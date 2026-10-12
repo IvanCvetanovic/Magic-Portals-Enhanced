@@ -295,6 +295,14 @@ placements carry it: 64 `antiportal` and 7 `antiportal.ent` (no body: `shape` 0)
 `crate_no_emissive`, 0.75** - 43.5 x 43.5 units where its .ent says 58 x 58, 0.303 where it would weigh
 0.538, and drawn at 0.75 of crate.png (planning step 172, CMP-16; `LevelBuilder::ReadCustomScale`).
 
+A script's `SetPosition` on a **static** body places it and leaves it no velocity: `ETHPhysicsEntityController::
+SetPosXY` is `b2Body::SetTransform` and `SetAwake(true)` (`ETHPhysicsEntityController.cpp:98-107`). `ETHCallback_bounce`
+(bytes 353694..353862) moves each of the four `bounce` slabs (4-02, 4-07 x 2, 4-17; `static` 1, density 0 in every
+placement) with `linearMotion` that way, so a slab shoves what it rises into and **carries nothing**: a rider keeps its own
+velocity, and 4-02's astronaut holds eye y 380 +-0.5 in all six of the library's stills while the slab bobs 6 px under
+him (planning step 173, CMP-15; `Bounce.cpp`, `Mover::PlaceKinematic`). The moving platforms', lifts' and doors' calls are
+the same one, which the port still writes as a velocity (G3-4, open).
+
 That turns "which of these 178 entities actually do something?" from judgement into an
 exact byte search — and it immediately rules three out. `moving_platform_single.ent`
 carries a `moveStride`, and inline `platform` and `anchor` carry `speed`/`stride`, that

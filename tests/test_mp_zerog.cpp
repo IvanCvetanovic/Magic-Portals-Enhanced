@@ -54,13 +54,14 @@ constexpr float kStep = 1.0f / 60.0f;
 //
 // This used to be level1c, and level1c broke these tests the moment `bouncer`
 // was built: it places a slab that bobs one pixel, the player rests on it, and
-// rides it. That is the mechanic working - the slab carries what stands on it -
-// so the answer was to assert stillness somewhere the only thing that can move
+// the slab moves him (a velocity carried him until planning step 173; it shoves
+// him now). That is the mechanic working, so the answer was to assert stillness
+// somewhere the only thing that can move
 // the player is the thing under test, rather than to widen `0.01` until a real
 // motion fitted underneath it.
 constexpr const char* kStill = "level2c";
 
-// And level1c, kept for the opposite reason: to watch the player ride that bob.
+// And level1c, kept for the opposite reason: to watch the player be shoved by that bob.
 constexpr const char* kWeightless = "level1c";
 constexpr const char* kNormal = "level0";
 // A normal level THAT GRANTS A PLACEMENT. level0 is metadata/max_portals = "0" -
@@ -231,17 +232,21 @@ void AndEverywhereElseItStillFalls() {
     CHECK(registry.get<RigidBodyComponent>(level.player).velocity.y < 0.0f);
 }
 
-// A PLAYER STANDING ON A BOUNCER RIDES IT, which is the only direct evidence
-// anywhere that Roles::Moves did its job. test_mp_bounce can assert the body is
-// kinematic, but a kinematic body that failed to carry its passenger would pass
-// that check and every check about where the slab is - the travel is ONE PIXEL,
-// so nothing about the slab's own position could ever tell the difference.
+// A PLAYER STANDING ON A BOUNCER IS SHOVED BY IT, which is direct evidence that
+// Roles::Moves did its job. test_mp_bounce can assert the body is kinematic,
+// but a body the solver did not see would pass that check and every check about
+// where the slab is - the travel is ONE PIXEL, so nothing about the slab's own
+// position could ever tell the difference. The slab is placed, not moved with a
+// velocity (planning step 173, CMP-15: the original's SetTransform on a static
+// body), so it does not CARRY him - test_mp_bounce pins that he keeps no speed
+// of its - but what it rises into it pushes out of the way, once, by at most
+// its own travel; the player's height here changes by that and by no more.
 //
 // This test exists because building `bouncer` broke the three stillness checks
 // above while they were pointed at level1c. That was the mechanic showing
 // through the player's own body, so it is asserted here on purpose rather than
 // merely moved out of the way.
-void AndAPlayerStandingOnOneRidesIt() {
+void AndAPlayerStandingOnOneIsShovedByIt() {
     Game::Data data;
     entt::registry registry;
     Game::Level level;
@@ -261,7 +266,7 @@ void AndAPlayerStandingOnOneRidesIt() {
         lowest = std::min(lowest, y);
         highest = std::max(highest, y);
     }
-    std::printf("  %s: the player rides the bob from %+.4f to %+.4f px\n", kWeightless, lowest, highest);
+    std::printf("  %s: the player is shoved by the bob from %+.4f to %+.4f px\n", kWeightless, lowest, highest);
 
     // It moves, which a player on a static slab would not - and it moves less
     // than the whole travel of the bob, which is 2 px peak to peak.
@@ -438,7 +443,7 @@ void runTests() {
     EveryOneOfTheEighteenStartsAndCarriesTheFlag();
     NothingFallsInThere();
     AndEverywhereElseItStillFalls();
-    AndAPlayerStandingOnOneRidesIt();
+    AndAPlayerStandingOnOneIsShovedByIt();
     AndInThereBeforeStepLeavesItAlone();
     TheWalkingButtonsDoNothing();
     AndEverywhereElseTheyStillWalk();

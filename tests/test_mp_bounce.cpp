@@ -2,14 +2,17 @@
 //
 // Four slabs across three levels, each bobbing one pixel up and one pixel down
 // every 5.24 seconds. The motion is decoration; what is NOT decoration is that
-// the slab is solid and moves, so it has to carry what stands on it.
+// the slab is solid and moves, so it shoves what it meets - and carries nothing.
 //
 // WHAT THIS SUITE IS REALLY FOR. The travel is ONE PIXEL, so no test of position
-// could ever tell a bouncer that carries the player from one that does not - a
-// static body would sit at the same coordinates to within a pixel and pass every
-// check below about where it is. So the assertion that matters here is that the
-// body is KINEMATIC, which is a build-time property of Roles::Moves and nothing
-// the tick can repair. test_mp_torch watches a body for the same reason.
+// could ever tell a bouncer that moves from one that does not - a static body
+// would sit at the same coordinates to within a pixel and pass every check below
+// about where it is. So the assertions that matter here are that the body is
+// KINEMATIC (a build-time property of Roles::Moves and nothing the tick can
+// repair: the engine's solver does not move a static body at all) and that it is
+// PLACED, with no velocity, as the original's SetTransform places it (planning
+// step 173, CMP-15): a velocity would carry a rider the original's slab leaves
+// where it is. test_mp_torch watches a body for the same reason.
 //
 // And the PHASE: cos(0) is 1, so a bouncer starts at full displacement rather
 // than at the node the level places it on - the node is the MIDDLE of the bob.
@@ -25,16 +28,20 @@
 #include "core/Components.hpp"
 #include "sim/Bounce.hpp"
 #include "sim/Game.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <system_error>
+#include <vector>
 
 using namespace MagicPortals;
 using Supersonic::RigidBodyComponent;
@@ -107,7 +114,8 @@ void FourSlabsAcrossThreeLevels() {
     }
 }
 
-// THE ONE THAT MATTERS. A slab that moves and does not carry is not built.
+// A slab the solver does not move is not built (it is placed with no velocity, below, and the engine
+// shoves what it moves into only because the body is kinematic).
 void EverySlabIsKinematic() {
     Game::Data data;
     entt::registry registry;
@@ -120,7 +128,7 @@ void EverySlabIsKinematic() {
         const auto* rigid = registry.try_get<RigidBodyComponent>(bob.entity);
         CHECK_MSG(rigid != nullptr, bob.name + " has a body to be moved by");
         if (rigid == nullptr) continue;
-        CHECK_MSG(rigid->isKinematic, bob.name + " is KINEMATIC, so it carries what stands on it");
+        CHECK_MSG(rigid->isKinematic, bob.name + " is KINEMATIC, so the solver moves it and it shoves what it meets");
     }
 }
 
@@ -204,6 +212,147 @@ void TheBodyItselfMoves() {
     CHECK(::test::nearly(static_cast<float>(isPx.y), static_cast<float>(saidPx.y)));
 }
 
+// THE RULE (planning step 173, CMP-15). ETHCallback_bounce moves its slab with linearMotion, whose SetPosition is
+// b2Body::SetTransform on a static body (ETHPhysicsEntityController.cpp:98-103): a placement, with no velocity. The port
+// had written the velocity that gets the slab there (Mover::MoveKinematic), which the engine's contact solve reads, so
+// whatever touched a slab was carried by it at the slab's own speed. The slab's velocity is zero after every tick, on
+// every one of the four, over a bob and a half.
+void EverySlabIsPlacedWithNoVelocity() {
+    const char* const names[] = {"level1c", "level6c", "level16c"};
+    for (const char* name : names) {
+        Game::Data data;
+        entt::registry registry;
+        Game::Level level;
+        if (!Open(name, data, registry, level)) continue;
+
+        std::size_t checked = 0;
+        std::size_t moving = 0;
+        int firstMoving = 0;
+        for (int tick = 1; tick <= 450; ++tick) {
+            Game::Tick(data, registry, level, 0.0f, kStep);
+            for (const Bounce::Bob& bob : level.bounce.bobs) {
+                const auto* rigid = registry.try_get<RigidBodyComponent>(bob.entity);
+                if (rigid == nullptr) continue;
+                ++checked;
+                if (rigid->velocity == glm::vec3(0.0f)) continue;
+                ++moving;
+                if (firstMoving == 0) firstMoving = tick;
+            }
+        }
+        CHECK_MSG(checked > 0, std::string(name) + ": a slab to read");
+        CHECK_MSG(moving == 0, std::string(name) + ": " + std::to_string(moving) + " of " + std::to_string(checked) +
+                                   " slab-ticks carry a velocity (the first on tick " + std::to_string(firstMoving) +
+                                   "): a slab is placed, not moved");
+    }
+}
+
+// One sample of the rider trace: where the player stood, and how fast, on a tick.
+struct Sample {
+    int tick = 0;
+    double yPx = 0.0;
+    double vyPxS = 0.0;
+};
+
+// How near a body must be to a slab to be at it. The engine rests a body a little off what it stands on (the 2 px
+// resting offset recorded as CMP16-5), so this is a touch and a bit.
+constexpr double kAtSlabPx = 3.0;
+
+// What an idle level's dynamic bodies do against its slabs: the player's samples at the named ticks, and how close any
+// dynamic body (the player, a crate) came to any slab - the census's measure of a rider.
+struct RiderTrace {
+    std::vector<Sample> samples;
+    double nearestPx = std::numeric_limits<double>::max(); // the smallest gap between any dynamic body and any slab
+    int atSlabTicks = 0;                                   // ticks on which some body was within kAtSlabPx of one
+    int firstAtSlab = 0;
+};
+
+RiderTrace TraceRiders(const char* name, int ticks, const std::vector<int>& sampleAt) {
+    RiderTrace trace;
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(name, data, registry, level)) return trace;
+
+    for (int tick = 1; tick <= ticks; ++tick) {
+        Game::Tick(data, registry, level, 0.0f, kStep);
+
+        bool atSlab = false;
+        for (const Bounce::Bob& bob : level.bounce.bobs) {
+            Impacts::Shape slab;
+            if (!registry.valid(bob.entity) || !Impacts::ShapeOf(registry, bob.entity, slab)) continue;
+            for (const auto [body, rigid] : registry.view<RigidBodyComponent>().each()) {
+                if (rigid.isKinematic || body == bob.entity) continue;
+                Impacts::Shape shape;
+                if (!Impacts::ShapeOf(registry, body, shape)) continue;
+                const double gap = Impacts::Between(shape, slab).px;
+                trace.nearestPx = std::min(trace.nearestPx, gap);
+                if (gap <= kAtSlabPx) atSlab = true;
+            }
+        }
+        if (atSlab) {
+            ++trace.atSlabTicks;
+            if (trace.firstAtSlab == 0) trace.firstAtSlab = tick;
+        }
+
+        if (std::find(sampleAt.begin(), sampleAt.end(), tick) != sampleAt.end() && registry.valid(level.player)) {
+            Sample sample;
+            sample.tick = tick;
+            sample.yPx = Units::ToPixels(registry.get<TransformComponent>(level.player).position).y;
+            sample.vyPxS = -static_cast<double>(registry.get<RigidBodyComponent>(level.player).velocity.y) *
+                           Units::kPixelsPerMetre;
+            trace.samples.push_back(sample);
+        }
+    }
+    return trace;
+}
+
+// THE RIDER OF 4-02 (CMP-15). The astronaut stands on level1c's slab in a room with no gravity. In the original he stays
+// where he is - his eye holds y 380 +-0.5 in all six of the library's stills while the slab's top moves between 475 and
+// 481 - and the port had him drift up at the slab's peak speed, 17 px by tick 420, because the slab's velocity carried
+// him. Placed, he is moved by the slab's travel only: pushed up by what it rises into him, never launched. From tick 75
+// to tick 450 his height changes by at most the slab's own travel from end to end (twice its stride), and his vertical
+// speed stays below a tenth of the slab's peak speed, which a carried rider keeps for ever.
+void TheRiderOfLevel1cIsNotCarried() {
+    const std::vector<int> at = {75, 150, 300, 420, 450};
+    const RiderTrace trace = TraceRiders("level1c", 450, at);
+    CHECK_MSG(trace.samples.size() == at.size(), "level1c: the player's five samples");
+    if (trace.samples.size() != at.size()) return;
+
+    Bounce::Rules rules;
+    std::string error;
+    if (!Bounce::LoadRules(kPortData + "/bounce.json", rules, error)) {
+        CHECK_MSG(false, error);
+        return;
+    }
+    for (const Sample& sample : trace.samples) {
+        std::printf("  level1c tick %3d: the player at y %8.3f px, vy %+8.4f px/s\n", sample.tick, sample.yPx,
+                    sample.vyPxS);
+    }
+    const double travelPx = 2.0 * rules.stridePx;
+    const double movedPx = std::abs(trace.samples.back().yPx - trace.samples.front().yPx);
+    std::printf("  level1c: the player moves %.3f px from tick 75 to tick 450 (the slab's travel is %.3f px)\n", movedPx,
+                travelPx);
+    CHECK_MSG(movedPx <= travelPx + 0.25, "level1c: the rider is moved by no more than the slab's own travel");
+    const double peakPxS = rules.stridePx * rules.speedRadPerSec;
+    for (const Sample& sample : trace.samples) {
+        CHECK_MSG(std::abs(sample.vyPxS) <= 0.1 * peakPxS,
+                  "level1c tick " + std::to_string(sample.tick) + ": the rider carries no velocity of the slab's");
+    }
+    // He does stand at it, which is the premise of the rule.
+    CHECK_MSG(trace.nearestPx <= kAtSlabPx, "level1c: the player stands at the slab");
+}
+
+// THE CENSUS OF RIDERS (planning step 173): which of the three levels has a body at a slab, idle. Printed, so that the
+// planning record's census says what the tree measured; 4-02's is pinned above and the other two by the routes' traces.
+void WhoStandsAtTheSlabs() {
+    const char* const names[] = {"level1c", "level6c", "level16c"};
+    for (const char* name : names) {
+        const RiderTrace trace = TraceRiders(name, 450, {});
+        std::printf("  %s idle: nearest body to a slab %.3f px; within %.1f px on %d of 450 ticks (the first on tick %d)\n",
+                    name, trace.nearestPx, kAtSlabPx, trace.atSlabTicks, trace.firstAtSlab);
+    }
+}
+
 // The role is played now, so no level reports it inert.
 void TheRoleIsPlayed() {
     CHECK(Roles::IsPorted(Roles::kBouncer));
@@ -226,6 +375,9 @@ void runTests() {
     ItBeginsAtFullDisplacementNotAtItsNode();
     ItBobsAndComesBack();
     TheBodyItselfMoves();
+    EverySlabIsPlacedWithNoVelocity();
+    TheRiderOfLevel1cIsNotCarried();
+    WhoStandsAtTheSlabs();
     TheRoleIsPlayed();
 }
 

@@ -175,9 +175,10 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
         MakeRigid(registry, entity, options, material, areaM2);
         ++out.rigids;
     } else if (isMover) {
-        // Moved by the port and carrying what stands on it: kinematic, so the
-        // contact solve reads the velocity Mover::MoveKinematic writes (F1). A
-        // kinematic body is moved by code and reads no locks.
+        // Moved by the port: kinematic, so the engine's solver sees it, shoves what it moves into
+        // and, for a mover that writes one with Mover::MoveKinematic, reads its velocity and carries
+        // what stands on it (F1); a bounce slab is placed with none (Bounce.cpp). A kinematic body
+        // is moved by code and reads no locks.
         auto& rigid = registry.emplace<RigidBodyComponent>(entity);
         rigid.isKinematic = true;
         rigid.friction = material.friction;

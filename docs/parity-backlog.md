@@ -3558,6 +3558,38 @@ it):
       tick 525 is off the view). 126 of 128 routes win on exactly the census's ticks. Next: the route phase (planning step 176) re-flies both; 2-01's header text is
       stale.
 
+**Step 173's recorded deviations** (a bounce slab is placed, not moved with a velocity, CMP-15, wave 4c-2; planning step 173 has the evidence, `RECORDED DEVIATIONS` 1-6;
+`out/parity/program/CMP15/` the reports, `impl.md`, `census.md`, `deviations.md`, `fix1.md`, `fix2.md` and `verify3.json`; GAMEPLAY: YES, 4-02's astronaut, and it moves 4-07's
+route; the row CMP-15 is closed by it, committed with these deviations by the owner's delegation):
+- [ ] **CMP15-1. Gate 3, the eye within +-1 px of 380 at f75, f150, f300, f420 and f450, is met from f150 and NOT at f75-f135** (deviation 1; the verifier's medium; the gate's text
+      is not rewritten). 383.10 at f75 (+3.1 px; 383.18 on the verifier's reader) is the same before and after the fix, and f90-f135 (383.07, 382.38, 381.94, 381.12) sit 0.5-1.1 px
+      FARTHER from 380 than before (the old drift carried him up toward 380 early); f150 380.75, f300 380.81, f420 380.42, f450 380.85, and all 21 frames f150-f450 read
+      380.31-381.08 (two of them 0.02-0.08 px over the band's edge: reader noise on a pulsing glow). The drift the row opened for (3.2 px/s, 16 px at f420) IS cured. Cause: the astronaut's spawn rest is about one stride (1 px = 2.8 screen px) lower than the
+      original's stills read until the slab's first rise shoves him 0.85 px near tick 79. No original frame exists at world tick 75 (the stills date themselves at f127-f208 on the
+      slab's own top-y clock), and the decode (`level1c.esc`: `main_char` (138, 152), slab (140, 202), collision 64 x 64; the slab's top below his feet to call 78) puts the original's
+      astronaut at his start on tick 75 too (an INFERENCE, labelled: about 382.8 on screen). Next: G3-5 (the bob's phase and the spawn offset) and CMP-low (a); nothing tuned.
+- [ ] **CMP15-2. Gate 6's route clause: three routes fail on this build, and the wave enters the route phase with three** (deviation 2; the verifier's medium). 125 of 128 win on
+      exactly their census tick, 0 on another tick, 0 missing. **4-07** (`level6c`, census 446) is not won by 470, by design: its route leaned on the rider the slab no longer
+      carries (the player and the crate rest on the top of the slab at (128, 208) from tick 44; 0.4-0.9 px less carry, the tick-313 shot flies 2.1 px lower and grazes the crate
+      on tick 344, the door shot's recoil leaves him at (-10, -11) u/s, the tap of tick 443 misses him). **2-01** (`level0a`, census 444: died on tick 283) and **4-29** (`level28c`,
+      census 1023: the tap on tick 525 is off the view) are inherited, not this step's: the same signatures in step 172's own run on `9d643c9` (`CMP16/runs/all1.log`), no
+      bounce node in either level, f420 frames byte-identical to the before-sweep (CMP16-7). `test_mp_routes` 2,321 checks, 6 failures. Next: the route phase (planning step 176)
+      re-flies 4-07, 2-01 and 4-29; read 4-07's exact vy only if a tick-sensitive tap fails again.
+- [ ] **CMP15-3. The gate 4 mutation of the kinematic rule was run by nobody** (deviation 3; the verifier's low). The placement rule's removal IS the red run of the new pins on the
+      committed `Bounce.cpp` (runner `e830640d`: 9 failures of 203, the velocity pin on the three levels, the rider's travel 7.501 px against 2.25, vy -1.1959..-1.2002 at the
+      five samples; green 203 / 0), not a separate removal build. "The body stays kinematic" (`kBouncer` out of `Roles::Moves`) has only the older `EverySlabIsKinematic` pin
+      (and `checked > 0`). Next: a throwaway build with it removed, restored before committing, when a step next touches the bounce slab (it costs a runner link).
+- [x] **CMP15-4. Settled at the commit: the executables were relinked for a comment-only change** (deviation 4; the verifier's low). `MagicPortals.exe` `877b51e6` and `test_mp.exe`
+      `7b6a91f7`, on which every gate was measured, predate the last comment of `Bounce.cpp` and the note of `bounce.json` (compiled alone, 0 warnings). The commit's build
+      relinked both (0 warning lines; `79814fd0` and `80560e19`), the runner ran once alone (`test_mp_bounce` 203 / 0) and 4-02's f420 on the relinked exe is `daf646c9`, the
+      sweep's. 0 Smart App Control refusals. Nothing left.
+- [ ] **CMP15-5. The same velocity-writing call remains for moving platforms' later calls, lifts and lift doors, and their riders were not measured** (deviation 5). They still
+      call `Mover::MoveKinematic`. Next: G3-4's throwaway build (`PlaceKinematic` for them), read each rider against the original, and record an engine gap with the number if
+      the push-out does not hold it.
+- [x] **CMP15-6. Disclosed: no engine gap** (deviation 6). The engine's push-out holds 4-02's rider (0.850 px once, vy 0.0000 on every sample); 4-07's rider drift of 1.2 u/s is the
+      recoil of the tick-183 shot (the fit: 0.000 u/s over ticks 156-181, -1.202 u/s from 186, predicted -1.182), not a push-out residue; the trace prints v as integers, so it is
+      a fit, not an exact vy. Nothing to fix.
+
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):
 - [x] **R4c1-1. Gate 4 (the sweep chain) failed as worded on one level, 4-12, and needed a scope ruling: RULED (a), 2026-10-12, and the wave pushed** (medium; the one finding of all three
@@ -3854,7 +3886,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       the hd art per axis) stretched and filtered where the original keeps detail, or a weaker normal-mapped relief. Not in the backlog. Next: render 2-17 with the
       lightmap off and at full resolution and read the Laplacian against `h6.3`; if it explains the gap, widen to the other 64 lightmapped levels. Gate: the wall's
       Laplacian s.d. 12.4 -> 17.2 on 2-17, no change on the unlightmapped levels. GAMEPLAY: none.
-- [ ] **CMP-15. A rider drifts off a bobbing slab: the astronaut on 4-02's bounce slab floats away at the slab's peak speed** (medium; structural; `decoded` but NOT
+- [x] **CMP-15. A rider drifts off a bobbing slab: the astronaut on 4-02's bounce slab floats away at the slab's peak speed** (medium; structural; `decoded` but NOT
       RUN; MOVES A ROUTE). Evidence: 4-02 box 350,330,450,520 (`pairs/4-02_h63_pair.png` and `_overlay.png`: the astronaut doubled, the port's about 17 px higher): the
       original's eye stays at y 380 +-0.5 in all six stills while the slab bobs 475-481 under him; the port's drifts up 3.2 px/s (383.1 at f75, 364.3 at f420) = the
       slab's peak speed (1 u x 1.2 rad/s = 3.4 px/s). Cause (code reading and the speed match, not run): the slab is `static` 1, density 0 in `level1c.esc` and
@@ -3863,6 +3895,28 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       velocity) exists. 4-07's slabs carry no rider and 4-17 shows no drift. Next: `PlaceKinematic` in place of `MoveKinematic` (G3-4's throwaway build), read the rider
       on 4-02; if the engine's push-out does not hold him, record an engine gap with the number (not this step). Gate: the astronaut's eye y within +-1 px of 380
       through f450, a `test_mp_bounce` pin, the 4-02 and 4-17 routes re-run. GAMEPLAY: yes (an idle astronaut stays on his block). Joins: G3-1, G3-4.
+      *Closed by step 173 (CMP15, wave 4c-2), 2026-10-12, WITH RECORDED DEVIATIONS (owner-delegated); committed in wave 4c-2 (the commit titled "Magic Portals: a bounce slab is
+      placed, not moved with a velocity"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it
+      MOVES A ROUTE: 4-07's route no longer wins (not won by tick 470; census 446), so `test_mp_routes` fails on THREE routes, 4-07 (this step), 2-01 (step 172) and 4-29 (step 171),
+      until the route phase (planning step 176) re-flies them; the other 125 win on exactly the census's ticks, 4-02 on 87 and 4-17 on 163 among them. The gate is MET FROM f150:
+      the eye is within +-1 px of 380 at four of the five sampled frames and every frame f150-f450 reads 380.31-381.08 (two 0.02-0.08 px over the band's edge: reader noise on a pulsing glow); f75-f135 stay open under G3-5 and CMP-low (a) (CMP15-1).* Built as the
+      Next says, port-side and no data: `Bounce::State::Tick` calls `Mover::PlaceKinematic` where it called `Mover::MoveKinematic`, the decoded rule (`ETHCallback_bounce`,
+      bytes 353694..353862, `linearMotion`'s `SetPosition` on a `static` 1, density 0 body = `b2Body::SetTransform` + `SetAwake(true)`, `ETHPhysicsEntityController.cpp:98-107`);
+      the body stays kinematic (`Roles::Moves(bouncer)`), so the engine still shoves what the slab rises into and carries nothing. No tunable moved (`bounce.json`'s notes
+      cite the decode). The census (derived from the converted scenes, the raw `.esc` and the listing; the hint was exact): 4 slabs in 3 levels, 4-02 (`level1c`, one),
+      4-07 (`level6c`, two) and 4-17 (`level16c`, one). **It corrects this row's "4-07's slabs carry no rider"**: idle only 4-02 has a rider (within 3 px on 450 of 450 ticks),
+      but in 4-07's ROUTE the player and the crate rest on the top of the slab at (128, 208) from tick 44 (the player also at the other slab's face), and in 4-17's the
+      recoils press the player into the slab's face (a side contact). Measured: the slab's rigid velocity (1.2 px/s at its peak, 60 px/s on tick 1) is zero on every tick;
+      4-02's astronaut was 7.501 px up from tick 75 to 450 at vy -1.2002 px/s and is 0.850 px up in all (the slab's first rise into him) at vy 0; his eye on screen 383.10 /
+      379.11 / 370.96 / 364.48 / 362.96 -> 383.10 / 380.75 / 380.81 / 380.42 / 380.85 at f75 / f150 / f300 / f420 / f450 against the original's six stills (379.75-380.60). The f420
+      sweep (owner's seed, 128 launches, validation silent) changes ONE level, 4-02 (10,321 px, the astronaut 16 px lower, on his block) and leaves 127 byte-identical, 4-07 and
+      4-17 among them (no body is at a slab at f420); box 350,330,450,520 against h6.3 mean abs 28.76 -> 8.53, whole frame h6.3 mean_abs 7.17 and edge_iou 0.6795; the doubled
+      astronaut of the 50/50 overlay is gone. Pins: `test_mp_bounce` 189 -> 203 (the new pins on the COMMITTED `Bounce.cpp` fail 9 of 203; green 203 / 0). 57 suites, 56 pass,
+      33,346 checks (`test_mp_routes` 2,321, 6 failures), reachability 108 / 20 / 0, 0 warnings. Independently verified in three rounds (`CMP15/verify3.json`: not a pass as
+      worded, its two mediums being gate 3 at f75-f135 and gate 6's route clause, recorded as deviations 1 and 2; no gate's text was rewritten). **What it leaves**: (a) the eye at
+      f75-f135, 1.1-3.1 px out of the band, the same start offset before and after (CMP15-1; G3-5); (b) the three routes (CMP15-2), 4-07's header text's positions being the CAP
+      era's; (c) the kinematic rule's mutation, run by nobody (CMP15-3); (d) the same velocity-writing call for platforms, lifts and lift doors (CMP15-5; G3-4). The deviations are
+      rows CMP15-1 to CMP15-6 above the wave 4c-1 rows.
 - [x] **CMP-16. 2-01's crate is drawn 33 percent too big and, in the original, is smaller and lighter** (medium; structural; `decoded`; MOVES A ROUTE). Evidence: 2-01
       original crate [443,57,577,187] against the port's [420,15,598,190] (`pairs/2-01_h63_pair.png` and `_overlay.png`: a crate inside a larger crate; the same at
       `h0.3` and `h2.8`): the original's is 134 x 130 px, the port's 178 x 175. Cause: `level0a.esc` id 796 (`crate_no_emissive`) carries the custom data `scale` 0.75,

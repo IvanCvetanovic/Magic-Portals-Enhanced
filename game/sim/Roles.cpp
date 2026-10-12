@@ -10,8 +10,8 @@
 namespace MagicPortals::Roles {
 
 bool Moves(const std::string& role) {
-    // kBouncer joins them: its slab bobs, and a static body would carry nothing
-    // while it did. The Godot project's MOVING_ROLES does not list it, because the
+    // kBouncer joins them: its slab bobs, and a static body is not one the engine's solver moves or
+    // shoves anything with (the slab is placed, and carries nothing: Bounce.hpp). The Godot project's MOVING_ROLES does not list it, because the
     // Godot project does not move it either - this is the port going past the Godot project to
     // the original, as the acceptance rule allows where the original is decoded.
     return role == kMovingPlatform || role == kLift || role == kSwitchedDoor || role == kBouncer;

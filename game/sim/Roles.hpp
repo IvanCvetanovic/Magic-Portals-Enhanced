@@ -91,7 +91,7 @@ inline constexpr const char* kPickup = "pickup";
 // The role table calls one "a solid polygon surface that throws things off it",
 // and the throwing is not real: ETHCallback_bounce imparts no impulse at all, it
 // moves the slab itself. It is in Moves() below as well as here, because a
-// bouncer that does not carry what stands on it is not built, only drawn.
+// bouncer the solver does not move is not built, only drawn.
 inline constexpr const char* kBouncer = "bouncer";
 // The gravity wells of chapter 4 (GravityWell.hpp), gravity_agent /
 // gravity_agent.ent. Three things at once: a solid circle the builder already

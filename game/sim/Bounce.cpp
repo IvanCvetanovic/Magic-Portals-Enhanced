@@ -116,10 +116,14 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
 
         if (!registry.valid(bob.entity)) continue;
         const glm::dvec2 at = bob.AtPx(rules);
-        // MoveKinematic, not a bare transform write: it sets the velocity the
-        // contact solve reads, which is what makes the slab carry what stands on
-        // it rather than slide out from under it.
-        Mover::MoveKinematic(registry, bob.entity, Units::ToWorld(at.x, at.y), step.physicsS);
+        // PlaceKinematic, not MoveKinematic: the slab is PLACED. ETHCallback_bounce's linearMotion SetPositions a
+        // static body, which is b2Body::SetTransform and leaves it no velocity (ETHPhysicsEntityController.cpp:98-103,
+        // the same decode as Mover::Movers' first call, G3-1). The engine still shoves what the slab moves into,
+        // because the body is kinematic; what it must not do is carry a rider, which the velocity MoveKinematic
+        // writes made it do, at the slab's own peak speed (CMP-15: 4-02's astronaut drifted up 17 px by tick 420
+        // where the original's eye holds y 380 +-0.5). The first call's jump a stride from the node is a placement
+        // like every other (written as a velocity it was a stride in one step, 60 px/s).
+        Mover::PlaceKinematic(registry, bob.entity, Units::ToWorld(at.x, at.y));
     }
 }
 

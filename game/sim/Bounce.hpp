@@ -21,10 +21,15 @@
 // from the binary - so bounce.json holds the decode and this holds the motion.
 //
 // What IS shared: Supersonic::DetMath, so a bob comes out the same on every C
-// runtime as a swing does, and Mover::MoveKinematic, so the body carries what
-// stands on it. The second needs `bouncer` in Roles::Moves - without it the
-// builder makes the body static and a bob would move a slab that carries
-// nothing, which is a mechanism that looks built and is not.
+// runtime as a swing does, and Mover::PlaceKinematic, so the body is put where
+// the callback puts it and the engine shoves what it moves into - and carries
+// nothing: the original's SetPosition on a static body is b2Body::SetTransform,
+// with no velocity (ETHPhysicsEntityController.cpp:98-103), so a rider keeps its
+// own (planning step 173, CMP-15; MoveKinematic, which wrote the velocity,
+// dragged 4-02's astronaut off his slab). The second needs `bouncer` in
+// Roles::Moves - without it the builder makes the body static and a bob would
+// move a slab the solver does not see, which is a mechanism that looks built
+// and is not.
 
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
@@ -66,8 +71,9 @@ struct State {
     Rules rules;
     std::vector<Bob> bobs;
 
-    // One step, before the physics step, each body moved with MoveKinematic so
-    // that it carries what stands on it - as Mover::Movers::Tick does.
+    // One step, before the physics step, each body placed with PlaceKinematic:
+    // where the bob says, with no velocity (Mover::Movers::Tick's first call
+    // places a platform the same way; every call after it moves one).
     void Tick(entt::registry& registry, const ScriptClock::Step& step);
 
     const Bob* Find(const std::string& name) const;
