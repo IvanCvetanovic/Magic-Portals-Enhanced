@@ -3523,3 +3523,121 @@ free disk 113.441 -> 114.822 GiB.
 **Inferred mood:** a guess from the facts - a long, careful day more than a triumphant one: a rendering fix that needed three verifications and closed one level of the 84 it was aimed at, a
 measuring pass that turned "how different is it" into a short list of causes (one of which explains 52 of the 58 worst levels and is decoded, so the next wave's first step is cheap), and a
 small ration of Smart App Control interruptions; what is left is mostly known and orderly.
+
+### 2026-10-11 19:14 - Session 30: program wave 4c-1 - the comparison's five drawing groups built, not pushed
+
+*Written 2026-10-12 at the close by this run's close role, from the records - planning steps 166-170 of `docs/planning/2026-09-11-magic-portals-remaster.md`, each step's
+reports under the gitignored `out/parity/program/<id>/` (`CMP1`, `CMP3`, `CMP7`, `CMP9`, `CMP10`: `impl.md`, `commit.md`, `deviations.md`, `fix*.md`, `verify*.json`) and the
+wave's own `out/parity/program/R4c1/` (`verify1.json` to `verify3.json`, `fix1.md`, `fix2.md`, `finalize.md`) - and git, not from a transcript. 19:14 is the time in
+`CMP1/start.txt`, the first record of the run, not a measured start; the last role's report (the finalize) is stamped 12:39. The run was on the owner's standing order of
+2026-10-10 ("just continue doing each step until you are finished or until i tell you to stop"). Every number below is one a record states, or one this role measured and says
+so. This role built nothing and launched no executable; it checked the baseline, deleted scratch, ran the image purge, edited the two tracked files and
+`out/parity/BASELINE.txt`, and committed. **Nothing was pushed: `origin/main` is still `16b78e1` and the wave is seven local commits.***
+
+**Built:**
+- **Step 166 (CMP-1, `baaa651`)**: the script's emissive override. `ignore_emissive` and `door_emissive` are read from the level's properties and the chapter's world; on the
+  78 flag levels the exit door is drawn at `door_emissive` (0 when absent) and the player at 0 (0.2 in chapter 3), where the port drew them lit. The readers' boxes, mean abs
+  luminance error: player 43.8 -> 0.7, arch 31.6 -> 0.7; against h6.3 the whole frame fell on 77 of 78 levels and rose on none. 77 levels change at f420 (2-32's player is dead
+  before it). Closes G1a-11. One verification, 9 gates, 4 low.
+- **Step 167 (CMP-3, `ca93e40`)**: pictures at one depth are drawn in the original's bucket order (128-unit buckets, the later bucket over the earlier). All 9 group levels read the
+  original's order (1-20 57.67 -> 0.77, 4-16 49.75 -> 1.03 mean abs to h6.3). "Only the nine change" is NOT met as written: 49 levels change, the other 40 each explained (33
+  toward the stills, 5 flat, 2 slightly away). The in-bucket move-to-front the old notes asked for is not built, because the stills contradict it. One verification, 9 gates, 7 low.
+- **Step 168 (CMP-7, `7ebe83b`)**: the red key's own light (colour (1, 0, 0), range 48, 6 over the key, one tick behind its picture). 4-20's group box R 17.3 -> 48.4 against the
+  original's 49.4. Gate 2 NOT met to the letter: the port is 1 to 2 percent low in every lit box, the same size as the unlit part of the same frame (0.979), cause untraced.
+  Committed with recorded deviations after three verifications. 4-20 is the one level that changes.
+- **Step 169 (CMP-9, `4216f32`, text fixes `1379eca` and `753e7d0`)**: the script's blinks: a barrel's emissive, a breakable wall's (on a doubled clock: period 300 ms, not 600),
+  a teleportable crate's, and the fire agent's pulse (1.02 -> 0.98 on 300 ms legs). The barrel's and the crate's periods were fitted on footage (0.605 s and 1.210 s against the
+  decode's 0.600 and 1.200). 40 levels change. **Gate 1 NOT met as first written**: 10 of them are outside the group's named 32 (the fire agents), and the step's gate was
+  corrected to 42 levels after its own verifier failed it. Three verifications.
+- **Step 170 (CMP-10, `5c1949b`)**: the help block at alpha 0.76, breathing 1.13 -> 1.05 on 250 ms legs, on the 13 levels that place one (the spec had the two scales swapped:
+  a call pushes its last argument first). 9 levels change at f420 (four blocks are off the frame). Gate 2's face tone NOT met to the letter: 1.1 to 3.0 grey of 255 under the
+  stills'. Three verifications.
+- **The wave's verification**: three rounds (`5c1949b`, `1379eca`, `753e7d0`), each with 128 fresh launches byte-identical to `CMP10/after/sweep`, 20 gold-seed re-takes read
+  against the stills, four controls byte-identical, 57 suites run once, routes and reachability checked. **Gates 1, 2, 3, 5, 6 and 7 held every round and gate 4 failed every
+  round on one level, 4-12**, the one fire-agent level that no group of the wave names. It is a scope ruling, not a defect: the listing runs the pulse on every fire agent
+  unconditionally (#282-300, no branch before it, re-read twice). Two text-only fix rounds followed, and the finalize role did not push, having no authority to rule on it.
+- **The push**: none. `R4c1-1` records the two options: accept CMP-9's scope as 42 levels and push as built (the second and third verifiers note it agrees with the rule that rulings
+  follow the original; fix 2 recommends it), or veto the pulse (a revert, a 128-level re-sweep and a relink of both executables).
+- **The close (this role)**: `docs/parity-backlog.md` updated - the date, three definition-of-done annotations (the largest cause fixed, "the largest fixed" still not met; routes;
+  reachability), the five hashes in the CMP closing notes (they said "the hash goes in at the wave's close"), CMP-9's and CMP9-1's scope marked as not ruled, CMP7-6 ticked on
+  the verifiers' scratch compiles (with `port_build.bat` not run said in the row), the old wave 4c list bracketed, the "Wave 4c-1" paragraph (table, verification, sweep chain,
+  suites, Smart App Control, baseline, purge, GAMEPLAY, the wave's rows) with "What the next wave should take (wave 4c-2)", three open rows R4c1-1 to R4c1-3, and the owner's calls
+  extended; and this entry. The five steps had already opened their own rows (CMP1-1 to CMP10-7, 32); 35 rows opened by the wave, 10 settled, 25 open; older rows closed:
+  CMP-1, CMP-3, CMP-7, CMP-9, CMP-10, G1a-11 and step 72's 1-07 ring deviation (with its limit).
+- **The wave's image purge** (the owner's standing order, 2026-10-03: delete images once finished with them). Before it: free disk 104.982 GiB, `out/parity` 18.743 GiB. The new
+  standing baseline is the final build's f420 sweep, `program/CMP10/after/sweep` (128 PNGs, 1280 x 720; taken on `MagicPortals.exe` `aecd9c1a`, step 170's relink; the committed
+  build is `29166f75` and the three verifiers' 128 launches each equal this folder md5 for md5). I checked all 128 by level id (128 compared, 128 unique ids; PNG signature, IEND
+  tail with no NUL padding, 1280 x 720, md5 equal to its line of `CMP10/after/capture.txt` and to `R4c1/verify3/sweep_md5.txt`) before and after the purge, and wrote
+  `out/parity/BASELINE.txt` first: the comment line and exactly `program/CMP10/after/sweep`, `program/R4b/CMP/port_f420`, `program/R4b/CMP/pairs` (it replaced `program/PX/after/sweep`;
+  `purge_images.py` reads each line as a path prefix). I deleted the wave's 64 scratch `--saves` folders (4,510 `scores.json` / `achievements.json` copies, 2.3 MB; a script
+  checked that each held nothing else and parsed, and refused anything under `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/`), dry-ran `purge_images.py all` (800 files, 0.53 GB,
+  0 refused; my own per-folder tally agreed: PX 128, CMP1 155, CMP3 166, CMP7 140, CMP9 158, CMP10 32, R4c1 21) and ran it with `--delete` (800 deleted). **Freed 800 images, 0.53 GB;
+  `out/parity` 18.743 -> 18.248 GiB; free disk 104.982 -> 105.485 GiB.** The baseline, `port_f420` and `pairs` still hold 128, 130 and 256 images, all opening, and
+  `merge_w1/sweep_saves/scores.json` is still `40bfef3a`. `git status` was unchanged by the purge (it printed nothing before the edits). A consequence the backlog records: the
+  pre-wave baseline and each step's own after-sweep are gone, so a veto of the pulse would compare its new sweep with `CMP10/after/sweep`.
+
+**Broke / dead ends:**
+- **Gate 4, three rounds in a row.** The step's own spec contradicted itself (its build line and CMP-9's text ask for the fire agent's pulse, its sweep gate says the 32); the step
+  built the pulse, the first verifier failed the gate on 4-12, fix 1 rewrote the step's gate to 42 levels, and the second and third verifiers rightly said a step rewriting its own gate
+  is not the wave's gate changing. The fixes were text only and could not make gate 4 pass; the two rounds they cost bought the clean statement in `R4c1-1` and nothing else.
+- **"Owner-delegated" was an agent's word.** The first verifier pointed out that the waivers of steps 168 to 170 were dispositions made by a role under the standing order, not
+  owner messages; fix 1 reworded step 169's, and I left the older wording of 168 and 170 and said so in the backlog instead of rewriting their rows.
+- **Smart App Control refused 5 launches of this repository's executables** (counted at this close from a CodeIntegrity 3033/3077 query from 2026-10-11 19:00): step 167's
+  implementer's `test_mp.exe` twice (21:15:22 and :23, one loop over two suites on the runner rebuilt for a mutation, which also left the column-major mutation never run) and the first
+  `MagicPortals.exe` (21:15:51), step 168's first `MagicPortals.exe` (23:13:18) and step 170's (06:23:25); each deleted and relinked once and the relinked one ran. The same query lists
+  events that are not this repository's: 14 pairs of `python.exe` from another project's virtual environment (10:50 to 11:25), one `python.exe` at 07:50:16 loading from the Roaming
+  site-packages (unattributed) and MiKTeX's `pdftoppm.exe` (3 events, 12:40:19 to 12:48:36 at the time of counting). Earlier waves: 83, 19, 2, 4, 9, 3, 13.
+- **Step findings that changed the spec**: the red key's offset is a z offset (step 69's prose said x); the wall's two blink calls share one clock, so it runs twice as fast; a barrel's
+  floor is the absent datum read as (0, 0, 0), so chapter 3 and 4 barrels get darker, not brighter; the fire agent's scale also draws its light and halo (found on the second read, after
+  the first build pulsed the picture alone); 1-11's and 1-12's rings are the agents' own particles, not an anti-portal at a lower depth; 1-25's "150" is not reproducible.
+- **Two measurement slips inside the steps, each caught and corrected there**: step 167's first sweep (before the line tolerance) changed 48 levels and left 1-20 and 2-14 identical, found and
+  fixed; step 170's first reading of the face ("0.7 to 1.7 grey, inside the spread") counted stills on another background and was corrected to 1.1 to 3.0 grey under.
+- **Capture sweeps stall when the capture window is minimised** on a desktop in use; recorded as R4c1-3 (allow 40 minutes, or restore the game's own window).
+- **My own slips, caught before the commit**: my first draft of the backlog attributed the one relink of `MagicPortals.exe` to the wave's first verifier, where the row says step
+  170's third verifier did it (`CMP10-7`); it said planning steps 166 to 170 still carry "the hash goes in at the wave's close" (a grep shows only the backlog does), and it gave a
+  sweep duration of 30 to 40 minutes I could not source (the record says "allow 40 minutes"). All three are corrected in the file; a fourth, in the evidence for ticking CMP7-6, is under Decision.
+
+**Decision:**
+- **Not pushed, and no ruling made.** The close recorded the 4-12 finding, both options and the verifiers' recommendation, and ticked nothing about gate 4. The close is a
+  record; the owner's or the orchestrator's word decides the push.
+- The new baseline is `CMP10/after/sweep`, not a fresh capture: three verifiers' own launches on the committed sources matched it byte for byte, and this close launched nothing, so it
+  could not cause a refusal. Its exe line says `aecd9c1a`, not `29166f75`; the backlog says so.
+- CMP7-6 is ticked on the verifiers' scratch compiles (verify1 and verify3 the 55 units with a changed dependency, verify2 all 136; every unit rc 0, 0 warnings) and the steps' build
+  logs (0 warning lines). `port_build.bat` was not run: with every object current it compiles nothing, so it shows nothing about warnings, and a relink can notify the owner. The
+  row says what was and was not run, and that the build logs do not say whether `port_build.bat` ran them. I read the logs before keeping that wording: my first draft had
+  said all three verifiers compiled 55 units (verify1 split them over two logs, verify2 compiled all 136) and that the `build_final` logs were `port_build.bat` runs.
+- The planning document was not edited (the commit is the two files): its step 169 keeps the sentence "8 of the 10 read slightly away" that verify3 could not reproduce (5 away, 1
+  flat, 4 toward on its estimator); `R4c1-2` carries the correction.
+
+**Where it stands / next:** first `R4c1-1`, the word on the push and on CMP-9's 42-level scope. Then wave 4c-2: the four groups that change gameplay, each its own step - CMP-2 (the
+revolute joint's attach point B, a change on both sides of the `.tscn`, re-converted into a staging directory and compared before it replaces anything), CMP-6 (two names out of
+`entity_roles.json`), CMP-15 (4-02's slab), CMP-16 (2-01's crate scale) - and the breakable wall's contact rows (Order 11.1's first clause and R3b-2's gate), with the routes they move
+re-flown once after all of them (2-28, 2-29, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31, 4-29, 3-09, 4-02, 2-01, 1-19, 1-20, 1-22 and the wall's checks), the two unrun code mutations at
+its first relink, and a second measuring pass on the fixed build. What stays: the rig clips (CMP-4, CMP-5, CMP-13, R3c-11, R4a-2), the port-only experiment (CMP-14), the owner's calls
+(the halo scale CMP-8 with CMP-12 after it, the engine's friction and restitution steps CMP-11, R24 CMP-17, the HUD / world clock offset, CAP-2), and the ship preparation:
+`docs/permission.md` is still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder (the owner's to fill), the play build (`tools\parity\play_build.bat`, none built), the
+owner's other calls and the repository's going public, which needs his explicit word.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and the backlog edits, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference | wc -l` prints 0). The forbidden-extension grep over the changed names printed nothing
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, `^out/`, `^reference/`); the wave's own range `git diff --name-only 16b78e1..753e7d0` holds 20 files, all under `docs/`,
+`game/` and `tests/`, none of them under `out/`, `reference/`, `engine/`, `tools/`, `data/` or `tests/routes/`. The owner's save folder holds `scores.json` alone (164 bytes, md5
+`40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** `16b78e1..753e7d0`: 7 commits (5 steps, 2 text-only), 20 files, +3,523 / -65; this close's commit is two files. 57 suites, 33,132 checks (32,314 at the start: +818).
+Routes won 128 of 128 on exactly the census's ticks after every step (2,366 checks, unchanged). Reachability 108 / 20 / 0. Levels changed at f420 against the old baseline: 106 of
+128 (22 identical); per step 77, 49, 1, 40, 9. GAMEPLAY changed: none. Rows opened 35 (R4c1 3, CMP1 6, CMP3 6, CMP7 6, CMP9 7, CMP10 7), 10 settled. Smart App Control refusals 5
+(2 `test_mp.exe`, 3 `MagicPortals.exe`). Images: 800 deleted, 0.53 GB, plus 4,510 scratch JSON copies (2.3 MB); free disk 104.982 -> 105.485 GiB; `out/parity` 18.743 -> 18.248 GiB.
+
+**Inferred mood:** a guess from the facts - a long run (about 17 hours from the first record to the last) of careful, mostly quiet work whose one stubborn item was not a bug but a
+sentence: three verifiers found the same level for the same reason, and the right answer was always going to be somebody else's to give. The drawing itself went well (the player and
+the arch, the key's light and the help block now read like the stills), so the day likely ended feeling unfinished rather than unsuccessful.
