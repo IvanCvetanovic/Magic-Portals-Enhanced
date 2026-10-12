@@ -1121,11 +1121,27 @@
       "The library's 2-20_h6.3 shows the orange ball where the port's f420 showed the red face (audit",
       "2026-09-29, check_assets.md item 2)."
     ],
-    "_not_built": [
-      "The same callback's #282-300, bounce(this, vector2(1.02, 1.02), vector2(0.98, 0.98), 300): the agent's",
-      "sprite pulses 1.02 -> 0.98 -> 1.02, 300 ms a leg, on bounce's blinkElapsedTime. Found here, not built:",
-      "not this step's (planning step 120, LEFT FOR THE OWNER)."
+    "_pulse": [
+      "THE AGENT'S OWN PULSE (built in planning step 169; found, not built, in step 120): the same callback's",
+      "#282-300 on every update, after its loop and doFollow, whatever the loop found: bounce(this,",
+      "vector2(1.02, 1.02), vector2(0.98, 0.98), 300). A call pushes its last argument first (00_order 8.0 rule 3):",
+      "#282 pushes the stride 300, #283-286 vector2(0.98) into v5 (scaleB), #288-291 vector2(1.02) into v6 (scaleA),",
+      "then the entity, and #297-299 name v6 and v5 in that order: scaleA 1.02, scaleB 0.98. bounce",
+      "(utilEntityEffect.angelscript, bytes 327057..327527) is the shock agent's (shock_ring agent_pulse has its",
+      "reading): blinkElapsedTime from 0, the leg's way by its stride count, interpolate(scaleA, scaleB,",
+      "smoothEnd(bias)) and SetScale(g_scale.scale(it)) - so the picture's scale is 1.02 x the .ent's picture at",
+      "0 ms, 0.98 at 300 ms, 1.02 at 600 ms, SET and not multiplied (fire_agent.ent's <Scale> is 1, no placement",
+      "carries a scale datum). SetScale touches no particle system (ETHEntity.cpp:601-608, the loop is commented",
+      "out), so the agent's flames do not pulse; but an entity's scale draws its OWN LIGHT and HALO as it draws its",
+      "picture: the light's offset and range are x scale.y (ETHEntityRenderingManager::BuildChildLight,",
+      "ETHEntityRenderingManager.cpp:174-183) and the halo's size x scale, at the unscaled position (DrawHalo,",
+      "ETHRenderEntity.cpp:376-386). The port passes the pulse as the owner scale of the agent's light (syncLights,",
+      "Lighting::OwnerScaled): picture, light range and offset and halo size pulse together. The clock is",
+      "the level's age, as the shock agent's and the antiportal's. fire_agent.ent is static=1, so the original runs",
+      "the callback only while the agent's bucket is drawn and the port from the level's first tick (the",
+      "bucket-clock row, G3-2). 22 placements on 20 levels, both spellings."
     ],
+    "pulse": { "from": [1.02, 1.02], "to": [0.98, 0.98], "stride_ms": 300.0 },
     "entity": "fire_agent",
     "sprite": "fire_agent.png"
   },
@@ -1185,14 +1201,39 @@
       "GetUInt reads 0. The library's 2-20_h6.3 shows the crates red-brown where the port drew them brown."
     ],
     "_clock": "The blink's clock is the level's age, the one art.json antiportal's runs on (a pause holds it), held from the tick the crate is burned. 19 of the 23 crates are dynamic, so their callback runs from the level's first frame; four are static=1, whose callback the original runs only while their bucket is drawn, and the port runs their blink from the first tick all the same (planning step 120, deviation 2); the clock is the script's floor, 16 ms a tick, since planning step 147 (as the antiportal's).",
-    "_not_built": [
-      "crateCallback's own blink after it, #38-121: a TELEPORTABLE crate that is not burned, when its callback",
-      "passes zeroEmissive or it carries the uint 'blink', blinks its emissive too: from (0.2, 0.2, 0.2) to 0",
-      "over 600 ms (#71-93), or with 'blink' from (1 - GetAmbientLight()) to 0 over 200 ms (#96-121). And",
-      "manageBurnable's fade of a burning crate: SetColor(bias) and SetAlpha(bias), bias 1 - burnTime/1000,",
-      "then DeleteEntity (#41-117); the port takes a burnt crate away whole. Found here, not built: not this",
-      "step's (planning step 120, LEFT FOR THE OWNER)."
+    "_teleportable": [
+      "THE TELEPORTABLE CRATE'S OWN BLINK (built in planning step 169; found, not built, in step 120):",
+      "crateCallback's #16-36 read the uint 'blink' (GetUInt != 0: hasBlinkFlag) and shallBlink = zeroEmissive ||",
+      "hasBlinkFlag, and #38-64 take the branch below only for a crate that is NOT burned (#43-49), IS teleportable",
+      "(#55, isTeleportable) and shallBlink (#62-64). Then #66-69 pick by hasBlinkFlag: without it, #70-93",
+      "blinkEmissive(this, vector3(0.2, 0.2, 0.2), V3_ZERO, 600). A call pushes its last argument first (00_order 8.0",
+      "rule 3): #71 pushes the stride 600, #72-79 V3_ZERO into v10 (colorB), #80-85 vector3(0.2) into v7 (colorA),",
+      "then the entity, and #91-92 name v7 and v10 in that order: from (0.2, 0.2, 0.2) to 0, 600 ms a leg, the",
+      "emissive 0.2 at 0 ms, 0 at 600 and 0.2 at 1200 (blinkEmissive, utilEntityEffect bytes 326616..327057, ends in",
+      "SetEmissiveColor(interpolate(colorA, colorB, bias)): the emissive over the node's and the .ent's own, as the",
+      "non-teleportable crate's is). manageNonTeleportable (#1-10) left a teleportable crate alone, so this is the",
+      "crate's only blink call and its blinkElapsedTime gains one frame's time a frame. Only the _no_emissive callers",
+      "(zero_emissive true) reach it without the flag: crate, crate_small and wood_piece_small have shallBlink 0 and",
+      "keep their node's emissive. CENSUS over the 128 levels: 28 teleportable crate_no_emissive or",
+      "crate_small_no_emissive placements on the 14 levels 2-04, 2-05, 2-08, 2-14, 2-17, 2-18, 2-19, 2-22, 2-23, 2-25,",
+      "2-28, 2-32, 3-15 and 4-25, none with the 'blink' datum and none static (each is a body, so its callback runs",
+      "from the level's first frame). Burned: manageBurnable then writes the colour, so the emissive keeps its last",
+      "blink, as the non-teleportable crate's."
     ],
+    "_not_built": [
+      "crateCallback's blink for a crate that carries the uint 'blink', #95-121: from (1 - GetAmbientLight()) to 0",
+      "over 200 ms, for a TELEPORTABLE crate that is not burned, whatever its zeroEmissive. 4-19's crate_2494 and",
+      "crate_2495 (both crate.ent, teleportable 1, blink 1) are the only two of the 128 levels: NOT built in planning",
+      "step 169, which is the 14 levels' and the barrels' and walls', and would move 4-19, outside its levels (LEFT FOR",
+      "LATER). And manageBurnable's fade of a burning crate: SetColor(bias) and SetAlpha(bias), bias 1 -",
+      "burnTime/1000, then DeleteEntity (#41-117); the port takes a burnt crate away whole. Found in planning step",
+      "120, LEFT FOR THE OWNER."
+    ],
+    "teleportable_emissive": {
+      "emissive": { "from": [0.2, 0.2, 0.2], "to": [0.0, 0.0, 0.0] },
+      "stride_ms": 600.0,
+      "blink_datum": "blink"
+    },
     "callbacks": [
       { "entity": "crate", "zero_emissive": false },
       { "entity": "crate_small", "zero_emissive": false },
@@ -1204,5 +1245,74 @@
     "stride_ms": 600.0,
     "colour": { "from": [1.0, 0.3, 0.3], "to": [1.0, 1.0, 1.0] },
     "emissive": { "from": [0.5, 0.0, 0.0], "to": [0.0, 0.0, 0.0] }
+  },
+
+  "barrel_bomb": {
+    "_source": [
+      "A BARREL'S EMISSIVE BLINKS, every frame (planning step 169; found, not built, in steps 120 and the restock's):",
+      "ETHCallback_barrel_bomb (MiscCallbacks.angelscript, bytecode bytes 339851..340212, Enhanced's",
+      "out/parity/asbc/all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0) #1-30, before its explode branch and",
+      "unconditional: blinkEmissive(thisEntity, thisEntity.GetVector3('minEmissive'), vector3(0.2, 0.2, 0.2), 300).",
+      "A call pushes its last argument first (00_order 8.0 rule 3): #5 pushes the stride 300 (the local `time`, #3), #6-10",
+      "build vector3(0.2, 0.2, 0.2) (the local `brightness`, #1) into v4, #11 names it (colorB), #12-22 build the",
+      "datum into v8 and #22 names it (colorA), then the entity, and #28-29 name v8 and v4 in that order. blinkEmissive",
+      "(utilEntityEffect.angelscript, bytes 326616..327057) is the one triangle - its blinkElapsedTime from 0 (the",
+      "entity's own uint, added the frame's time once a call: ins 26-41), the leg by its stride count, bias the",
+      "remainder over 300 turned back on odd legs, SetEmissiveColor(colorA + (colorB - colorA) x bias) at ins 90 -",
+      "so the emissive runs minEmissive at 0 ms, 0.2 at 300 and minEmissive again at 600, OVER the node's own and",
+      "the .ent's 0.45 (SetEmissiveColor writes the entity's emissive, ETHEntity.cpp:482-485).",
+      "THE FLOOR, minEmissive, is a vector3 datum. ETHEntity::GetVector3 of a datum that is not there is (0, 0, 0)",
+      "(ETHEntity.cpp:886-890; ETHCustomDataManager.cpp:170-175 returns false and leaves it), so a barrel with no",
+      "such datum blinks 0 -> 0.2 -> 0. Of the 128 levels' scenes ONE placement carries it, 4-32's barrel_bomb_2225",
+      "(level31c.esc, id 2225: <Type>vector3</Type> <Name>minEmissive</Name> <Value x=1 y=1 z=1>), and the dark",
+      "dragon's restock sets the same on every barrel it adds (darkdragon.json restock, ins 1038-1063:",
+      "SetVector3('minEmissive', V3_ONE)): the floor is 1 and the barrel blinks 1 -> 0.2 -> 1. The converter writes a",
+      "vector3 datum as an empty string (metadata/minEmissive = \"\"), so the port reads the datum's PRESENCE and takes",
+      "floor_present, the one value the census holds; a pin counts the nodes that carry it. The ghost's restock adds",
+      "barrel_bomb_low_emissive.ent, which has no callback in the listing (and so no blink).",
+      "31 placements on 16 levels, both spellings (a callback is named for the entity less its .ent, ETHASUtil.cpp:63-67),",
+      "none static (each is a body), so the callback runs from the level's first frame; an added barrel's clock starts",
+      "when it is added. Drawn at min(1, ambient + emissive) x colour (ETHRenderEntity.cpp:113-117)."
+    ],
+    "entity": "barrel_bomb",
+    "datum": "minEmissive",
+    "floor_absent": [0.0, 0.0, 0.0],
+    "floor_present": [1.0, 1.0, 1.0],
+    "emissive": { "to": [0.2, 0.2, 0.2], "stride_ms": 300.0 }
+  },
+
+  "breakable_wall": {
+    "_source": [
+      "A BREAKABLE WALL WITH THE uint 'blink' BLINKS ITS COLOUR AND ITS EMISSIVE (planning step 169; in no earlier row):",
+      "ETHCallback_breakable_wall (MiscCallbacks.angelscript, bytecode bytes 347658..348349) #87-99 read the uint 'blink'",
+      "(GetUInt, CMPIu against 0, JZ to the end #152: a wall without it - an absent datum reads 0, ETHEntity.cpp:865-870 -",
+      "does nothing here), then #101-151: blinkColor(this, V3_ONE, vector3(0.8, 0.8, 0.8), 300) (#105-127) and",
+      "blinkEmissive(this, V3_ONE, vector3(0.8, 0.8, 0.8), 300) (#129-151). Each pushes its last argument first (00_order",
+      "8.0 rule 3): #105 and #129 push the stride 300 (the local `time`, #103), #106-111 and #130-135 build",
+      "vector3(0.8) (the local `brightness`, #101) into v8 and name it (colorB), #112-119 and #136-143 copy V3_ONE into",
+      "v13 and name it (colorA), then the entity, and #125-126 and #149-150 name v13 and v8 in that order: BOTH run from 1",
+      "to 0.8 and back, 300 ms a leg: the colour's rgb (SetColor keeps the alpha, ETHEntity.cpp:493-498) and the emissive",
+      "(SetEmissiveColor), over the node's own (1 on levels 1-xx, 0.4 on 2-14 and 3-14 in the port) and the .ent's 1.",
+      "THE CLOCK RUNS TWICE AS FAST. blinkColor (utilEntityEffect bytes 326140..326616) and blinkEmissive (bytes",
+      "326616..327057) each do AddToUInt('blinkElapsedTime', g_timeManager.getLastFrameElapsedTime()) at their ins 26-41",
+      "on the SAME entity uint, and both are called in one frame, so the entity's clock gains two frames' time a",
+      "frame: calls_per_frame 2. blinkColor reads it after its own add and blinkEmissive after both, so with the level's",
+      "age `a` since the wall's first run and the frame's time `f`, the colour reads 2a - f ms and the emissive 2a ms",
+      "(BreakableWall::ClockMs): at 16 ms a tick a 300 ms leg is 150 ms, 9.4 ticks, the 600 ms period 18.75 ticks, and the",
+      "colour trails the emissive by one frame's time. blinkEmissive's own CheckCustomData test (ins 1-12) finds the",
+      "uint blinkColor just made, so neither resets it.",
+      "ETHCallback_breakable_wall is named for the entity less its .ent: breakable_wall_no_emissive and _sand have no",
+      "callback (the listing), so the entity is matched whole. CENSUS over the 128 levels: 33 breakable_wall placements on",
+      "28 levels, every one static=1 (the original runs the callback only while the wall's bucket is drawn and the port",
+      "from the level's first tick: the bucket-clock row, G3-2, as the antiportal's blink); 9 carry blink 1, on the 8",
+      "levels 1-09, 1-13, 1-19, 1-22 (two), 1-24, 1-25, 2-14 and 3-14, and the other 24 on 20 levels stay constant.",
+      "Drawn at min(1, ambient + emissive) x colour (ETHRenderEntity.cpp:113-117)."
+    ],
+    "entity": "breakable_wall",
+    "datum": "blink",
+    "colour": { "from": [1.0, 1.0, 1.0], "to": [0.8, 0.8, 0.8] },
+    "emissive": { "from": [1.0, 1.0, 1.0], "to": [0.8, 0.8, 0.8] },
+    "stride_ms": 300.0,
+    "calls_per_frame": 2
   }
 }

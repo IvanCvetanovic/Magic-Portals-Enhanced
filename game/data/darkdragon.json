@@ -439,7 +439,8 @@
       "barrel_spawn's GetPosition() at angle 0. A barrel asked to go off but not yet gone is",
       "still found. Then ins 1038-1063: on the barrel it added (not null), SetVector3",
       "('minEmissive', V3_ONE), the floor of ETHCallback_barrel_bomb's blink (#1-30,",
-      "blinkEmissive) - which the port does not draw for any barrel (not_built)."
+      "blinkEmissive) - which the port draws since planning step 169 (art.json barrel_bomb): an added barrel",
+      "blinks from this floor on its own clock, from the tick it is added."
     ],
     "search": "barrel_bomb",
     "add": "barrel_bomb.ent",
@@ -473,8 +474,7 @@
     "barrel_spawn with every restock: effects.json _bosses_flames_hands. The shake is built since",
     "planning step 101: earthquake.json's dark_dragon_mouth - on waypoint 3 past bias 0.2, ins",
     "573-578 - dark_dragon_shot, 15 per shot at the player (ins 980-982), and dark_dragon_death,",
-    "explode's 50.) The restocked barrel's minEmissive (1, 1, 1): the blink it is the floor of",
-    "(ETHCallback_barrel_bomb #1-30) is drawn for no barrel.",
+    "explode's 50.) (The restocked barrel's minEmissive blink is drawn since planning step 169: art.json barrel_bomb.)",
     "The wound's torch shot's guard: the original fires only at an unlit `light_off.ent`",
     "and relights it; the port fires at the torch lit or not (damage note).",
     "The summon's clock: F16 (out/parity/footage/F16.md section 3) shows arm_ms counted",

@@ -237,6 +237,10 @@ struct Antiportal {
 struct FireAgent {
     std::string entity; // the entity name, without .ent, whose callback it is
     std::string sprite; // the file SetSprite names, found in entities/
+    // And its #282-300, bounce(this, vector2(1.02), vector2(0.98), 300) on every update
+    // (art.json fire_agent pulse, planning step 169): the entity's scale, SET: its picture's,
+    // and so its light's offset and range and its halo's size, but not its flames'.
+    Pulse pulse;
 };
 
 // A key, a keyhole or a locked door as setKeyColor repaints it before it is first
@@ -273,7 +277,10 @@ struct Blink {
 // _no_emissive crates) and its colour when it does not. The two are written over
 // the node's own, never added to them.
 struct NonTeleportable {
-    enum class Blinks { Nothing, Colour, Emissive };
+    // TeleportableEmissive is crateCallback's own blink for a teleportable
+    // _no_emissive crate (#70-93, planning step 169), the same writes as Emissive
+    // with its own colours and the one call a frame it has always had.
+    enum class Blinks { Nothing, Colour, Emissive, TeleportableEmissive };
 
     // crateCallback's callers, by entity name without .ent, and the zeroEmissive
     // each passes it.
@@ -281,10 +288,52 @@ struct NonTeleportable {
     std::string datum; // the uint isTeleportable reads
     Blink colour;      // blinkColor's, SetColor
     Blink emissive;    // blinkEmissive's, SetEmissiveColor
+    // A teleportable crate's: blinkEmissive(this, vector3(0.2), V3_ZERO, 600), and the
+    // uint crateCallback's hasBlinkFlag reads, whose branch (#95-121) is not built.
+    Blink teleportableEmissive;
+    std::string blinkDatum;
 
     // What a placement of `bareEntity` blinks, `teleportable` being whether its
-    // datum is there and not 0 (GetUInt reads an absent one as 0).
-    Blinks For(const std::string& bareEntity, bool teleportable) const;
+    // datum is there and not 0 (GetUInt reads an absent one as 0) and `blinkFlag`
+    // whether its uint 'blink' is there and not 0. A crate that carries the flag
+    // takes the 200 ms branch of crateCallback, which is not built: it blinks
+    // nothing here, as the teleportable crates did before this one.
+    Blinks For(const std::string& bareEntity, bool teleportable, bool blinkFlag) const;
+};
+
+// A barrel's blink, every frame (art.json barrel_bomb; ETHCallback_barrel_bomb #1-30):
+// blinkEmissive(this, GetVector3('minEmissive'), vector3(0.2), 300), over its node's and
+// its .ent's emissive. The floor is the datum, (0, 0, 0) where it is absent.
+struct BarrelBomb {
+    std::string entity; // the entity name, without .ent, whose callback it is
+    std::string datum;  // the vector3 colorA reads
+    glm::dvec3 floorAbsent{0.0};  // GetVector3 of a datum that is not there
+    glm::dvec3 floorPresent{1.0}; // the one value the scenes' placements carry (the converter writes none)
+    glm::dvec3 ceiling{0.2};      // blinkEmissive's colorB
+    double strideMs = 0.0;        // a leg
+
+    // The floor of a barrel whose datum is there or not, and the triangle from a floor.
+    const glm::dvec3& FloorFor(bool datumPresent) const { return datumPresent ? floorPresent : floorAbsent; }
+    Blink Triangle(const glm::dvec3& floor) const { return Blink{floor, ceiling, strideMs}; }
+};
+
+// A breakable wall's blink (art.json breakable_wall; ETHCallback_breakable_wall
+// #87-151): a wall whose uint `datum` is not 0 runs blinkColor and blinkEmissive in the
+// same frame, both from 1 to 0.8 on 300 ms legs. They add the frame's time to the SAME
+// blinkElapsedTime, so its clock gains callsPerFrame frames' worth a frame.
+struct BreakableWall {
+    std::string entity; // the entity name, without .ent, whose callback it is
+    std::string datum;  // the uint the callback reads
+    Blink colour;       // blinkColor's, SetColor
+    Blink emissive;     // blinkEmissive's, SetEmissiveColor
+    int callsPerFrame = 1;
+
+    // The clock call number `call` (1 is the first) of a frame reads, `ageMs` since the
+    // wall's first run once this frame's time `frameMs` is in: every call adds `frameMs`
+    // before it reads, so the calls after it have not added theirs yet.
+    double ClockMs(double ageMs, double frameMs, int call) const {
+        return callsPerFrame * ageMs - (callsPerFrame - call) * frameMs;
+    }
 };
 
 // The dial the original adds behind a timed crystal, as timer.ent draws it and
@@ -512,6 +561,8 @@ struct Rules {
     FireAgent fireAgent;
     KeyColour keyColour;
     NonTeleportable nonTeleportable;
+    BarrelBomb barrelBomb;         // ETHCallback_barrel_bomb's blink
+    BreakableWall breakableWall;   // ETHCallback_breakable_wall's, for a wall with `blink`
     Timer timer;         // timer.ent, the dial behind a timed crystal
     Minion minion;       // minion.ent, the minions and knights
     Ghost ghost;         // ghost.ent, chapter 3's boss

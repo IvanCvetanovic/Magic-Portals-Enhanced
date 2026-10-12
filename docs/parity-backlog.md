@@ -3284,6 +3284,57 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       `port_build.bat` (it could relink and notify the owner; `ninja -n` showed a CMake re-check step, cause not investigated). Every source is older than the executables
       `08469442` and `23a7d823`. Next: the wave's verify role runs `port_build.bat` once.
 
+**Step 169's recorded deviations** (the script's emissive blinks, CMP-9, wave 4c-1; planning step 169 has the evidence, `RECORDED DEVIATIONS` 1-7; `out/parity/program/CMP9/` the reports, `deviations.md` (the owner-delegated disposition after the third verification; its own numbering differs from the record's, which these rows follow) and `verify1.json` to `verify3.json`; GAMEPLAY: none; the row CMP-9 is closed by it):
+- [ ] **CMP9-1. Gate 1: the f420 sweep changed 40 levels, 10 of them outside the group's 32, and 2 of the 32 did not change** (deviation 1; the first, second and third
+      verifications' medium). Required: only the group's 32 levels differ from `CMP7/after/sweep`, the rest byte-identical, each change explained. Measured: 128 launches, rc 0,
+      validation silent; 88 byte-identical, 40 changed = 30 of the 32 and 10 outside them: 2-10, 2-11, 2-20, 2-26, 2-27, 2-30, 2-31, 3-23, 4-12, 4-28, exactly the fire-agent
+      levels outside the 32 (22 agents on 20 levels, 10 inside the 32 and 10 outside, from the scenes), 445 to 5,125 changed pixels, at most 25 grey levels (2-31's agents are
+      off the frame and only their range-256 light reaches it). The pulse stands at 0.9965 of the size at f420, and the whole frame's mean absolute difference to h6.3 moves by
+      0.006 or less on each of the 10. 2-32 and 3-15 are byte-identical: their one teleportable crate is off the f420 frame (2-32's at x 1312 of a scrolling level; 3-15's at x
+      496, 770 px right of the frame's edge). The spec contradicts itself (its BUILD line and CMP-9's own text, "also decoded, not built: the fire agent's bounce", ask for the
+      pulse; its sweep gate names only the 32). **Scope 42 levels ACCEPTED at the commit (owner-delegated)**, because the ruling is the original and the pulse is what the
+      original does; the gate is not recorded as passed. Revert if the owner vetoes it: the pulse line in `syncSprites`, the owner-scale pass in `syncLights`,
+      `fire_agent.pulse` (`art.json`, `Art.cpp`, `Art.hpp`) and its pins, then a re-sweep (only the 30 drawn levels then move). Next: 2-32 and 3-15 each get a capture at a tick
+      with the crate on screen, in the wave 4c-2 re-fly or the final comparison; the pulse was swept at f420 only, not at its ends (0.98, 1.02).
+- [ ] **CMP9-2. Gate 2: 16 of the 93 stills lie outside the port's f420-f504 range after alignment (20 before it)** (deviation 2; the verifications' lows). Measured: 77 of 93
+      stills over the 22 boxes inside the range after the camera offsets of four stills are aligned (73 before), 66 of 69 in the 17 boxes whose content is the blinking thing
+      alone. Outside, with the cause looked at: 2-25's h0.3 (the "Part 2" title over the crate), 2-08's pyramid (burning in the later stills), 2-05's small crates (a pile
+      elsewhere), 2-24's 700 x 300 px box, 3-19's h0.3 (its static sky 20 percent brighter in that still), 2-29's h6.3 (blue above red: another object). The stills never sample
+      the port's troughs on 4-32 (43.3 to 67.2 against 15.7 to 65.2), 4-25 (the aligned floor 9.7 against 2.4) and 2-21 (20.7 to 22.9 against 10.9 to 22.4); footage F16's
+      amplitude on 4-32 supports the port's. 3-14's h0.3 and 4-25's h0.3 and t2.0 were camera offsets (closed). Cause: confounded boxes and the stills' phase sampling (wall
+      seconds at 15 to 29 fps, the HUD 0.5 to 0.9 s ahead of the world), not a wrong rule. Next: trace the ambient and the lights on 4-25, 4-32 and 2-21, or capture a clip of
+      them, in the wave 4c-2 re-fly or the final comparison.
+- [ ] **CMP9-3. The flagged wall's period and the static entities' phase are decode only** (deviation 3; the verifications' low). No footage clip holds a wall with `blink` (8
+      levels), so its 300 ms period on the doubled clock is the decode's, not measured (the barrel's 0.605 s and the crate's 1.210 s are measured, against the decode's 0.600
+      and 1.200); the fire agent's pulse (+-2 percent of a 32-unit picture) is below pixel resolution. The 33 breakable walls and the fire agents are static, so the original
+      starts their clock when their bucket is first drawn (G3-2) and the port at level tick 1: the ends and the period are the original's, the phase is not known to match; a
+      restocked barrel is drawn one frame early. Next: a clip of 1-09 or 2-14 (the same clip as CMP9-6), then G3-2.
+- [x] **CMP9-4. Settled before the commit: the restocked barrel's blink had no test and the code rules were never mutated** (deviation 4; the first verification's medium).
+      Fixed (fix1): `ARestockedBarrelBlinksFromItsOwnBirth` drives 4-32 to the dragon's next shot (12 checks, the barrel drawn from its birth tick), and the four code rules
+      (the wall colour's one add behind, `For`'s teleportable branch, the light's and halo's owner scale, the restock's born clock) were mutated in one relinked runner, each
+      failing the checks that name it. The restock's floor assignment is an equivalent mutant on the shipped data (the placed barrel it is copied from already carries the
+      floor); the test pins the value. Nothing is left to do.
+- [ ] **CMP9-5. The `blink`-flag crate branch is not built: 4-19's two flagged crates** (deviation 5). `crateCallback` #95-121, `blinkEmissive(1 - GetAmbientLight(), V3_ZERO,
+      200)` for a teleportable crate that carries the uint `blink`: `crate_2494` and `crate_2495` are the only two of the 128 levels; building it moves 4-19, which is neither
+      in CMP-9's group nor in the step's build list (4-19 is byte-identical to before). `art.json` `non_teleportable._not_built` says so. Next: build it with the step that
+      takes 4-19.
+- [ ] **CMP9-6. The whole frame's MAD against h6.3 is slightly worse on three changed levels; the chapter-1 walls read dimmer than the stills** (deviation 6; the
+      owner-delegated disposition, `CMP9/deviations.md`). h6.3: 1-22 5.205 -> 5.260, 2-19 2.576 -> 2.651, 1-13 4.597 -> 4.607; six more (2-11, 2-26, 2-29, 2-31, 3-23, 4-10)
+      move by 0.006 or less. Summed over ALL the kept stills the frame MAD is flat or better on all three (1-22 55.26 -> 55.16, six stills; 1-13 49.46 -> 49.30, six; 2-19 11.97
+      -> 11.95, three) and the MAD over the changed pixels is better (100.0 -> 98.4, 117.8 -> 110.9, 27.5 -> 27.1), so the h6.3 reading is one phase; 2-19's port value now sits
+      inside the stills' spread. **Open:** on the chapter-1 walls (1-22, 1-13) the port's f420 value (0.85 to 0.875 of the old peak) is dimmer than all six stills on the
+      changed pixels (port minus still -3.5 to -12.1 on 1-22), where before it was brighter than four. The stills read 0.72 to 1.01 of the peak (mean about 0.91) against the
+      decode's 0.64 to 1.0 cycle, sampled at multiples of 0.1 s on a 0.3 s period, which can explain it; a shallower original blink (the colour and emissive floors not both
+      reaching 0.8 in the picture) cannot be ruled out without a clip. Cause: probably the phase, not traced to a depth difference. Next: the clip of CMP9-3, then the wall's
+      depth and phase measured; the wave 4c-2 re-measure reads them as ranges.
+- [ ] **CMP9-7. Housekeeping: dead default initialisers in `Art.hpp`, and `MagicPortals.exe` older than the libraries** (deviation 7; the third verification's lows). (a)
+      `BarrelBomb::floorPresent{1.0}` and `ceiling{0.2}` and `BreakableWall::callsPerFrame = 1` repeat `art.json`'s values and never take effect (`LoadRules` refuses the file
+      without each key); code, and `Art.hpp` is included by ten files, so the edit relinks both executables: not done at the commit. Next: value-initialise them to 0 the next
+      time `Art.hpp` is touched. (b) `build/game/MagicPortals.exe` `90a48b79` (linked 02:57) is older than the libraries rebuilt for `test_mp` after the first fix (04:35); the
+      sources are byte-identical (md5s equal `fix2/md5_end.txt`) and the sweep was taken with this executable, so nothing was rebuilt at the commit. Next: the wave's verify
+      role runs `port_build.bat` once (`ninja -n` shows a CMake re-check step, so it may relink and a refused launch notifies the owner), launches the new exe once alone, and
+      re-checks three levels against `CMP9/after/sweep`.
+
 **The final comparison's rows** (wave 4b; 128 levels, 18 causes and CMP-low; GAMEPLAY: none in the comparison itself, each row says its fix's). Evidence is under
 `out/parity/program/R4b/CMP/` (`residuals.md` has every reader's line with its box, `groups.json` the causes and proposals, `per_level.md` the table): the pair images
 `pairs/<id>_h63_pair.png` (the original above the port, half scale) and `pairs/<id>_h63_overlay.png`, port frames `port_f420/<id>_f420.png`, are kept (named in
@@ -3431,7 +3482,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (a) one global scale fitted on the 128 x 6 stills this comparison holds, (b) per-entity scales (torch, `blue_light`, `diamond_light_*`, fire agent), or (c) leave.
       Gate if taken: the box ratios to 1.0 +-0.05 on a held-out half of the levels, G5's `LM_E<1_halo` rows still pass at hd art, the flicker amplitude re-read.
       GAMEPLAY: none.
-- [ ] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
+- [x] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
       levels in scope: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-04, 2-05, 2-08, 2-12 to 2-19, 2-21 to 2-25, 2-28, 2-29, 2-32, 3-14, 3-15, 3-19, 4-10, 4-16, 4-25, 4-32 (the
       readers filed it on 17). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
       against 50) and barrel box 205,395,292,508; 3-14 wall box 560,410,915,495 (78-101 against 66); 2-05 crates [710,156,890,330] (the original shows their grain, the
@@ -3444,6 +3495,27 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       blink); the wall's blink is in no row. Next: three more callers of the existing blink in `sim/Art` and the layer (data in `art.json` with the listing citations)
       and the fire agent's pulse. Gate: the readers' boxes inside the original's range at the right phase, pins in `test_mp_sprites`, the f420 sweep changes only the 32
       levels. GAMEPLAY: none.
+      *Closed by step 169 (CMP9, wave 4c-1), 2026-10-12; committed locally, the hash goes in at the wave's close. GAMEPLAY: none (the 128 routes win on exactly the census's
+      ticks, 83 to 3,343). Committed WITH RECORDED DEVIATIONS (owner-delegated): gate 1 is not met to the letter.* Built as the Next says, from the listing (md5 `48fe65ce`),
+      every number in `game/data/art.json` with its citations: a barrel's emissive from its `minEmissive` datum to 0.2 on 300 ms legs, every frame, over the node's own
+      (`ETHCallback_barrel_bomb` #1-30; `GetVector3` of an absent datum is (0, 0, 0), so 15 of the 16 barrel levels blink 0 -> 0.2, chapter 2's barrels get brighter and 3-19's,
+      4-10's and 4-16's, which carried 0.45, get darker; 4-32's one barrel carries (1, 1, 1), as does every barrel the dark dragon restocks); a breakable wall with the uint
+      `blink`, colour and emissive 1 -> 0.8 on 300 ms legs, **both calls adding the frame to ONE clock, so it runs twice as fast: a period of 300 ms, the colour one add
+      behind** (`ETHCallback_breakable_wall` #87-151; the group's row did not state it); a teleportable `_no_emissive` crate's emissive 0.2 -> 0 on 600 ms legs (`crateCallback`
+      #70-93); and the fire agent's pulse, its scale 1.02 -> 0.98 on 300 ms legs, which draws its picture, its light's range and offset and its halo's size, not its flames
+      (`ETHCallback_fire_agent` #282-300). Pins: `test_mp_sprites` 1,675 -> 1,763, `test_mp_layer` 4,017 -> 4,090; 13 `art.json` mutations and four code mutations each fail
+      named checks. Measured: the f420 sweep changed 40 levels of 128 (88 byte-identical): 30 of the group's 32 and the fire agent's 10 outside it; the readers' boxes 77 of 93
+      stills inside the port's f420-f504 range once the camera offsets are aligned (73 unaligned), 66 of 69 where the box holds only the blinking thing: 2-12's barrel 10.5 ->
+      16.3 against the stills' 15.9-23.8, 2-14's wall 50.0 -> 76.7 against 71.8-87.8, 3-14's walls 66.0 -> 89.6 against 78.1-100.9 (the 78.1, h0.3, reads 99.4 once aligned),
+      3-19's barrel, which was too bright, 50.0 -> 27.8 against 26.5-32.6, 4-25's crate no longer a black square and 2-05's crates showing their grain; the periods fitted on
+      the original's footage, 0.605 s for the barrel and 1.210 s for the crate, against the decode's 0.600 and 1.200; 57 suites, 32,773 checks, `test_mp_routes` 2,366 checks
+      with 128 of 128 on the census's ticks, reachability 108 / 20 / 0, 0 warnings. Independently verified three times (`CMP9/verify1.json` to `verify3.json`: the third read 8
+      of 9 gates ok, gate 1's letter not met). **What it leaves**: (a) gate 1's scope of 42 levels (accepted) and the unchanged 2-32 and 3-15 (CMP9-1); (b) the stills never
+      sample the port's troughs on 4-25, 4-32 and 2-21 and five stills lie outside for stated causes (CMP9-2); (c) the flagged wall's period and the static entities' phase are
+      decode only (CMP9-3), and the chapter-1 walls read dimmer than all six stills at f420 on the changed pixels, 1-22, 1-13 and 2-19 slightly worse against h6.3 alone
+      (CMP9-6); (d) 4-19's two flagged crates, the 200 ms branch, are not built (CMP9-5); (e) the dead initialisers and the older executable (CMP9-7). The deviations are rows
+      CMP9-1 to CMP9-7 above; the older rows that name the barrel's blink, the crate's emissive and the pulse as unbuilt ("Found by step 120", "The restock's pictures") carry a
+      note.
 - [ ] **CMP-10. The help block ("?") is drawn plain and opaque; the original draws it at alpha 0.76 breathing 1.05-1.13x** (medium; structural; `decoded`; moves no
       route). 13 levels in scope: 1-02, 1-03, 1-10, 1-11, 1-13, 1-19, 1-25, 1-32, 2-03, 2-06, 3-09, 4-01, 4-02; in frame and filed on 1-02, 1-10, 1-11, 1-13, 1-25; in
       frame and unfiled on 2-03 and 2-06 (their pair images show the same greyer face, about 16 percent dimmer over the dark sky: the readers missed a decoded
@@ -3920,6 +3992,9 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (2-09's, 2-11's, 2-23's and 4-12's crates are `static="1"`, so the original blinks them only while their bucket
       is drawn, 00_order 8.12c; the port from the level's first tick - the bucket-limited clock, not decodable from
       stills).
+      *Step 169 (CMP-9) builds the fire agent's pulse (its picture, its light's range and offset and its halo) and the teleportable `_no_emissive` crate's emissive (0.2 -> 0 on
+      600 ms legs, `crateCallback` #70-93); the `blink`-flag branch (#95-121, 4-19's two crates; CMP9-5), the burning crate's fade and the static crates' bucket clock stay open
+      here, so the row stays open.*
 - [x] **P5. SpaceSky** (spiral, planet, eclipse) on the 19 space levels. KNOWN only as a cause. **Built in step 122**
       (program wave 1, track B, `691d6de`), as `SpaceSky` (Sky.angelscript L30669-31104): the space sky at the view's
       centre at its own size; the spiral at the view's bottom-centre, a square as wide as the view's diagonal, coloured
@@ -4195,6 +4270,8 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       effects' owner. *The effects-runtime row is built in step 146*: `ghost_utility_spawn.ent` on the spawn marker's
       own point and depth before each barrel and fire diamond a boss puts back, at the ghost's escorts and at the dark
       dragon's key_pos. The barrel's `minEmissive` blink is still not drawn.
+      *Step 169 (CMP-9) draws the blink: a barrel the dragon puts back runs the barrel's triangle from the tick it is made, at the floor (1, 1, 1)
+      (`ARestockedBarrelBlinksFromItsOwnBirth`, 4-32).*
 - [ ] **The lava is filed as a hazard, and kills nobody in the original** (step 116, finding):
       `ETHBeginContactCallback_lava` (L68416) only burns and sets `explode`; `entity_roles.json` puts `lava` under
       `hazard`, so `Hazards` gives level31c's `lava_1140` a 16 px box that kills the player. Unreachable: the player

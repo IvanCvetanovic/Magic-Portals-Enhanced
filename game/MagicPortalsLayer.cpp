@@ -539,6 +539,7 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // state, whose preLoop starts the black, "Part N" and the plaque again
     // (GameLayer::update, bytes 100358..100663) - so it is zero here too.
     m_levelAgeMs = 0.0;
+    m_levelStepMs = 0.0;
     // And the time a pause or a popup stood it still, which the new level has had
     // none of, and the plaque's dismissal, which it has not reached.
     m_stoppedMs = 0.0;
@@ -4997,12 +4998,40 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             double datum = 0.0;
             const Tscn::Value* flag = node->Meta(m_artRules.nonTeleportable.datum);
             const bool teleportable = flag != nullptr && flag->AsNumber(datum) && datum != 0.0;
-            drawn.blinks = m_artRules.nonTeleportable.For(BareEntityName(*node), teleportable);
+            // crateCallback #16-36's hasBlinkFlag: a teleportable crate that carries it takes the
+            // 200 ms branch, which is not built (art.json non_teleportable _not_built).
+            double flagValue = 0.0;
+            const Tscn::Value* blinkMeta = node->Meta(m_artRules.nonTeleportable.blinkDatum);
+            const bool blinkFlag = blinkMeta != nullptr && blinkMeta->AsNumber(flagValue) && flagValue != 0.0;
+            drawn.blinks = m_artRules.nonTeleportable.For(BareEntityName(*node), teleportable, blinkFlag);
             if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
                 const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
                 for (std::size_t b = 0; b < burnables.size(); ++b) {
                     if (burnables[b].name == sprite.node) drawn.burnable = static_cast<int>(b);
                 }
+            }
+        }
+        // THE SCRIPT'S OTHER THREE BLINKS (planning step 169), each named by its callback, the
+        // entity less its .ent: a barrel blinks its emissive every frame (art.json barrel_bomb),
+        // from its minEmissive datum - the converter wrote the datum's value as an empty string, so
+        // its presence says it is the one value the scenes hold - to 0.2; a breakable wall that
+        // carries the uint `blink` blinks its colour and its emissive on one clock run twice a
+        // frame (breakable_wall; _no_emissive and _sand have no callback); and a fire agent pulses
+        // its picture (fire_agent pulse). syncLighting writes the first two and syncSprites the
+        // third, every tick.
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            const std::string bare = BareEntityName(*node);
+            if (bare == m_artRules.barrelBomb.entity) {
+                drawn.scriptBlink = DrawnSprite::ScriptBlink::Barrel;
+                drawn.blinkFloor = m_artRules.barrelBomb.FloorFor(node->Meta(m_artRules.barrelBomb.datum) != nullptr);
+            } else if (bare == m_artRules.breakableWall.entity) {
+                double flagValue = 0.0;
+                const Tscn::Value* flag = node->Meta(m_artRules.breakableWall.datum);
+                if (flag != nullptr && flag->AsNumber(flagValue) && flagValue != 0.0) {
+                    drawn.scriptBlink = DrawnSprite::ScriptBlink::Wall;
+                }
+            } else if (bare == m_artRules.fireAgent.entity) {
+                drawn.firePulse = true;
             }
         }
         drawn.ownerPx = sprite.atPx;
@@ -5772,6 +5801,11 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         // And never its template's quads: a barrel has no sky's cover, and a copy
         // that kept one would destroy it twice.
         made.cover = entt::null;
+        // A barrel it adds blinks on its own clock, from the tick it is added (its blinkElapsedTime is
+        // the entity's own), and from the floor the dark dragon sets on every one: SetVector3(
+        // 'minEmissive', V3_ONE) (darkdragon.json restock, ins 1038-1063; art.json barrel_bomb).
+        made.blinkBornMs = m_levelAgeMs;
+        if (made.scriptBlink == DrawnSprite::ScriptBlink::Barrel) made.blinkFloor = m_artRules.barrelBomb.floorPresent;
         made.quad = makeSprite(registry, "Magic Portals Restocked Sprite", made.sprite.texture, made.sprite.additive);
         // A body, moved on the tick and drawn at its place, as buildSprites gives one.
         registry.emplace<InterpolatedTransformComponent>(made.quad);
@@ -6108,6 +6142,11 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         // to 0.95 and back, 300 ms a leg, on the level's age as the antiportal's
         // blink - about its own point, its pivot 0, and its sparks untouched.
         if (drawn.field >= 0) drawnSizePx *= m_artRules.shockRing.agentPulse.ScaleAt(m_levelAgeMs);
+        // And a fire agent at its own (art.json fire_agent pulse): bounce(this, 1.02, 0.98, 300) SETS
+        // the picture's scale to the pulse, its flames untouched (its light and halo take the same scale: syncLights).
+        // fire_agent.ent's <Scale> is 1 and no placement carries a scale datum, so the picture's own size times the
+        // pulse is it.
+        if (drawn.firePulse) drawnSizePx *= m_artRules.fireAgent.pulse.ScaleAt(m_levelAgeMs - drawn.blinkBornMs);
         drawn.drawnSizePx = drawnSizePx;
         placeSprite(registry, drawn.quad, centrePx, drawnSizePx, drawn.z, rotation);
         if (drawn.cover != entt::null) placeSkyCover(registry, drawn, centrePx, drawnSizePx, rotation);
@@ -6960,6 +6999,21 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         // writing either: manageBurnable takes the colour from 1 (its fade is not
         // drawn, so the node's white stands), and the emissive keeps its last blink.
         glm::dvec3 emissive = drawn.emissive;
+        // A BARREL'S BLINK (art.json barrel_bomb): ETHCallback_barrel_bomb's blinkEmissive every frame
+        // writes the emissive over the node's own - its floor, minEmissive, to 0.2 and back on
+        // 300 ms legs - on the barrel's own clock, one call a frame.
+        if (drawn.scriptBlink == DrawnSprite::ScriptBlink::Barrel) {
+            emissive = m_artRules.barrelBomb.Triangle(drawn.blinkFloor).At(m_levelAgeMs - drawn.blinkBornMs);
+        }
+        // A WALL WITH `blink` (art.json breakable_wall): blinkColor then blinkEmissive, 1 to 0.8 and
+        // back on 300 ms legs, both adding the frame's time to ONE blinkElapsedTime, so the colour
+        // reads the clock one add behind the emissive and both run at twice the level's rate.
+        if (drawn.scriptBlink == DrawnSprite::ScriptBlink::Wall) {
+            const Art::BreakableWall& wall = m_artRules.breakableWall;
+            const double sinceMs = m_levelAgeMs - drawn.blinkBornMs;
+            colour = glm::vec4(glm::vec3(wall.colour.At(wall.ClockMs(sinceMs, m_levelStepMs, 1))), colour.a);
+            emissive = wall.emissive.At(wall.ClockMs(sinceMs, m_levelStepMs, wall.callsPerFrame));
+        }
         if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
             const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
             const bool burned = drawn.burnable >= 0 && static_cast<std::size_t>(drawn.burnable) < burnables.size() &&
@@ -6973,6 +7027,9 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
                 colour = glm::vec4(glm::vec3(crates.colour.At(drawn.blinkMs)), colour.a);
             } else if (drawn.blinks == Art::NonTeleportable::Blinks::Emissive && drawn.blinked) {
                 emissive = crates.emissive.At(drawn.blinkMs);
+            } else if (drawn.blinks == Art::NonTeleportable::Blinks::TeleportableEmissive && drawn.blinked) {
+                // crateCallback's own, for a teleportable crate (#70-93): 0.2 to 0 on 600 ms legs.
+                emissive = crates.teleportableEmissive.At(drawn.blinkMs);
             }
         }
         tint(registry, drawn.quad, colour, emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
@@ -7308,14 +7365,20 @@ void MagicPortalsLayer::syncLights(entt::registry& registry) {
     for (const PlacedLight& placed : m_placedLights) {
         bool present = true;
         glm::dvec2 ownerPx = placed.atPx;
+        // A level placement: its <Scale> is in its light already (K7).
+        glm::dvec2 ownerScale(1.0);
         if (placed.sprite >= 0) {
             const DrawnSprite& owner = m_sprites[static_cast<std::size_t>(placed.sprite)];
             present = owner.quad != entt::null && registry.valid(owner.quad);
             ownerPx = owner.ownerPx;
+            // A FIRE AGENT'S BOUNCE SETS ITS SCALE, and its scale draws its light and its halo as it draws its
+            // picture (art.json fire_agent pulse): the light's offset and range x scale.y (BuildChildLight,
+            // ETHEntityRenderingManager.cpp:174-183), the halo's size x scale (DrawHalo, ETHRenderEntity.cpp:376-386).
+            // The pulse is the level placement's scale on top of the 1 its <Scale> left in the light.
+            if (owner.firePulse) ownerScale = m_artRules.fireAgent.pulse.ScaleAt(m_levelAgeMs - owner.blinkBornMs);
         }
-        // A level placement: its <Scale> is in its light already (K7).
         place(placed.entity, placed.halo, placed.light, ownerPx, placed.ownerZ, placed.ownerStatic,
-              particleRatioOf(placed.emitter), placed.haloZ, present, glm::dvec2(1.0));
+              particleRatioOf(placed.emitter), placed.haloZ, present, ownerScale);
     }
 
     // THE KEYS' OWN: a script's light (AddLight), so the live layer, no particle share and no owner scale - the
@@ -11765,6 +11828,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         // The level is a tick older. BEFORE the input, because the pads slide
         // in and a tap is tested against where they are on this tick.
         m_levelAgeMs += dtMs;
+        m_levelStepMs = dtMs;
         m_levelFrameWallMs += ScriptClock::WallMs(step);
         // GameLayer is updated on this tick: the plaque's colour is written.
         tickPlaqueDismissal(true);

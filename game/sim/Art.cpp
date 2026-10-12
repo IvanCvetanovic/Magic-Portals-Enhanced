@@ -307,12 +307,16 @@ std::string KeyColour::SpriteFor(const std::string& entityName, const std::strin
     return {};
 }
 
-NonTeleportable::Blinks NonTeleportable::For(const std::string& bareEntity, bool teleportable) const {
-    // manageNonTeleportable #1-10 leaves a teleportable crate alone; #23-24 picks
-    // the emissive for a zeroEmissive caller and the colour for the rest.
-    if (teleportable) return Blinks::Nothing;
+NonTeleportable::Blinks NonTeleportable::For(const std::string& bareEntity, bool teleportable, bool blinkFlag) const {
     for (const auto& [entity, zeroEmissive] : callbacks) {
-        if (entity == bareEntity) return zeroEmissive ? Blinks::Emissive : Blinks::Colour;
+        if (entity != bareEntity) continue;
+        // manageNonTeleportable #1-10 leaves a teleportable crate alone; #23-24 picks
+        // the emissive for a zeroEmissive caller and the colour for the rest.
+        if (!teleportable) return zeroEmissive ? Blinks::Emissive : Blinks::Colour;
+        // crateCallback #31-36 and #62-64: a teleportable crate blinks when zeroEmissive
+        // or it carries the flag, and #66-69 send the flag's to its own, shorter branch
+        // (#95-121), which is not built.
+        return zeroEmissive && !blinkFlag ? Blinks::TeleportableEmissive : Blinks::Nothing;
     }
     return Blinks::Nothing;
 }
@@ -901,6 +905,15 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.fireAgent.entity = fireEntry["entity"].AsString("");
     read.fireAgent.sprite = fireEntry["sprite"].AsString("");
+    // Its own bounce, which a scale that does not change would make no pulse of.
+    if (!ReadPulse(fireEntry["pulse"], read.fireAgent.pulse) ||
+        read.fireAgent.pulse.fromScale == read.fireAgent.pulse.toScale ||
+        !(read.fireAgent.pulse.fromScale.x > 0.0 && read.fireAgent.pulse.fromScale.y > 0.0 &&
+          read.fireAgent.pulse.toScale.x > 0.0 && read.fireAgent.pulse.toScale.y > 0.0)) {
+        error = path + ": fire_agent needs a pulse, a from and a to of two scales above 0 that differ, and a "
+                       "stride_ms above 0";
+        return false;
+    }
 
     KeyColour& keys = read.keyColour;
     const Json::Value& keyEntry = root["key_colour"];
@@ -955,6 +968,56 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     crates.datum = crateEntry["datum"].AsString("");
     crates.colour.strideMs = crateEntry["stride_ms"].AsNumber();
     crates.emissive.strideMs = crates.colour.strideMs;
+    // The teleportable crate's own blink (crateCallback #70-93), and the datum whose crates
+    // take the other branch.
+    const Json::Value& teleportable = crateEntry["teleportable_emissive"];
+    if (!teleportable.IsObject() || !Emissive(teleportable["emissive"]["from"], crates.teleportableEmissive.from) ||
+        !Emissive(teleportable["emissive"]["to"], crates.teleportableEmissive.to) || !Finite(teleportable["stride_ms"]) ||
+        !(teleportable["stride_ms"].AsNumber() > 0.0) || !plainName(teleportable["blink_datum"])) {
+        error = path + ": non_teleportable needs teleportable_emissive, an emissive with a from and a to of three "
+                       "numbers none below 0, a stride_ms above 0 and a blink_datum, a name without a dot";
+        return false;
+    }
+    crates.teleportableEmissive.strideMs = teleportable["stride_ms"].AsNumber();
+    crates.blinkDatum = teleportable["blink_datum"].AsString("");
+
+    // A barrel's blink and a wall's, every frame of a callback (ETHCallback_barrel_bomb #1-30,
+    // ETHCallback_breakable_wall #87-151). Named as their callbacks are, without the .ent.
+    BarrelBomb& barrel = read.barrelBomb;
+    const Json::Value& barrelEntry = root["barrel_bomb"];
+    if (!barrelEntry.IsObject() || !plainName(barrelEntry["entity"]) || !plainName(barrelEntry["datum"]) ||
+        !Emissive(barrelEntry["floor_absent"], barrel.floorAbsent) ||
+        !Emissive(barrelEntry["floor_present"], barrel.floorPresent) ||
+        !Emissive(barrelEntry["emissive"]["to"], barrel.ceiling) || !Finite(barrelEntry["emissive"]["stride_ms"]) ||
+        !(barrelEntry["emissive"]["stride_ms"].AsNumber() > 0.0)) {
+        error = path + ": barrel_bomb needs an entity and a datum, names without a dot, a floor_absent and a "
+                       "floor_present of three numbers none below 0, and an emissive with a to of three numbers none "
+                       "below 0 and a stride_ms above 0";
+        return false;
+    }
+    barrel.entity = barrelEntry["entity"].AsString("");
+    barrel.datum = barrelEntry["datum"].AsString("");
+    barrel.strideMs = barrelEntry["emissive"]["stride_ms"].AsNumber();
+
+    BreakableWall& wall = read.breakableWall;
+    const Json::Value& wallEntry = root["breakable_wall"];
+    if (!wallEntry.IsObject() || !plainName(wallEntry["entity"]) || !plainName(wallEntry["datum"]) ||
+        !Emissive(wallEntry["colour"]["from"], wall.colour.from) || !Emissive(wallEntry["colour"]["to"], wall.colour.to) ||
+        !Emissive(wallEntry["emissive"]["from"], wall.emissive.from) ||
+        !Emissive(wallEntry["emissive"]["to"], wall.emissive.to) || !Finite(wallEntry["stride_ms"]) ||
+        !(wallEntry["stride_ms"].AsNumber() > 0.0) || !Finite(wallEntry["calls_per_frame"]) ||
+        wallEntry["calls_per_frame"].AsNumber() < 1.0 || wallEntry["calls_per_frame"].AsNumber() > 8.0 ||
+        wallEntry["calls_per_frame"].AsNumber() != std::floor(wallEntry["calls_per_frame"].AsNumber())) {
+        error = path + ": breakable_wall needs an entity and a datum, names without a dot, a colour and an emissive, "
+                       "each with a from and a to of three numbers none below 0, a stride_ms above 0 and "
+                       "calls_per_frame, a whole number from 1 to 8";
+        return false;
+    }
+    wall.entity = wallEntry["entity"].AsString("");
+    wall.datum = wallEntry["datum"].AsString("");
+    wall.colour.strideMs = wallEntry["stride_ms"].AsNumber();
+    wall.emissive.strideMs = wall.colour.strideMs;
+    wall.callsPerFrame = static_cast<int>(wallEntry["calls_per_frame"].AsNumber());
     out = std::move(read);
     return true;
 }

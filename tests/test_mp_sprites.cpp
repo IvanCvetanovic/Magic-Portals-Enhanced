@@ -823,17 +823,32 @@ void TheFireAgentTheKeysAndTheCratesAreTheirScripts() {
     const Art::NonTeleportable& crates = rules.nonTeleportable;
     CHECK_MSG(crates.datum == "teleportable", "isTeleportable reads the uint 'teleportable'");
     CHECK_EQ(crates.callbacks.size(), std::size_t{5});
-    CHECK_MSG(crates.For("crate", false) == Blinks::Colour && crates.For("crate_small", false) == Blinks::Colour &&
-                  crates.For("wood_piece_small", false) == Blinks::Colour,
+    CHECK_MSG(crates.For("crate", false, false) == Blinks::Colour && crates.For("crate_small", false, false) == Blinks::Colour &&
+                  crates.For("wood_piece_small", false, false) == Blinks::Colour,
               "ETHCallback_crate, _crate_small and _wood_piece_small pass zeroEmissive 0: the colour");
-    CHECK_MSG(crates.For("crate_no_emissive", false) == Blinks::Emissive &&
-                  crates.For("crate_small_no_emissive", false) == Blinks::Emissive,
+    CHECK_MSG(crates.For("crate_no_emissive", false, false) == Blinks::Emissive &&
+                  crates.For("crate_small_no_emissive", false, false) == Blinks::Emissive,
               "the two _no_emissive callbacks pass 1: the emissive");
-    CHECK_MSG(crates.For("crate", true) == Blinks::Nothing && crates.For("crate_no_emissive", true) == Blinks::Nothing,
-              "a teleportable crate is left alone");
-    CHECK_MSG(crates.For("crate_low_emissive", false) == Blinks::Nothing &&
-                  crates.For("barrel_bomb", false) == Blinks::Nothing,
+    CHECK_MSG(crates.For("crate", false, true) == Blinks::Colour && crates.For("crate_no_emissive", false, true) == Blinks::Emissive,
+              "manageNonTeleportable does not read the uint 'blink': a crate no portal carries blinks as it did");
+    // crateCallback #31-36 and #62-64: a TELEPORTABLE crate blinks when zeroEmissive or it carries the flag.
+    CHECK_MSG(crates.For("crate_no_emissive", true, false) == Blinks::TeleportableEmissive &&
+                  crates.For("crate_small_no_emissive", true, false) == Blinks::TeleportableEmissive,
+              "a teleportable crate whose callback passes zeroEmissive 1 blinks its emissive (#70-93)");
+    CHECK_MSG(crates.For("crate", true, false) == Blinks::Nothing && crates.For("crate_small", true, false) == Blinks::Nothing &&
+                  crates.For("wood_piece_small", true, false) == Blinks::Nothing,
+              "one that passes 0 and carries no flag has shallBlink 0 and keeps its node's emissive");
+    CHECK_MSG(crates.For("crate", true, true) == Blinks::Nothing && crates.For("crate_no_emissive", true, true) == Blinks::Nothing,
+              "one that carries the flag takes the 200 ms branch (#95-121), which is not built: nothing");
+    CHECK_MSG(crates.For("crate_low_emissive", false, false) == Blinks::Nothing &&
+                  crates.For("crate_low_emissive", true, false) == Blinks::Nothing &&
+                  crates.For("barrel_bomb", false, false) == Blinks::Nothing,
               "crate_low_emissive has no callback, and nothing else runs crateCallback");
+    CHECK_MSG(crates.blinkDatum == "blink", "crateCallback #16-29 reads the uint 'blink'");
+    CHECK_MSG(crates.teleportableEmissive.strideMs == 600.0 &&
+                  crates.teleportableEmissive.from == glm::dvec3(0.2, 0.2, 0.2) &&
+                  crates.teleportableEmissive.to == glm::dvec3(0.0),
+              "blinkEmissive(this, vector3(0.2), V3_ZERO, 600): colorA 0.2, colorB 0, 600 ms a leg (#70-93)");
     CHECK_MSG(crates.colour.strideMs == 600.0 && crates.emissive.strideMs == 600.0, "600 ms a leg, both ways");
     CHECK_MSG(crates.colour.from == glm::dvec3(1.0, 0.3, 0.3) && crates.colour.to == glm::dvec3(1.0),
               "blinkColor(this, vector3(1, 0.3, 0.3), V3_ONE, 600)");
@@ -860,6 +875,158 @@ void TheFireAgentTheKeysAndTheCratesAreTheirScripts() {
         if (!near3(crates.colour.At(ms), colour) || !near3(crates.emissive.At(ms), emissive)) ++off;
     }
     CHECK_MSG(off == 0, std::to_string(off) + " milliseconds off the decode");
+    // The teleportable crate's, read the same straight: 0.2 at 0 ms, 0.1 at 300, 0 at 600, 0.1 at 900, 0.2 at 1200.
+    int teleportableOff = 0;
+    for (int ms = 0; ms <= 2400; ++ms) {
+        double bias = static_cast<double>(ms % 600) / 600.0;
+        if ((ms / 600) % 2 == 1) bias = 1.0 - bias;
+        const glm::dvec3 want = glm::dvec3(0.2) * (1.0 - bias);
+        if (!near3(crates.teleportableEmissive.At(ms), want)) ++teleportableOff;
+    }
+    CHECK_MSG(teleportableOff == 0, std::to_string(teleportableOff) + " milliseconds off the teleportable crate's decode");
+    CHECK_MSG(near3(crates.teleportableEmissive.At(0.0), glm::dvec3(0.2)) &&
+                  near3(crates.teleportableEmissive.At(300.0), glm::dvec3(0.1)) &&
+                  near3(crates.teleportableEmissive.At(600.0), glm::dvec3(0.0)) &&
+                  near3(crates.teleportableEmissive.At(900.0), glm::dvec3(0.1)) &&
+                  near3(crates.teleportableEmissive.At(1200.0), glm::dvec3(0.2)),
+              "0.2 at 0 ms, 0 at 600, 0.2 again at 1200: its two ends and its period");
+}
+
+// THE SCRIPT'S THREE OTHER BLINKS, as their callbacks say (planning step 169): a barrel's emissive, a
+// breakable wall's colour and emissive on a clock its two calls run twice as fast, and a fire agent's pulse.
+// Each end and the period of each, read straight and not through the rule; the layer's use is test_mp_layer's.
+void TheBarrelTheWallAndTheFireAgentBlinkAsTheirCallbacksSay() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const auto near3 = [](const glm::dvec3& got, const glm::dvec3& want) { return glm::length(got - want) < 1e-9; };
+    // The triangle every blinkColor and blinkEmissive is: colorA at 0, colorB a stride on, colorA again a stride after.
+    const auto triangle = [](double ms, double stride) {
+        double bias = std::fmod(ms, stride) / stride;
+        if (std::fmod(std::floor(ms / stride), 2.0) == 1.0) bias = 1.0 - bias;
+        return bias;
+    };
+
+    // ETHCallback_barrel_bomb #1-30: blinkEmissive(this, GetVector3('minEmissive'), vector3(0.2), 300).
+    const Art::BarrelBomb& barrel = rules.barrelBomb;
+    CHECK_MSG(barrel.entity == "barrel_bomb" && barrel.datum == "minEmissive", "the callback's entity and the datum it reads");
+    CHECK_MSG(barrel.strideMs == 300.0 && barrel.ceiling == glm::dvec3(0.2), "colorB 0.2, 300 ms a leg");
+    CHECK_MSG(barrel.floorAbsent == glm::dvec3(0.0) && barrel.floorPresent == glm::dvec3(1.0),
+              "GetVector3 of an absent datum is (0, 0, 0); the one datum the scenes carry is (1, 1, 1)");
+    CHECK_MSG(barrel.FloorFor(false) == glm::dvec3(0.0) && barrel.FloorFor(true) == glm::dvec3(1.0), "FloorFor");
+    const Art::Blink fromNothing = barrel.Triangle(barrel.FloorFor(false));
+    const Art::Blink fromOne = barrel.Triangle(barrel.FloorFor(true));
+    CHECK_MSG(near3(fromNothing.At(0.0), glm::dvec3(0.0)) && near3(fromNothing.At(150.0), glm::dvec3(0.1)) &&
+                  near3(fromNothing.At(300.0), glm::dvec3(0.2)) && near3(fromNothing.At(600.0), glm::dvec3(0.0)),
+              "a barrel with no datum: 0 at 0 ms, 0.2 at 300, 0 at 600");
+    CHECK_MSG(near3(fromOne.At(0.0), glm::dvec3(1.0)) && near3(fromOne.At(300.0), glm::dvec3(0.2)) &&
+                  near3(fromOne.At(600.0), glm::dvec3(1.0)) && near3(fromOne.At(900.0), glm::dvec3(0.2)),
+              "4-32's barrel, minEmissive (1, 1, 1): 1 at 0 ms, 0.2 at 300, 1 at 600");
+    int barrelOff = 0;
+    for (int ms = 0; ms <= 1800; ++ms) {
+        const double bias = triangle(ms, 300.0);
+        if (!near3(fromNothing.At(ms), glm::dvec3(0.2 * bias)) || !near3(fromOne.At(ms), glm::dvec3(1.0 + (0.2 - 1.0) * bias))) {
+            ++barrelOff;
+        }
+    }
+    CHECK_MSG(barrelOff == 0, std::to_string(barrelOff) + " milliseconds off the barrel's decode");
+
+    // ETHCallback_breakable_wall #87-151: blinkColor and blinkEmissive, both from 1 to 0.8 on 300 ms legs, ONE clock.
+    const Art::BreakableWall& wall = rules.breakableWall;
+    CHECK_MSG(wall.entity == "breakable_wall" && wall.datum == "blink", "the callback's entity and the uint it reads");
+    CHECK_MSG(wall.colour.from == glm::dvec3(1.0) && wall.colour.to == glm::dvec3(0.8) &&
+                  wall.emissive.from == glm::dvec3(1.0) && wall.emissive.to == glm::dvec3(0.8) &&
+                  wall.colour.strideMs == 300.0 && wall.emissive.strideMs == 300.0,
+              "colorA V3_ONE, colorB vector3(0.8), 300 ms a leg, both calls");
+    CHECK_MSG(wall.callsPerFrame == 2, "both calls add the frame's time to the same blinkElapsedTime");
+    // The first frame (16 ms): blinkColor reads its own add, blinkEmissive both; frame 10 (160 ms): 304 and 320.
+    CHECK_MSG(wall.ClockMs(16.0, 16.0, 1) == 16.0 && wall.ClockMs(16.0, 16.0, 2) == 32.0,
+              "frame 1: the colour reads 16 ms, the emissive 32");
+    CHECK_MSG(wall.ClockMs(160.0, 16.0, 1) == 304.0 && wall.ClockMs(160.0, 16.0, 2) == 320.0,
+              "frame 10: 2 x 160 - 16 and 2 x 160");
+    CHECK_MSG(near3(wall.colour.At(wall.ClockMs(160.0, 16.0, 1)), glm::dvec3(1.0 - 0.2 * (1.0 - 4.0 / 300.0))) &&
+                  near3(wall.emissive.At(wall.ClockMs(160.0, 16.0, 2)), glm::dvec3(1.0 - 0.2 * (1.0 - 20.0 / 300.0))),
+              "and there, on the odd leg 300 to 600 turned back: 0.81867 and 0.81333");
+    // A 300 ms leg on the doubled clock is 150 ms of the level's, the period 300: a quarter tick under 19 ticks of 16.
+    CHECK_MSG(near3(wall.emissive.At(wall.ClockMs(150.0, 16.0, 2)), glm::dvec3(0.8)) &&
+                  near3(wall.emissive.At(wall.ClockMs(300.0, 16.0, 2)), glm::dvec3(1.0)) &&
+                  near3(wall.emissive.At(wall.ClockMs(450.0, 16.0, 2)), glm::dvec3(0.8)),
+              "the emissive is at 0.8 at 150 ms of level age, 1 at 300, 0.8 at 450: the period is 300 ms, not 600");
+    int wallOff = 0;
+    for (int tick = 1; tick <= 400; ++tick) {
+        const double age = 16.0 * tick;
+        const double colourClock = 2.0 * age - 16.0;
+        const double emissiveClock = 2.0 * age;
+        const double colourWant = 1.0 + (0.8 - 1.0) * triangle(colourClock, 300.0);
+        const double emissiveWant = 1.0 + (0.8 - 1.0) * triangle(emissiveClock, 300.0);
+        if (!near3(wall.colour.At(wall.ClockMs(age, 16.0, 1)), glm::dvec3(colourWant)) ||
+            !near3(wall.emissive.At(wall.ClockMs(age, 16.0, 2)), glm::dvec3(emissiveWant))) {
+            ++wallOff;
+        }
+    }
+    CHECK_MSG(wallOff == 0, std::to_string(wallOff) + " ticks off the wall's decode");
+
+    // ETHCallback_fire_agent #282-300: bounce(this, vector2(1.02), vector2(0.98), 300).
+    const Art::Pulse& pulse = rules.fireAgent.pulse;
+    CHECK_MSG(pulse.fromScale == glm::dvec2(1.02) && pulse.toScale == glm::dvec2(0.98) && pulse.strideMs == 300.0,
+              "scaleA 1.02, scaleB 0.98, 300 ms a leg");
+    const auto nearScale = [](const glm::dvec2& got, double want) { return glm::length(got - glm::dvec2(want)) < 1e-6; };
+    CHECK_MSG(nearScale(pulse.ScaleAt(0.0), 1.02) && nearScale(pulse.ScaleAt(300.0), 0.98) &&
+                  nearScale(pulse.ScaleAt(600.0), 1.02) && nearScale(pulse.ScaleAt(900.0), 0.98),
+              "1.02 at 0 ms, 0.98 at 300, 1.02 at 600: its two ends and its period");
+    // bounce eases each leg by smoothEnd(bias) = sin(bias x PI / 2): 0.99172 at the middle of the first.
+    CHECK_MSG(nearScale(pulse.ScaleAt(150.0), 1.02 - 0.04 * std::sin(std::acos(-1.0) / 4.0)) &&
+                  nearScale(pulse.ScaleAt(450.0), 1.02 - 0.04 * std::sin(std::acos(-1.0) / 4.0)),
+              "and the middle of a leg is eased: 0.99172 either way");
+}
+
+// Without their numbers the port would draw the barrels, the walls and the fire agents still.
+void TheBarrelTheWallAndTheFireAgentWithoutTheirBlinksAreRefused() {
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name,
+                                 const std::string& says) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-blinks-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find(says) != std::string::npos, name + ": " + error);
+    };
+    const std::string barrel = "barrel_bomb needs";
+    refused("\"barrel_bomb\": {", "\"barrel_bomb_gone\": {", "barrel absent", barrel);
+    refused("\"entity\": \"barrel_bomb\",", "\"entity\": \"barrel_bomb.ent\",", "barrel a name with its extension", barrel);
+    refused("\"floor_absent\": [0.0, 0.0, 0.0]", "\"floor_absent\": [0.0, 0.0]", "barrel a floor of two numbers", barrel);
+    refused("\"floor_present\": [1.0, 1.0, 1.0]", "\"floor_present\": [1.0, -1.0, 1.0]", "barrel a floor below zero", barrel);
+    refused("\"emissive\": { \"to\": [0.2, 0.2, 0.2], \"stride_ms\": 300.0 }",
+            "\"emissive\": { \"to\": [0.2, 0.2, 0.2], \"stride_ms\": 0 }", "barrel a leg of 0", barrel);
+    const std::string wall = "breakable_wall needs";
+    refused("\"breakable_wall\": {", "\"breakable_wall_gone\": {", "wall absent", wall);
+    refused("\"datum\": \"blink\",", "\"datum\": \"\",", "wall no datum", wall);
+    refused("\"calls_per_frame\": 2", "\"calls_per_frame\": 0", "wall no calls", wall);
+    refused("\"calls_per_frame\": 2", "\"calls_per_frame\": 1.5", "wall half a call", wall);
+    refused("\"colour\": { \"from\": [1.0, 1.0, 1.0], \"to\": [0.8, 0.8, 0.8] },\n    \"emissive\"",
+            "\"colour\": { \"from\": [1.0, 1.0, 1.0], \"to\": [0.8, 0.8] },\n    \"emissive\"", "wall a colour of two numbers", wall);
+    refused("\"stride_ms\": 300.0,\n    \"calls_per_frame\"", "\"stride_ms\": 0,\n    \"calls_per_frame\"", "wall a leg of 0", wall);
+    const std::string fire = "fire_agent needs";
+    refused("\"pulse\": { \"from\": [1.02, 1.02], \"to\": [0.98, 0.98], \"stride_ms\": 300.0 }",
+            "\"pulse_gone\": { \"from\": [1.02, 1.02], \"to\": [0.98, 0.98], \"stride_ms\": 300.0 }", "fire no pulse", fire);
+    refused("\"to\": [0.98, 0.98], \"stride_ms\": 300.0 }", "\"to\": [1.02, 1.02], \"stride_ms\": 300.0 }", "fire a pulse that does not move", fire);
+    refused("\"to\": [0.98, 0.98], \"stride_ms\": 300.0 }", "\"to\": [0.98, 0.98], \"stride_ms\": 0 }", "fire a leg of 0", fire);
+    const std::string crate = "non_teleportable needs";
+    refused("\"teleportable_emissive\": {", "\"teleportable_emissive_gone\": {", "crates no teleportable blink", crate);
+    refused("\"emissive\": { \"from\": [0.2, 0.2, 0.2], \"to\": [0.0, 0.0, 0.0] },\n      \"stride_ms\": 600.0,",
+            "\"emissive\": { \"from\": [0.2, 0.2], \"to\": [0.0, 0.0, 0.0] },\n      \"stride_ms\": 600.0,",
+            "crates a teleportable colour of two numbers", crate);
+    refused("\"stride_ms\": 600.0,\n      \"blink_datum\"", "\"stride_ms\": 0,\n      \"blink_datum\"", "crates a teleportable leg of 0", crate);
 }
 
 // Without them the port draws what the level saved: the anti-portal agent's face,
@@ -1986,8 +2153,18 @@ void TheScriptsRepaintWhatTheLevelsPlace() {
     int crates = 0;
     int emissive = 0;
     int colour = 0;
-    std::vector<std::string> absent;
-    std::set<std::string> agentLevels, paintedLevels, blueLevels, redLevels, crateLevels;
+    // And the three blinks of planning step 169: a teleportable _no_emissive crate's, the flag's branch
+    // that is not built, the barrels', and the walls'.
+    int teleportable = 0;
+    int flagged = 0;
+    int barrels = 0;
+    int barrelsWithDatum = 0;
+    int walls = 0;
+    int wallsStatic = 0;
+    int wallsBlinking = 0;
+    std::vector<std::string> absent, flaggedAt, barrelDatumAt;
+    std::set<std::string> agentLevels, paintedLevels, blueLevels, redLevels, crateLevels, teleportableLevels, barrelLevels,
+        wallLevels, wallBlinkingLevels;
     for (const char* suffix : {"", "a", "b", "c"}) {
         for (int i = 0; i < 32; ++i) {
             const std::string level = "level" + std::to_string(i) + suffix;
@@ -2037,10 +2214,44 @@ void TheScriptsRepaintWhatTheLevelsPlace() {
                         }
                     }
                 }
-                double teleportable = 0.0;
+                if (bare == rules.barrelBomb.entity) {
+                    ++barrels;
+                    barrelLevels.insert(level);
+                    if (node->Meta(rules.barrelBomb.datum) != nullptr) {
+                        ++barrelsWithDatum;
+                        barrelDatumAt.push_back(level + "/" + sprite.node);
+                    }
+                }
+                if (bare == rules.breakableWall.entity) {
+                    ++walls;
+                    wallLevels.insert(level);
+                    double isStatic = 0.0;
+                    const Tscn::Value* staticMeta = node->Meta("eth_static");
+                    if (staticMeta != nullptr && staticMeta->AsNumber(isStatic) && isStatic != 0.0) ++wallsStatic;
+                    double blinkValue = 0.0;
+                    const Tscn::Value* blinkMeta = node->Meta(rules.breakableWall.datum);
+                    if (blinkMeta != nullptr && blinkMeta->AsNumber(blinkValue) && blinkValue != 0.0) {
+                        ++wallsBlinking;
+                        wallBlinkingLevels.insert(level);
+                    }
+                }
+                double datumValue = 0.0;
                 const Tscn::Value* flag = node->Meta(rules.nonTeleportable.datum);
-                const bool carried = flag != nullptr && flag->AsNumber(teleportable) && teleportable != 0.0;
-                const Blinks blinks = rules.nonTeleportable.For(bare, carried);
+                const bool carried = flag != nullptr && flag->AsNumber(datumValue) && datumValue != 0.0;
+                double blinkFlagValue = 0.0;
+                const Tscn::Value* blinkFlagMeta = node->Meta(rules.nonTeleportable.blinkDatum);
+                const bool blinkFlag = blinkFlagMeta != nullptr && blinkFlagMeta->AsNumber(blinkFlagValue) && blinkFlagValue != 0.0;
+                const Blinks blinks = rules.nonTeleportable.For(bare, carried, blinkFlag);
+                // A crate that takes crateCallback's flagged branch, which is not built.
+                if (blinks == Blinks::Nothing && carried && blinkFlag && rules.nonTeleportable.For(bare, false, false) != Blinks::Nothing) {
+                    ++flagged;
+                    flaggedAt.push_back(level + "/" + sprite.node);
+                }
+                if (blinks == Blinks::TeleportableEmissive) {
+                    ++teleportable;
+                    teleportableLevels.insert(level);
+                    continue;
+                }
                 if (blinks == Blinks::Nothing) continue;
                 ++crates;
                 crateLevels.insert(level);
@@ -2073,6 +2284,30 @@ void TheScriptsRepaintWhatTheLevelsPlace() {
     CHECK_EQ(colour, 8);
     CHECK_MSG(absent == std::vector<std::string>({"level7a/crate_small_no_emissive_826"}),
               "the one crate with no datum is level7a's 826");
+    // Planning step 169: 28 teleportable _no_emissive crates on 14 levels blink their emissive and none carries the flag;
+    // 4-19's two crates carry both and take the branch that is not built.
+    std::printf("  step 169: %d teleportable crates on %zu levels, %d flagged; %d barrels on %zu levels (%d with the datum); "
+                "%d breakable walls on %zu levels (%d static), %d blinking on %zu levels\n",
+                teleportable, teleportableLevels.size(), flagged, barrels, barrelLevels.size(), barrelsWithDatum, walls,
+                wallLevels.size(), wallsStatic, wallsBlinking, wallBlinkingLevels.size());
+    CHECK_EQ(teleportable, 28);
+    CHECK_MSG(teleportableLevels == std::set<std::string>({"level3a", "level4a", "level7a", "level13a", "level16a", "level17a",
+                                                           "level18a", "level21a", "level22a", "level24a", "level27a", "level31a",
+                                                           "level14b", "level24c"}),
+              "the 14 levels: 2-04, 2-05, 2-08, 2-14, 2-17, 2-18, 2-19, 2-22, 2-23, 2-25, 2-28, 2-32, 3-15 and 4-25");
+    CHECK_MSG(flaggedAt == std::vector<std::string>({"level18c/crate_2494", "level18c/crate_2495"}),
+              "the flag's branch is 4-19's two crates, and nobody else's");
+    CHECK_EQ(barrels, 31);
+    CHECK_EQ(barrelLevels.size(), std::size_t{16});
+    CHECK_MSG(barrelDatumAt == std::vector<std::string>({"level31c/barrel_bomb_2225"}),
+              "one barrel of the 128 levels carries minEmissive: 4-32's, (1, 1, 1) in its .esc");
+    CHECK_EQ(walls, 33);
+    CHECK_EQ(wallLevels.size(), std::size_t{28});
+    CHECK_MSG(wallsStatic == walls, "every breakable_wall is static: its callback runs while its bucket is drawn");
+    CHECK_EQ(wallsBlinking, 9);
+    CHECK_MSG(wallBlinkingLevels == std::set<std::string>({"level8", "level12", "level18", "level21", "level23", "level24", "level13a",
+                                                           "level13b"}),
+              "the blinking walls are on 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-14 and 3-14");
     if (!original) std::printf("  (the repainted files' sizes not checked: no extracted assets at %s)\n", kOriginal.c_str());
 }
 
@@ -3980,6 +4215,8 @@ MP_SUITE_MAIN("test_mp_sprites") {
     TheAntiportalBlinksRedAndTurns();
     AnAntiportalWithoutItsBlinkIsRefused();
     TheFireAgentTheKeysAndTheCratesAreTheirScripts();
+    TheBarrelTheWallAndTheFireAgentBlinkAsTheirCallbacksSay();
+    TheBarrelTheWallAndTheFireAgentWithoutTheirBlinksAreRefused();
     TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused();
     TheTimerIsTimerEnt();
     ATimerWithoutItsClockIsRefused();

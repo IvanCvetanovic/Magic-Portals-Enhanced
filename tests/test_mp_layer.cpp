@@ -1718,6 +1718,20 @@ entt::entity QuadOfNode(const MagicPortalsLayer& layer, const std::string& node)
     return entt::null;
 }
 
+// blinkColor's and blinkEmissive's bias, read straight from the decode (utilEntityEffect ins 55-75) and not through the
+// rule under test: the remainder of a stride over the stride, turned back on an odd leg.
+double BlinkBias(double elapsedMs, double strideMs) {
+    const double legs = std::floor(elapsedMs / strideMs);
+    const double bias = (elapsedMs - legs * strideMs) / strideMs;
+    return std::fmod(legs, 2.0) == 1.0 ? 1.0 - bias : bias;
+}
+
+// A fire agent's scale at `elapsedMs` of its bounce (ETHCallback_fire_agent #282-300: 1.02 to 0.98 and back on 300 ms legs, each eased by
+// smoothEnd(bias) = sin(bias x PI / 2)), read straight from the decode and not through the rule under test.
+double FireAgentPulse(double elapsedMs) {
+    return 1.02 + (0.98 - 1.02) * std::sin(BlinkBias(elapsedMs, 300.0) * std::acos(-1.0) / 2.0);
+}
+
 // A FIRE AGENT WEARS ITS OWN FACE (art.json fire_agent): ETHCallback_fire_agent
 // sets fire_agent.png on every update, whatever the level saved. 2-20 (level19a)
 // saved fire_agent_1086 with anti_portal_agent.png. 1-12 (level11)'s
@@ -1743,9 +1757,10 @@ void AFireAgentWearsItsOwnFace() {
                   "drawn from fire_agent.png: " + material.albedoTexturePath);
         CHECK_MSG(material.albedoTexturePath.find(MAGICPORTALS_ORIGINAL_DIR) == 0,
                   "found as SetSprite finds it, in the original's entities: " + material.albedoTexturePath);
-        const float size = MagicPortals::Units::ToMetres(32.0);
+        // 32 units, the saved file's and fire_agent.png's too, times the pulse the agent's own bounce has reached (planning step 169).
+        const float size = MagicPortals::Units::ToMetres(32.0 * FireAgentPulse(layer.LevelAgeMs()));
         CHECK_MSG(std::fabs(transform.scale.x - size) < 1e-6f && std::fabs(transform.scale.y - size) < 1e-6f,
-                  "at the saved file's 32 units, which are fire_agent.png's too");
+                  "at the saved file's 32 units, which are fire_agent.png's too, times its pulse");
         CHECK_MSG(material.albedoColor == glm::vec4(1.0f), "in the colour the level gave it");
         int faces = 0;
         for (auto [entity, tag, drawn] : registry.view<TagComponent, MaterialComponent>().each()) {
@@ -1975,13 +1990,328 @@ void ACrateNoPortalCarriesBlinksRed() {
         int wrong = 0;
         for (int tick = 0; tick < 40; ++tick) {
             tickWith(layer, registry, kRest, {}, {});
+            // 854 is teleportable: manageNonTeleportable leaves it, and crateCallback's own blink (planning step 169)
+            // writes its emissive from 0.2 to 0 over 600 ms, which is not the red one 826 blinks.
+            const double teleportableEmissive = 0.2 * (1.0 - BlinkBias(layer.LevelAgeMs(), 600.0));
             if (!near(registry.get<MaterialComponent>(misspelt).sprite2D.ambient,
                       ambientWith(layer, crates.emissive.At(layer.LevelAgeMs()))) ||
-                !near(registry.get<MaterialComponent>(carried).sprite2D.ambient, ambientWith(layer, glm::dvec3(0.0)))) {
+                !near(registry.get<MaterialComponent>(carried).sprite2D.ambient,
+                      ambientWith(layer, glm::dvec3(teleportableEmissive)))) {
                 ++wrong;
             }
         }
-        CHECK_MSG(wrong == 0, "826 blinks, 854 does not: " + std::to_string(wrong) + " ticks wrong");
+        CHECK_MSG(wrong == 0, "826 blinks red, 854 blinks 0.2 to 0: " + std::to_string(wrong) + " ticks wrong");
+        layer.OnDetach(registry);
+    }
+}
+
+// THE SCRIPT'S OTHER THREE BLINKS, as the layer draws them (planning step 169): each tick's quad against the decode read straight.
+// A barrel (art.json barrel_bomb): blinkEmissive every frame from its minEmissive (an absent datum is 0) to 0.2 on 300 ms legs, OVER
+// its node's own emissive: 2-12's has none, 3-19's carries 0.45, and 4-32's has the datum (1, 1, 1).
+void ABarrelBlinksItsEmissiveEveryFrame() {
+    if (!OriginalArtIsThere("ABarrelBlinksItsEmissiveEveryFrame")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    struct Case {
+        const char* level;
+        const char* node;
+        double floor;
+    };
+    int seen = 0;
+    for (const Case& c : {Case{"level11a", "barrel_bomb_ent_1041", 0.0}, Case{"level18b", "barrel_bomb_1560", 0.0},
+                          Case{"level31c", "barrel_bomb_2225", 1.0}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity quad = QuadOfNode(layer, c.node);
+        CHECK_MSG(quad != entt::null, std::string(c.level) + " draws " + c.node);
+        if (quad == entt::null) continue;
+        ++seen;
+        int wrong = 0;
+        double lowest = 1e9;
+        double highest = -1e9;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const double want = c.floor + (0.2 - c.floor) * BlinkBias(layer.LevelAgeMs(), 300.0);
+            const auto& material = registry.get<MaterialComponent>(quad);
+            const glm::vec3 wantAmbient(Lighting::AmbientTerm(layer.AmbientNow(), glm::dvec3(want)));
+            if (glm::length(material.sprite2D.ambient - wantAmbient) > 1e-5f || material.albedoColor != glm::vec4(1.0f)) ++wrong;
+            lowest = std::min(lowest, want);
+            highest = std::max(highest, want);
+        }
+        CHECK_MSG(wrong == 0, std::string(c.level) + "'s barrel is min(1, ambient + the blink) of the level's age: " +
+                                  std::to_string(wrong) + " of 80 ticks wrong");
+        // 80 ticks of 16 ms are 1280 ms: two periods of 600, with both ends reached.
+        const double top = std::max(c.floor, 0.2);
+        const double bottom = std::min(c.floor, 0.2);
+        CHECK_MSG(lowest < bottom + 0.02 && highest > top - 0.02,
+                  std::string(c.level) + ": from " + std::to_string(lowest) + " to " + std::to_string(highest));
+        layer.OnDetach(registry);
+    }
+    CHECK_MSG(seen == 3, "the three barrels are drawn");
+}
+
+// A breakable wall that carries the uint `blink` (art.json breakable_wall): blinkColor and blinkEmissive, both 1 to 0.8 on 300 ms legs,
+// on ONE blinkElapsedTime both add the frame to, so the colour reads 2 x age - 16 ms and the emissive 2 x age; and the wall without
+// the flag does nothing, on the level that has one (1-20's two) and on 2-14's, whose node emissive 0.4 the blink replaces.
+void AWallThatCarriesBlinkBlinksItsColourAndEmissiveOnADoubledClock() {
+    if (!OriginalArtIsThere("AWallThatCarriesBlinkBlinksItsColourAndEmissiveOnADoubledClock")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    struct Case {
+        const char* level;
+        const char* node;
+    };
+    int seen = 0;
+    for (const Case& c : {Case{"level8", "breakable_wall_625"}, Case{"level13a", "breakable_wall_1142"},
+                          Case{"level13b", "breakable_wall_1200"}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity quad = QuadOfNode(layer, c.node);
+        CHECK_MSG(quad != entt::null, std::string(c.level) + " draws " + c.node);
+        if (quad == entt::null) continue;
+        ++seen;
+        int wrong = 0;
+        double lowestColour = 1e9;
+        double lowestEmissive = 1e9;
+        double highestEmissive = -1e9;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const double age = layer.LevelAgeMs();
+            const double colour = 1.0 - 0.2 * BlinkBias(2.0 * age - kScriptMs, 300.0);
+            const double emissive = 1.0 - 0.2 * BlinkBias(2.0 * age, 300.0);
+            const auto& material = registry.get<MaterialComponent>(quad);
+            const glm::vec3 wantAmbient(Lighting::AmbientTerm(layer.AmbientNow(), glm::dvec3(emissive)));
+            if (glm::length(glm::vec3(material.albedoColor) - glm::vec3(static_cast<float>(colour))) > 1e-5f ||
+                material.albedoColor.a != 1.0f || glm::length(material.sprite2D.ambient - wantAmbient) > 1e-5f) {
+                ++wrong;
+            }
+            lowestColour = std::min(lowestColour, colour);
+            lowestEmissive = std::min(lowestEmissive, emissive);
+            highestEmissive = std::max(highestEmissive, emissive);
+        }
+        CHECK_MSG(wrong == 0, std::string(c.level) + "'s wall is colour(2 age - 16) and emissive(2 age): " +
+                                  std::to_string(wrong) + " of 80 ticks wrong");
+        CHECK_MSG(lowestColour < 0.805 && lowestEmissive < 0.805 && highestEmissive > 0.995,
+                  std::string(c.level) + ": colour down to " + std::to_string(lowestColour) + ", emissive " +
+                      std::to_string(lowestEmissive) + " to " + std::to_string(highestEmissive));
+        layer.OnDetach(registry);
+    }
+    CHECK_MSG(seen == 3, "the three flagged walls are drawn");
+    // One period of the doubled clock is 300 ms of the level's age, 18.75 ticks: the emissive at 1 (age 0 of a period) and 0.8 half
+    // a period on. Read off 1-09's wall at ages 150 and 300 (ticks 9.4 and 18.75 of 16 ms, so its neighbours).
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level8");
+        layer.OnAttach(registry);
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const entt::entity quad = QuadOfNode(layer, "breakable_wall_625");
+        std::vector<double> reads;
+        for (int tick = 0; tick < 40 && quad != entt::null; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            reads.push_back(registry.get<MaterialComponent>(quad).albedoColor.g);
+        }
+        int troughs = 0;
+        for (std::size_t i = 1; i + 1 < reads.size(); ++i) {
+            if (reads[i] < reads[i - 1] && reads[i] <= reads[i + 1]) ++troughs;
+        }
+        // 40 ticks are 640 ms: two periods of 300 ms and a bit, so two troughs, not the one a 600 ms period would show.
+        CHECK_MSG(troughs == 2, "the wall's colour has two troughs in 640 ms: " + std::to_string(troughs));
+        layer.OnDetach(registry);
+    }
+    // A wall without the flag: constant, at its node's own colour and emissive, on 1-20 (level19) and on 2-19's (level18a, node 0.4).
+    for (const Case& c : {Case{"level19", "breakable_wall_ent_1061"}, Case{"level19", "breakable_wall_ent_1056"},
+                          Case{"level18a", "breakable_wall_1040"}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity quad = QuadOfNode(layer, c.node);
+        CHECK_MSG(quad != entt::null, std::string(c.level) + " draws " + c.node);
+        if (quad == entt::null) continue;
+        const MaterialComponent first = registry.get<MaterialComponent>(quad);
+        int moved = 0;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const auto& material = registry.get<MaterialComponent>(quad);
+            if (material.albedoColor != first.albedoColor || material.sprite2D.ambient != first.sprite2D.ambient) ++moved;
+        }
+        CHECK_MSG(moved == 0 && first.albedoColor == glm::vec4(1.0f),
+                  std::string(c.node) + " has no blink flag and stays as the level drew it: " + std::to_string(moved) + " ticks moved");
+        layer.OnDetach(registry);
+    }
+}
+
+// A teleportable _no_emissive crate (art.json non_teleportable teleportable_emissive; crateCallback #70-93): blinkEmissive 0.2 to 0 on
+// 600 ms legs, its colour white - 2-25's on a lit level and 4-25's on a dark one, where it was a black square - and, once burned,
+// its emissive keeps its last blink while the other goes on (2-19's, put in its fire agent's reach).
+void ATeleportableCrateBlinksItsEmissive() {
+    if (!OriginalArtIsThere("ATeleportableCrateBlinksItsEmissive")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    struct Case {
+        const char* level;
+        const char* node;
+    };
+    int seen = 0;
+    for (const Case& c : {Case{"level24a", "crate_small_no_emissive_ent_1107"}, Case{"level24c", "crate_small_no_emissive_ent_1797"}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), c.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        const entt::entity quad = QuadOfNode(layer, c.node);
+        CHECK_MSG(quad != entt::null, std::string(c.level) + " draws " + c.node);
+        if (quad == entt::null) continue;
+        ++seen;
+        int wrong = 0;
+        double lowest = 1e9;
+        double highest = -1e9;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const double want = 0.2 * (1.0 - BlinkBias(layer.LevelAgeMs(), 600.0));
+            const auto& material = registry.get<MaterialComponent>(quad);
+            const glm::vec3 wantAmbient(Lighting::AmbientTerm(layer.AmbientNow(), glm::dvec3(want)));
+            if (glm::length(material.sprite2D.ambient - wantAmbient) > 1e-5f || material.albedoColor != glm::vec4(1.0f)) ++wrong;
+            lowest = std::min(lowest, want);
+            highest = std::max(highest, want);
+        }
+        CHECK_MSG(wrong == 0, std::string(c.level) + "'s crate is min(1, ambient + 0.2 to 0) at the level's age, white: " +
+                                  std::to_string(wrong) + " of 80 ticks wrong");
+        // 80 ticks are 1280 ms, past one period of 1200: both ends are reached.
+        CHECK_MSG(lowest < 0.005 && highest > 0.195, std::string(c.level) + ": from " + std::to_string(lowest) + " to " +
+                                                          std::to_string(highest));
+        layer.OnDetach(registry);
+    }
+    CHECK_MSG(seen == 2, "both crates are drawn");
+
+    // 2-19: crate_no_emissive_ent_1109 and _1089 are teleportable and burnable; the fire agent stands at (183, 70).
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level18a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    const entt::entity burning = QuadOfNode(layer, "crate_no_emissive_ent_1109");
+    const entt::entity other = QuadOfNode(layer, "crate_no_emissive_ent_1089");
+    CHECK_MSG(burning != entt::null && other != entt::null, "2-19 draws both crates");
+    if (burning == entt::null || other == entt::null) return;
+    const auto& burnables = layer.SimLevel()->fire.burnables;
+    const auto burnable = std::find_if(burnables.begin(), burnables.end(),
+                                       [](const auto& b) { return b.name == "crate_no_emissive_ent_1109"; });
+    const auto body = layer.SimLevel()->built.entities.find("crate_no_emissive_ent_1109");
+    CHECK_MSG(burnable != burnables.end() && body != layer.SimLevel()->built.entities.end(),
+              "the crate is burnable and has a body");
+    if (burnable == burnables.end() || body == layer.SimLevel()->built.entities.end()) return;
+    const std::size_t index = static_cast<std::size_t>(burnable - burnables.begin());
+    auto& at = registry.get<TransformComponent>(body->second);
+    const glm::vec3 world = MagicPortals::Units::ToWorld(183.0, 78.0);
+    at.position = glm::vec3(world.x, world.y, at.position.z);
+    int ticks = 0;
+    glm::vec3 lastBlink = registry.get<MaterialComponent>(burning).sprite2D.ambient;
+    while (!layer.SimLevel()->fire.burnables[index].burned && ticks < 30) {
+        lastBlink = registry.get<MaterialComponent>(burning).sprite2D.ambient;
+        tickWith(layer, registry, kRest, {}, {});
+        ++ticks;
+    }
+    CHECK_MSG(layer.SimLevel()->fire.burnables[index].burned, "the fire agent burns it, " + std::to_string(ticks) + " ticks on");
+    int held = 0;
+    int otherStill = 0;
+    int drawnTicks = 0;
+    glm::vec3 otherBefore = registry.get<MaterialComponent>(other).sprite2D.ambient;
+    for (int tick = 0; tick < 30; ++tick) {
+        if (QuadOfNode(layer, "crate_no_emissive_ent_1109") != burning) break;
+        ++drawnTicks;
+        if (glm::length(registry.get<MaterialComponent>(burning).sprite2D.ambient - lastBlink) > 1e-5f) ++held;
+        tickWith(layer, registry, kRest, {}, {});
+        const glm::vec3 otherNow = registry.get<MaterialComponent>(other).sprite2D.ambient;
+        if (otherNow == otherBefore) ++otherStill;
+        otherBefore = otherNow;
+    }
+    CHECK_MSG(drawnTicks >= 10, "the burning crate is drawn on: " + std::to_string(drawnTicks) + " ticks");
+    CHECK_MSG(held == 0, "a burnt teleportable crate's emissive keeps its last blink: " + std::to_string(held) + " ticks off");
+    CHECK_MSG(otherStill <= 1, "while the unburnt one blinks on: " + std::to_string(otherStill) + " still ticks");
+    layer.OnDetach(registry);
+}
+
+// A fire agent's own bounce (art.json fire_agent pulse; ETHCallback_fire_agent #282-300): its scale SET to 1.02 -> 0.98 -> 1.02
+// on 300 ms legs, each eased by sin(bias x PI / 2), on the level's age: its picture, its light's range and height offset and its halo's
+// size (BuildChildLight and DrawHalo take the entity's scale), not its flames. Both spellings: 2-20's fire_agent_1086 (range 80,
+// offset 2) and 2-19's fire_agent_ent_1086 (range 256, offset 10).
+void AFireAgentPulsesOnItsBounceToo() {
+    if (!OriginalArtIsThere("AFireAgentPulsesOnItsBounceToo")) return;
+    struct Agent {
+        const char* level;
+        const char* node;
+        double range;   // its <Light> range in the level's units, and its offset's z
+        double offsetZ;
+    };
+    for (const Agent& agentCase : {Agent{"level19a", "fire_agent_1086", 80.0, 2.0}, Agent{"level18a", "fire_agent_ent_1086", 256.0, 10.0}}) {
+        const char* level = agentCase.level;
+        const char* node = agentCase.node;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const auto pulse = [](double ms) { return FireAgentPulse(ms); };
+        int wrong = 0;
+        int lightWrong = 0;
+        double smallest = 1e9;
+        double largest = -1e9;
+        double haloLow = 1e9;
+        double haloHigh = -1e9;
+        const entt::entity light = FirstTagged(registry, "Magic Portals 2D Light");
+        const entt::entity halo = FirstTagged(registry, "Magic Portals Halo");
+        CHECK_MSG(light != entt::null && halo != entt::null && Tagged(registry, "Magic Portals 2D Light") == 1,
+                  std::string(level) + " has one light and its halo");
+        if (light == entt::null || halo == entt::null) return;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            const MagicPortalsLayer::DrawnPictureReport agent = layer.DrawnPicture(node);
+            const double want = pulse(layer.LevelAgeMs());
+            if (!agent.drawn || std::abs(agent.sizePx.x - 32.0 * want) > 1e-3 || std::abs(agent.sizePx.y - 32.0 * want) > 1e-3) ++wrong;
+            // Its light's range and height offset and its halo's size take the same scale (BuildChildLight, DrawHalo).
+            const auto& lit = registry.get<Light2DComponent>(light);
+            if (std::abs(lit.range - MagicPortals::Units::ToMetres(agentCase.range * want)) > 1e-4 ||
+                std::abs(lit.height - MagicPortals::Units::ToMetres(agent.lookZ + agentCase.offsetZ * want)) > 1e-4) {
+                ++lightWrong;
+            }
+            const double haloRatio = registry.get<TransformComponent>(halo).scale.x / want;
+            haloLow = std::min(haloLow, haloRatio);
+            haloHigh = std::max(haloHigh, haloRatio);
+            smallest = std::min(smallest, agent.sizePx.x / 32.0);
+            largest = std::max(largest, agent.sizePx.x / 32.0);
+        }
+        CHECK_MSG(wrong == 0, std::string(level) + "'s agent is 32 x the pulse of the level's age on 80 ticks: " + std::to_string(wrong) +
+                                  " off");
+        CHECK_MSG(smallest < 0.9805 && smallest >= 0.98 - 1e-6 && largest > 1.0195 && largest <= 1.02 + 1e-6,
+                  std::string(level) + ": from " + std::to_string(smallest) + " to " + std::to_string(largest));
+        CHECK_MSG(lightWrong == 0, std::string(level) + "'s light is range " + std::to_string(agentCase.range) + " and offset z " +
+                                       std::to_string(agentCase.offsetZ) + " x the pulse on 80 ticks: " + std::to_string(lightWrong) + " off");
+        CHECK_MSG(haloHigh - haloLow < 1e-6 * haloHigh && haloLow > 0.0,
+                  std::string(level) + "'s halo is one size x the pulse: " + std::to_string(haloLow) + " to " + std::to_string(haloHigh));
         layer.OnDetach(registry);
     }
 }
@@ -15340,6 +15670,133 @@ void TheDarkDragonIsDrawnAsItsCallbackLeavesIt() {
 }
 
 
+// A BARREL THE DARK DRAGON PUTS BACK blinks on ITS OWN clock, from the tick it is added (planning step 169, the fix after the first
+// verifier): ETHCallback_barrel_bomb's blinkEmissive runs on the entity's blinkElapsedTime, which a new entity has at zero, and the
+// restock sets minEmissive to (1, 1, 1) on it (darkdragon.json restock, ins 1038-1063; art.json barrel_bomb floor_present). So its
+// first drawn tick reads the floor, 1, and then 1 to 0.2 on 300 ms legs from THAT tick - not the level's age, which on the tick the
+// dragon's next shot leaves is nowhere near a whole period. Driven as a player drives 4-32: the torch shot, the dragon summoned, the
+// placed barrel gone (put into the lava, where the original's goes off), then the player in the line of fire, whose shot puts one back.
+// Removing the restock's born clock (MagicPortalsLayer::syncSprites) fails this: its first tick would read the level's phase.
+void ARestockedBarrelBlinksFromItsOwnBirth() {
+    if (!OriginalArtIsThere("ARestockedBarrelBlinksFromItsOwnBirth")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    using MagicPortals::DarkDragon::Phase;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31c");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    const MagicPortals::DarkDragon::State& dragon = level.darkDragon;
+    if (!dragon.present || level.torch.lights.empty() || level.player == entt::null || level.fire.bombs.size() != 1) {
+        CHECK_MSG(false, "level31c places the dark dragon's spawn, a torch, a player and one barrel");
+        return;
+    }
+    const auto step = [&]() {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    };
+    // Where the sim's own dark dragon cases put the player: on the floor under the torch, in the dragon's sight, and behind the
+    // torch's block, out of it.
+    const glm::dvec2 floor(241.0, 200.0);
+    const glm::dvec2 hidden(700.0, 40.0);
+    waitForFirstTap(layer, registry);
+    for (int tick = 0; tick < 30; ++tick) {
+        PutBodyAt(registry, level.player, floor);
+        step();
+    }
+    shoot(layer, registry, screenOf(registry, level.torch.lights.front().atPx));
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    for (int tick = 0; tick < 240 && !level.torch.lights.front().lit; ++tick) step();
+    CHECK_MSG(level.torch.lights.front().lit, "a shot from the floor lit 4-32's torch: " + lastFailure(layer));
+    for (int tick = 0; tick < 1800 && !(dragon.alive && dragon.phase == Phase::Fighting); ++tick) {
+        PutBodyAt(registry, level.player, hidden);
+        step();
+    }
+    CHECK_MSG(dragon.alive && dragon.phase == Phase::Fighting, "the dragon came and is fighting");
+    if (!(dragon.alive && dragon.phase == Phase::Fighting)) return;
+
+    // THE PLACED BARREL GOES: dropped over the gap between the light wall and block 2256, it goes off in the lava, and the player,
+    // out of sight, is not shot at meanwhile.
+    const MagicPortals::Fire::Bomb& placed = level.fire.bombs.front();
+    CHECK_MSG(placed.name == "barrel_bomb_2225" && level.restock.added.empty(), "the one barrel is 4-32's, nothing put back yet");
+    PutBodyAt(registry, placed.body, glm::dvec2(160.0, 150.0));
+    for (int tick = 0; tick < 300 && !placed.blown; ++tick) {
+        PutBodyAt(registry, level.player, hidden);
+        step();
+    }
+    CHECK_MSG(placed.blown, "the placed barrel goes off in the lava");
+    if (!placed.blown) return;
+
+    // THE SHOT AT THE PLAYER that leaves puts one back, at barrel_spawn.
+    int waited = 0;
+    for (; waited < 1500 && level.restock.added.empty(); ++waited) {
+        PutBodyAt(registry, level.player, floor);
+        step();
+    }
+    CHECK_MSG(level.restock.added.size() == 1, "the dragon's next shot at the player put one barrel back: " +
+                                                   std::to_string(level.restock.added.size()) + " after " + std::to_string(waited) +
+                                                   " ticks");
+    if (level.restock.added.size() != 1) return;
+    const std::string name = level.restock.added.front().name;
+    // Its first tick drawn: the sprite is made by the layer's sync on the tick the sim adds the body, or on the one after.
+    entt::entity quad = QuadOfNode(layer, name);
+    for (int extra = 0; extra < 3 && quad == entt::null; ++extra) {
+        PutBodyAt(registry, level.player, hidden);
+        step();
+        quad = QuadOfNode(layer, name);
+    }
+    CHECK_MSG(quad != entt::null && registry.valid(quad), name + " is drawn");
+    if (quad == entt::null || !registry.valid(quad)) return;
+    const double born = layer.LevelAgeMs();
+    // Out of the fireball's way, and a vacuous test refused: from the level's age the blink would read something else on this tick.
+    const double floorValue = 1.0;
+    const double ceilingValue = 0.2;
+    CHECK_MSG(std::fabs(BlinkBias(born, 300.0)) > 0.0625,
+              "the level's age (" + std::to_string(born) + " ms) is not on a leg's end, so a clock kept from the level cannot read the floor");
+    int wrong = 0;
+    int measured = 0;
+    double lowest = 1e9;
+    double highest = -1e9;
+    double firstWant = -1.0;
+    std::string firstWrong;
+    for (int tick = 0; tick < 48; ++tick) {
+        if (tick > 0) {
+            PutBodyAt(registry, level.player, hidden);
+            step();
+        }
+        const entt::entity now = QuadOfNode(layer, name);
+        if (now == entt::null || !registry.valid(now)) break;
+        ++measured;
+        const double want = floorValue + (ceilingValue - floorValue) * BlinkBias(layer.LevelAgeMs() - born, 300.0);
+        if (tick == 0) firstWant = want;
+        lowest = std::min(lowest, want);
+        highest = std::max(highest, want);
+        const auto& material = registry.get<MaterialComponent>(now);
+        const glm::vec3 wantAmbient(Lighting::AmbientTerm(layer.AmbientNow(), glm::dvec3(want)));
+        if (glm::length(material.sprite2D.ambient - wantAmbient) > 1e-5f || material.albedoColor != glm::vec4(1.0f)) {
+            if (wrong++ == 0) {
+                firstWrong = "tick " + std::to_string(tick) + " (" + std::to_string(layer.LevelAgeMs() - born) + " ms after it): ambient (" +
+                             std::to_string(material.sprite2D.ambient.r) + ") against (" + std::to_string(wantAmbient.r) + ") for emissive " +
+                             std::to_string(want);
+            }
+        }
+    }
+    CHECK_MSG(measured >= 40, "the restocked barrel stays drawn long enough to read two legs: " + std::to_string(measured) + " ticks");
+    CHECK_MSG(firstWant == floorValue, "on its first drawn tick the clock is at zero, the floor 1: " + std::to_string(firstWant));
+    CHECK_MSG(wrong == 0, name + " is the floor (1, 1, 1) to 0.2 on 300 ms legs from its own birth: " + std::to_string(wrong) + " of " +
+                              std::to_string(measured) + " ticks wrong; the first " + firstWrong);
+    // 48 ticks of 16 ms are 768 ms: past its second leg (600 ms), so both ends are reached and it comes back up.
+    CHECK_MSG(lowest < ceilingValue + 0.02 && highest > floorValue - 0.001,
+              "both ends reached: " + std::to_string(lowest) + " to " + std::to_string(highest));
+    std::printf("  level31c: the barrel the dragon put back after %d ticks, born at level age %.0f ms, blinked %.2f to %.2f over %d ticks, "
+                "%d wrong\n",
+                waited, born, lowest, highest, measured, wrong);
+    layer.OnDetach(registry);
+}
+
 // ---- The shot's marks and ends, and its depth (the visuals plan's 10.1, step 103) ----
 //
 // What a tap and a shot leave behind, as the original's script adds it, on the
@@ -21197,6 +21654,7 @@ void runTests() {
     TheBlackKnightsLandingMakesNoTremble();
     TheGhostComesWithItsKnightsDeath();
     TheDarkDragonIsDrawnAsItsCallbackLeavesIt();
+    ARestockedBarrelBlinksFromItsOwnBirth();
     Level31DrawsTheBeholder();
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();
@@ -21225,6 +21683,10 @@ void runTests() {
     AFireAgentWearsItsOwnFace();
     BlueAndRedKeysKeyholesAndDoorsAreTheirColours();
     ACrateNoPortalCarriesBlinksRed();
+    ABarrelBlinksItsEmissiveEveryFrame();
+    AWallThatCarriesBlinkBlinksItsColourAndEmissiveOnADoubledClock();
+    ATeleportableCrateBlinksItsEmissive();
+    AFireAgentPulsesOnItsBounceToo();
     WithoutTheArtTheLevelIsBoxes();
     APortalAndAShotAreTheOriginals();
     TheShotsCellsRunOnOneTimer();

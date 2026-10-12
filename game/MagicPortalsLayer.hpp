@@ -1605,6 +1605,18 @@ private:
         int burnable{-1};
         bool blinked{false};
         double blinkMs{0.0};
+        // THE SCRIPT'S OTHER EMISSIVE BLINKS (planning step 169): a barrel's every frame
+        // (art.json barrel_bomb: its floor, the minEmissive datum read as GetVector3 does),
+        // a breakable wall's with the uint `blink` (breakable_wall: colour and emissive on
+        // one doubled clock). Both write over the node's own, from the entity's own
+        // blinkElapsedTime, whose zero is the level's age when its callback first ran: 0 for
+        // a placed one, the tick a restock added it for the barrel it adds.
+        enum class ScriptBlink { None, Barrel, Wall };
+        ScriptBlink scriptBlink{ScriptBlink::None};
+        glm::dvec3 blinkFloor{0.0};
+        double blinkBornMs{0.0};
+        // A fire agent: ETHCallback_fire_agent's bounce pulses its picture (art.json fire_agent pulse).
+        bool firePulse{false};
         // The bucket its entity stood in when the slots were last dealt (art.json
         // draw_order, Sprites::Rank): what a move across a bucket line is seen against.
         Sprites::Bucket bucket;
@@ -3183,6 +3195,9 @@ private:
     bool m_hudReady{false};
     std::string m_hudError;
     double m_levelAgeMs{0.0};
+    // The frame time the level's age last gained (the script's, ScriptClock::Ms): what a wall's colour
+    // call reads its doubled clock one add behind (art.json breakable_wall). Held through a pause.
+    double m_levelStepMs{0.0};
 
     // The tutorial's ring, drawn on each pad's corner, under the pads; empty
     // outside the tutorial.
