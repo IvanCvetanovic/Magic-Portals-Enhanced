@@ -1849,7 +1849,7 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   *Wave 4b, 2026-10-11: the first half is done - the comparison has run and its residuals are recorded (CMP-1 to CMP-18, CMP-low and
   CMP-R1, rows after step 165's). "The largest fixed" is NOT met: the largest cause, CMP-1 (the player and the exit arch drawn
   lit on 78 levels), is decoded and unbuilt, and so are eight more groups; wave 4c takes them.*
-  *Wave 4c-1, 2026-10-12 (NOT pushed: R4c1-1): the comparison's five drawing groups are built and committed locally - CMP-1 (the player and the exit arch lit on
+  *Wave 4c-1, 2026-10-12 (pushed after the ruling R4c1-1): the comparison's five drawing groups are built and committed - CMP-1 (the player and the exit arch lit on
   78 levels, 52 of the 58 `differs` levels), CMP-3, CMP-7, CMP-9 and CMP-10 (steps 166-170) - so the largest cause is fixed; "the largest fixed" is still NOT met as a
   whole: the four groups that change gameplay (CMP-2, CMP-6, CMP-15, CMP-16) are decoded and unbuilt and wave 4c-2 takes them, and the five fixes have not yet been
   re-compared against the stills (the next measuring pass does, against `CMP/port_f420` and `CMP/pairs`).*
@@ -2381,9 +2381,10 @@ them: a widely included header) and WAKE-7's tests, with R4a-10's one check.
 **Wave 4c-1 (the comparison's five drawing groups, CMP-1, CMP-3, CMP-7, CMP-9 and CMP-10; 2026-10-11 19:14 to 2026-10-12 12:39; closed 2026-10-12, NOT PUSHED).** Five
 drawing-only steps, one per decoded group of the final comparison, each independently verified, then three rounds of an independent verification of the whole wave and a
 finalize that did not push; on the owner's standing order of 2026-10-10. 19:14 is `out/parity/program/CMP1/start.txt`, the first record of the run (not a measured start); 12:39 is
-the finalize report's stamp. **`origin/main` is still `16b78e1`: the wave is seven local commits on `main` (`16b78e1..753e7d0`: 20 files, +3,523 / -65) and is not pushed,
-because the wave's own gate 4 (the sweep chain) fails as worded on one level, 4-12, in all three verification rounds. The finalize role had no authority to rule on it and did not
-push, and neither has this close: R4c1-1 is the open question.** The engine pin stayed `710bffc`; no converter, route, collision, physics, level or `data/` file changed, so
+the finalize report's stamp. **`origin/main` was `16b78e1` when the wave closed: the wave was seven local commits on `main` (`16b78e1..753e7d0`: 20 files, +3,523 / -65) and the
+close's own, and it was not pushed then, because the wave's own gate 4 (the sweep chain) failed as worded on one level, 4-12, in all three verification rounds. The finalize role
+had no authority to rule on it and did not push, and neither had this close. The orchestrator ruled afterwards (R4c1-1, option (a): CMP-9's scope is 42 levels) and pushed the
+wave as built, a fast-forward from `16b78e1`, with one docs commit that records the ruling.** The engine pin stayed `710bffc`; no converter, route, collision, physics, level or `data/` file changed, so
 `out/levels`, `out/assets` and `out/data` are the ones the wave started from.
 
 | Step | Row | Commit | Outcome | f420 sweep changes | GAMEPLAY | Routes win |
@@ -2397,7 +2398,7 @@ push, and neither has this close: R4c1-1 is the open question.** The engine pin 
 **Verification.** Steps 166 and 167 passed their one independent verification (9 gates each; 4 and 7 low). Steps 168, 169 and 170 each took three rounds and a disposition that
 committed them with recorded deviations (168 gate 2, 169 gate 1, 170 gate 2); each deviation is a row in the step's block above. The wave's own verification ran three times
 (`R4c1/verify1.json` at `5c1949b`, `verify2.json` at `1379eca`, `verify3.json` at `753e7d0`) and found the same thing each time: gates 1, 2, 3, 5, 6 and 7 hold and **gate 4
-fails on 4-12** (R4c1-1: a scope ruling, not a defect). Fix 1 (`1379eca`) and fix 2 (`753e7d0`) were text-only corrections of step 169's record (its gate 1 to 42 levels; its
+fails on 4-12** (R4c1-1: a scope ruling, not a defect; ruled (a) after the close). Fix 1 (`1379eca`) and fix 2 (`753e7d0`) were text-only corrections of step 169's record (its gate 1 to 42 levels; its
 "nothing got worse at f420" to its own table; the word "owner-delegated" there to "a delegated disposition"); no source, data, test, route or engine file moved after step 170's
 commit, and the finalize role checked it (git only, no launch). Verify3's measurements: 128 launches of `MagicPortals.exe` `29166f75`, each with a fresh copy of the owner's
 `scores.json`, 128 of 128 byte-identical to `CMP10/after/sweep`, validation active and silent in all; 20 gold-seed re-takes read against the stills (the claimed improvements are
@@ -2432,7 +2433,7 @@ its line of `CMP10/after/capture.txt` and to verify3's list) before and after th
 `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/`), then `purge_images.py all`: **800 images, 0.53 GB, 0 refused** (the old baseline `PX/after/sweep` and the sweeps, golds,
 pairs and crops of steps 166 to 169 and the leftovers of 170 and the verifications); `out/parity` 18.743 -> 18.248 GiB, free disk 104.982 -> 105.485 GiB. Kept: the baseline
 and the two comparison folders (128, 130 and 256 images, all opening), `original/`, `smoke/`, `markers/`, `saves/`, `asbc/`, the audit, every mp4 and every text, json, script and
-log file. **A consequence**: the pre-wave baseline and each step's own after-sweep no longer exist, so a veto of the fire agent's pulse (R4c1-1 (b)) compares its new sweep with
+log file. **A consequence**: the pre-wave baseline and each step's own after-sweep no longer exist, so a later veto of the fire agent's pulse (R4c1-1's option (b), not taken) would compare its new sweep with
 `CMP10/after/sweep`.
 
 **GAMEPLAY changed in wave 4c-1: none.** Each step is presentation: colours, a draw order, a light, blinks, a picture's alpha and scale; no body, shape, sensor, tick or number
@@ -2445,8 +2446,8 @@ opened, 10 of them closed or settled (CMP1-1, CMP3-5, CMP7-2, CMP7-6 by this clo
 CMP-3, CMP-7, CMP-9 and CMP-10 (5 of the comparison's 20), G1a-11, and step 72's 1-07 ring deviation (with its limit); "Script-driven emissive" (section 1), Order 11.3's
 deviation 9 and G1a-2 are annotated and stay open.
 
-**What the next wave should take (wave 4c-2)**, in this order. **First, R4c1-1**: the word on the push and on CMP-9's 42-level scope, because the wave's `CMP10/after/sweep` is the
-baseline every step below measures against (a veto of the pulse moves the fire-agent levels' frames and relinks both executables). Then: (1) **the groups that change gameplay,
+**What the next wave should take (wave 4c-2)**, in this order. **R4c1-1 is ruled** (option (a), its row: the pulse stays, CMP-9's scope is 42 levels, the wave is pushed); the wave's `CMP10/after/sweep` is the
+baseline every step below measures against. Then: (1) **the groups that change gameplay,
 each its own step with its gates** (the f420 sweep changes only the levels the group names, each change explained against `CMP10/after/sweep`; the group's boxes read the
 original's; the group's pair images re-taken): **CMP-2** (high: the revolute joint's attach point B: the converter carries it and the hinge uses it, a change on both sides of the
 `.tscn`, re-converted into a staging directory under `out/` and compared with `out/levels` before it replaces anything, `tools/converter`'s `pytest` and `ruff check` clean),
@@ -2468,7 +2469,7 @@ reads a blink, a pulse or a bounce as a RANGE across the six stills and the port
 section-5 box ticks only when the structural groups are fixed. (4) **The ship preparation**: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT
 HERE" placeholder, so the record of the scope is incomplete: the owner's to fill), the play build (`tools\parity\play_build.bat` exists; no play build has been made), the
 owner's calls listed here once (2-30's creep R3-2, G10-14 and WT-1, G10-2's matched 60 Hz, R24 and R25, `crate_low_emissive`'s guessed 0.08 R3b-3, 2-32 ahead of the dragon's
-camera R3-3, STK-8, PIC-1's smoothing above 80 Hz, the halo scale CMP-8, CMP-9's pulse scope R4c1-1 and the standing ones in "The owner's calls" below) and **the repository's going
+camera R3-3, STK-8, PIC-1's smoothing above 80 Hz, the halo scale CMP-8, CMP-9's pulse scope (ruled in R4c1-1; the owner may overrule it) and the standing ones in "The owner's calls" below) and **the repository's going
 public, which still needs the owner's explicit word**. **With the wave**: R3b-6 and R3c-9 (`win_by` of the 85 older routes tightened when those files are next touched), 3-20's
 knife-edge (R3-4), the comment-only fixes that wait for their file's next real edit (the two comments of `game/sim/Resting.hpp` among them: a widely included header) and
 WAKE-7's tests, with R4a-10's one check.
@@ -3406,7 +3407,7 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       pulse; its sweep gate names only the 32). **Scope 42 levels ACCEPTED at the commit (a delegated disposition under the standing order of 2026-10-10: no owner message) and the gate's text CORRECTED to the 42 by wave 4c-1's fix1, after its verifier failed the first text on 4-12, the one fire-agent level that no CMP group of the wave names (the other nine are inside CMP-1's 78; planning step 169's fix paragraph has the recomputation, `out/parity/program/R4c1/fix1/changed_vs_named.txt`)**, because the ruling is the original and the pulse is what the
       original does; the gate is not recorded as passed. Revert if the owner vetoes it: the pulse line in `syncSprites`, the owner-scale pass in `syncLights`,
       `fire_agent.pulse` (`art.json`, `Art.cpp`, `Art.hpp`) and its pins, then a re-sweep (only the 30 drawn levels then move). Next: 2-32 and 3-15 each get a capture at a tick
-      with the crate on screen, in the wave 4c-2 re-fly or the final comparison; the pulse was swept at f420 only, not at its ends (0.98, 1.02). The scope of 42 is the open ruling R4c1-1 (the wave's gate 4 fails on 4-12 as worded).
+      with the crate on screen, in the wave 4c-2 re-fly or the final comparison; the pulse was swept at f420 only, not at its ends (0.98, 1.02). The scope of 42 is the ruling R4c1-1 (accepted after the wave's close: its gate 4 failed on 4-12 as worded).
 - [ ] **CMP9-2. Gate 2: 16 of the 93 stills lie outside the port's f420-f504 range after alignment (20 before it)** (deviation 2; the verifications' lows). Measured: 77 of 93
       stills over the 22 boxes inside the range after the camera offsets of four stills are aligned (73 before), 66 of 69 in the 17 boxes whose content is the blinking thing
       alone. Outside, with the cause looked at: 2-25's h0.3 (the "Part 2" title over the crate), 2-08's pyramid (burning in the later stills), 2-05's small crates (a pile
@@ -3490,7 +3491,7 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
 
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):
-- [ ] **R4c1-1. The wave is NOT pushed: gate 4 (the sweep chain) fails as worded on one level, 4-12, and needs a scope ruling** (medium; the one finding of all three
+- [x] **R4c1-1. Gate 4 (the sweep chain) failed as worded on one level, 4-12, and needed a scope ruling: RULED (a), 2026-10-12, and the wave pushed** (medium; the one finding of all three
       verifications: `verify1.json` at `5c1949b`, `verify2.json` at `1379eca`, `verify3.json` at `753e7d0`). Required (the wave's gate 4): the owner-seed f420 sweep of the final
       build equals `CMP10/after/sweep` byte for byte, and against `PX/after/sweep` every changed level lies inside the union of the five groups' named lists (CMP-1 78; CMP-3
       its 9 and its 40-level table; CMP-7 4-19 and 4-20; CMP-9 "the 32"; CMP-10 13) and in some step's explained table. Measured (verify3): the first half holds (128 launches,
@@ -3506,8 +3507,14 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       wave pushes as built with nothing rebuilt (verify2 and verify3 note that it agrees with the standing rule that rulings follow the original, and fix 2 recommends it); **(b)** veto the pulse: the
       revert is the recipe in step 169's deviation 1 (the pulse line in `syncSprites`, the owner-scale pass in `syncLights`, `fire_agent.pulse` with its loader requirement in
       `Art.cpp`, `Art.hpp` and `art.json`, its pins in `test_mp_sprites` and `test_mp_layer`), then a re-sweep of the 128 levels and a relink of both executables (a Smart App
-      Control risk), compared with `CMP10/after/sweep`, the one sweep this close keeps (only the fire-agent levels' frames should move). Next: the owner's or the orchestrator's
-      word; until then the wave stays local and gate 4 is NOT recorded as passed.
+      Control risk), compared with `CMP10/after/sweep`, the one sweep this close keeps (only the fire-agent levels' frames should move).
+      **RULING (2026-10-12, the orchestrator, on the owner's standing order of 2026-10-10, "just continue doing each step until you are finished or until i tell you to stop"):
+      option (a).** Why: the original pulses every fire agent (`ETHCallback_fire_agent` #282-300, no branch before it, re-read by two verifiers), so the port's 20 are the
+      original's 20 and a veto would make the port differ from the original, besides costing a relink of both executables (a Smart App Control notification each); the spec
+      contradicted itself (its BUILD line asks for the pulse, its gate 4 names 32 levels) and the scope it should have named is the census of fire agents; three rounds found no
+      other defect. **Gate 4 as written FAILED on 4-12 and stays recorded as failed as written; it holds under the 42-level scope** (106 changed levels, each step's changed set
+      inside its own scope). The wave was pushed as built, a fast-forward from `16b78e1`, its last commit the docs commit that carries this ruling. Not one of the owner's calls
+      (no engine change, no pin bump, no gameplay) and reversible by an ordinary commit (the recipe is step 169's deviation 1); the owner may overrule it.
 - [ ] **R4c1-2. Step 169's "over their changed pixels alone 8 of the 10 read slightly away" does not reproduce, and the pulse is not shown to help any frame at f420** (low;
       verify3's problem 2; the sentence is in planning step 169's deviation 1 as `753e7d0` wrote it, and this close does not edit the planning document). On verify3's estimator
       (luma mean abs to h6.3 over each level's changed pixels, owner seed, `CMP7` -> `CMP9`) the fire agent's ten outside the 32 read: away 2-11 18.9 -> 20.5, 2-26 32.2 -> 32.9,
@@ -3548,7 +3555,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       only), the rule and its citations in `game/data/lighting.json`. Gate: the f420 sweep changes only the 78 levels (the other 50 byte-identical to `PX/after/sweep`),
       the player and arch boxes read the original's (chapter 2 player RGB 8-35, arch 5-12 grey); pin 2-01, 3-05, 4-01 and 4-22 in `test_mp_art` or `test_mp_layer`.
       GAMEPLAY: none. Of the 58 `differs` levels, 52 differ by this cause alone.
-      *Closed by step 166 (CMP1, wave 4c-1), 2026-10-11; committed locally as `baaa651`, not pushed (wave 4c-1's close). GAMEPLAY: none (the 128 routes win on exactly the census's
+      *Closed by step 166 (CMP1, wave 4c-1), 2026-10-11; committed as `baaa651` (wave 4c-1's close; pushed on 2026-10-12 after R4c1-1's ruling). GAMEPLAY: none (the 128 routes win on exactly the census's
       ticks).* Built as the Next says: the port reads `ignore_emissive` and `door_emissive` from the level's first `properties` node and the chapter's 0-based world; the flag
       gates both writes (4-02 to 4-19's `door_emissive` 0 is never read); on a flag level `door.ent` is drawn at `door_emissive` (0 when absent) and the player at 0 (0.2 in
       chapter 3). The rule and its citations: `game/data/lighting.json` `script_emissive`; pins in `test_mp_lighting` (548 -> 588 checks) and `test_mp_layer` (3,876 -> 3,905).
@@ -3589,7 +3596,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       original draws it in front of), Order 11.3's deviation 9. Next: break z ties by (floor(y/128), floor(x/128)) of the node's current position, then file order
       (`Sprites::Find`, `buildSprites`). Gate: the 9 static orders on f420 frames, 1-11's and 1-12's rings as the original's, the other 119 levels reviewed for flips,
       `test_mp_pictures` pin. GAMEPLAY: none.
-      *Closed by step 167 (CMP3, wave 4c-1), 2026-10-11; committed locally as `ca93e40`, not pushed (wave 4c-1's close). GAMEPLAY: none (the 128 routes win on exactly the census's
+      *Closed by step 167 (CMP3, wave 4c-1), 2026-10-11; committed as `ca93e40` (wave 4c-1's close; pushed on 2026-10-12 after R4c1-1's ruling). GAMEPLAY: none (the 128 routes win on exactly the census's
       ticks).* Built as the Next says, with the bucket's own order: `Sprites::Rank` deals the slots of each `z_index` by (exact depth, bucket row, bucket column, place in
       the file), the later bucket (the lower row, then the higher column) over the earlier; the bucket is 128 level units and the line tolerance 0.001, both in
       `game/data/art.json` `draw_order` with their citations; the layer deals at build and again a frame late when a picture's bucket changes. Pins: `test_mp_sprites`
@@ -3643,7 +3650,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       `_not_built` names it. Joins planning step 69; no backlog row. Next: `sim/Keys` and the layer add the point light while a red key is visible (the torches' own
       `AddLight` path), the numbers in `keys.json` with the citation. Gate: 4-20 f420 box from (26,25,35) to the original's (57,19,22), 4-19 unchanged within noise, the
       lighting suites. GAMEPLAY: none.
-      *Closed by step 168 (CMP7, wave 4c-1), 2026-10-12; committed locally as `7ebe83b`, not pushed (wave 4c-1's close). GAMEPLAY: none (the 128 routes win on exactly the census's
+      *Closed by step 168 (CMP7, wave 4c-1), 2026-10-12; committed as `7ebe83b` (wave 4c-1's close; pushed on 2026-10-12 after R4c1-1's ruling). GAMEPLAY: none (the 128 routes win on exactly the census's
       ticks). Committed WITH RECORDED DEVIATIONS (owner-delegated): gate 2 is not met to the letter.* Built as the Next says: a key whose `color` datum is `red` adds, on every
       call, a point light (1, 0, 0), range 48, 6 over the key's own z, at the key's place of the PREVIOUS tick, so it follows a carried key and stays while the key's
       picture does (`Keys::Rules::OwnLight` and `HasOwnLight`, `game/data/keys.json` `red_light` with its citations, the layer's `KeyLight`; a script's light, so no owner scale and
@@ -3686,7 +3693,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       blink); the wall's blink is in no row. Next: three more callers of the existing blink in `sim/Art` and the layer (data in `art.json` with the listing citations)
       and the fire agent's pulse. Gate: the readers' boxes inside the original's range at the right phase, pins in `test_mp_sprites`, the f420 sweep changes only the 32
       levels (corrected by wave 4c-1's fix1 to the 32 and the fire agent's 10, 42). GAMEPLAY: none.
-      *Closed by step 169 (CMP9, wave 4c-1), 2026-10-12; committed locally as `4216f32` (and two text-only commits, `1379eca` and `753e7d0`, which correct its record), not pushed (wave 4c-1's close). GAMEPLAY: none (the 128 routes win on exactly the census's
+      *Closed by step 169 (CMP9, wave 4c-1), 2026-10-12; committed as `4216f32` (and two text-only commits, `1379eca` and `753e7d0`, which correct its record) (wave 4c-1's close; pushed on 2026-10-12 after R4c1-1's ruling). GAMEPLAY: none (the 128 routes win on exactly the census's
       ticks, 83 to 3,343). Committed WITH RECORDED DEVIATIONS (a delegated disposition): gate 1 as first written is not met; its text is corrected to 42 levels (fix1).* Built as the Next says, from the listing (md5 `48fe65ce`),
       every number in `game/data/art.json` with its citations: a barrel's emissive from its `minEmissive` datum to 0.2 on 300 ms legs, every frame, over the node's own
       (`ETHCallback_barrel_bomb` #1-30; `GetVector3` of an absent datum is (0, 0, 0), so 15 of the 16 barrel levels blink 0 -> 0.2, chapter 2's barrels get brighter and 3-19's,
@@ -3717,7 +3724,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (`Popup.cpp`) only reads the touch. Alpha 0.76 over the dark wall predicts the measured 171-173. No backlog row names it. Next: draw alpha 0.76 and the smoothEnd
       triangle 1.13 -> 1.05 over 250 ms on `help_block.ent` in the layer (numbers in `art.json` or `ui.json` with the citation; the tap rect unchanged, it uses
       `box_scale`). Gate: the face reads 171-173 and 72-76 px on 1-10, 1-11, 1-13; a `test_mp_sprites` pin. GAMEPLAY: none.
-      *Closed by step 170 (CMP10, wave 4c-1), 2026-10-12; committed locally as `5c1949b`, not pushed (wave 4c-1's close). GAMEPLAY: none (the 128 routes win on exactly the
+      *Closed by step 170 (CMP10, wave 4c-1), 2026-10-12; committed as `5c1949b` (wave 4c-1's close; pushed on 2026-10-12 after R4c1-1's ruling). GAMEPLAY: none (the 128 routes win on exactly the
       census's ticks, 83 to 3,343). Committed WITH RECORDED DEVIATIONS (owner-delegated): gate 2's face tolerance is not met to the letter.* Built as the Next says, from
       the listing (md5 `48fe65ce`), every number in `game/data/art.json` `help_block` with its citations: the block is drawn at alpha 0.76 (`ETHCallback_help_block` #1-3
       `SetAlpha(0.76f)`) and breathes 1.13 -> 1.05 -> 1.13 on 250 ms legs, a period of 500 ms (#5-23, `bounce(thisEntity, 1.13, 1.05, 250)`: a call pushes its last argument
@@ -4997,9 +5004,9 @@ the engine's contact margin (CAP-2: the player and crates at rest 1.6-1.8 px low
 in play now that the comparison names the differences a player could see: the player and the exit arch lit on chapters 2-4 (CMP-1), a plank or a seesaw standing where it
 was placed (2-31, 3-19, 3-20, 4-31: CMP-2), the knight beside 4-29's gem that the original never spawns (CMP-6), 3-05's first knight arriving early (CMP-5) and 1-30's
 pile toppling (CMP-4); the grant in `docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
-*Added by wave 4c-1's close*: wave 4c-1 is NOT pushed (seven local commits, `origin/main` still `16b78e1`; the five drawing groups CMP-1, CMP-3, CMP-7, CMP-9 and CMP-10, GAMEPLAY
-none): whether it is pushed as built, with the fire agent's pulse accepted on all 20 fire-agent levels (10 are outside CMP-9's named 32; the original pulses every fire agent,
-`ETHCallback_fire_agent` #282-300 has no branch before it) or the pulse is vetoed (a revert, a re-sweep and a relink of both executables), R4c1-1; the help block's face tone, 1 to 3
+*Added by wave 4c-1's close*: wave 4c-1 is pushed after the ruling R4c1-1 (the five drawing groups CMP-1, CMP-3, CMP-7, CMP-9 and CMP-10, GAMEPLAY
+none): the fire agent's pulse is accepted on all 20 fire-agent levels (10 are outside CMP-9's named 32; the original pulses every fire agent,
+`ETHCallback_fire_agent` #282-300 has no branch before it), ruled in R4c1-1 and open to the owner's veto (a revert, a re-sweep and a relink of both executables); the help block's face tone, 1 to 3
 grey of 255 under the original's (CMP10-1: one calibration experiment on a second alpha-blended picture, not a retune of the block); what to look for in play now that these are
 drawn as the original draws them: the player and the exit arch dark on chapters 2-4 and 4-01 (CMP-1), pictures at one depth stacked as the original stacks them (CMP-3), 4-20's
 red wash from the key's own light (CMP-7), barrels, cracked walls and crates breathing in brightness and the fire agents' small pulse (CMP-9), and the help block translucent
