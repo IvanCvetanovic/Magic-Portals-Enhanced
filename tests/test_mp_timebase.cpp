@@ -679,6 +679,186 @@ void TheMassesAreTheEntsDensityOverTheShape() {
     std::printf("  2-24: the barrel weighs %.4f, the player %.4f - %.2f times\n", barrelKg, playerKg, barrelKg / playerKg);
 }
 
+// A NODE'S OWN `scale` DATUM IS ITS ENTITY'S SCALE, and the body is built from the scaled box (planning step 172, CMP-16).
+// SGlobalScale::scaleEntity (listing bytes 6072..6337) takes the datum and calls ETHEntity::Scale(getScale() x it), which
+// destroys the body and has ETHPhysicsSimulator::CreateBody build it afresh from `box.Scale(entity->GetScale())` -
+// size AND offset, per axis (ETHCollisionBox.cpp:105-111) - so Box2D's mass, the .ent's density over that area, goes with
+// the SQUARE of the scale. A hand-written scene, so the rule is read on every shape the builder takes and on a material that
+// states the original's own area, and 2-01's own crate, the one node of the game with a body and a datum: 58 x 58 units and
+// 0.538 become 43.5 x 43.5 and 0.303.
+const std::string kScaledScene = R"([gd_scene load_steps=5 format=3]
+
+[sub_resource type="RectangleShape2D" id="Rect_1"]
+size = Vector2(58, 58)
+
+[sub_resource type="RectangleShape2D" id="Rect_2"]
+size = Vector2(58, 58)
+
+[sub_resource type="CircleShape2D" id="Circle_1"]
+radius = 20
+
+[sub_resource type="CircleShape2D" id="Circle_2"]
+radius = 9.1
+
+[node name="root" type="Node2D"]
+
+[node name="scaled_crate" type="Node2D" parent="."]
+position = Vector2(100, 40)
+metadata/entity_name = "crate_no_emissive"
+metadata/scale = "0.75"
+
+[node name="Body" type="RigidBody2D" parent="scaled_crate"]
+
+[node name="Shape" type="CollisionShape2D" parent="scaled_crate/Body"]
+shape = SubResource("Rect_1")
+position = Vector2(8, -4)
+
+[node name="plain_crate" type="Node2D" parent="."]
+position = Vector2(300, 40)
+metadata/entity_name = "crate_no_emissive"
+
+[node name="Body" type="RigidBody2D" parent="plain_crate"]
+
+[node name="Shape" type="CollisionShape2D" parent="plain_crate/Body"]
+shape = SubResource("Rect_2")
+position = Vector2(8, -4)
+
+[node name="stone" type="Node2D" parent="."]
+position = Vector2(500, 40)
+metadata/entity_name = "rolling_stone"
+metadata/scale = "0.5"
+
+[node name="Body" type="RigidBody2D" parent="stone"]
+
+[node name="Shape" type="CollisionShape2D" parent="stone/Body"]
+shape = SubResource("Circle_1")
+
+[node name="knight" type="Node2D" parent="."]
+position = Vector2(700, 40)
+metadata/entity_name = "minion"
+metadata/scale = "0.5"
+
+[node name="Body" type="RigidBody2D" parent="knight"]
+
+[node name="Shape" type="CollisionShape2D" parent="knight/Body"]
+shape = SubResource("Circle_2")
+
+[node name="wedge" type="Node2D" parent="."]
+position = Vector2(900, 40)
+metadata/entity_name = "block00"
+metadata/scale = "2"
+
+[node name="Body" type="StaticBody2D" parent="wedge"]
+
+[node name="Shape" type="CollisionPolygon2D" parent="wedge/Body"]
+polygon = PackedVector2Array(-10, -10, 10, -10, 0, 10)
+position = Vector2(4, 2)
+)";
+
+void AScaleDatumScalesTheBodyAndItsMassAsScaleEntityDoes() {
+    entt::registry registry;
+    registry.ctx().insert_or_assign<LevelBuilder::Materials>(ReadMaterials());
+    Tscn::Scene scene;
+    std::string error;
+    const bool parsed = Tscn::Parse(kScaledScene, scene, error);
+    CHECK_MSG(parsed, error);
+    if (!parsed) return;
+    LevelBuilder::Options options;
+    options.prismDirectory = std::filesystem::temp_directory_path() / "supersonic-test-mp-timebase-scale";
+    LevelBuilder::Built built;
+    const bool made = LevelBuilder::Build(scene, registry, options, built, error);
+    CHECK_MSG(made, error);
+    if (!made) return;
+    CHECK_EQ(built.rigids, 4);
+    CHECK_EQ(built.statics, 1);
+    const auto entity = [&](const char* node) { return built.entities.at(node); };
+    const auto massOf = [&](const char* node) {
+        return static_cast<double>(registry.get<RigidBodyComponent>(entity(node)).mass);
+    };
+
+    // A box: its size and its offset, each 0.75 of the file's, and the mass 0.4 over the scaled area.
+    const auto& scaled = registry.get<BoxColliderComponent>(entity("scaled_crate"));
+    const auto& plain = registry.get<BoxColliderComponent>(entity("plain_crate"));
+    CHECK_WITHIN(plain.size.x, 58.0 / 50.0, 1e-6);
+    CHECK_WITHIN(scaled.size.x, 43.5 / 50.0, 1e-6);
+    CHECK_WITHIN(scaled.size.y, 43.5 / 50.0, 1e-6);
+    CHECK_WITHIN(scaled.size.z, plain.size.z, 0.0); // the depth the plane does not have is not the entity's
+    CHECK_WITHIN(plain.center.x, Units::ToWorld(8.0, -4.0).x, 1e-6);
+    CHECK_WITHIN(scaled.center.x, Units::ToWorld(6.0, -3.0).x, 1e-6);
+    CHECK_WITHIN(scaled.center.y, Units::ToWorld(6.0, -3.0).y, 1e-6);
+    CHECK_WITHIN(massOf("plain_crate"), 0.4 * 1.16 * 1.16, 1e-5);
+    CHECK_WITHIN(massOf("scaled_crate"), 0.4 * 0.87 * 0.87, 1e-5);
+    CHECK_WITHIN(massOf("scaled_crate") / massOf("plain_crate"), 0.75 * 0.75, 1e-5);
+
+    // A circle: its radius, and the mass of the scaled disc (rolling_stone's density is 1).
+    CHECK_WITHIN(registry.get<Supersonic::SphereColliderComponent>(entity("stone")).radius, 10.0 / 50.0, 1e-6);
+    CHECK_WITHIN(massOf("stone"), kPi * 0.2 * 0.2, 1e-5);
+
+    // A material that states the ORIGINAL's own area (the knight's two circles, one disc here) states it unscaled: scaled with it.
+    const LevelBuilder::Material minion = ReadMaterials().Of("minion");
+    CHECK_WITHIN(registry.get<Supersonic::SphereColliderComponent>(entity("knight")).radius, 4.55 / 50.0, 1e-6);
+    CHECK_WITHIN(massOf("knight"), static_cast<double>(minion.density) * minion.areaM2 * 0.25, 1e-6);
+
+    // A hull: its points and its offset, scaled together, in metres with +y up.
+    const auto& wedge = registry.get<LevelBuilder::PlanePolygon>(entity("wedge"));
+    CHECK_EQ(wedge.points.size(), std::size_t{3});
+    if (wedge.points.size() == 3) {
+        CHECK_WITHIN(wedge.points[0].x, (-10.0 * 2.0 + 4.0 * 2.0) / 50.0, 1e-6);
+        CHECK_WITHIN(wedge.points[0].y, -(-10.0 * 2.0 + 2.0 * 2.0) / 50.0, 1e-6);
+        CHECK_WITHIN(wedge.points[2].x, (0.0 + 4.0 * 2.0) / 50.0, 1e-6);
+        CHECK_WITHIN(wedge.points[2].y, -(10.0 * 2.0 + 2.0 * 2.0) / 50.0, 1e-6);
+    }
+
+    // The box a consumer reads (fire, a reach, the debug box) is the body's own.
+    glm::dvec2 offsetPx(0.0);
+    glm::dvec2 sizePx(0.0);
+    CHECK(LevelBuilder::ShapeBoundsPx(scene, *scene.FindNode("scaled_crate"), offsetPx, sizePx));
+    CHECK_WITHIN(sizePx.x, 43.5, 1e-9);
+    CHECK_WITHIN(offsetPx.x, 6.0, 1e-9);
+    CHECK_WITHIN(offsetPx.y, -3.0, 1e-9);
+    CHECK(LevelBuilder::ShapeBoundsPx(scene, *scene.FindNode("plain_crate"), offsetPx, sizePx));
+    CHECK_WITHIN(sizePx.x, 58.0, 1e-9);
+    CHECK(LevelBuilder::ShapeBoundsPx(scene, *scene.FindNode("wedge"), offsetPx, sizePx));
+    CHECK_WITHIN(sizePx.x, 40.0, 1e-9); // 20 wide, twice
+    CHECK_WITHIN(offsetPx.x, 8.0, 1e-9);
+
+    // A datum that is not a number above 0 is refused, naming it, and builds nothing.
+    for (const char* bad : {"0", "-0.5", "huge"}) {
+        std::string text = kScaledScene;
+        const std::string wanted = "metadata/scale = \"0.75\"";
+        text.replace(text.find(wanted), wanted.size(), std::string("metadata/scale = \"") + bad + "\"");
+        Tscn::Scene broken;
+        entt::registry other;
+        other.ctx().insert_or_assign<LevelBuilder::Materials>(ReadMaterials());
+        LevelBuilder::Built nothing;
+        std::string why;
+        const bool ok = Tscn::Parse(text, broken, why) && LevelBuilder::Build(broken, other, options, nothing, why);
+        CHECK_MSG(!ok && why.find("scale") != std::string::npos, std::string("a scale of ") + bad + " is refused: " + why);
+    }
+
+    // 2-01's own crate: 58 x 58 units at 0.538 become 43.5 x 43.5 at 0.3028, a crate of 0.5625 of the weight.
+    if (!LevelIsThere("level0a")) return;
+    Started run;
+    if (!Start("level0a", run)) return;
+    const auto found = run.level.built.entities.find("crate_no_emissive_796");
+    CHECK(found != run.level.built.entities.end());
+    if (found == run.level.built.entities.end()) return;
+    const auto& box = run.registry.get<BoxColliderComponent>(found->second);
+    const double kg = static_cast<double>(run.registry.get<RigidBodyComponent>(found->second).mass);
+    CHECK_WITHIN(box.size.x, 43.5 / 50.0, 1e-6);
+    CHECK_WITHIN(box.size.y, 43.5 / 50.0, 1e-6);
+    CHECK_WITHIN(kg, 0.4 * 0.87 * 0.87, 1e-5);
+    CHECK_WITHIN(kg / (0.4 * 1.16 * 1.16), 0.5625, 1e-5);
+    const Tscn::Node* node = run.data.scene.FindNode("crate_no_emissive_796");
+    CHECK(node != nullptr);
+    if (node != nullptr) {
+        CHECK(LevelBuilder::ShapeBoundsPx(run.data.scene, *node, offsetPx, sizePx));
+        CHECK_WITHIN(sizePx.x, 43.5, 1e-9);
+        CHECK_WITHIN(sizePx.y, 43.5, 1e-9);
+    }
+    std::printf("  2-01: the crate is %.1f x %.1f units and weighs %.4f (58 x 58 and 0.5382 unscaled)\n", sizePx.x, sizePx.y, kg);
+}
+
 // What the masses do to a push: a walking player (velocity set outright every tick) against a loose crate shares the contact's
 // impulse by inverse mass, so the pair moves at m_player / (m_player + m_crate) of the walk - the original's Box2D does the same.
 // A small crate (30 x 30, density 0.4: 0.144 against the player's 0.104) goes at 0.42 of 2.4 units a tick, where the engine's
@@ -1190,6 +1370,7 @@ void runTests() {
     EveryDynamicBodyIsHeldToBox2DsMaxTranslation();
     TheEngineBouncesAStoneBeforeItTouches();
     TheMassesAreTheEntsDensityOverTheShape();
+    AScaleDatumScalesTheBodyAndItsMassAsScaleEntityDoes();
     ADecodedPlayerPushesACrateAtTheMassRatio();
     TheEngineWalksARestingBoxSidewaysAtTheDecodedFriction();
     ABoxBuiltFromTheTableRestsAndSleeps();

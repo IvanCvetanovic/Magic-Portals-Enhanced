@@ -4964,6 +4964,20 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             drawn.lookZ = look->second.z;
             drawn.particles = look->second.particles;
         }
+        // THE SCALE ITS NODE'S OWN DATA GIVES IT (LevelBuilder::kScaleDatum): Game::preLoop's scaleEntities
+        // runs scaleEntity on every entity the scene places, which calls ETHEntity::Scale(getScale() x the
+        // `scale` datum, 1 where there is none), and that multiplies the picture (and the particle systems)
+        // as the script's own Scale() calls below do - they multiply on top of it. 72 nodes of the 128 levels
+        // carry the datum: the antiportals', which the manager halves below, and 2-01's crate_no_emissive,
+        // 0.75, whose body LevelBuilder builds at the same scale (planning step 172). An unreadable datum is a
+        // node LevelBuilder has refused; the picture keeps 1 and says so.
+        if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
+            std::string why;
+            if (!LevelBuilder::ReadCustomScale(*node, drawn.scale, why)) {
+                drawn.scale = 1.0;
+                SUPERSONIC_LOG_WARN("Magic Portals") << "picture not scaled: " << why << std::endl;
+            }
+        }
         // A STATIC PORTAL IS DRAWN AS ITS SCRIPT REDRAWS IT (art.json static_portal):
         // once, ETHCallback_portal_static scales the entity by 0.8 - its picture here,
         // its particle systems in buildEmitters - and sets its colour red or blue by
@@ -4977,7 +4991,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             const std::string named =
                 colour != nullptr && colour->kind == Tscn::Value::Kind::String ? colour->text : std::string();
             drawn.colour = glm::vec4(glm::vec3(m_artRules.staticPortal.TintFor(named)), drawn.colour.a);
-            drawn.scale = m_artRules.staticPortal.scale;
+            drawn.scale *= m_artRules.staticPortal.scale;
         }
         // 4-19'S RED KEY STATE IS DRAWN AS ITS FIRST CALL REDRAWS IT (keys.json
         // red_key_state, #14-73): Scale(vector2(0.8, 1.5)) and SetColor(1, 0.1, 0.1)
@@ -5071,14 +5085,14 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         // no_portal zone is not one of its fields and keeps its own size.
         //
         // The node's `scale` is its custom data, which SGlobalScale::scaleEntity
-        // applies (CheckCustomData, GetFloat, Scale); the port reads it for a zone
-        // only. It is not the Sprite2D `scale` that step 9.1 (00_order, K9) has
-        // Sprites::Find apply: that one is the entity's <Scale> element, 1 for
-        // antiportal.ent, and multiplies on top of this line, not in place of it.
+        // applies (CheckCustomData, GetFloat, Scale) and the lines above have put in
+        // drawn.scale (step 172: before it, only a zone's picture read it). It is not
+        // the Sprite2D `scale` that step 9.1 (00_order, K9) has Sprites::Find apply:
+        // that one is the entity's <Scale> element, 1 for antiportal.ent, and
+        // multiplies on top of this line, not in place of it.
         if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node);
             drawn.zone >= 0 && node != nullptr && BareEntityName(*node) == m_level.portals.rules.antiportalEntity) {
-            drawn.scale = m_level.portals.rules.antiportalManagerScale *
-                          m_level.portals.zones[static_cast<std::size_t>(drawn.zone)].scale;
+            drawn.scale *= m_level.portals.rules.antiportalManagerScale;
         }
         // AND IT BLINKS AND TURNS (art.json antiportal): ETHCallback_antiportal is
         // named for the entity less its .ent, so it runs for every placement of it,

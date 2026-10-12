@@ -3524,6 +3524,40 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
 - [ ] **CMP6-9. `test_mp_layer`'s order test does not tell row-major from column-major** (deviation 9; a low carried from wave 4c-2's mutation role, not this step's). Next:
       a pin that does, when the layer's order is next touched.
 
+**Step 172's recorded deviations** (a node's own `scale` datum scales its picture, its body's box and its mass, CMP-16, wave 4c-2; planning step 172 has the evidence,
+`RECORDED DEVIATIONS` 1-6; `out/parity/program/CMP16/` the reports, `impl.md`, `census.md` and `verify1.json`; GAMEPLAY: YES, 2-01's crate; the row CMP-16 is closed by
+it):
+- [x] **CMP16-1. Settled at the commit: gates 2 and 3 were NOT RUN by the implementer, and the verifier took them** (deviation 1). Smart App Control refused the three
+      links of `MagicPortals.exe` on their first launches (16:02-16:03); the verifier launched the same `7dd3a7de` at 16:29, no refusal, no relink, and measured the sweep
+      (1 of 128 changed, 2-01) and the crate (135 x 128 against 135 x 130). The implementer's "135 x 131 COMPUTED" was wrong by 3 rows (it used the spec's 175, which
+      reads 6 rows into the platform). Planning step 172 now carries the measured rows. Nothing left.
+- [ ] **CMP16-2. The gate 4 mutations were one build and could not tell the box from the mass** (deviation 2; the verifier's low). Five removals were applied together (to
+      limit Smart App Control exposure) and the box, circle and hull unscaled with the geometry-derived mass fell together (17 + 2 checks); only the picture (4),
+      `ShapeBoundsPx` (7), the refusal (2 + 2) and the material's stated-area override (1) were each shown to fail alone. The verifier did not re-run them (each costs a
+      `test_mp.exe` relink) and read the implementer's three logs, which match. Next, if the wave's close wants the split: a box-only and a mass-only build (two links),
+      `test_mp.exe test_mp_timebase` once each.
+- [x] **CMP16-3. Disclosed: 5 Smart App Control refusals, and the process note** (deviation 3). `test_mp.exe` 44fcd318 and the mutated 29c679de (each relinked once),
+      `MagicPortals.exe` bbaa1bd1, cee70780 and 7dd3a7de (three links, each refused on its first launch). `7dd3a7de` then ran unchanged at 16:29, so the refusal was
+      transient: launch a refused exe once more before relinking (a relink is a new file, checked again, and every refusal notifies the owner). Nothing to fix.
+- [x] **CMP16-4. Settled: `ReadCustomScale` refuses a datum that is not a number above 0** (deviation 4), where `scaleEntity` would pass a 0 or a negative number to
+      `Scale()`. No node carries one (the census), the refusal names the datum, and `test_mp_levels` and `test_mp_timebase` pin it. Nothing left.
+- [ ] **CMP16-5. 2-01's crate is 2 px lower in height than the original's, which is not the scale** (deviation 5; the verifier's low; GAMEPLAY: none). 128 px tall against
+      the original's 130 at f420, width exact (135 = 135). The same 2-row drop is measured on 3-13's UNSCALED crate (top and bottom edges both 2 rows lower in the port,
+      left and right equal), so it is a pre-existing resting offset of the engine's contact, not this step's. Hypothesis, unproven: Box2D's polygon skin
+      (`b2Settings.h:76`, `b2_polygonRadius` = 2 x `b2_linearSlop` = 0.01 m, a rest separation of about 0.015 m = 0.75 unit = 2.1 px) which the engine's resting contact
+      does not reproduce. Next: measure a crate at rest on a flat floor in the port against the original's (a footage frame or the library stills), and record an engine
+      gap with the number if it is the contact (an engine step, not this one).
+- [ ] **CMP16-6. `ShapeBoundsPx` returns the scaled box, which the original's script-side box is not** (deviation 6; the verifier's low; GAMEPLAY: none today).
+      `GetCollisionBox` (`ETHEntity.cpp:314-321`) and `getAbsoluteCollisionBox` (listing bytes 6337..6722: it multiplies by `getScale()`, 1 in the port, and by the angle)
+      are not scaled by the entity's own scale; only `CreateBody`'s box is. The port's consumers (lava, breakables, lifts, killer floors, minions, the dark dragon's
+      platform, restock barrels, the drawn box) read no node that carries the datum except 2-01's crate, which only the drawn box reads, so nothing a script would read
+      differs. The function's comment named a burning crate's flames, a consumer that does not exist (`Fire.cpp` reads lava only); the commit rewords it, text only, and
+      the binaries were not relinked for it. Next: nothing owned; a node with the datum and a script-side box consumer would have to read the unscaled box.
+- [ ] **CMP16-7. 2-01's and 4-29's routes fail on this build** (the route text of planning step 172; the verifier's low). 2-01: the lighter crate is pushed at 1.0-1.8 px
+      a tick of 2.4, the player steps off the top floor on tick ~175 (route: ~308) and is burned by the fireball spat on tick 283. 4-29: step 171's, unchanged (the tap on
+      tick 525 is off the view). 126 of 128 routes win on exactly the census's ticks. Next: the route phase (planning step 176) re-flies both; 2-01's header text is
+      stale.
+
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):
 - [x] **R4c1-1. Gate 4 (the sweep chain) failed as worded on one level, 4-12, and needed a scope ruling: RULED (a), 2026-10-12, and the wave pushed** (medium; the one finding of all three
@@ -3829,7 +3863,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       velocity) exists. 4-07's slabs carry no rider and 4-17 shows no drift. Next: `PlaceKinematic` in place of `MoveKinematic` (G3-4's throwaway build), read the rider
       on 4-02; if the engine's push-out does not hold him, record an engine gap with the number (not this step). Gate: the astronaut's eye y within +-1 px of 380
       through f450, a `test_mp_bounce` pin, the 4-02 and 4-17 routes re-run. GAMEPLAY: yes (an idle astronaut stays on his block). Joins: G3-1, G3-4.
-- [ ] **CMP-16. 2-01's crate is drawn 33 percent too big and, in the original, is smaller and lighter** (medium; structural; `decoded`; MOVES A ROUTE). Evidence: 2-01
+- [x] **CMP-16. 2-01's crate is drawn 33 percent too big and, in the original, is smaller and lighter** (medium; structural; `decoded`; MOVES A ROUTE). Evidence: 2-01
       original crate [443,57,577,187] against the port's [420,15,598,190] (`pairs/2-01_h63_pair.png` and `_overlay.png`: a crate inside a larger crate; the same at
       `h0.3` and `h2.8`): the original's is 134 x 130 px, the port's 178 x 175. Cause: `level0a.esc` id 796 (`crate_no_emissive`) carries the custom data `scale` 0.75,
       the only custom scale on a non-agent node in the 128 levels; `SGlobalScale::scaleEntity` multiplies it through `ETHEntity::Scale(float)`
@@ -3837,6 +3871,27 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       and the port keeps 58 u. Planning step 71 names it "an unowned scaleEntities gap". The 2-01 route pushes this crate from tick 61 ("five times the player's
       weight"). Next: read `metadata/scale` on a crate into picture, collision box and mass; re-fly 2-01. Gate: the crate 134 x 130 px at f420, a `test_mp_levels` pin,
       `test_mp_routes` 128 of 128. GAMEPLAY: yes (a smaller, lighter crate on 2-01).
+      *Closed by step 172 (CMP16, wave 4c-2), 2026-10-12; committed in wave 4c-2 (the commit titled "Magic Portals: a node's own scale scales its picture, its body and
+      its mass"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it MOVES A ROUTE:
+      2-01's route no longer wins (the crate it pushes now weighs 2.91 players and not 5.17, so the player reaches the top floor's end on tick ~175 where the route has
+      ~308 and is burned by the fireball spat on tick 283), and 4-29's fails as it did after step 171; the other 126 routes win on exactly the census's ticks, so
+      `test_mp_routes` fails on 2-01 and 4-29 until the route phase (planning step 176) re-flies them.* Built as the Next says, port-side and no data:
+      `LevelBuilder::ReadCustomScale` (`kScaleDatum`) is the one reader; `BuildNode` scales the box, the circle and the hull (size AND offset) and a material's stated
+      original area by it, so the mass goes with the square; `ShapeBoundsPx` is scaled and `buildSprites` puts the datum in `drawn.scale` (the static portal's 0.8 and the
+      antiportal manager's 0.5 now multiply it: the same double). The census (derived from the 128 converted scenes, the raw `.esc` and the listing): 72 nodes carry the
+      datum in 53 levels, converted = raw: 64 `antiportal` and 7 `antiportal.ent` (no body, honoured since step 71) and ONE other, 2-01's `crate_no_emissive_796`, 0.75,
+      the hint exact and the only node with a body. 2-01's crate: body 58 -> 43.5 units, mass 0.5382 -> 0.3028 (x 0.5625; 5.17 -> 2.91 times the player's 0.1041), picture
+      64 -> 48 units (180 -> 135 px). Measured by the verifier on `MagicPortals.exe` `7dd3a7de` (the implementer's three links were refused by Smart App Control; the same
+      exe ran when launched again): the f420 sweep (owner's seed, 128 launches, validation silent) changed ONE level and left 127 byte-identical, the 52 other levels that
+      carry the datum (the antiportals) among them: 2-01, 27,328 px, the crate 180 -> 135 px wide; the crate visible 135 x 128 px against the original's 135 x 130 (the
+      spec's 134 x 130, +-2: met at the edge); `compare.py` ALL-GOLD against the original's stills, h6.3 mean_abs 7.04 -> 3.31 and edge_iou 0.4187 -> 0.6308, h2.8 7.14 ->
+      3.34 and 0.4212 -> 0.6686. Pins: `test_mp_levels` 129 -> 150, `test_mp_timebase` 445 -> 495, `test_mp_layer` 4,157 -> 4,171; the rules put back fail 27 + 6 + 2
+      checks (the box and the geometry-derived mass fell together: CMP16-2). 57 suites, 56 pass, 33,347 checks (`test_mp_routes` 2,336, failing on 2-01 and 4-29),
+      reachability 108 / 20 / 0, 0 warnings. Independently verified once (`CMP16/verify1.json`: pass; its medium, the record's stale rows, is corrected in this commit,
+      and its lows are the rows below). **What it leaves**: (a) 2-01's route and 4-29's, re-flown by the route phase (planning step 176; CMP16-7), the 2-01 route's header
+      text ("five times the player's weight", "a fifth of his pace") being stale; (b) the crate's 2 rows of height, a pre-existing resting offset (CMP16-5); (c) the
+      unsplit mutation (CMP16-2); (d) `ShapeBoundsPx`'s scaled box against the script's unscaled one (CMP16-6). The deviations are rows CMP16-1 to CMP16-6 above the wave
+      4c-1 rows, and CMP16-7 is the routes.
 - [ ] **CMP-17. 3-08's lone guard rests 30 px right of and 7 px below the original's, astride the ledge seam** (medium; structural; `owner-call`; MOVES A ROUTE if R24
       changes). Evidence: 3-08 box x144-256 y48-192 (`pairs/3-08_h63_pair.png`, top left). The guard (spawn (410,48), wayA0 (372,48), hold 9999999) stops about 11 u
       earlier than the original's (`minions.json` `arrive_px` 8, `settle_px` 16) and ends over the seam of two ledge blocks; the same row was closed for 3-01 by step

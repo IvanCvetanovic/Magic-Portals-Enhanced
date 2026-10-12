@@ -26,6 +26,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -112,6 +113,20 @@ float MassOf(const Material& material, double colliderAreaM2);
 // The material `entityName`'s bodies are built with in this registry: the table Game::Start put in its
 // context, or the default where there is none (a rig built with no level behind it).
 Material MaterialOf(entt::registry& registry, const std::string& entityName);
+
+// THE SCALE A NODE'S OWN DATA GIVES ITS ENTITY. The original's Game::preLoop runs SGlobalScale::scaleEntities over every
+// entity of the scene (and ETHCallback_adder runs scaleEntity on the one it adds): scaleEntity (listing bytes 6072..6337)
+// takes the custom datum `scale` where the entity has one (CheckCustomData, GetFloat: ins 5-28; 1 where it has none, ins 3)
+// and calls ETHEntity::Scale(getScale() x it) (ins 30-36). That multiplies the entity's <Scale> (ETHEntity.cpp:591-599) and
+// rebuilds its body from the scaled box (ETHPhysicsEntityController.cpp:186-193: Destroy, then
+// ETHPhysicsSimulator::CreateBody, whose `box.Scale(entity->GetScale())` multiplies the shape's size AND its offset,
+// ETHCollisionBox.cpp:105-111, and whose fixture takes the density of the .ent, so Box2D's mass is that density times the
+// SCALED area). getScale() is 1 in the port's units. The number is the scene's: 72 nodes carry it (64 antiportal, 7
+// antiportal.ent, which have no body, and 2-01's crate_no_emissive, 0.75), and a node that carries none is scaled by 1.
+inline constexpr std::string_view kScaleDatum = "scale";
+
+// A node's `scale` datum, 1 where it carries none. False, with `error`, where it is not a number above 0.
+bool ReadCustomScale(const Tscn::Node& node, double& scale, std::string& error);
 
 // The 2D port's locks: every rigid body stays in the plane - no motion along z -
 // and turns about z only. Unlocked, the spike measured a resting crate 30 px out

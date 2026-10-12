@@ -22,6 +22,7 @@
 #include "MpSuite.hpp"
 
 #include "core/ConvexHullCache.hpp"
+#include "sim/LevelBuilder.hpp"
 #include "sim/Prism.hpp"
 #include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
@@ -321,6 +322,80 @@ void AllLevels() {
     CHECK_EQ(total.polygonPoints.size(), std::size_t{2});
 }
 
+// THE NODES THAT CARRY THE CUSTOM DATUM `scale` (planning step 172, CMP-16): what SGlobalScale::scaleEntity multiplies into
+// an entity's Scale, and so into its picture, its body's box and the mass the box gives (LevelBuilder::kScaleDatum). The
+// census over the 128 converted levels (out/parity/program/CMP16/census.md, derived from these files AND the original's
+// own .esc, 72 placements either way): 64 antiportal and 7 antiportal.ent, which have no body (antiportal.ent is shape 0), and
+// ONE node with a body - 2-01's crate_no_emissive_796 at 0.75, the only scale on a non-agent node of the game. The set is
+// pinned as the set, so a level that comes to carry a body with a scale is a failure to read and decide, not a body built
+// at the wrong size.
+void TheNodesThatCarryAScaleDatum() {
+    int carrying = 0;
+    int unreadable = 0;
+    std::map<std::string, int> byEntity;
+    std::vector<std::string> withBody;
+    for (const char* suffix : {"", "a", "b", "c"}) {
+        for (int i = 0; i < 32; ++i) {
+            const std::string level = "level" + std::to_string(i) + suffix;
+            Tscn::Scene scene;
+            std::string error;
+            if (!Tscn::Load(kLevels + "/" + level + ".tscn", scene, error)) {
+                CHECK_MSG(false, level + ": " + error);
+                continue;
+            }
+            for (const Tscn::Node& node : scene.nodes) {
+                if (node.parent != "." || node.Meta(LevelBuilder::kScaleDatum) == nullptr) continue;
+                ++carrying;
+                const Tscn::Value* entity = node.Meta("entity_name");
+                ++byEntity[entity != nullptr ? entity->text : std::string("(none)")];
+                double scale = 0.0;
+                std::string why;
+                if (!LevelBuilder::ReadCustomScale(node, scale, why)) {
+                    ++unreadable;
+                    continue;
+                }
+                if (scene.Child(node, "Body") != nullptr) {
+                    withBody.push_back(level + "/" + node.name + "=" + std::to_string(scale).substr(0, 4));
+                }
+            }
+        }
+    }
+    CHECK_EQ(carrying, 72);
+    CHECK_EQ(unreadable, 0);
+    CHECK_EQ(byEntity.size(), std::size_t{3});
+    CHECK_EQ(byEntity["antiportal"], 64);
+    CHECK_EQ(byEntity["antiportal.ent"], 7);
+    CHECK_EQ(byEntity["crate_no_emissive"], 1);
+    CHECK_MSG(withBody == std::vector<std::string>({"level0a/crate_no_emissive_796=0.75"}),
+              "the nodes with a body and a scale are 2-01's crate alone");
+    std::printf("  step 172: %d nodes carry a scale datum (%d antiportal, %d antiportal.ent, %d crate_no_emissive); %zu with a body\n",
+                carrying, byEntity["antiportal"], byEntity["antiportal.ent"], byEntity["crate_no_emissive"], withBody.size());
+
+    // The reader's own rule on its own (scaleEntity ins 3-28): no datum is 1, a number above 0 is itself, and anything else is
+    // refused rather than read as a scale of 1 that would build the body at a size nobody wrote.
+    const auto read = [](const char* datum, double& scale, std::string& why) {
+        const std::string text = std::string("[gd_scene load_steps=1 format=3]\n\n[node name=\"root\" type=\"Node2D\"]\n\n"
+                                             "[node name=\"a\" type=\"Node2D\" parent=\".\"]\n") +
+                                 datum + "\n";
+        Tscn::Scene scene;
+        std::string error;
+        const bool parsed = Tscn::Parse(text, scene, error);
+        CHECK_MSG(parsed, error);
+        const Tscn::Node* node = parsed ? scene.FindNode("a") : nullptr;
+        return node != nullptr && LevelBuilder::ReadCustomScale(*node, scale, why);
+    };
+    double scale = 0.0;
+    std::string why;
+    CHECK_MSG(read("metadata/entity_name = \"crate\"", scale, why) && scale == 1.0, "no datum: scaled by 1");
+    CHECK_MSG(read("metadata/scale = \"0.75\"", scale, why) && scale == 0.75, "a quoted number is read: " + std::to_string(scale));
+    CHECK_MSG(read("metadata/scale = \"13\"", scale, why) && scale == 13.0, "the antiportals' largest is read: " + std::to_string(scale));
+    for (const char* bad : {"metadata/scale = \"0\"", "metadata/scale = \"-1\"", "metadata/scale = \"big\"", "metadata/scale = \"\""}) {
+        why.clear();
+        CHECK_MSG(!read(bad, scale, why) && why.find("scale") != std::string::npos,
+                  std::string(bad) + " is refused, naming the datum: " + why);
+    }
+}
+
 // The S2 route across every level. Each distinct collision polygon becomes an
 // OBJ prism, and each prism a hull that must be exactly the prism: one piece,
 // every point a vertex, the polygon's area times the depth for a volume, and
@@ -353,6 +428,7 @@ void EveryPolygonIsAnExactHull() {
 void runTests() {
     Level30();
     AllLevels();
+    TheNodesThatCarryAScaleDatum();
     EveryPolygonIsAnExactHull();
 }
 

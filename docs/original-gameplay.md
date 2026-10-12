@@ -286,6 +286,15 @@ nothing: the scenes place 60 `minion_spawn` markers (it has `ETHCallback_minion_
 `minion_spawn_` (3-09) and one `minion_spawn6` (4-29), and the last two have no callback, so
 they spawn no knight (planning step 171, CMP-6; `data/entity_roles.json` lists the one name).
 
+An entity's own `scale` datum scales it before play: `Game::preLoop` runs `SGlobalScale::scaleEntities`,
+whose `scaleEntity` (bytes 6072..6337) calls `ETHEntity::Scale(getScale() x scale)` with the datum (1
+where there is none; `ETHEntity.cpp:591-599`), and that scales the picture AND rebuilds the body from the
+scaled box (`ETHPhysicsEntityController.cpp:186-193`, `ETHPhysicsSimulator::CreateBody`,
+`box.Scale(GetScale())`: size and offset), so the mass is the .ent's density over the SCALED area. 72
+placements carry it: 64 `antiportal` and 7 `antiportal.ent` (no body: `shape` 0) and **2-01's
+`crate_no_emissive`, 0.75** - 43.5 x 43.5 units where its .ent says 58 x 58, 0.303 where it would weigh
+0.538, and drawn at 0.75 of crate.png (planning step 172, CMP-16; `LevelBuilder::ReadCustomScale`).
+
 That turns "which of these 178 entities actually do something?" from judgement into an
 exact byte search — and it immediately rules three out. `moving_platform_single.ent`
 carries a `moveStride`, and inline `platform` and `anchor` carry `speed`/`stride`, that

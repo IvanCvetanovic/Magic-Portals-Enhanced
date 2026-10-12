@@ -2466,6 +2466,63 @@ void EveryHelpBlockOfTheThirteenLevelsIsDrawnByItsCallback() {
     CHECK_EQ(drawn, 13);
 }
 
+// A NODE'S `scale` DATUM SCALES ITS PICTURE AND ITS BOX TOGETHER (planning step 172, CMP-16). SGlobalScale::scaleEntity
+// multiplies the entity's scale by the datum, and the picture is drawn at its frame times that scale while the body is built
+// from the box times it. 2-01's crate_no_emissive_796 carries 0.75 (the one body of the game that does), so its crate.png is
+// 0.75 of the one 1-31's unscaled crate draws, its box 0.75 of that crate's, and the picture stands to the box as it does
+// there. The antiportals' pictures, which took the datum since step 71 through the manager's own 0.5, are the test above.
+void ACratesScaleDatumScalesItsPictureAndItsBoxTogether() {
+    struct Seen {
+        std::vector<float> across; // each crate.png quad's width, in metres
+        float box = 0.0f;          // the named node's body, in metres
+    };
+    const auto look = [](const char* level, const char* node) {
+        Seen seen;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr) return seen;
+        CloseTheLevelStartPopup(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        for (auto [entity, tag, material, transform] :
+             registry.view<TagComponent, MaterialComponent, TransformComponent>().each()) {
+            (void)entity;
+            if (tag.tag != "Magic Portals Sprite") continue;
+            const std::string& path = material.albedoTexturePath;
+            if (path.ends_with("/crate.png") || path.ends_with("\\crate.png")) seen.across.push_back(transform.scale.x);
+        }
+        const auto found = layer.SimLevel()->built.entities.find(node);
+        CHECK_MSG(found != layer.SimLevel()->built.entities.end(), std::string(node) + " is built");
+        if (found != layer.SimLevel()->built.entities.end()) {
+            seen.box = registry.get<BoxColliderComponent>(found->second).size.x;
+        }
+        layer.OnDetach(registry);
+        return seen;
+    };
+    const Seen scaled = look("level0a", "crate_no_emissive_796");
+    const Seen plain = look("level30", "crate_969");
+    CHECK_MSG(!scaled.across.empty(), "2-01 draws its crate.png");
+    CHECK_MSG(!plain.across.empty(), "1-31 draws an unscaled crate.png");
+    if (scaled.across.empty() || plain.across.empty() || !(scaled.box > 0.0f) || !(plain.box > 0.0f)) return;
+    for (const float across : plain.across) CHECK_NEAR(across, plain.across.front());
+    for (const float across : scaled.across) CHECK_NEAR(across, scaled.across.front());
+    CHECK_NEAR(plain.box, static_cast<float>(MagicPortals::Units::ToMetres(58.0)));
+    CHECK_NEAR(scaled.box, static_cast<float>(MagicPortals::Units::ToMetres(43.5)));
+    CHECK_MSG(std::fabs(scaled.across.front() / plain.across.front() - 0.75f) < 1e-4f,
+              "2-01's crate is 0.75 of the unscaled picture: " + std::to_string(scaled.across.front() / plain.across.front()));
+    CHECK_MSG(std::fabs(scaled.box / plain.box - 0.75f) < 1e-4f, "and its box is 0.75 of the unscaled one");
+    CHECK_MSG(std::fabs(scaled.across.front() / scaled.box - plain.across.front() / plain.box) < 1e-4f,
+              "the picture stands to the box as an unscaled crate's does");
+    std::printf("  step 172: 2-01's crate.png is %.3f units across over a %.1f unit box (1-31's: %.3f over %.1f)\n",
+                static_cast<double>(scaled.across.front()) / MagicPortals::Units::ToMetres(1.0),
+                static_cast<double>(scaled.box) / MagicPortals::Units::ToMetres(1.0),
+                static_cast<double>(plain.across.front()) / MagicPortals::Units::ToMetres(1.0),
+                static_cast<double>(plain.box) / MagicPortals::Units::ToMetres(1.0));
+}
+
 void AnAntiportalSpelledWithEntIsDrawnTheSame() {
     // The manager collects both spellings, GetEntityArray("antiportal") and
     // ("antiportal.ent"). 3-29 (level28b) places antiportal_ent_2204 at (372, 160),
@@ -21872,6 +21929,7 @@ void runTests() {
     AStaticPortalGlows();
     AnAntiportalIsDrawnAtHalfItsNodesScale();
     AnAntiportalSpelledWithEntIsDrawnTheSame();
+    ACratesScaleDatumScalesItsPictureAndItsBoxTogether();
     AGravityWellWearsAGreenRing();
     AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth();
     TheScriptClockIsTheFloorOfEachTicksMilliseconds();

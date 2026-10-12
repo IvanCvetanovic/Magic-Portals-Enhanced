@@ -97,9 +97,15 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
 
     const Tscn::Node& shape = *shapes.front();
     const double depth = isRigid ? kBodyDepthMetres : kStaticDepthMetres;
-    const Material material = MaterialOf(registry, Roles::EntityName(node));
+    Material material = MaterialOf(registry, Roles::EntityName(node));
+    // The scale its own data gives its entity (kScaleDatum): the body is built from the SCALED box, so its size AND its
+    // offset are multiplied by it, and the mass, which is the .ent's density over that area, goes with the area.
+    double scale = 1.0;
+    if (!ReadCustomScale(node, scale, error)) return false;
+    // A material that states the original's own area (a shape the port builds simpler) states it unscaled.
+    if (material.areaM2 > 0.0f) material.areaM2 = static_cast<float>(static_cast<double>(material.areaM2) * scale * scale);
     double areaM2 = 0.0; // the collider's, for a body's mass
-    const glm::dvec2 offset = VectorOf(shape.Find("position"));
+    const glm::dvec2 offset = VectorOf(shape.Find("position")) * scale;
     const entt::entity entity = Place(registry, node, node.name);
 
     if (shape.type == "CollisionPolygon2D") {
@@ -110,8 +116,8 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
         }
         std::vector<double> points = polygon->numbers;
         for (std::size_t i = 0; i + 1 < points.size(); i += 2) {
-            points[i] += offset.x;
-            points[i + 1] += offset.y;
+            points[i] = points[i] * scale + offset.x;
+            points[i + 1] = points[i + 1] * scale + offset.y;
         }
         std::string why;
         const std::string path = Prism::Write(points, depth, options.prismDirectory, why);
@@ -144,7 +150,7 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
         }
         const glm::vec3 centre = Units::ToWorld(offset.x, offset.y);
         if (resource->type == "RectangleShape2D") {
-            const glm::dvec2 size = VectorOf(resource->Find("size"));
+            const glm::dvec2 size = VectorOf(resource->Find("size")) * scale;
             auto& box = registry.emplace<BoxColliderComponent>(entity);
             box.size = glm::vec3(Units::ToMetres(size.x), Units::ToMetres(size.y), static_cast<float>(depth));
             box.center = centre;
@@ -152,7 +158,7 @@ bool BuildNode(const Tscn::Scene& scene, const Tscn::Node& node, entt::registry&
             areaM2 = static_cast<double>(Units::ToMetres(size.x)) * static_cast<double>(Units::ToMetres(size.y));
         } else if (resource->type == "CircleShape2D") {
             auto& sphere = registry.emplace<SphereColliderComponent>(entity);
-            sphere.radius = Units::ToMetres(NumberOf(resource->Find("radius")));
+            sphere.radius = Units::ToMetres(NumberOf(resource->Find("radius")) * scale);
             sphere.center = centre;
             sphere.isTrigger = isArea;
             areaM2 = kPi * static_cast<double>(sphere.radius) * static_cast<double>(sphere.radius);
@@ -206,6 +212,20 @@ std::string WithoutExtension(const std::string& entityName) {
 }
 
 } // namespace
+
+bool ReadCustomScale(const Tscn::Node& node, double& scale, std::string& error) {
+    // scaleEntity's individualScale starts at 1 (ins 3) and is replaced only where the entity has the datum (ins 5-28).
+    scale = 1.0;
+    const Tscn::Value* datum = node.Meta(kScaleDatum);
+    if (datum == nullptr) return true;
+    double value = 0.0;
+    if (!datum->AsNumber(value) || !std::isfinite(value) || !(value > 0.0)) {
+        error = node.name + ": its " + std::string(kScaleDatum) + " is not a number above 0";
+        return false;
+    }
+    scale = value;
+    return true;
+}
 
 Material Materials::Of(const std::string& entityName) const {
     const auto found = byEntity.find(WithoutExtension(entityName));
@@ -325,7 +345,10 @@ bool Build(const Tscn::Scene& scene, entt::registry& registry, const Options& op
     return true;
 }
 
-bool ShapeBoundsPx(const Tscn::Scene& scene, const Tscn::Node& node, glm::dvec2& offsetPx, glm::dvec2& sizePx) {
+namespace {
+
+// The shape's bounds as the level wrote them, before the node's own scale.
+bool UnscaledShapeBoundsPx(const Tscn::Scene& scene, const Tscn::Node& node, glm::dvec2& offsetPx, glm::dvec2& sizePx) {
     const Tscn::Node* body = scene.Child(node, "Body");
     const Tscn::Node* shape = body != nullptr ? scene.Child(*body, "Shape") : nullptr;
     if (shape == nullptr) return false;
@@ -361,6 +384,22 @@ bool ShapeBoundsPx(const Tscn::Scene& scene, const Tscn::Node& node, glm::dvec2&
         return true;
     }
     return false;
+}
+
+} // namespace
+
+bool ShapeBoundsPx(const Tscn::Scene& scene, const Tscn::Node& node, glm::dvec2& offsetPx, glm::dvec2& sizePx) {
+    if (!UnscaledShapeBoundsPx(scene, node, offsetPx, sizePx)) return false;
+    // The same scale BuildNode builds the body at, so a consumer of the box (a lava's, a breakable's, a lift's or a minion's
+    // bounds, the drawn box) reads the body's own. The original's script-side box is NOT scaled by the entity's scale (GetCollisionBox,
+    // ETHEntity.cpp:314-321; getAbsoluteCollisionBox multiplies by getScale() only, listing bytes 6337..6722): only CreateBody's is. The
+    // one node with both the datum and a body is 2-01's crate, which only the drawn box reads. An unreadable datum is a refused node.
+    double scale = 1.0;
+    std::string ignored;
+    if (!ReadCustomScale(node, scale, ignored)) return false;
+    offsetPx *= scale;
+    sizePx *= scale;
+    return true;
 }
 
 entt::entity BuildRigidCircle(entt::registry& registry, const std::string& tag, const glm::dvec2& atPx,
