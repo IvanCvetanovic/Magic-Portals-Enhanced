@@ -3284,15 +3284,15 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       `port_build.bat` (it could relink and notify the owner; `ninja -n` showed a CMake re-check step, cause not investigated). Every source is older than the executables
       `08469442` and `23a7d823`. Next: the wave's verify role runs `port_build.bat` once.
 
-**Step 169's recorded deviations** (the script's emissive blinks, CMP-9, wave 4c-1; planning step 169 has the evidence, `RECORDED DEVIATIONS` 1-7; `out/parity/program/CMP9/` the reports, `deviations.md` (the owner-delegated disposition after the third verification; its own numbering differs from the record's, which these rows follow) and `verify1.json` to `verify3.json`; GAMEPLAY: none; the row CMP-9 is closed by it):
+**Step 169's recorded deviations** (the script's emissive blinks, CMP-9, wave 4c-1; planning step 169 has the evidence, `RECORDED DEVIATIONS` 1-7; `out/parity/program/CMP9/` the reports, `deviations.md` (the delegated disposition after the third verification; its own numbering differs from the record's, which these rows follow) and `verify1.json` to `verify3.json`; GAMEPLAY: none; the row CMP-9 is closed by it):
 - [ ] **CMP9-1. Gate 1: the f420 sweep changed 40 levels, 10 of them outside the group's 32, and 2 of the 32 did not change** (deviation 1; the first, second and third
-      verifications' medium). Required: only the group's 32 levels differ from `CMP7/after/sweep`, the rest byte-identical, each change explained. Measured: 128 launches, rc 0,
+      verifications' medium). Required (as first written; corrected to 42 levels by wave 4c-1's fix1, below): only the group's 32 levels differ from `CMP7/after/sweep`, the rest byte-identical, each change explained. Measured: 128 launches, rc 0,
       validation silent; 88 byte-identical, 40 changed = 30 of the 32 and 10 outside them: 2-10, 2-11, 2-20, 2-26, 2-27, 2-30, 2-31, 3-23, 4-12, 4-28, exactly the fire-agent
       levels outside the 32 (22 agents on 20 levels, 10 inside the 32 and 10 outside, from the scenes), 445 to 5,125 changed pixels, at most 25 grey levels (2-31's agents are
       off the frame and only their range-256 light reaches it). The pulse stands at 0.9965 of the size at f420, and the whole frame's mean absolute difference to h6.3 moves by
       0.006 or less on each of the 10. 2-32 and 3-15 are byte-identical: their one teleportable crate is off the f420 frame (2-32's at x 1312 of a scrolling level; 3-15's at x
       496, 770 px right of the frame's edge). The spec contradicts itself (its BUILD line and CMP-9's own text, "also decoded, not built: the fire agent's bounce", ask for the
-      pulse; its sweep gate names only the 32). **Scope 42 levels ACCEPTED at the commit (owner-delegated)**, because the ruling is the original and the pulse is what the
+      pulse; its sweep gate names only the 32). **Scope 42 levels ACCEPTED at the commit (a delegated disposition under the standing order of 2026-10-10: no owner message) and the gate's text CORRECTED to the 42 by wave 4c-1's fix1, after its verifier failed the first text on 4-12, the one fire-agent level that no CMP group of the wave names (the other nine are inside CMP-1's 78; planning step 169's fix paragraph has the recomputation, `out/parity/program/R4c1/fix1/changed_vs_named.txt`)**, because the ruling is the original and the pulse is what the
       original does; the gate is not recorded as passed. Revert if the owner vetoes it: the pulse line in `syncSprites`, the owner-scale pass in `syncLights`,
       `fire_agent.pulse` (`art.json`, `Art.cpp`, `Art.hpp`) and its pins, then a re-sweep (only the 30 drawn levels then move). Next: 2-32 and 3-15 each get a capture at a tick
       with the crate on screen, in the wave 4c-2 re-fly or the final comparison; the pulse was swept at f420 only, not at its ends (0.98, 1.02).
@@ -3319,7 +3319,7 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       in CMP-9's group nor in the step's build list (4-19 is byte-identical to before). `art.json` `non_teleportable._not_built` says so. Next: build it with the step that
       takes 4-19.
 - [ ] **CMP9-6. The whole frame's MAD against h6.3 is slightly worse on three changed levels; the chapter-1 walls read dimmer than the stills** (deviation 6; the
-      owner-delegated disposition, `CMP9/deviations.md`). h6.3: 1-22 5.205 -> 5.260, 2-19 2.576 -> 2.651, 1-13 4.597 -> 4.607; six more (2-11, 2-26, 2-29, 2-31, 3-23, 4-10)
+      delegated disposition, `CMP9/deviations.md`). h6.3: 1-22 5.205 -> 5.260, 2-19 2.576 -> 2.651, 1-13 4.597 -> 4.607; six more (2-11, 2-26, 2-29, 2-31, 3-23, 4-10)
       move by 0.006 or less. Summed over ALL the kept stills the frame MAD is flat or better on all three (1-22 55.26 -> 55.16, six stills; 1-13 49.46 -> 49.30, six; 2-19 11.97
       -> 11.95, three) and the MAD over the changed pixels is better (100.0 -> 98.4, 117.8 -> 110.9, 27.5 -> 27.1), so the h6.3 reading is one phase; 2-19's port value now sits
       inside the stills' spread. **Open:** on the chapter-1 walls (1-22, 1-13) the port's f420 value (0.85 to 0.875 of the old peak) is dimmer than all six stills on the
@@ -3526,7 +3526,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       GAMEPLAY: none.
 - [x] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
       levels in scope: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-04, 2-05, 2-08, 2-12 to 2-19, 2-21 to 2-25, 2-28, 2-29, 2-32, 3-14, 3-15, 3-19, 4-10, 4-16, 4-25, 4-32 (the
-      readers filed it on 17). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
+      readers filed it on 17; wave 4c-1's fix1 adds the fire agent's 10 outside them, which the cause text below names (the pulse): 2-10, 2-11, 2-20, 2-26, 2-27, 2-30, 2-31, 3-23, 4-12 and 4-28, 42 levels in all). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
       against 50) and barrel box 205,395,292,508; 3-14 wall box 560,410,915,495 (78-101 against 66); 2-05 crates [710,156,890,330] (the original shows their grain, the
       port's are dark); 4-25 crate [678,92,770,182] (textured in the original, black in the port); the walls' pulse 1.18-1.53x. Cause (listing):
       `ETHCallback_barrel_bomb` #1-30 `blinkEmissive(thisEntity, 0.2, 300 ms, minEmissive)` every frame (16 barrel levels; the readers called it "unknown, not decoded"
@@ -3536,9 +3536,9 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (`Art.hpp`, built for the non-teleportable crate and the antiportal). Joins: "Found by step 120, decoded, not built", "The restock's pictures" (the barrel's
       blink); the wall's blink is in no row. Next: three more callers of the existing blink in `sim/Art` and the layer (data in `art.json` with the listing citations)
       and the fire agent's pulse. Gate: the readers' boxes inside the original's range at the right phase, pins in `test_mp_sprites`, the f420 sweep changes only the 32
-      levels. GAMEPLAY: none.
+      levels (corrected by wave 4c-1's fix1 to the 32 and the fire agent's 10, 42). GAMEPLAY: none.
       *Closed by step 169 (CMP9, wave 4c-1), 2026-10-12; committed locally, the hash goes in at the wave's close. GAMEPLAY: none (the 128 routes win on exactly the census's
-      ticks, 83 to 3,343). Committed WITH RECORDED DEVIATIONS (owner-delegated): gate 1 is not met to the letter.* Built as the Next says, from the listing (md5 `48fe65ce`),
+      ticks, 83 to 3,343). Committed WITH RECORDED DEVIATIONS (a delegated disposition): gate 1 as first written is not met; its text is corrected to 42 levels (fix1).* Built as the Next says, from the listing (md5 `48fe65ce`),
       every number in `game/data/art.json` with its citations: a barrel's emissive from its `minEmissive` datum to 0.2 on 300 ms legs, every frame, over the node's own
       (`ETHCallback_barrel_bomb` #1-30; `GetVector3` of an absent datum is (0, 0, 0), so 15 of the 16 barrel levels blink 0 -> 0.2, chapter 2's barrels get brighter and 3-19's,
       4-10's and 4-16's, which carried 0.45, get darker; 4-32's one barrel carries (1, 1, 1), as does every barrel the dark dragon restocks); a breakable wall with the uint
