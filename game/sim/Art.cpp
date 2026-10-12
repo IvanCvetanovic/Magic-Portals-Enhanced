@@ -1018,6 +1018,22 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     wall.colour.strideMs = wallEntry["stride_ms"].AsNumber();
     wall.emissive.strideMs = wall.colour.strideMs;
     wall.callsPerFrame = static_cast<int>(wallEntry["calls_per_frame"].AsNumber());
+
+    // The help block's alpha and bounce, every frame of ETHCallback_help_block (#1-23). An alpha of 1
+    // or a scale that does not change would draw the block as it was before the callback was read.
+    HelpBlock& help = read.helpBlock;
+    const Json::Value& helpEntry = root["help_block"];
+    if (!helpEntry.IsObject() || !plainName(helpEntry["entity"]) || !Finite(helpEntry["alpha"]) ||
+        !(helpEntry["alpha"].AsNumber() > 0.0 && helpEntry["alpha"].AsNumber() < 1.0) ||
+        !ReadPulse(helpEntry["pulse"], help.pulse) || help.pulse.fromScale == help.pulse.toScale ||
+        !(help.pulse.fromScale.x > 0.0 && help.pulse.fromScale.y > 0.0 && help.pulse.toScale.x > 0.0 &&
+          help.pulse.toScale.y > 0.0)) {
+        error = path + ": help_block needs an entity, a name without a dot, an alpha above 0 and below 1, and a "
+                       "pulse, a from and a to of two scales above 0 that differ, and a stride_ms above 0";
+        return false;
+    }
+    help.entity = helpEntry["entity"].AsString("");
+    help.alpha = helpEntry["alpha"].AsNumber();
     out = std::move(read);
     return true;
 }

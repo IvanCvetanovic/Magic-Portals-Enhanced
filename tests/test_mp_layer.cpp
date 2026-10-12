@@ -1732,6 +1732,13 @@ double FireAgentPulse(double elapsedMs) {
     return 1.02 + (0.98 - 1.02) * std::sin(BlinkBias(elapsedMs, 300.0) * std::acos(-1.0) / 2.0);
 }
 
+// A help block's scale at `elapsedMs` of its bounce (ETHCallback_help_block #5-23: bounce(this, vector2(1.13), vector2(1.05), 250), 1.13
+// to 1.05 and back on 250 ms legs, each eased by smoothEnd(bias) = sin(bias x PI / 2)), read straight from the decode and not
+// through the rule under test.
+double HelpBlockPulse(double elapsedMs) {
+    return 1.13 + (1.05 - 1.13) * std::sin(BlinkBias(elapsedMs, 250.0) * std::acos(-1.0) / 2.0);
+}
+
 // A FIRE AGENT WEARS ITS OWN FACE (art.json fire_agent): ETHCallback_fire_agent
 // sets fire_agent.png on every update, whatever the level saved. 2-20 (level19a)
 // saved fire_agent_1086 with anti_portal_agent.png. 1-12 (level11)'s
@@ -2314,6 +2321,149 @@ void AFireAgentPulsesOnItsBounceToo() {
                   std::string(level) + "'s halo is one size x the pulse: " + std::to_string(haloLow) + " to " + std::to_string(haloHigh));
         layer.OnDetach(registry);
     }
+}
+
+// THE HELP BLOCK (art.json help_block; ETHCallback_help_block #1-23, planning step 170): drawn at SetAlpha(0.76) and its scale SET to
+// 1.13 -> 1.05 -> 1.13 on 250 ms legs, each eased by sin(bias x PI / 2), on the level's age: 32 units x the pulse. Its TAP RECT is none of
+// that: HelpBlockController reads the collision box x box_scale, 38 x 1.2, so the rect is one size in one place on every tick, the
+// largest the picture gets lies inside it, and a touch at its corner - well beyond the smallest picture - opens the popup. 1-10
+// (level9) opens LevelHelpAntiportalAgent; 4-02 (level1c) and 1-25 (level24) are the other two blocks drawn in frame; 1-02 (level1) holds
+// the block at its first scale under the level-start popup, which stops the level's clock.
+void AHelpBlockIsDrawnAtItsAlphaAndBreathesButItsTapRectDoesNot() {
+    if (!OriginalArtIsThere("AHelpBlockIsDrawnAtItsAlphaAndBreathesButItsTapRectDoesNot")) return;
+    struct Block {
+        const char* level;
+        const char* node;
+    };
+    for (const Block& blockCase :
+         {Block{"level9", "help_block_ent_701"}, Block{"level1c", "help_block_ent_2087"}, Block{"level24", "help_block_ent_1238"}}) {
+        const std::string level = blockCase.level;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), blockCase.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const std::vector<Hud::Rect> placed = layer.HelpBlockRects();
+        CHECK_MSG(placed.size() == 1, level + " places one help block");
+        if (placed.size() != 1) return;
+        const glm::dvec2 wantSize = glm::dvec2(38.0) * layer.PopupRules().helpBlock.boxScale;
+        CHECK_MSG(glm::length(placed[0].size - wantSize) < 1e-9,
+                  level + "'s tap rect is the collision box, 38 units, x box_scale: " + ShowRect(placed[0]));
+        // The rect is made on the view (the node's place less the camera's corner), so a camera that pans moves it on the
+        // view and not in the level: the level's place it covers is what the picture's breathing must not move.
+        const auto levelMin = [&layer](const Hud::Rect& rect) { return rect.min + layer.CameraCentrePx() - layer.ViewPx() * 0.5; };
+        const glm::dvec2 placedMin = levelMin(placed[0]);
+        int wrong = 0;
+        int alphaWrong = 0;
+        int materialWrong = 0;
+        int rectMoved = 0;
+        double smallest = 1e9;
+        double largest = -1e9;
+        for (int tick = 0; tick < 80; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            const MagicPortalsLayer::DrawnPictureReport block = layer.DrawnPicture(blockCase.node);
+            const double want = HelpBlockPulse(layer.LevelAgeMs());
+            if (!block.drawn || std::abs(block.sizePx.x - 32.0 * want) > 1e-3 || std::abs(block.sizePx.y - 32.0 * want) > 1e-3) ++wrong;
+            if (!block.drawn || std::abs(block.alpha - 0.76f) > 1e-6f) ++alphaWrong;
+            if (!block.drawn || std::abs(registry.get<MaterialComponent>(block.quad).albedoColor.a - 0.76f) > 1e-6f) ++materialWrong;
+            const std::vector<Hud::Rect> now = layer.HelpBlockRects();
+            if (now.size() != 1 || glm::length(levelMin(now[0]) - placedMin) > 1e-9 || now[0].size != placed[0].size) ++rectMoved;
+            if (block.drawn) {
+                smallest = std::min(smallest, block.sizePx.x / 32.0);
+                largest = std::max(largest, block.sizePx.x / 32.0);
+            }
+        }
+        CHECK_MSG(wrong == 0, level + "'s block is 32 x the pulse of the level's age on 80 ticks: " + std::to_string(wrong) + " off");
+        CHECK_MSG(alphaWrong == 0, level + "'s block is drawn at alpha 0.76 on every tick: " + std::to_string(alphaWrong) + " off");
+        CHECK_MSG(materialWrong == 0, level + "'s quad is tinted at alpha 0.76 on every tick: " + std::to_string(materialWrong) + " off");
+        CHECK_MSG(smallest >= 1.05 - 1e-6 && smallest < 1.051 && largest > 1.12 && largest <= 1.13 + 1e-6,
+                  level + ": from " + std::to_string(smallest) + " to " + std::to_string(largest));
+        CHECK_MSG(rectMoved == 0, level + "'s tap rect, in the level, moves or changes size while the picture breathes: " +
+                                      std::to_string(rectMoved));
+        CHECK_MSG(32.0 * largest < placed[0].size.x, level + "'s largest picture lies inside its tap rect");
+
+        if (level == "level9") {
+            // A touch 1 unit in from the rect's corner, which is 6 units outside the picture at its smallest (33.6 wide
+            // in a 45.6 rect), opens the popup on its release: the rect is the collision box, not the picture.
+            const std::vector<Hud::Rect> inView = layer.HelpBlockRects();
+            CHECK_MSG(inView.size() == 1, "and it is still the one block");
+            if (inView.size() != 1) return;
+            const glm::vec2 corner = ScreenOfView(layer, inView[0].min + glm::dvec2(1.0));
+            tap(layer, registry, corner);
+            CHECK_MSG(!layer.PopupOpen(), "a touch down on the block opens nothing yet");
+            lift(layer, registry, corner);
+            CHECK_MSG(layer.PopupOpen() && layer.OpenPopupClass() != nullptr && layer.OpenPopupClass()->name == "LevelHelpAntiportalAgent",
+                      "its release at the rect's corner opens LevelHelpAntiportalAgent");
+        }
+        layer.OnDetach(registry);
+    }
+    {
+        // 1-02: the level-start popup is up from the load frame and game time stands, so the block holds at its first
+        // scale and its alpha for as long as the popup is open.
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level1");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        int held = 0;
+        for (int tick = 0; tick < 40; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            const MagicPortalsLayer::DrawnPictureReport block = layer.DrawnPicture("help_block_ent_671");
+            if (layer.LevelAgeMs() != 0.0 || !block.drawn || std::abs(block.sizePx.x - 32.0 * 1.13) > 1e-3 ||
+                std::abs(block.alpha - 0.76f) > 1e-6f) {
+                ++held;
+            }
+        }
+        CHECK_MSG(layer.PopupOpen() && held == 0,
+                  "1-02's block stays at 1.13 and alpha 0.76 under the level-start popup: " + std::to_string(held) + " ticks off");
+        layer.OnDetach(registry);
+    }
+}
+
+// And the rule reaches every block of the 13 levels that place one, the four whose block is off the f420 frame (1-32, 3-09, 4-01 and
+// 4-02) and the 1-03 sliver at the frame's edge among them: each is drawn at alpha 0.76 and 32 x the pulse of the level's age.
+void EveryHelpBlockOfTheThirteenLevelsIsDrawnByItsCallback() {
+    if (!OriginalArtIsThere("EveryHelpBlockOfTheThirteenLevelsIsDrawnByItsCallback")) return;
+    struct Block {
+        const char* tag;
+        const char* level;
+        const char* node;
+    };
+    int drawn = 0;
+    for (const Block& blockCase : {Block{"1-02", "level1", "help_block_ent_671"}, Block{"1-03", "level2", "help_block_ent_687"},
+                                   Block{"1-10", "level9", "help_block_ent_701"}, Block{"1-11", "level10", "help_block_ent_747"},
+                                   Block{"1-13", "level12", "help_block_ent_918"}, Block{"1-19", "level18", "help_block_ent_1021"},
+                                   Block{"1-25", "level24", "help_block_ent_1238"}, Block{"1-32", "level31", "help_block_ent_825"},
+                                   Block{"2-03", "level2a", "help_block_ent_814"}, Block{"2-06", "level5a", "help_block_ent_879"},
+                                   Block{"3-09", "level8b", "help_block_ent_1543"}, Block{"4-01", "level0c", "help_block_ent_2209"},
+                                   Block{"4-02", "level1c", "help_block_ent_2087"}}) {
+        const std::string tag = blockCase.tag;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), blockCase.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), tag + ": " + layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 40; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        const MagicPortalsLayer::DrawnPictureReport block = layer.DrawnPicture(blockCase.node);
+        const double want = HelpBlockPulse(layer.LevelAgeMs());
+        CHECK_MSG(block.drawn && layer.LevelAgeMs() > 0.0 && std::abs(block.sizePx.x - 32.0 * want) < 1e-3 &&
+                      std::abs(block.sizePx.y - 32.0 * want) < 1e-3 && std::abs(block.alpha - 0.76f) < 1e-6f,
+                  tag + "'s block is 32 x " + std::to_string(want) + " at alpha 0.76: " + std::to_string(block.sizePx.x) + ", " +
+                      std::to_string(block.alpha));
+        if (block.drawn) ++drawn;
+        layer.OnDetach(registry);
+    }
+    CHECK_EQ(drawn, 13);
 }
 
 void AnAntiportalSpelledWithEntIsDrawnTheSame() {
@@ -21687,6 +21837,8 @@ void runTests() {
     AWallThatCarriesBlinkBlinksItsColourAndEmissiveOnADoubledClock();
     ATeleportableCrateBlinksItsEmissive();
     AFireAgentPulsesOnItsBounceToo();
+    AHelpBlockIsDrawnAtItsAlphaAndBreathesButItsTapRectDoesNot();
+    EveryHelpBlockOfTheThirteenLevelsIsDrawnByItsCallback();
     WithoutTheArtTheLevelIsBoxes();
     APortalAndAShotAreTheOriginals();
     TheShotsCellsRunOnOneTimer();

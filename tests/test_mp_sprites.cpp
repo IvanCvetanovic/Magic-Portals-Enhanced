@@ -1029,6 +1029,74 @@ void TheBarrelTheWallAndTheFireAgentWithoutTheirBlinksAreRefused() {
     refused("\"stride_ms\": 600.0,\n      \"blink_datum\"", "\"stride_ms\": 0,\n      \"blink_datum\"", "crates a teleportable leg of 0", crate);
 }
 
+// THE HELP BLOCK, as ETHCallback_help_block draws it (planning step 170): SetAlpha(0.76) and bounce(this, vector2(1.13),
+// vector2(1.05), 250) every update. The two scales are read in the order the listing's call takes them, scaleA 1.13 first (the
+// spec wrote them in the order they are pushed, 1.05 then 1.13): the block is at its largest at 0 ms and at its smallest at 250.
+// Each end, the period and the easing are read straight from the decode and not through the rule; the layer's use is test_mp_layer's.
+void TheHelpBlockIsDrawnAtItsAlphaAndBreathesAsItsCallbackSays() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Art::HelpBlock& block = rules.helpBlock;
+    CHECK_MSG(block.entity == "help_block", "the callback is named for the entity less its .ent: " + block.entity);
+    CHECK_MSG(std::fabs(block.alpha - 0.76) < 1e-12, "SetAlpha(0.76): " + std::to_string(block.alpha));
+    CHECK_MSG(block.pulse.fromScale == glm::dvec2(1.13) && block.pulse.toScale == glm::dvec2(1.05) && block.pulse.strideMs == 250.0,
+              "scaleA 1.13, scaleB 1.05, 250 ms a leg");
+    const auto nearScale = [](const glm::dvec2& got, double want) { return glm::length(got - glm::dvec2(want)) < 1e-6; };
+    const double halfPi = std::acos(-1.0) / 2.0;
+    CHECK_MSG(nearScale(block.pulse.ScaleAt(0.0), 1.13) && nearScale(block.pulse.ScaleAt(250.0), 1.05) &&
+                  nearScale(block.pulse.ScaleAt(500.0), 1.13) && nearScale(block.pulse.ScaleAt(750.0), 1.05),
+              "1.13 at 0 ms, 1.05 at 250, 1.13 at 500, 1.05 at 750: its two ends and its period, 500 ms");
+    // bounce eases each leg by smoothEnd(bias) = sin(bias x PI / 2): 1.0734 at the middle of the first leg, and of the second
+    // (the way turned back on an odd stride count).
+    CHECK_MSG(nearScale(block.pulse.ScaleAt(125.0), 1.13 - 0.08 * std::sin(halfPi / 2.0)) &&
+                  nearScale(block.pulse.ScaleAt(375.0), 1.13 - 0.08 * std::sin(halfPi / 2.0)),
+              "and the middle of a leg is eased: 1.0734 either way");
+    // The whole triangle over 2 s against the decode's own formula.
+    int off = 0;
+    for (int ms = 0; ms <= 2000; ++ms) {
+        const double legs = std::floor(ms / 250.0);
+        double bias = (ms - legs * 250.0) / 250.0;
+        if (std::fmod(legs, 2.0) == 1.0) bias = 1.0 - bias;
+        if (!nearScale(block.pulse.ScaleAt(ms), 1.13 + (1.05 - 1.13) * std::sin(bias * halfPi))) ++off;
+    }
+    CHECK_MSG(off == 0, std::to_string(off) + " milliseconds off the block's decode");
+    // The range the original's stills show: 68 px x 1.05 to 1.13 is 71.4 to 76.8, against the 72-76 the readers measured.
+    CHECK_MSG(68.0 * 1.05 > 71.0 && 68.0 * 1.13 < 77.0, "a 68 px block breathes between 71.4 and 76.8 px");
+}
+
+// Without its alpha and its bounce the port would draw the block plain and opaque.
+void TheHelpBlockWithoutItsAlphaOrBounceIsRefused() {
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const auto refused = [&real](const std::string& from, const std::string& to, const std::string& name) {
+        std::string text = real;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, from);
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-help-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules rules;
+        std::string error;
+        const bool ok = Art::LoadRules(path.string(), rules, error);
+        CHECK_MSG(!ok, "refused: " + name);
+        CHECK_MSG(error.find("help_block needs") != std::string::npos, name + ": " + error);
+    };
+    const std::string pulse = "\"pulse\": { \"from\": [1.13, 1.13], \"to\": [1.05, 1.05], \"stride_ms\": 250.0 }";
+    refused("\"help_block\": {", "\"help_block_gone\": {", "absent");
+    refused("\"entity\": \"help_block\",", "\"entity\": \"help_block.ent\",", "a name with its extension");
+    refused("\"alpha\": 0.76,", "\"alpha\": 1.0,", "an alpha that fades nothing");
+    refused("\"alpha\": 0.76,", "\"alpha\": 0.0,", "an alpha of nothing");
+    refused("\"alpha\": 0.76,", "\"alpha\": \"0.76\",", "an alpha that is text");
+    refused(pulse, "\"pulse_gone\": { \"from\": [1.13, 1.13], \"to\": [1.05, 1.05], \"stride_ms\": 250.0 }", "no pulse");
+    refused(pulse, "\"pulse\": { \"from\": [1.13, 1.13], \"to\": [1.13, 1.13], \"stride_ms\": 250.0 }", "a pulse that does not move");
+    refused(pulse, "\"pulse\": { \"from\": [1.13, 1.13], \"to\": [1.05, 1.05], \"stride_ms\": 0 }", "a leg of 0");
+    refused(pulse, "\"pulse\": { \"from\": [0.0, 0.0], \"to\": [1.05, 1.05], \"stride_ms\": 250.0 }", "a scale of nothing");
+}
+
 // Without them the port draws what the level saved: the anti-portal agent's face,
 // yellow keys and still crates.
 void TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused() {
@@ -2309,6 +2377,58 @@ void TheScriptsRepaintWhatTheLevelsPlace() {
                                                            "level13b"}),
               "the blinking walls are on 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-14 and 3-14");
     if (!original) std::printf("  (the repainted files' sizes not checked: no extracted assets at %s)\n", kOriginal.c_str());
+}
+
+// THE HELP BLOCKS THE LEVELS PLACE (art.json help_block), over the 128 levels the converter wrote: 13, one a level, on 1-02, 1-03,
+// 1-10, 1-11, 1-13, 1-19, 1-25, 1-32, 2-03, 2-06, 3-09, 4-01 and 4-02, none with a scale datum and each at its picture's own
+// size - which is what makes the bounce's SET scale the picture's size times the pulse - and each the 32-unit picture
+// help_block.png is (hd 64 x 64). The tap rect is made from the node, trigger_size and ui.json's box_scale, not from any of this.
+void TheHelpBlocksTheLevelsPlaceAreOneALevelAndUnscaled() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    const Tiers::Rules tiers = TheTiers();
+    int levels = 0;
+    int blocks = 0;
+    int scaled = 0;
+    int offSize = 0;
+    std::set<std::string> blockLevels;
+    for (const char* suffix : {"", "a", "b", "c"}) {
+        for (int i = 0; i < 32; ++i) {
+            const std::string level = "level" + std::to_string(i) + suffix;
+            Tscn::Scene scene;
+            std::vector<Sprites::Sprite> all;
+            const bool read = Tscn::Load(kLevels + "/" + level + ".tscn", scene, error) &&
+                              Sprites::Find(scene, kLevels + "/..", tiers, all, error);
+            CHECK_MSG(read, level + ": " + error);
+            if (!read) continue;
+            ++levels;
+            int here = 0;
+            for (const Sprites::Sprite& sprite : all) {
+                const Tscn::Node* node = scene.FindNode(sprite.node);
+                const Tscn::Value* named = node != nullptr ? node->Meta("entity_name") : nullptr;
+                if (named == nullptr || named->kind != Tscn::Value::Kind::String) continue;
+                std::string bare = named->text;
+                if (bare.size() > 4 && bare.compare(bare.size() - 4, 4, ".ent") == 0) bare.resize(bare.size() - 4);
+                if (bare != rules.helpBlock.entity) continue;
+                ++blocks;
+                ++here;
+                blockLevels.insert(level);
+                if (node->Meta("scale") != nullptr || sprite.scale != glm::dvec2(1.0)) ++scaled;
+                if (sprite.sizePx != glm::dvec2(32.0)) ++offSize;
+            }
+            CHECK_MSG(here <= 1, level + " places more than one help block: " + std::to_string(here));
+        }
+    }
+    std::printf("  step 170: %d help blocks on %zu levels (%d with a scale, %d not 32 units)\n", blocks, blockLevels.size(), scaled,
+                offSize);
+    CHECK_EQ(levels, 128);
+    CHECK_EQ(blocks, 13);
+    CHECK_MSG(blockLevels == std::set<std::string>({"level1", "level2", "level9", "level10", "level12", "level18", "level24", "level31",
+                                                    "level2a", "level5a", "level8b", "level0c", "level1c"}),
+              "the 13 levels: 1-02, 1-03, 1-10, 1-11, 1-13, 1-19, 1-25, 1-32, 2-03, 2-06, 3-09, 4-01 and 4-02");
+    CHECK_MSG(scaled == 0, "no help block carries a scale: " + std::to_string(scaled));
+    CHECK_MSG(offSize == 0, "every help block's picture is 32 units: " + std::to_string(offSize) + " not");
 }
 
 void ThePlacementsCarryTheSystemsTheirLevelsState() {
@@ -4217,6 +4337,8 @@ MP_SUITE_MAIN("test_mp_sprites") {
     TheFireAgentTheKeysAndTheCratesAreTheirScripts();
     TheBarrelTheWallAndTheFireAgentBlinkAsTheirCallbacksSay();
     TheBarrelTheWallAndTheFireAgentWithoutTheirBlinksAreRefused();
+    TheHelpBlockIsDrawnAtItsAlphaAndBreathesAsItsCallbackSays();
+    TheHelpBlockWithoutItsAlphaOrBounceIsRefused();
     TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused();
     TheTimerIsTimerEnt();
     ATimerWithoutItsClockIsRefused();
@@ -4290,6 +4412,7 @@ MP_SUITE_MAIN("test_mp_sprites") {
     AnOffsetAndATurn();
     TheScaledPlacementsAreDrawnAtTheirScale();
     TheScriptsRepaintWhatTheLevelsPlace();
+    TheHelpBlocksTheLevelsPlaceAreOneALevelAndUnscaled();
     ThePlacementsCarryTheSystemsTheirLevelsState();
     TheOriginalsObservedPairsAreDealtItsWay();
     FindReadsTheNodesUnroundedDepth();

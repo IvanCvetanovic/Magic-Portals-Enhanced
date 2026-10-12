@@ -1617,6 +1617,9 @@ private:
         double blinkBornMs{0.0};
         // A fire agent: ETHCallback_fire_agent's bounce pulses its picture (art.json fire_agent pulse).
         bool firePulse{false};
+        // A help block: ETHCallback_help_block's SetAlpha(0.76) and bounce(this, 1.13, 1.05, 250) every update
+        // (art.json help_block, planning step 170): its picture's alpha and its size, not its tap rect.
+        bool helpBlock{false};
         // The bucket its entity stood in when the slots were last dealt (art.json
         // draw_order, Sprites::Rank): what a move across a bucket line is seen against.
         Sprites::Bucket bucket;

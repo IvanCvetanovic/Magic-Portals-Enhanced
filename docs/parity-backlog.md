@@ -3327,13 +3327,55 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       decode's 0.64 to 1.0 cycle, sampled at multiples of 0.1 s on a 0.3 s period, which can explain it; a shallower original blink (the colour and emissive floors not both
       reaching 0.8 in the picture) cannot be ruled out without a clip. Cause: probably the phase, not traced to a depth difference. Next: the clip of CMP9-3, then the wall's
       depth and phase measured; the wave 4c-2 re-measure reads them as ranges.
-- [ ] **CMP9-7. Housekeeping: dead default initialisers in `Art.hpp`, and `MagicPortals.exe` older than the libraries** (deviation 7; the third verification's lows). (a)
+- [x] **CMP9-7. Housekeeping: dead default initialisers in `Art.hpp`, and `MagicPortals.exe` older than the libraries** (deviation 7; the third verification's lows). (a)
       `BarrelBomb::floorPresent{1.0}` and `ceiling{0.2}` and `BreakableWall::callsPerFrame = 1` repeat `art.json`'s values and never take effect (`LoadRules` refuses the file
       without each key); code, and `Art.hpp` is included by ten files, so the edit relinks both executables: not done at the commit. Next: value-initialise them to 0 the next
       time `Art.hpp` is touched. (b) `build/game/MagicPortals.exe` `90a48b79` (linked 02:57) is older than the libraries rebuilt for `test_mp` after the first fix (04:35); the
       sources are byte-identical (md5s equal `fix2/md5_end.txt`) and the sweep was taken with this executable, so nothing was rebuilt at the commit. Next: the wave's verify
       role runs `port_build.bat` once (`ninja -n` shows a CMake re-check step, so it may relink and a refused launch notifies the owner), launches the new exe once alone, and
       re-checks three levels against `CMP9/after/sweep`.
+      *Settled by step 170 (CMP10, wave 4c-1), 2026-10-12: (a) the three dead default initialisers (`BarrelBomb::floorPresent`, `ceiling`, `BreakableWall::callsPerFrame`)
+      are value-initialised to 0 in `Art.hpp` (planning step 170, THE CHANGE; nothing reads them: the full run and the sweep equal the before); (b) the third verifier of
+      step 170 relinked `MagicPortals.exe` once (`29166f75`), launched it alone with no refusal, and its 128 launches equal `CMP10/after/sweep` byte for byte (the other 119
+      levels equal `CMP9/after/sweep`; CMP10-7).*
+
+**Step 170's recorded deviations** (the help block's alpha and bounce, CMP-10, wave 4c-1; planning step 170 has the evidence, `RECORDED DEVIATIONS` 1-7;
+`out/parity/program/CMP10/` the reports, `deviations.md` (the owner-delegated disposition after the third verification; its numbering is the record's) and `verify1.json` to
+`verify3.json`; GAMEPLAY: none; the row CMP-10 is closed by it):
+- [ ] **CMP10-1. Gate 2: the face reads 1.1 to 3.0 grey of 255 under the original's on all eight levels in frame; one calibration experiment, not a fix** (deviation 1; the
+      third verification's low). Required: the face 171-173 on the readers' statistic (1-10, 1-11, 1-13, 1-25) to the group's tolerance or the spread of the six stills.
+      Measured (`CMP10/verify3/gate2.md`: one finder on the stills and the port, gold seed): the port minus the same-wall stills' mean 1-02 -1.1, 1-10 -1.8, 1-11 -1.4, 1-13
+      -2.2, 1-25 -1.4, 1-19 -1.6, 2-03 -2.7, 2-06 -3.0 grey, 0.5 to 1.2 percent, against the stills' own spread of 0.5 to 0.8; the readers' statistic moves about 1 grey
+      with the threshold and the phase (the port 173.6-175.2 / 169.1-170.2 / 170.3-171.5 / 171.7-173.2). The widths are met (the port 71-77 px over a period, the stills
+      71-75). Cause: not the port: on 1-10, 1-11 and 1-13 the port draws the PNG at the decoded 0.76 (fits 0.7587 to 0.7593) and the original reads 0.7661 to 0.7670 on 16
+      fits, a source weight 0.9 to 1.1 percent heavier; the mechanism is unknown (alpha and face tone are not separable) and 1-25, 2-06, 1-02 and 1-19 are not fitted. A
+      lead, not established: the HUD's pause button reads +2.8 / +1.5 / +2.9 grey (R / G / B, the median of 31 readings) above the port's, so the excess may be general to
+      the original's alpha-blended pictures. **Next, an experiment:** run `fix2/fit2.py` on a second alpha-blended picture with a decoded alpha (a fading handle, the hint,
+      the HUD button) and calibrate only if it says the excess is general (a blend calibration, a row of its own); do not retune the block alone (an alpha of about 0.767 or
+      a face x 1.01 would contradict the decoded 0.76 and could mask a general effect). The lighting rows may take the 1-19 and 2-03 wall (+2.7 to +4.0 grey, 42 to 80 px
+      from the block).
+- [x] **CMP10-2. Settled at the commit: 1-25's "150" is not reproducible** (deviation 2). The readers' patch coordinates were never recorded (`chunk_4.json` holds only the
+      box) and no 5 x 5 patch reproduces their 150 / 147 / 152; the port reads 148 / 146 / 149 on patches chosen by the original's value, which is not an independent
+      reproduction. Dropped from CMP-10's text at the commit; nothing left.
+- [x] **CMP10-3. Settled at the commit: the group's and the spec's order of the two scales is the listing's push order** (deviation 3). The call is `bounce(thisEntity,
+      1.13, 1.05, 250)` (a call pushes its last argument first; the fire agent's #282-300 and bounce's `interpolate(scaleA, scaleB, ...)` agree): 1.13 at 0 ms, 1.05 at 250,
+      period 500. The range, 71.4 to 76.8 px, is the same either way; only the phase, which no still fixes, would differ. Built as decoded; CMP-10's wording of the call and
+      of the triangle corrected at the commit; nothing left.
+- [ ] **CMP10-4. The block's phase against the original's, and what a paused time does to it** (deviation 4). The stills are timed by wall seconds and read as a range, so
+      the phase is not measured. `help_block.ent` is static, so the original runs the callback only while its bucket is drawn (G3-2) and the port from tick 1 on the level's
+      age; 1-02 and 1-03 hold the block at 1.13 and alpha 0.76 under their level-start popup (the age stands at 0 under it; what f420 shows on the owner's seed). Whether
+      the original's paused game time stops the callback's `blinkElapsedTime` the same way is the pause row's. Next: a clip of 1-02 or 1-10 from the load frame pins the
+      phase and the popup's hold; the bucket clock (G3-2), with the fire agent's (CMP9-3), the antiportal's and the walls' rows.
+- [ ] **CMP10-5. Four blocks are on no frame the comparison holds: 1-32, 3-09, 4-01 and 4-02** (deviation 5). Unchanged at f420 because the block is off the frame (with
+      `--place` each shows the translucent block); the 13-level layer pin (`EveryHelpBlockOfTheThirteenLevelsIsDrawnByItsCallback`) is what reaches them; the original's
+      stills never show 4-01's block either. 1-03's block is a 25 px sliver at the frame's edge, its face and width not measured. Next: nothing owned; the wave 4c-2 re-fly
+      or the final comparison may capture them with the block on screen.
+- [x] **CMP10-6. Settled at the commit: the planning record's gate 2 row quoted the readers' statistic to a precision it lacks** (deviation 6; the third verification's
+      low). The single values 172.8 / 169.3 / 169.8 / 172.0 and "1-10 and 1-25 inside 171-173, 1-11 and 1-13 1.2 to 1.7 under" now read as the series ranges 173.6-175.2 /
+      169.1-170.2 / 170.3-171.5 / 171.7-173.2, good to about 1 grey; no conclusion changes. Nothing left.
+- [x] **CMP10-7. Settled by the third verifier: step 169's deviation 7b, the executable older than the libraries** (deviation 7). `MagicPortals.exe` `29166f75`, relinked
+      once and launched alone with no refusal; its 128 launches equal `CMP10/after/sweep` byte for byte. Part (a) of the same row is closed by this step's `Art.hpp` (see
+      CMP9-7). Nothing left.
 
 **The final comparison's rows** (wave 4b; 128 levels, 18 causes and CMP-low; GAMEPLAY: none in the comparison itself, each row says its fix's). Evidence is under
 `out/parity/program/R4b/CMP/` (`residuals.md` has every reader's line with its box, `groups.json` the causes and proposals, `per_level.md` the table): the pair images
@@ -3516,15 +3558,30 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (CMP9-6); (d) 4-19's two flagged crates, the 200 ms branch, are not built (CMP9-5); (e) the dead initialisers and the older executable (CMP9-7). The deviations are rows
       CMP9-1 to CMP9-7 above; the older rows that name the barrel's blink, the crate's emissive and the pulse as unbuilt ("Found by step 120", "The restock's pictures") carry a
       note.
-- [ ] **CMP-10. The help block ("?") is drawn plain and opaque; the original draws it at alpha 0.76 breathing 1.05-1.13x** (medium; structural; `decoded`; moves no
+- [x] **CMP-10. The help block ("?") is drawn plain and opaque; the original draws it at alpha 0.76 breathing 1.05-1.13x** (medium; structural; `decoded`; moves no
       route). 13 levels in scope: 1-02, 1-03, 1-10, 1-11, 1-13, 1-19, 1-25, 1-32, 2-03, 2-06, 3-09, 4-01, 4-02; in frame and filed on 1-02, 1-10, 1-11, 1-13, 1-25; in
       frame and unfiled on 2-03 and 2-06 (their pair images show the same greyer face, about 16 percent dimmer over the dark sky: the readers missed a decoded
       difference). Evidence: 1-10 box 520,386,605,470 (`pairs/1-10_h63_pair.png`: face 171-173 against the port's 213, width 72-76 against 68 px; the same on 1-11 box
-      490,120,580,215 and 1-13 box 85,236,165,318); 1-25 box 785,280,875,370 (150); 1-02 box (1152,184)-(1226,261). Cause (listing): `ETHCallback_help_block` (bytes
-      371476..371655) `SetAlpha(0.76)` and `bounce(thisEntity, 1.05, 1.13, 250 ms)` every frame (`utilEntityEffect` bounce, bytes 327057..327527); `helpBlockInput`
+      490,120,580,215 and 1-13 box 85,236,165,318); 1-25 box 785,280,875,370; 1-02 box (1152,184)-(1226,261). Cause (listing): `ETHCallback_help_block` (bytes
+      371476..371655) `SetAlpha(0.76)` and `bounce(thisEntity, 1.13, 1.05, 250 ms)` every frame (`utilEntityEffect` bounce, bytes 327057..327527); `helpBlockInput`
       (`Popup.cpp`) only reads the touch. Alpha 0.76 over the dark wall predicts the measured 171-173. No backlog row names it. Next: draw alpha 0.76 and the smoothEnd
-      triangle 1.05 -> 1.13 over 250 ms on `help_block.ent` in the layer (numbers in `art.json` or `ui.json` with the citation; the tap rect unchanged, it uses
+      triangle 1.13 -> 1.05 over 250 ms on `help_block.ent` in the layer (numbers in `art.json` or `ui.json` with the citation; the tap rect unchanged, it uses
       `box_scale`). Gate: the face reads 171-173 and 72-76 px on 1-10, 1-11, 1-13; a `test_mp_sprites` pin. GAMEPLAY: none.
+      *Closed by step 170 (CMP10, wave 4c-1), 2026-10-12; committed locally, the hash goes in at the wave's close. GAMEPLAY: none (the 128 routes win on exactly the
+      census's ticks, 83 to 3,343). Committed WITH RECORDED DEVIATIONS (owner-delegated): gate 2's face tolerance is not met to the letter.* Built as the Next says, from
+      the listing (md5 `48fe65ce`), every number in `game/data/art.json` `help_block` with its citations: the block is drawn at alpha 0.76 (`ETHCallback_help_block` #1-3
+      `SetAlpha(0.76f)`) and breathes 1.13 -> 1.05 -> 1.13 on 250 ms legs, a period of 500 ms (#5-23, `bounce(thisEntity, 1.13, 1.05, 250)`: a call pushes its last argument
+      first, and the group's text and the spec had the push order, CMP10-3), on all 13 levels; its tap rect is unchanged (`box_scale`; pinned fixed over 80 ticks, a touch
+      at its corner opens the popup). This row's text is corrected: the `(150)` of 1-25's box is dropped (not reproducible, CMP10-2) and the call and the triangle are
+      written in the argument order. Pins: `test_mp_sprites` 1,763 -> 2,061, `test_mp_layer` 4,090 -> 4,151; three code rules mutated in a hooked runner and five `art.json`
+      values mutated, each failing the checks that name it. Measured: the f420 sweep (owner's seed, 128 launches, validation silent) changed 9 levels and left 119
+      byte-identical: 1-02, 1-03, 1-10, 1-11, 1-13, 1-19, 1-25, 2-03 and 2-06, all in the group; 1-32, 3-09, 4-01 and 4-02 are unchanged because their block is off the f420
+      frame (the 13-level layer pin reaches them). The widths are met: 71-77 px over a period on the eight levels in frame against the stills' 71-75 and the old block's 68;
+      the opaque near-white square (face about 213, 40 grey off) is gone and the face reads 1.1 to 3.0 grey under the stills'. 57 suites, 33,132 checks (32,773 before),
+      `test_mp_routes` 2,366 checks with 128 of 128 on the census's ticks, reachability 108 / 20 / 0, 0 warnings. Independently verified three times (`CMP10/verify1.json`
+      to `verify3.json`: the third read gates 1 and 3 to 9 ok and gate 2 not met on the face). **What it leaves**: (a) the face gap, cause open and on the original's side
+      where fitted, one calibration experiment (CMP10-1); (b) the block's phase and the popup's hold (CMP10-4); (c) four blocks on no comparison frame (CMP10-5). The
+      deviations are rows CMP10-1 to CMP10-7 above.
 - [ ] **CMP-11. Crates and barrels that creep or rest elsewhere than the original's** (medium; structural; `owner-call`; MOVES ROUTES if taken). Levels: 2-20 (box
       880,195,1000,295: the small crate on the big one slides and tilts, (-5,+5) px at f75, (-14,+6) at f450), 2-24 (box 625,45,725,175: the top barrel 6 px low and
       creeping), 2-22 (box 945,100,1250,290: a crate rotated 2 degrees), 3-03 (box x1072-1280 y448-640, `pairs/3-03_h63_overlay.png`: the crate rests 11 px (4 u) off

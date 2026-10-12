@@ -5011,14 +5011,14 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
                 }
             }
         }
-        // THE SCRIPT'S OTHER THREE BLINKS (planning step 169), each named by its callback, the
+        // THE SCRIPT'S OTHER BLINKS (planning steps 169 and 170), each named by its callback, the
         // entity less its .ent: a barrel blinks its emissive every frame (art.json barrel_bomb),
         // from its minEmissive datum - the converter wrote the datum's value as an empty string, so
         // its presence says it is the one value the scenes hold - to 0.2; a breakable wall that
         // carries the uint `blink` blinks its colour and its emissive on one clock run twice a
         // frame (breakable_wall; _no_emissive and _sand have no callback); and a fire agent pulses
-        // its picture (fire_agent pulse). syncLighting writes the first two and syncSprites the
-        // third, every tick.
+        // its picture (fire_agent pulse), and a help block is drawn at alpha 0.76 and breathes
+        // (help_block). syncLighting writes the first two and syncSprites the other two, every tick.
         if (const Tscn::Node* node = m_data.scene.FindNode(sprite.node); node != nullptr) {
             const std::string bare = BareEntityName(*node);
             if (bare == m_artRules.barrelBomb.entity) {
@@ -5032,6 +5032,8 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
                 }
             } else if (bare == m_artRules.fireAgent.entity) {
                 drawn.firePulse = true;
+            } else if (bare == m_artRules.helpBlock.entity) {
+                drawn.helpBlock = true;
             }
         }
         drawn.ownerPx = sprite.atPx;
@@ -6120,6 +6122,10 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         }
         // 4-19's red key state goes when its fade ends: DeleteEntity(thisEntity), #190.
         if (drawn.redKeyState && m_level.redKey.gone) gone = true;
+        // THE HELP BLOCK'S SetAlpha (art.json help_block; ETHCallback_help_block #1-3, every update): the
+        // sprite's alpha, over the colour its node gives (none) and drawn by syncLighting as every fade
+        // is. Its bounce is its size, below.
+        if (drawn.helpBlock) drawn.fade = static_cast<float>(m_artRules.helpBlock.alpha);
         if (gone) {
             registry.destroy(drawn.quad);
             drawn.quad = entt::null;
@@ -6147,6 +6153,11 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         // fire_agent.ent's <Scale> is 1 and no placement carries a scale datum, so the picture's own size times the
         // pulse is it.
         if (drawn.firePulse) drawnSizePx *= m_artRules.fireAgent.pulse.ScaleAt(m_levelAgeMs - drawn.blinkBornMs);
+        // And a help block at its own (art.json help_block): bounce(this, 1.13, 1.05, 250) SETS the
+        // picture's scale, 1.13 at 0 ms and 1.05 at 250, on the level's age. help_block.ent's <Scale> is 1
+        // and no placement carries one, so the picture's own size times the pulse is it; its tap rect
+        // (HelpBlockRects) is made from the node and trigger_size, never from this size.
+        if (drawn.helpBlock) drawnSizePx *= m_artRules.helpBlock.pulse.ScaleAt(m_levelAgeMs - drawn.blinkBornMs);
         drawn.drawnSizePx = drawnSizePx;
         placeSprite(registry, drawn.quad, centrePx, drawnSizePx, drawn.z, rotation);
         if (drawn.cover != entt::null) placeSkyCover(registry, drawn, centrePx, drawnSizePx, rotation);

@@ -243,6 +243,17 @@ struct FireAgent {
     Pulse pulse;
 };
 
+// The help block as its callback draws it (art.json help_block; ETHCallback_help_block, planning
+// step 170), on every update: SetAlpha(alpha) over the colour the level gave it, and
+// bounce(this, vector2(1.13), vector2(1.05), 250) - the entity's scale SET, so its picture is its
+// own size times the pulse. Both spellings of the entity run it. The tap rect, which reads the
+// collision box, is none of this.
+struct HelpBlock {
+    std::string entity; // the entity name, without .ent, whose callback it is
+    double alpha = 0.0; // SetAlpha
+    Pulse pulse;        // bounce: scaleA, scaleB and the stride
+};
+
 // A key, a keyhole or a locked door as setKeyColor repaints it before it is first
 // drawn (art.json's key_colour): by its `datum`, a colour `sprites` names has its
 // picture swapped for its entity name as the level spells it plus that suffix, and
@@ -308,8 +319,8 @@ struct BarrelBomb {
     std::string entity; // the entity name, without .ent, whose callback it is
     std::string datum;  // the vector3 colorA reads
     glm::dvec3 floorAbsent{0.0};  // GetVector3 of a datum that is not there
-    glm::dvec3 floorPresent{1.0}; // the one value the scenes' placements carry (the converter writes none)
-    glm::dvec3 ceiling{0.2};      // blinkEmissive's colorB
+    glm::dvec3 floorPresent{0.0}; // the one value the scenes' placements carry (the converter writes none)
+    glm::dvec3 ceiling{0.0};      // blinkEmissive's colorB
     double strideMs = 0.0;        // a leg
 
     // The floor of a barrel whose datum is there or not, and the triangle from a floor.
@@ -326,7 +337,7 @@ struct BreakableWall {
     std::string datum;  // the uint the callback reads
     Blink colour;       // blinkColor's, SetColor
     Blink emissive;     // blinkEmissive's, SetEmissiveColor
-    int callsPerFrame = 1;
+    int callsPerFrame = 0;
 
     // The clock call number `call` (1 is the first) of a frame reads, `ageMs` since the
     // wall's first run once this frame's time `frameMs` is in: every call adds `frameMs`
@@ -563,6 +574,7 @@ struct Rules {
     NonTeleportable nonTeleportable;
     BarrelBomb barrelBomb;         // ETHCallback_barrel_bomb's blink
     BreakableWall breakableWall;   // ETHCallback_breakable_wall's, for a wall with `blink`
+    HelpBlock helpBlock;           // ETHCallback_help_block's alpha and bounce
     Timer timer;         // timer.ent, the dial behind a timed crystal
     Minion minion;       // minion.ent, the minions and knights
     Ghost ghost;         // ghost.ent, chapter 3's boss
