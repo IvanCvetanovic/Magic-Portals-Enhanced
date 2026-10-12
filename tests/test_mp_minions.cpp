@@ -48,10 +48,12 @@
 
 #include "core/Components.hpp"
 #include "core/PhysicsSystem.hpp"
+#include "sim/Achievements.hpp"
 #include "sim/Art.hpp"
 #include "sim/Game.hpp"
 #include "sim/Minions.hpp"
 #include "sim/Particles.hpp"
+#include "sim/Roles.hpp"
 #include "sim/ScriptClock.hpp"
 #include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
@@ -62,6 +64,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -742,10 +745,137 @@ void aMarkerAddsTheEntityItNames() {
             }
         }
     }
-    CHECK_EQ(markers, 62);
-    CHECK_MSG(black == 1 && other.empty(), "one ghost_minion.ent, on level31b, and 61 minion.ent:" + other);
+    CHECK_EQ(markers, 60); // 62 until planning step 171 (CMP-6): minion_spawn_ and minion_spawn6 spawn nothing
+    CHECK_MSG(black == 1 && other.empty(), "one ghost_minion.ent, on level31b, and 59 minion.ent:" + other);
     std::printf("  R16: %d markers in the 128 levels, %d adding ghost_minion.ent (level31b), %d minion.ent\n", markers,
                 black, markers - black);
+}
+
+// CMP-6 (planning step 171): THE NAME DECIDES, as Ethanon decides it. The engine runs the script function
+// 'ETHCallback_' + the entity's name without its extension, by exact name (ETHASUtil.cpp:63-79, FindCallbackFunction), and the
+// shipped script has ETHCallback_minion_spawn (bytes 426511..426876) and no ETHCallback_minion_spawn_ or
+// ETHCallback_minion_spawn6. The scenes place 60 of the first, ONE `minion_spawn_` (3-09, level8b, id 908, wayA) and ONE
+// `minion_spawn6` (4-29, level28c, id 1766, wayB): those two stand there for ever and spawn no knight, as the
+// chapter-3 boss's `minion_spawn_point` (a name by which the boss finds its summon anchor) spawns none. The port spawned
+// one from each until this step, from a role table that listed all three names. So pinned here, each a way the rule could
+// be lost: the TABLE lists exactly the one spelling; the SCENES place exactly these names (a fifth spelling is a name
+// to look up in the listing, not to list); the SIM makes 60 knights, none from a marker of the other two spellings, and
+// 3-09 two (three before) and 4-29 one (two before); and the original's own SCRIPT agrees from the other side - the
+// achievements it decodes count, for a run that kills none, the knights its levels make (3-09's id 31, 'exactly 2'), so
+// the knights the port starts with must equal those numbers (all but one level's do: 4-30, an open finding below).
+std::string LevelFileOf(int world, int level) {
+    static const char* const kSuffix[] = {"", "a", "b", "c"};
+    return "level" + std::to_string(level) + kSuffix[world];
+}
+
+void aMarkerTheScriptHasNoCallbackForSpawnsNothing() {
+    Run run;
+    if (!Begin("level8b", run)) return;
+    const Minions::Rules& rules = run.level.minions.rules;
+
+    // THE TABLE: enemy_spawn lists the one name that has a callback, and the three that do not are in no role.
+    const auto& roleOf = run.data.roles.roleOf;
+    CHECK_MSG(roleOf.count("minion_spawn") == 1 && roleOf.at("minion_spawn") == Roles::kEnemySpawn,
+              "minion_spawn (ETHCallback_minion_spawn exists) is an enemy_spawn");
+    int spawning = 0;
+    for (const auto& [name, role] : roleOf) {
+        if (role == Roles::kEnemySpawn) ++spawning;
+    }
+    CHECK_MSG(spawning == 1, "enemy_spawn lists exactly one name: " + std::to_string(spawning));
+    for (const char* name : {"minion_spawn_", "minion_spawn6", "minion_spawn_point"}) {
+        CHECK_MSG(roleOf.count(name) == 0, std::string(name) + " has no ETHCallback_ in the script, so it has no role");
+    }
+
+    // THE SCENES AND THE SIM, over the 128 levels.
+    std::map<std::string, int> placed;           // exact entity name beginning minion_spawn -> placements
+    std::map<std::string, std::string> whereIs;  // a name that spawns nothing -> the files that place it
+    std::map<std::string, int> knights;          // file -> knights the sim makes
+    std::map<std::string, int> ordinary;         // file -> of them, minion.ent
+    int levels = 0;
+    int total = 0;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".tscn") continue;
+        Tscn::Scene scene;
+        std::string error;
+        if (!Tscn::Load(entry.path().string(), scene, error)) continue;
+        const std::string stem = entry.path().stem().string();
+        ++levels;
+        std::vector<std::string> silent; // this scene's nodes that spawn nothing
+        for (const Tscn::Node& node : scene.nodes) {
+            if (node.parent != ".") continue;
+            const std::string entity = Roles::EntityName(node);
+            if (entity.rfind("minion_spawn", 0) != 0) continue;
+            ++placed[entity];
+            if (entity != "minion_spawn") {
+                whereIs[entity] += (whereIs[entity].empty() ? "" : " ") + stem;
+                silent.push_back(node.name);
+            }
+        }
+        Minions::State state;
+        CHECK_MSG(Minions::Find(scene, run.data.roles, rules, state, error), stem + ": " + error);
+        knights[stem] = static_cast<int>(state.minions.size());
+        total += knights[stem];
+        for (const Minions::Minion& minion : state.minions) {
+            if (minion.entity == "minion.ent") ++ordinary[stem];
+        }
+        for (const std::string& name : silent) {
+            CHECK_MSG(state.FindMinion(name) == nullptr, stem + ": " + name + " spawns a knight, and the script has no callback for it");
+        }
+    }
+    CHECK_EQ(levels, 128);
+    CHECK_MSG(placed.size() == 4, "four spellings begin minion_spawn in the 128 scenes: " + std::to_string(placed.size()));
+    CHECK_EQ(placed["minion_spawn"], 60);
+    CHECK_EQ(placed["minion_spawn_"], 1);
+    CHECK_EQ(placed["minion_spawn6"], 1);
+    CHECK_EQ(placed["minion_spawn_point"], 1);
+    CHECK_MSG(whereIs["minion_spawn_"] == "level8b", "minion_spawn_ is 3-09's: " + whereIs["minion_spawn_"]);
+    CHECK_MSG(whereIs["minion_spawn6"] == "level28c", "minion_spawn6 is 4-29's: " + whereIs["minion_spawn6"]);
+    CHECK_MSG(whereIs["minion_spawn_point"] == "level31b", "minion_spawn_point is 3-32's: " + whereIs["minion_spawn_point"]);
+    CHECK_EQ(total, 60);
+    CHECK_MSG(knights["level8b"] == 2, "3-09 makes two knights (three before step 171): " + std::to_string(knights["level8b"]));
+    CHECK_MSG(knights["level28c"] == 1, "4-29 makes one knight (two before step 171): " + std::to_string(knights["level28c"]));
+    std::printf("  CMP-6: %d knights in the 128 levels from %d minion_spawn; 3-09 %d (3 before), 4-29 %d (2 before); "
+                "minion_spawn_ in %s, minion_spawn6 in %s spawn none\n",
+                total, placed["minion_spawn"], knights["level8b"], knights["level28c"], whereIs["minion_spawn_"].c_str(),
+                whereIs["minion_spawn6"].c_str());
+
+    // THE SCRIPT'S OWN COUNTS. Each of these achievements counts the live minion.ent a run that kills none leaves: 'exactly N'
+    // on 3-06, 3-09, 3-16 and 3-23, hasBeenUnnoticed(N) - exactly N alive and none having seen - on the seven stealth
+    // levels. The port's knights at the start are those N, on every level but one.
+    Achievements::Rules achievements;
+    std::string why;
+    CHECK_MSG(Achievements::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/achievements.json", achievements, why), why);
+    int compared = 0;
+    int agree = 0;
+    std::string disagree;
+    for (const Achievements::LevelRule& rule : achievements.level) {
+        for (const Achievements::Term& term : rule.terms) {
+            const bool stealth = term.kind == Achievements::TermKind::Unnoticed;
+            const bool exactly = term.kind == Achievements::TermKind::CountExactly && term.value > 0.0 &&
+                                 term.names == std::vector<std::string>({"minion.ent"});
+            if (!stealth && !exactly) continue;
+            const std::string file = LevelFileOf(rule.world, rule.level);
+            const int wanted = static_cast<int>(term.value);
+            ++compared;
+            if (ordinary[file] == wanted) {
+                ++agree;
+            } else {
+                disagree += " " + file + "(id " + std::to_string(rule.id) + ": the script's " + std::to_string(wanted) +
+                            ", the port's " + std::to_string(ordinary[file]) + ")";
+            }
+            if (file == "level8b") {
+                CHECK_MSG(ordinary[file] == 2 && wanted == 2, "3-09: id 31 counts 2 knights alive, and the port starts with 2");
+            }
+        }
+    }
+    std::printf("  CMP-6: %d of the script's %d knight counts equal the port's; the other:%s\n", agree, compared,
+                disagree.empty() ? " none" : disagree.c_str());
+    CHECK_EQ(compared, 11);
+    CHECK_EQ(agree, 10);
+    // OPEN (planning step 171, LEFT FOR THE OWNER): 4-30's id 76 asks for exactly 1 knight alive and unseen, and both of its
+    // markers are `minion_spawn` with a callback, so the original makes two there. Pinned as the one disagreement so a new one fails.
+    CHECK_MSG(disagree == " level29c(id 76: the script's 1, the port's 2)", "the one level whose count differs:" + disagree);
 }
 
 // A marker that names an entity minions.json does not build is refused by name,
@@ -853,6 +983,7 @@ void runTests() {
     aMinionsDeathIsWrittenDownForTheFrame();
     aFireballBurnsTheMinionItReaches();
     aMarkerAddsTheEntityItNames();
+    aMarkerTheScriptHasNoCallbackForSpawnsNothing();
     anEntityTheRulesDoNotKnowIsRefused();
     theBlackKnightsBodyIsAMinions();
 }

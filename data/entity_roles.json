@@ -290,12 +290,28 @@
     "enemy_spawn": {
       "_note": [
         "Invisible marker. No enemy is ever placed directly in a scene.",
-        "waypointName is a PREFIX: 'wayA' patrols wayA0 <-> wayA1."
+        "waypointName is a PREFIX: 'wayA' patrols wayA0 <-> wayA1.",
+        "",
+        "ONLY THE EXACT NAME `minion_spawn` SPAWNS, and that is why only it is listed (CMP-6, planning step 171).",
+        "Ethanon runs the script function 'ETHCallback_' + the entity's name without its extension, by exact name",
+        "(toolkit/Source/src/engine/Util/ETHASUtil.cpp:63-79, FindCallbackFunction; Scene/ETHScene.cpp:707-708;",
+        "Platform.cpp:90-110, RemoveExtension: no '.', no change). The shipped script has ETHCallback_minion_spawn",
+        "(ETHCallback_minion.angelscript, bytes 426511..426876: it hands the marker's position to spawnMinion and",
+        "deletes itself) and NO ETHCallback_minion_spawn_ and NO ETHCallback_minion_spawn6 (out/parity/asbc/",
+        "all_functions.txt, md5 48fe65ce8baea16b94ed84d8d7be84b0; no ETHConstructorCallback_ exists at all, and no",
+        "script reads either name as a string). The scenes place 60 `minion_spawn`, ONE `minion_spawn_` (3-09 =",
+        "level8b, id 908 at (410, 48), wayA, wayA0 holding 9999999) and ONE `minion_spawn6` (4-29 = level28c, id",
+        "1766 at (414, 208), static, wayB): those two markers stand in their levels for ever and spawn no knight.",
+        "They were listed here with the first until planning step 171 and the port spawned a knight from each.",
+        "They have NO ROLE, as `minion_spawn_point` (the chapter-3 boss's summon anchor, found by name) has none:",
+        "an unlisted name is scenery and a spriteless marker with no shape makes nothing of itself.",
+        "Cross-check, independent of the listing's absence: achievement 31 (3-09, 'Give peace a chance') counts 'exactly 2'",
+        "live minion.ent for a run that kills none (game/data/achievements.json; id 74 counts 0, kill all): the two markers",
+        "that spawn. The port made a third knight, which killed itself on the killer floor on tick 58 of every run (a 19.7 px",
+        "shake and its death effects) and so left 2 alive at the door by accident; with the two it makes now, 2 stand from tick 1."
       ],
       "names": [
-        "minion_spawn",
-        "minion_spawn_",
-        "minion_spawn6"
+        "minion_spawn"
       ]
     },
     "waypoint": {

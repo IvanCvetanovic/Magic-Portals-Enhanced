@@ -3489,6 +3489,41 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       once and launched alone with no refusal; its 128 launches equal `CMP10/after/sweep` byte for byte. Part (a) of the same row is closed by this step's `Art.hpp` (see
       CMP9-7). Nothing left.
 
+**Step 171's recorded deviations** (the two spawn markers the script never runs, CMP-6, wave 4c-2; planning step 171 has the evidence, `RECORDED DEVIATIONS` 1-9;
+`out/parity/program/CMP6/` the reports, `impl.md`, `census.md` and `verify1.json`; GAMEPLAY: YES, 3-09 and 4-29; the row CMP-6 is closed by it):
+- [x] **CMP6-1. Settled at the commit: the row "3-09 minion_killed" was fed by the knight that is gone** (deviation 1; the first full run's failure). The guard died on the
+      killer floor on tick 58 of every run, which `EventsALevelMakesOnItsOwnShakeTheView` waited for; the row now carries a knight 20 px over the floor, as a portal would,
+      and the callback's own numbers (the 20, the one-tick order of the shake) still pass. The original's 3-09 never raises that event in play (the verifier's low): the row
+      proves the callback's numbers, not a death the level produces. Nothing left.
+- [x] **CMP6-2. Settled at the commit: the high-knight pin moved from 3-09 to 3-03 and its tolerance was corrected** (deviation 2). 3-09's 157.9 px knight was the pin's
+      only high marker; the next is 3-03's `minion_spawn_913` (29.9 px over its floor). The old pin read the step's travel from the begin's velocity in the original's units
+      where the port's body falls SimRatio times that (5.0 px a tick at the matched 60 Hz); it now reads the body's own two transforms and passes for a step of at least 4.4
+      px. Nothing left.
+- [ ] **CMP6-3. 4-30's id 76 ("unnoticed 1") asks for exactly 1 knight alive and unseen, and both of its markers are `minion_spawn` with a callback** (deviation 3; the
+      verifier's low; GAMEPLAY: yes if real). Level29c: ids 1766 at (360, 208) and 1902 at (112, 208). Ten of the eleven achievement counts that name `minion.ent` equal the
+      port's knights; this is the one difference, pinned by level in `test_mp_minions`. Candidates, unproven: a knight the original loses on its own (as 3-09's guard did in
+      the port), a bucket-gated spawn (a static marker's callback runs only in a visible bucket, G3-2), or an achievement the designers never made winnable. The level is
+      dark and no footage exists. Next: a clip of 4-30 from the load frame or the bucket trace (G3-2); the owner's call if neither decides it.
+- [ ] **CMP6-4. A minimised capture window stalled the sweeps** (deviation 4; both the implementer's and the verifier's sweeps; the verifier's low). Something on the
+      desktop minimised `MagicPortals.exe`'s window on a launch (7 minutes lost in each sweep; cause unknown, not either role's doing as far as the logs show: no
+      portal_launch, tap or Escape input in the verifier's 132 launches' logs); each role restored its own window only, by `ShowWindow(SW_SHOWNOACTIVATE)` from a hidden watchdog.
+      The runs are fixed-step: the two sweeps' 128 PNGs are byte-identical. Next: as R4c1-3 (d): allow 40 minutes for a 128-level sweep, keep a restore loop for the sweep's
+      own window, or sweep with the laptop awake; the later steps' sweeps will meet it.
+- [ ] **CMP6-5. 3-09's 80 px at f420 are attributed to the shared effects random stream, not proven** (deviation 5; the verifier's low). The two clusters (68 px at
+      (870-879, 86-94), the red eye of the knight on the block; 12 px at (1063-1118, 446-521), the red flame; at most 16 grey levels) were confirmed, and the baseline log
+      carries the guard's death, its 19.69 px shake and the skull and blood particles that the after log lacks; no frame with a differing stream was taken. Next: nothing
+      owned; a frame with the old stream (the guard's draws replayed) would prove it.
+- [ ] **CMP6-6. The DEVLOG entry is the wave's close role's** (deviation 6). The backlog row CMP-6 is ticked by this commit; `test_mp_minions`' new test names 4-30 and the
+      two silent levels by file, as the suite's other census does. Next: the close role's DEVLOG entry.
+- [x] **CMP6-7. Disclosed: the launches beyond "once each"** (deviation 7; the verifier's low). `test_mp_minions` 7, `test_mp_layer` 4, `test_mp_routes` 3, the no-argument
+      run 2: the fresh-runner launch, a first full run that found deviations 1 and 2, the relinked runner's confirmation and the gate 4 mutations; zero Smart App Control
+      refusals. Nothing to fix; later steps keep one link and one launch per runner.
+- [ ] **CMP6-8. The gate 4 mutation has no second witness** (deviation 8; the verifier's low). The verifier may not edit a tracked data file in place and read the four
+      mutation logs (12 + 1, 9, 6 failures) instead. Next, if the wave's close wants one: put `minion_spawn_` and `minion_spawn6` back into `enemy_spawn.names`, run
+      `test_mp.exe test_mp_minions` once (expected: 12 failures), restore the file (md5 `5bc2e4f1`).
+- [ ] **CMP6-9. `test_mp_layer`'s order test does not tell row-major from column-major** (deviation 9; a low carried from wave 4c-2's mutation role, not this step's). Next:
+      a pin that does, when the layer's order is next touched.
+
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):
 - [x] **R4c1-1. Gate 4 (the sweep chain) failed as worded on one level, 4-12, and needed a scope ruling: RULED (a), 2026-10-12, and the wave pushed** (medium; the one finding of all three
@@ -3634,7 +3669,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       either level exists (`out/parity/footage/INDEX.md`). Next: record 3-05 for 10 s without moving and 3-22 for 14 s (`docs/parity.md` sections 1-2), then fix in
       `sim/Minions` or the spawn gate. Gate: knight A's first frame and 3-22's departure tick against the clip; the stealth routes (3-04, 3-05, 3-11, 3-24: achievements
       26-28, 32, 42) and 3-22's re-flown. GAMEPLAY: yes if real. Joins: G3-2, R24/R25, R3c-3, R3c-8.
-- [ ] **CMP-6. A knight the original never spawns: the markers `minion_spawn6` (4-29) and `minion_spawn_` (3-09) have no `ETHCallback`** (high; structural; `decoded`;
+- [x] **CMP-6. A knight the original never spawns: the markers `minion_spawn6` (4-29) and `minion_spawn_` (3-09) have no `ETHCallback`** (high; structural; `decoded`;
       MOVES ROUTES). Evidence: 4-29 box [860,495,1050,632] (`pairs/4-29_h63_pair.png`, lower right: sky, gem and a black knight in the port, empty in the original; six
       original stills and 12 footage frames, `out/parity/footage/L1_out_4-29_sheet.png`, show none); 3-09's lone guard (`minion_spawn_` id 908 at (410,48), wayA, hold
       9999999) is in neither still. Cause: Ethanon runs `ETHCallback_` + the entity's exact name without extension (`ETHASUtil.cpp:63-79`); the listing has
@@ -3643,6 +3678,23 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       static), one `minion_spawn_`. Next: remove the two names from `enemy_spawn` (or mark them no-spawn with the citation); `test_mp_minions` pins the census (60
       spawning markers); re-fly 4-29 (its route was flown for the knights A and B, B being `minion_spawn6_1766`) and re-check 3-09's. Gate: 4-29 f420 shows no knight at
       the gem, reachability 108 / 20 / 0, `test_mp_routes` 128 of 128. GAMEPLAY: yes (one knight fewer on 4-29, the 3-09 guard gone).
+      *Closed by step 171 (CMP6, wave 4c-2), 2026-10-12; committed in wave 4c-2 (the commit titled "Magic Portals: two spawn markers the original never runs spawn no
+      knight"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it MOVES A ROUTE: 4-29's
+      route no longer wins (its first problem: the tap on tick 525 is off the view), the other 127 routes win on exactly the census's ticks (3-09 still on 838), so
+      `test_mp_routes` fails on 4-29 until the route phase (planning step 176) re-flies it.* Built as the Next says, as data and no code: `data/entity_roles.json`
+      `enemy_spawn.names` is `["minion_spawn"]`, its `_note` carrying the citations (`ETHASUtil.cpp:63-79`, `ETHScene.cpp:707-708`, `Platform.cpp:90-110`, the listing's
+      bytes 426511..426876, md5 `48fe65ce`); no line under `game/` changed and `MagicPortals.exe` is still `29166f75`. The census (derived from the 128 converted scenes and
+      the 128 raw `.esc`: 60 `minion_spawn` in 35 levels, one `minion_spawn_`, one `minion_spawn6`) names exactly 3-09 and 4-29, the hint; knights over the 128 levels 62 ->
+      60 (3-09 3 -> 2, 4-29 2 -> 1). Measured: the f420 sweep (owner's seed, 128 launches, validation silent) changed 2 levels and left 126 byte-identical: 4-29 (7,779 px;
+      the black knight beside the gem is gone: its box's mean absolute difference to the original's three stills 18.0 / 18.5 / 18.4 -> 1.13 / 1.65 / 1.50, pixels darker
+      than 30 7,383 -> 380, the original's 380) and 3-09 (80 px, at most 16 grey levels: the lone guard that dropped on tick 24 and died on the killer floor on tick 58 with
+      a 19.7 px shake is not made, so the effects' shared random stream differs; achievement 31's count of exactly 2 now stands from tick 1 instead of by accident). Pins:
+      `test_mp_minions` 294 -> 448 (the census pin 62 -> 60 and `aMarkerTheScriptHasNoCallbackForSpawnsNothing`), `test_mp_layer` 4,151 -> 4,157; the old table put back
+      fails 12 + 1 checks (both names), 9 (`minion_spawn_` alone) and 6 (`minion_spawn6` alone). 57 suites, 56 pass, 33,277 checks (`test_mp_routes` 2,351, failing on 4-29
+      only), reachability 108 / 20 / 0, 0 warnings. Independently verified once (`CMP6/verify1.json`: pass). **What it leaves**: (a) **4-29's route**, re-flown by the route
+      phase (planning step 176) for knight A only (`minion_spawn_1902`), dropping knight B's tap on tick 336 and the wait it needed; (b) 4-30's id 76, whose two callback
+      markers disagree with the script's count of 1 (CMP6-3); (c) achievement 31 on 3-09 (gold, no knight killed) is exercised by no route. The deviations are rows CMP6-1
+      to CMP6-9 above.
 - [x] **CMP-7. The red key's own light is not built** (high; light; `decoded`; moves no route). Levels: 4-20 (seen), 4-19 (holds the other red key; reads `match`, its
       light not separated from `red_key_state`'s halo). Evidence: 4-20 box 760,255,1040,465 (`pairs/4-20_h63_pair.png`: RGB 57,19,22 in the original against 26,25,35 in
       the port; the strip beside him 86,0,0 against 0,0,0; the key lies at the spawn and is taken on tick 1). Cause (listing): `ETHCallback_key` #119-186 (bytes

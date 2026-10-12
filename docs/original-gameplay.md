@@ -280,6 +280,12 @@ Until then: values live in `data/*.json` marked `_guess`, and
 `"ETHCallback_" + RemoveExtension(entityName)`. So **an entity has behaviour if and only
 if a matching `ETHCallback_*` symbol exists in `android_game.bin`.** 96 do.
 
+The match is by the EXACT name (`ETHASUtil.cpp:63-79`, `FindCallbackFunction`; the contact
+callbacks the same, `ETHPhysicsEntityController.cpp:66-70`), so a near-miss spelling runs
+nothing: the scenes place 60 `minion_spawn` markers (it has `ETHCallback_minion_spawn`), one
+`minion_spawn_` (3-09) and one `minion_spawn6` (4-29), and the last two have no callback, so
+they spawn no knight (planning step 171, CMP-6; `data/entity_roles.json` lists the one name).
+
 That turns "which of these 178 entities actually do something?" from judgement into an
 exact byte search — and it immediately rules three out. `moving_platform_single.ent`
 carries a `moveStride`, and inline `platform` and `anchor` carry `speed`/`stride`, that

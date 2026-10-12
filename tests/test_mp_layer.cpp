@@ -7261,7 +7261,9 @@ void ASwitchedDoorShakesTheViewAsItGoes() {
 // Rows 24, 9, 11, 22 and 5, each from a level left to run: a knight onto its killer
 // floor (3-09), a thrown stone into a destroyier (1-24), a rock the beholder threw
 // breaking (1-32), a carranca's fireball ending on 2-12's barrel and the barrel it
-// sets off. Contact callbacks and dynamic entities' own: all before the update.
+// sets off. (3-09's knight is carried onto the killer floor, as a portal would carry it, from planning step 171 on: the
+// knight that used to walk off its platform onto that floor of its own accord was minion_spawn_908, a marker named
+// `minion_spawn_` that has no callback in the script, so the original makes no knight there and the two it makes stand.) Contact callbacks and dynamic entities' own: all before the update.
 // The barrel's 50 comes one tick after a fireball's 5 was shown, so it lands with
 // nothing due and waits, and the next tremble is that forth undone (F6's shape).
 // Since planning step 114 the closed door_lift_1042 stops 2-12's fire, as F6 #72
@@ -7295,6 +7297,17 @@ void EventsALevelMakesOnItsOwnShakeTheView() {
         if (std::string(run.level) == "level11a" && !layer.SimLevel()->fire.bombs.empty()) {
             const entt::entity barrel = layer.SimLevel()->fire.bombs.front().body;
             registry.get<TransformComponent>(barrel).position = MagicPortals::Units::ToWorld(92.0, 200.0);
+        }
+        if (std::string(run.level) == "level8b") {
+            const auto& minions = layer.SimLevel()->minions;
+            CHECK_MSG(!minions.killers.empty() && !minions.minions.empty(), "3-09: a killer floor and a knight");
+            if (!minions.killers.empty() && !minions.minions.empty()) {
+                // 20 px over the floor's top, at its middle: it falls onto it from rest.
+                const auto& floor = minions.killers.front().box;
+                auto& at = registry.get<TransformComponent>(minions.minions.front().body);
+                at.position = glm::vec3(floor.centre.x, floor.centre.y + floor.half.y + MagicPortals::Units::ToMetres(20.0),
+                                        at.position.z);
+            }
         }
         quakeTickWith(layer, registry, ticks);
         quakeTickWith(layer, registry, ticks);
@@ -7813,17 +7826,14 @@ void ABodyFallingOnThePlayerShakesTheView() {
     }
 }
 
-// The minions' spawn drop end to end (sim/Impacts Watched::spawnDropPx), on 3-09
-// (level8b), whose three markers are the two kinds the census finds (Q.2
-// spawn_census): minion_spawn_1255 and minion_spawn_913 stand 16 px over their
-// floors, so the original's knights are made with their feet 2 px into them and
-// begin them at rest; minion_spawn_908 stands 176 px over the floor under it, and
-// the original's falls 157.9 px onto it. Played from the level's first tick: the
-// two standing knights' 9 px falls onto those floors begin nothing, and the high
-// one begins its floor once - on the step the original's feet reach it, its entity
-// point 18.1 px over the floor's top within that step's travel - and not again when
-// the port's own circle arrives 11.1 px lower. (A standing knight walking across a
-// seam onto the next tile begins that tile, as the original's does: printed.)
+// The minions' spawn drop end to end (sim/Impacts Watched::spawnDropPx), in two levels. On 3-09 (level8b) the two knights
+// the original makes, minion_spawn_1255 and minion_spawn_913, stand 16 px over their floors, so the original's knights are
+// made with their feet 2 px into them and begin them at rest. Played from the level's first tick: their 9 px falls onto those
+// floors begin nothing. (A standing knight walking across a seam onto the next tile begins that tile, as the original's
+// does: printed.) The level's third marker, minion_spawn_908, stood 176 px over the floor under it and this test took it for
+// the high knight until planning step 171 (CMP-6): its entity name is `minion_spawn_`, the script has no
+// ETHCallback_minion_spawn_, and the original makes no knight from it, so the level has two knights and this test pins that.
+// The high knight is 3-03's, below.
 void AKnightIsLookedAtWhereTheOriginalsStands() {
     const MagicPortals::Earthquake::Rules rules = quakeRules();
     entt::registry registry;
@@ -7840,9 +7850,10 @@ void AKnightIsLookedAtWhereTheOriginalsStands() {
     };
     const entt::entity standingA = knight("minion_spawn_1255");
     const entt::entity standingB = knight("minion_spawn_913");
-    const entt::entity high = knight("minion_spawn_908");
-    CHECK_MSG(standingA != entt::null && standingB != entt::null && high != entt::null, "3-09's three knights");
-    if (standingA == entt::null || standingB == entt::null || high == entt::null) return;
+    CHECK_MSG(standingA != entt::null && standingB != entt::null, "3-09's two knights");
+    CHECK_MSG(knight("minion_spawn_908") == entt::null && layer.SimLevel()->minions.minions.size() == 2,
+              "3-09 makes no knight at minion_spawn_908 (`minion_spawn_`, no callback in the script): two knights, not three");
+    if (standingA == entt::null || standingB == entt::null) return;
     // The floor a knight's marker stands over: the solid the original's feet are in
     // when it is made, a px above their lowest point.
     const double feetBelow = layer.SimLevel()->minions.rules.entityAboveFeetPx;
@@ -7865,19 +7876,13 @@ void AKnightIsLookedAtWhereTheOriginalsStands() {
     int standingBegins = 0;
     std::string standingSeen;
     std::string seamSeen;
-    std::vector<std::pair<int, MagicPortals::Impacts::Begin>> highBegins;
-    std::string highSeen;
     for (int tick = 1; tick <= 150; ++tick) {
         tickWith(layer, registry, kRest, {}, {});
         for (const auto& begin : layer.ImpactBegins()) {
             if (begin.kind != MagicPortals::Impacts::Kind::Minion) continue;
             const std::string said = " tick " + std::to_string(tick) + ": " + describe(begin, readImpact(rules, layer, begin)) +
                                      ";";
-            if (begin.body == high) {
-                highBegins.emplace_back(tick, begin);
-                highSeen += said;
-            } else if ((begin.body == standingA && begin.other == floorA) ||
-                       (begin.body == standingB && begin.other == floorB)) {
+            if ((begin.body == standingA && begin.other == floorA) || (begin.body == standingB && begin.other == floorB)) {
                 ++standingBegins;
                 standingSeen += said;
             } else if (begin.body == standingA || begin.body == standingB) {
@@ -7885,10 +7890,47 @@ void AKnightIsLookedAtWhereTheOriginalsStands() {
             }
         }
     }
-    std::printf("  3-09 knights: minion_spawn_908's begins:%s\n", highSeen.empty() ? " none" : highSeen.c_str());
     std::printf("  3-09 knights: the standing knights' other begins:%s\n", seamSeen.empty() ? " none" : seamSeen.c_str());
     CHECK_MSG(standingBegins == 0, "3-09: the knights made on their floors began them" + standingSeen);
-    CHECK_MSG(!highBegins.empty(), "3-09: minion_spawn_908 came down");
+    layer.OnDetach(registry);
+}
+
+// The same watch for a knight that DOES stand high: 3-03's (level2b), whose one marker, minion_spawn_913 at (612, 176), is the
+// highest over its floor that the original makes (Q.2 spawn_census: 29.9 px over the floor under it, the port's circle 41
+// px), now that 3-09's 157.9 px marker is known to make nothing (planning step 171). It begins its floor once - on the step
+// the original's feet reach it, its entity point 18.1 px over the floor's top within that step's travel - and not again when
+// the port's own circle arrives 11.1 px lower.
+void AKnightMadeHighOverItsFloorBeginsItOnceAsTheOriginalsFeetReachIt() {
+    const MagicPortals::Earthquake::Rules rules = quakeRules();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level2b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    entt::entity high = entt::null;
+    for (const auto& minion : layer.SimLevel()->minions.minions) {
+        if (minion.name == "minion_spawn_913") high = minion.body;
+    }
+    CHECK_MSG(high != entt::null && layer.SimLevel()->minions.minions.size() == 1, "3-03's one knight, minion_spawn_913");
+    if (high == entt::null) return;
+    std::vector<std::pair<int, MagicPortals::Impacts::Begin>> highBegins;
+    std::vector<double> travels; // the port's own fall on the tick of each begin, px
+    std::string highSeen;
+    double was = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(high).position).y;
+    for (int tick = 1; tick <= 150; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const double now = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(high).position).y;
+        for (const auto& begin : layer.ImpactBegins()) {
+            if (begin.kind != MagicPortals::Impacts::Kind::Minion || begin.body != high) continue;
+            highBegins.emplace_back(tick, begin);
+            travels.push_back(now - was);
+            highSeen += " tick " + std::to_string(tick) + ": " + describe(begin, readImpact(rules, layer, begin)) + ";";
+        }
+        was = now;
+    }
+    std::printf("  3-03 knight: minion_spawn_913's begins:%s\n", highSeen.empty() ? " none" : highSeen.c_str());
+    CHECK_MSG(!highBegins.empty(), "3-03: minion_spawn_913 came down");
     if (highBegins.empty()) return;
     const auto& [landedOn, landed] = highBegins.front();
     MagicPortals::Impacts::Shape floor;
@@ -7896,17 +7938,19 @@ void AKnightIsLookedAtWhereTheOriginalsStands() {
     double top = std::numeric_limits<double>::infinity();
     for (const glm::dvec2& point : floor.core) top = std::min(top, point.y);
     const ImpactRead read = readImpact(rules, layer, landed);
-    const double travel = std::fabs(landed.Approaching(read.along).y) / 60.0;
+    // The step's travel is the port's own (the begin's velocity is the original's: the port carries every body at the
+    // script clock's SimRatio times it, so at the matched 60 Hz twice), read off the body's two transforms.
+    const double travel = travels.front();
     const double feet = landed.atPx.y + layer.SimLevel()->minions.rules.entityAboveFeetPx;
-    CHECK_MSG(feet <= top + 0.5 && feet >= top - travel - 0.5,
-              "3-09: minion_spawn_908 began its floor (top " + std::to_string(top) + ") with the original's feet at " +
+    CHECK_MSG(travel > 0.0 && feet <= top + 0.5 && feet >= top - travel - 0.5,
+              "3-03: minion_spawn_913 began its floor (top " + std::to_string(top) + ") with the original's feet at " +
                   std::to_string(feet) + " going into the step, " + std::to_string(travel) + " px a step");
     int again = 0;
     for (std::size_t i = 1; i < highBegins.size(); ++i) {
         if (highBegins[i].second.other == landed.other) ++again;
     }
-    CHECK_MSG(again == 0, "3-09: minion_spawn_908 began its floor again when the port's circle landed");
-    std::printf("  3-09: minion_spawn_908 began its floor on tick %d, the original's feet at %.2f over a top of %.2f; %s\n",
+    CHECK_MSG(again == 0, "3-03: minion_spawn_913 began its floor again when the port's circle landed");
+    std::printf("  3-03: minion_spawn_913 began its floor on tick %d, the original's feet at %.2f over a top of %.2f; %s\n",
                 landedOn, feet, top, read.calls ? ("calls " + std::to_string(read.intensity)).c_str() : "no call");
     layer.OnDetach(registry);
 }
@@ -21772,6 +21816,7 @@ void runTests() {
     AStandingPlayerBeginsNothing();
     ABodyFallingOnThePlayerShakesTheView();
     AKnightIsLookedAtWhereTheOriginalsStands();
+    AKnightMadeHighOverItsFloorBeginsItOnceAsTheOriginalsFeetReachIt();
     TheBeholderHurtShakesTheView();
     TheF14RouteLandsOnTheBlock();
     TheSceneHasFourBlackBarsInFrontOfEverything();
