@@ -1506,7 +1506,7 @@ Only revolute joints exist. The ENML entity name must **start with** `"revoluteJ
 |---|---|---|---|
 | `otherEntityName` | string | `""` | `:60-63` |
 | `attachPointAX`, `attachPointAY` | float | `0.0` | `:44-50`; normalized −1..1 of entity A's scaled collision box (`ETHRevoluteJoint.cpp:60-64`: `boxSize = collisionBox.size.xy * scale * 0.5`, anchor = `anchorPoint * boxSize`) |
-| `attachPointBX`, `attachPointBY` | float | `0.0` | `:52-58` |
+| `attachPointBX`, `attachPointBY` | float | `0.0` | `:52-58`; normalized −1..1 of **entity B's** scaled collision box, B being the entity the joint names (below), NOT A's: `ETHRevoluteJoint.cpp:35-44` sets `localAnchorA = ComputeAnchorPosition(entityA, attachPointA)` and `localAnchorB = ComputeAnchorPosition(entityB, attachPointB)` (`:39-40`, after `jointDef.Initialize(...)` has set both on one point), so the two world points are NOT one where the level places the bodies and Box2D pulls the dynamic one until they are (CMP-2, planning step 174) |
 | `enableLimit` | bool-string | false | `:70-73` → `ETHGlobal::IsTrue` |
 | `enableMotor` | bool-string | false | `:75-78` |
 | `lowerAngle` | float (radians) | `0.0` | `:87-92` |
@@ -1521,7 +1521,20 @@ Only revolute joints exist. The ENML entity name must **start with** `"revoluteJ
 whose key equals the joint's ENML entity name* (`ETHPhysicsEntityController.cpp:266-283`): a `string` value
 names the other entity, an `int` value gives its scene id; neither ⇒ the joint is skipped. Both forms ship:
 `spinning_cross.ent` uses the fallback (`<Joints>revoluteJoint{…}` + custom `string revoluteJoint = "tower"`),
-`ushape_joint.ent` uses the direct form (`otherEntityName = anchor;` / `= meteor;`).
+`ushape_joint.ent` uses the direct form (`otherEntityName = anchor;` / `= meteor;`). The other entity is the **first** in
+the scene's entity array whose name or id matches (`:287-298`, `break` on the first), and the array is the bucket
+manager's, not the file's order (`ETHScene::ResolveJoints` -> `m_buckets.GetEntityArray`, `ETHScene.cpp:917-922`);
+every shipped joint names an entity placed once (census, `out/parity/program/CMP2/census.md`), so the two orders agree.
+`ResolveJoints` runs once at load, in the level's `preLoop`: `Game::preLoop` (listing bytes 112536..114414, #37) calls
+`SGlobalScale::scaleEntities` (6838..7228), which scales the `scalable` entities and then makes the joints (`CALLSYS
+ResolveJoints`, #98), so before the first physics step.
+
+**What the converter writes for a joint** (`tscn.py`, 2026-10-12, planning step 174): beside the eight `joint_*` keys
+(A's anchor against A's scaled half box, the limits and the motor), `metadata/joint_other` (the node that is B, found
+as `ResolveJoints` finds it, the file's order) and `metadata/joint_anchor_b_x/y` (attach point B against **B's** box and
+**B's** `<Scale>`, in B's own frame, unrotated: B's angle is the node's). The port turns it by the node's `rotation`
+(Box2D's body angle, `-radians` of the `.esc`'s, `ETHPhysicsSimulator.cpp:76`; `x' = c x - s y, y' = s x + c y` in the
+level's +y-down px). A joint whose partner is not placed writes neither and is reported as skipped.
 
 Keys exercised by shipped data: `attachPointAX/AY/BX/BY`, `otherEntityName`, `enableMotor`, `motorSpeed`,
 `maxMotorTorque`. **`enableLimit`, `upperAngle`, `lowerAngle` are source-verified but never used in any

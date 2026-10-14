@@ -397,6 +397,16 @@ nothing while raising no error.
 **Angles are RADIANS**, now settled from data rather than inferred: the shipped `±1.57075`
 is `±π/2`. Only 10 instances exist, all in worlds 2–4.
 
+**A joint has two ends, and the swinging body stands where THEY meet, not where the level placed it.**
+`ETHRevoluteJoint.cpp:35-44` puts the joint's two local anchors on `attachPointA x half of A's box` and
+`attachPointB x half of B's box` (each the half of its own entity's collision box times its scale, `:60-64`), A
+being the entity that carries the `<Joints>` and B the first entity its `revoluteJoint` datum names (`anchor`, in
+all ten). Box2D's position constraint takes the whole error out in the first step and A is the dynamic body, so
+**A moves until its anchor is on B's**: with A's attach point at its centre (all ten) the plank's centre ends on
+B's centre plus attach point B turned by B's angle. Eight of the ten start somewhere other than where the level
+places them: 2-31's seesaw 31.8 px (14.0 left, 28.5 down), 3-19's plank 8 px down, 3-15's 4 right, 4-31's 3 up,
+2-28's 2.1 (0.6 right, 2 down), 3-20's 2 left, 2-29's 0.6 right, 4-11's 0.4 left; 2-30's and 3-22's already meet.
+
 ### 6.6 Level properties
 
 **DATA.** The `properties` entity, in 102 of 128 levels. Chapter 4 is where they matter:

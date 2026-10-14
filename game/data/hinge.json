@@ -2,8 +2,10 @@
   "_about": [
     "Seesaws and spinning platforms - the bodies the original pins with a revolute",
     "joint. Almost nothing is authored here, because almost nothing is ours: the",
-    "converter already carries the eight joint_* keys and the revoluteJoint name",
-    "through to each placement, and the engine's own solver does the rest.",
+    "converter carries the joint_* keys, the revoluteJoint name and, since planning",
+    "step 174 (CMP-2), the joint's other end (joint_other, joint_anchor_b_x/y) through",
+    "to each placement, Hinge::Find puts each body where the joint holds it",
+    "(ETHRevoluteJoint.cpp:35-44) and the engine's own solver does the rest.",
     "Hinge.hpp says how the anchor and the angle are worked out."
   ],
   "joint": {

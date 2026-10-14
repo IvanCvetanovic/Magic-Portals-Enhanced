@@ -292,8 +292,9 @@ void AllLevels() {
     CHECK_EQ(total.keys["scale"], 33);
     CHECK_EQ(total.keys.size(), std::size_t{12});
 
-    // Metadata by spelling. The 80 bare numbers are the ten hinges' eight
-    // joint_* keys, and nothing else is written bare.
+    // Metadata by spelling. The 100 bare numbers are the ten hinges' ten
+    // joint_* keys (the eight, and attach point B's joint_anchor_b_x and _y:
+    // planning step 174, below), and nothing else is written bare.
     //
     // The strings were 5,700 until Enhanced's b572fec, whose converter writes
     // the original's lighting as metadata/eth_* strings. The levels were
@@ -311,9 +312,21 @@ void AllLevels() {
     // draw a sprite. Every file came out as the one before plus those lines:
     // 16,934 + 840, the converter's own count, and nothing else in this
     // inventory moved. The layer draws the systems of the file a node names.
-    CHECK_EQ(total.metaStrings, 17774);
+    //
+    // Then 17,784, and 100 bare numbers where there were 80 (planning step 174, CMP-2):
+    // the levels were regenerated on 12 October 2026 with the converter that
+    // carries a revolute joint's attach point B. Each of the ten placements that
+    // carry a joint gained three lines, joint_other (the node that is B, a
+    // string) and joint_anchor_b_x and _y (B's attach point in B's own frame, bare
+    // numbers), and not one other byte of any file changed: the unchanged converter
+    // reproduced the 128 files and chapters.json byte for byte into a staging
+    // directory first, and the new one's staging differs from them in exactly
+    // those ten files by exactly those thirty lines. 17,774 + 10 = 17,784 and
+    // 80 + 20 = 100; every new number is a joint_* key, so the count outside
+    // the joints stays 0.
+    CHECK_EQ(total.metaStrings, 17784);
     CHECK_EQ(total.metaVectors, 837);
-    CHECK_EQ(total.metaNumbers, 80);
+    CHECK_EQ(total.metaNumbers, 100);
     CHECK_EQ(total.metaNumbersOutsideJoints, 0);
 
     // The collision polygons: 956 eight-point chamfered boxes and 16 triangles.

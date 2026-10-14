@@ -16,20 +16,32 @@
 //
 // WHERE THE NUMBERS COME FROM
 //
-// The converter already carries the joint through: eight bare metadata/joint_*
-// keys, plus metadata/revoluteJoint, a STRING naming the other body by its
-// entity_name. In every one of the ten placements that string is "anchor", and
-// every level that has one places an `anchor` node - a static body - so this is
-// body to body and never body to world.
+// The converter carries the joint through: eight bare metadata/joint_* keys (A's
+// attach point and the limits), metadata/revoluteJoint, a STRING naming the other
+// body by its entity_name, and since planning step 174 (CMP-2) the other end
+// itself: metadata/joint_other, the node that is B, and joint_anchor_b_x/y, B's
+// attach point in B's own frame. In every one of the ten placements the entity
+// is "anchor" and the node a static body, so this is body to body and never
+// body to world.
 //
 // The original's attachPoints are FRACTIONS OF THE HALF COLLISION BOX
-// (ETHRevoluteJoint::ComputeAnchorPosition: anchorPoint * size * scale * 0.5).
-// The converter multiplies A's out to pixels and writes joint_anchor_x/y, and it
-// DROPS B's. That loss costs nothing here: Box2D's Initialize puts both anchors
-// on the same world point, so B's anchor is simply where A's lands, expressed in
-// B's frame. level27a checks out to within a pixel - the anchor node at x 460
-// with a 256-wide box and attachPointBX -0.8 gives 460 - 102.4 = 357.6, and the
-// platform stands at 357.
+// (ETHRevoluteJoint::ComputeAnchorPosition: anchorPoint * size * scale * 0.5),
+// each of ITS OWN entity's box: A's against A's, B's against B's
+// (ETHRevoluteJoint.cpp:35-44, :60-64). The converter multiplies both out to
+// pixels.
+//
+// B'S POINT IS NOT A'S. It was once thought to cost nothing: "Box2D's Initialize
+// puts both anchors on the same world point, so B's anchor is simply where A's
+// lands". But the constructor overwrites what Initialize set with the two
+// authored local anchors (:39-40), and those two points are NOT on one world
+// point where the level places the bodies: 8 of the 10 are 0.4 to 31.8 px
+// apart (2-31's seesaw 31.8, 3-19's plank 8, 2-28 2.1 - this file's first
+// author saw level27a's 357.6 against the platform's 357 and let the 0.6 px
+// go). Box2D's position constraint takes the whole error out in the first step,
+// and A is the dynamic body, so A moves to where its anchor meets B's: the
+// body's centre ends on B's world point (A's own attach point is its centre in
+// all ten). Find puts it there before the first tick, and gives the engine's
+// joint B's point as the connected anchor, so the solver holds it there.
 //
 // THE ANGLE, WHICH IS THE PART THAT BITES
 //
@@ -109,6 +121,11 @@ struct Hinged {
     entt::entity body = entt::null;
     entt::entity anchor = entt::null;
 
+    // Where the level placed the body's centre, and where its joint holds it (px, +y down): B's centre plus attach point B
+    // turned by B's angle, less A's own attach point turned by A's. Equal when the two ends already meet (2-30, 3-22).
+    glm::dvec2 placedPx{0.0};
+    glm::dvec2 heldPx{0.0};
+
     bool limited = false;
     double restRad = 0.0;  // the hinge angle the level is built at
     double lowerRad = 0.0; // as authored, relative to rest
@@ -128,7 +145,10 @@ struct State {
 // placement whose body or whose anchor was not built is passed over, which is
 // what a level started without its statics leaves - the anchor is static.
 // False, with `error`, for a revoluteJoint naming an entity the level does not
-// place, because that is a level that would swing about nothing.
+// place, because that is a level that would swing about nothing; for a level
+// whose conversion lacks attach point B, which would hold every body at the
+// middle of its anchor; and for a joint_other that is not the entity the
+// custom datum names.
 bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilder::Built& built,
           entt::registry& registry, const Rules& rules, State& out, std::string& error);
 

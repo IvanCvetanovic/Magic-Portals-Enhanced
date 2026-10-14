@@ -189,6 +189,16 @@ class Collision:
     # A revolute joint, present iff the entity ships <Joints>. Keys are the ENML ones,
     # values already converted: anchor in world units, angles in radians.
     joint: dict[str, float] = field(default_factory=dict)
+    # The rest of the joint, read where the engine reads it (ETHRevoluteJoint.cpp:35-44,
+    # ETHPhysicsEntityController.cpp:252-298). `joint_attach_b` is NORMALISED -1..1 like
+    # attachPointA but against ENTITY B's half box, which only the scene can say, so it
+    # stays unresolved here and tscn.py turns it into world units. `joint_other_name` and
+    # `joint_other_id` name entity B: otherEntityName, else the custom datum keyed like the
+    # joint (a string names it, an int is its scene id). Empty / -1 when the entity names none.
+    joint_name: str = ""
+    joint_attach_b: tuple[float, float] = (0.0, 0.0)
+    joint_other_name: str = ""
+    joint_other_id: int = -1
 
 
 @dataclass
@@ -318,50 +328,100 @@ def _parse_compound(
     return out
 
 
-def _parse_joint(collision_el: ET.Element, box: tuple[float, float]) -> dict[str, float]:
-    """Read a ``<Joints>`` payload — a revolute (pin) joint, as ENML.
-
-    Nested inside ``<Collision>``, exactly like ``<Polygon>`` and ``<Compound>``. Looking
-    one level higher finds nothing, which is the same trap ``<Polygon>`` set earlier.
+def _revolute_definition(collision_el: ET.Element) -> tuple[str, dict[str, str]] | None:
+    """The first ``revoluteJoint*`` definition in a ``<Joints>`` payload: its ENML name and
+    attributes. Nested inside ``<Collision>``, exactly like ``<Polygon>`` and ``<Compound>``.
+    Looking one level higher finds nothing, which is the same trap ``<Polygon>`` set earlier.
 
     Only revolute joints exist: the ENML entity name must START WITH ``revoluteJoint``
     (a prefix test, ``ETHJoint::IsRevoluteJoint``), and shipped names are ``revoluteJoint``,
     ``revoluteJoint0/1`` and ``revoluteJointA``.
-
-    Anchors are normalised −1..1 of the entity's scaled collision half-box
-    (``ETHRevoluteJoint.cpp:60-64``) and are converted to world units here. Angles are
-    RADIANS — the shipped ``±1.57075`` is ``±π/2``, which is what settles the units
-    question the format notes left open.
     """
     node = collision_el.find("Joints")
     if node is None or not (node.text or "").strip():
-        return {}
+        return None
     parsed = enml.parse(node.text or "")
-    def number(attrs: dict[str, str], name: str, fallback: float) -> float:
-        raw = attrs.get(name, "").strip()
-        try:
-            return float(raw)
-        except ValueError:
-            return fallback
+    for key, attrs in parsed.items():
+        if key.startswith("revoluteJoint"):
+            return key, attrs
+    return None
 
-    def truthy(attrs: dict[str, str], name: str) -> float:
+
+def _joint_number(attrs: dict[str, str], name: str, fallback: float) -> float:
+    raw = attrs.get(name, "").strip()
+    try:
+        return float(raw)
+    except ValueError:
+        return fallback
+
+
+def _parse_joint(collision_el: ET.Element, box: tuple[float, float]) -> dict[str, float]:
+    """Read a ``<Joints>`` payload - a revolute (pin) joint, as ENML.
+
+    Anchors are normalised -1..1 of the entity's scaled collision half-box
+    (``ETHRevoluteJoint.cpp:60-64``) and are converted to world units here. Angles are
+    RADIANS - the shipped ``+-1.57075`` is ``+-pi/2``, which is what settles the units
+    question the format notes left open. This is entity A's half: attach point B belongs to
+    the OTHER entity's box (``Collision.joint_attach_b``, resolved by tscn.py).
+    """
+    found = _revolute_definition(collision_el)
+    if found is None:
+        return {}
+    _, attrs = found
+
+    def number(name: str, fallback: float) -> float:
+        return _joint_number(attrs, name, fallback)
+
+    def truthy(name: str) -> float:
         return 1.0 if attrs.get(name, "").strip().lower() in ("true", "1") else 0.0
 
-    for key, attrs in parsed.items():
-        if not key.startswith("revoluteJoint"):
-            continue
-        return {
-            "anchor_x": number(attrs, "attachPointAX", 0.0) * box[0] * 0.5,
-            "anchor_y": number(attrs, "attachPointAY", 0.0) * box[1] * 0.5,
-            "enable_limit": truthy(attrs, "enableLimit"),
-            # ETHJoint.cpp:80-92 — upper defaults to 2*pi, lower to 0.
-            "lower_angle": number(attrs, "lowerAngle", 0.0),
-            "upper_angle": number(attrs, "upperAngle", 6.2831853),
-            "enable_motor": truthy(attrs, "enableMotor"),
-            "motor_speed": number(attrs, "motorSpeed", 0.0),
-            "max_motor_torque": number(attrs, "maxMotorTorque", 100.0),
-        }
-    return {}
+    return {
+        "anchor_x": number("attachPointAX", 0.0) * box[0] * 0.5,
+        "anchor_y": number("attachPointAY", 0.0) * box[1] * 0.5,
+        "enable_limit": truthy("enableLimit"),
+        # ETHJoint.cpp:80-92 — upper defaults to 2*pi, lower to 0.
+        "lower_angle": number("lowerAngle", 0.0),
+        "upper_angle": number("upperAngle", 6.2831853),
+        "enable_motor": truthy("enableMotor"),
+        "motor_speed": number("motorSpeed", 0.0),
+        "max_motor_torque": number("maxMotorTorque", 100.0),
+    }
+
+
+def _joint_partner(
+    collision_el: ET.Element, custom: dict[str, tuple[str, str]]
+) -> tuple[str, tuple[float, float], str, int]:
+    """Entity B of a joint, as the engine finds it: ``(joint name, attach point B, name, id)``.
+
+    ``ETHPhysicsEntityController::ResolveJoints`` (``:252-298``) takes ``otherEntityName`` from
+    the joint definition; if that is empty, the custom datum keyed like the joint, a ``string``
+    naming the entity and an ``int`` giving its scene id, and any other type skips the joint
+    (``:264-283``). The attach point is ``ETHJoint::GetAttachPointInEntityB`` (``:52-58``),
+    ``attachPointBX/BY``, 0 when absent.
+    """
+    found = _revolute_definition(collision_el)
+    if found is None:
+        return "", (0.0, 0.0), "", -1
+    joint_name, attrs = found
+    attach = (
+        _joint_number(attrs, "attachPointBX", 0.0),
+        _joint_number(attrs, "attachPointBY", 0.0),
+    )
+    other_name = attrs.get("otherEntityName", "")
+    other_id = -1
+    if not other_name:
+        datum = custom.get(joint_name)
+        if datum is not None and datum[0] == "string":
+            other_name = datum[1]
+        elif datum is not None and datum[0] == "int":
+            other_id = _scanf_int_text(datum[1], -1)
+    return joint_name, attach, other_name, other_id
+
+
+def _scanf_int_text(text: str, default: int) -> int:
+    """The leading integer of a string, as ``sscanf("%d")`` reads it; ``default`` if none."""
+    match = _SCANF_INT.match(text)
+    return int(match.group(0)) if match else default
 
 
 def _scanf_int(element: ET.Element, attr: str, default: int) -> int:
@@ -468,31 +528,41 @@ def parse_element(element: ET.Element, *, name: str = "") -> Entity:
         element
     )
 
+    # <Variable> uses child ELEMENTS, not attributes:
+    #     <Variable><Type>float</Type><Name>speed</Name><Value>4</Value></Variable>
+    # An earlier version read var.get("name")/var.get("value") and therefore silently
+    # parsed every custom-data bag as empty — no error, just nothing. This bag is
+    # where the original's designers put per-instance gameplay parameters, so losing
+    # it loses `teleportable`, `max_portals`, portal pairing, platform speeds…
+    # Read before the collision because a joint finds its other entity in it, by <Type>
+    # (ETHPhysicsEntityController.cpp:264-283); `custom_data` keeps the values alone.
+    typed_custom: dict[str, tuple[str, str]] = {}
+    custom = element.find("CustomData")
+    if custom is not None:
+        for var in custom.findall("Variable"):
+            key = (var.findtext("Name") or "").strip()
+            if key:
+                value = (var.findtext("Value") or "").strip()
+                typed_custom[key] = ((var.findtext("Type") or "").strip(), value)
+                ent.custom_data[key] = value
+
     collision_el = element.find("Collision")
     if collision_el is not None:
         pos = collision_el.find("Position")
         size = collision_el.find("Size")
         box = (_f(size, "x"), _f(size, "y"))
+        joint_name, attach_b, other_name, other_id = _joint_partner(collision_el, typed_custom)
         ent.collision = Collision(
             offset=(_f(pos, "x"), _f(pos, "y")),
             size=box,
             polygon=_parse_polygon(collision_el),
             compound=_parse_compound(collision_el, box),
             joint=_parse_joint(collision_el, box),
+            joint_name=joint_name,
+            joint_attach_b=attach_b,
+            joint_other_name=other_name,
+            joint_other_id=other_id,
         )
-
-    custom = element.find("CustomData")
-    if custom is not None:
-        # <Variable> uses child ELEMENTS, not attributes:
-        #     <Variable><Type>float</Type><Name>speed</Name><Value>4</Value></Variable>
-        # An earlier version read var.get("name")/var.get("value") and therefore silently
-        # parsed every custom-data bag as empty — no error, just nothing. This bag is
-        # where the original's designers put per-instance gameplay parameters, so losing
-        # it loses `teleportable`, `max_portals`, portal pairing, platform speeds…
-        for var in custom.findall("Variable"):
-            key = (var.findtext("Name") or "").strip()
-            if key:
-                ent.custom_data[key] = (var.findtext("Value") or "").strip()
 
     return ent
 

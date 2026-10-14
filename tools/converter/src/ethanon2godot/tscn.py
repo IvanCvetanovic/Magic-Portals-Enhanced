@@ -120,6 +120,10 @@ _HALO_SIZE_DEFAULT = (64.0, 64.0)
 # The joint keys entity._parse_joint resolves against the collision box, and the <Scale> axis
 # each takes; the angles and the motor are not lengths.
 _JOINT_ANCHOR_AXIS = {"anchor_x": 0, "anchor_y": 1}
+# What a joint says about its OTHER entity (ETHRevoluteJoint.cpp:35-44): the node that is B, and
+# attach point B in B's own local frame, in world units against B's scaled half box.
+_JOINT_OTHER_KEY = "joint_other"
+_JOINT_ANCHOR_B_KEYS = ("joint_anchor_b_x", "joint_anchor_b_y")
 
 
 def quote(value: str) -> str:
@@ -310,6 +314,33 @@ def _collider_lines(inst: Instance, parent: str, sub_ids: list[str]) -> tuple[li
     return lines, "shape"
 
 
+def _joint_partner(scene: Scene, ent: Entity) -> Instance | None:
+    """The instance that is entity B of ``ent``'s joint, or ``None`` when the joint has none.
+
+    ``ETHPhysicsEntityController::ResolveJoints`` (``:252-298``) walks the scene's entities and
+    takes the FIRST whose name is the joint's other-entity name or whose id is its other-entity
+    id (``:287-298``). The walk here is the file's order, which is the order the instances are
+    added in; every shipped joint names an entity that is placed once (the census of
+    ``out/parity/program/CMP2``), so the engine's bucket order cannot pick a different one.
+    A partner the converter itself does not write (no definition, a scale not above 0) is no
+    partner: the port would find no node for it.
+    """
+    col = ent.collision
+    if col is None:
+        return None
+    for other in scene.instances:
+        if other.entity is None:
+            continue
+        named = bool(col.joint_other_name) and other.entity_name == col.joint_other_name
+        numbered = col.joint_other_id >= 0 and other.id == col.joint_other_id
+        if not (named or numbered):
+            continue
+        if not (other.entity.scale[0] > 0.0 and other.entity.scale[1] > 0.0):
+            return None
+        return other
+    return None
+
+
 def _vertical_offset(ent, sprite_dir: Path | None) -> tuple[float, float] | None:
     """Sprite offset for a ``type=2`` (``ET_VERTICAL``) entity, or ``None`` if unknowable.
 
@@ -491,6 +522,33 @@ def write_scene(
                 if axis is not None:
                     value *= ent.scale[axis]
                 body.append(f"metadata/joint_{key} = {_num(value)}")
+            # Attach point B, and which node it is on. The anchor of B is its attach point times
+            # the half of ENTITY B's box times B's <Scale> (ETHRevoluteJoint.cpp:60-64 with
+            # entityB), NOT A's: a joint is built on two bodies and Box2D pulls the dynamic one
+            # until the two world points meet (:35-44), so dropping B left the body where the
+            # level put it instead of where the joint holds it.
+            partner = _joint_partner(scene, ent)
+            if partner is None or partner.entity is None:
+                report.skipped.append(
+                    f"{inst.entity_name}#{inst.id}: its revolute joint names no placed entity "
+                    f"({ent.collision.joint_other_name or ent.collision.joint_other_id!r}); "
+                    "attach point B not written"
+                )
+            else:
+                other = partner.entity
+                other_box = other.collision.size if other.collision is not None else (0.0, 0.0)
+                body.append(
+                    f"metadata/{_JOINT_OTHER_KEY} = "
+                    f"{quote(_node_name(partner.entity_name, partner.id))}"
+                )
+                for axis, key in enumerate(_JOINT_ANCHOR_B_KEYS):
+                    value = (
+                        ent.collision.joint_attach_b[axis]
+                        * other_box[axis]
+                        * 0.5
+                        * other.scale[axis]
+                    )
+                    body.append(f"metadata/{key} = {_num(value)}")
         if ent.collision is not None and not ent.is_collidable:
             # UNSCALED, unlike a body: this box is for the scripts' own overlap tests, and a
             # script's GetCollisionBox() returns the box as read, never times the <Scale>

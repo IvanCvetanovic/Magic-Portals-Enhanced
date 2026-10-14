@@ -38,11 +38,13 @@
 #include "core/PhysicsSettings.hpp"
 #include "sim/Game.hpp"
 #include "sim/Hinge.hpp"
+#include "sim/Units.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
 
@@ -234,6 +236,324 @@ void ASeesawStopsAtItsOwnEnds() {
               "with the long 1.1325 below rest and the short 0.4382 above, as level30a authors it");
 }
 
+// ---- ATTACH POINT B (planning step 174, CMP-2) -------------------------------------------------------------------------
+//
+// ETHRevoluteJoint.cpp:35-44 puts the joint's two ends on `attachPointA x half of A's box` and `attachPointB x half of B's
+// box` (:60-64), and Box2D pulls the DYNAMIC body until the two world points meet. A is the swinging body, B the static
+// `anchor`, and A's attach point is its own centre in all ten placements, so the body's centre ends on B's world point:
+// B's centre plus B's attach point turned by B's angle.
+//
+// THE CONVENTION. A node's tscn `rotation` is Box2D's body angle (-radians of the .esc's: ETHPhysicsSimulator.cpp:76); a
+// local offset is turned by it in the level's own space (+y down), x' = c x - s y, y' = s x + c y. The tests below do that
+// arithmetic THEMSELVES, from the scene file, so they do not borrow Hinge.cpp's.
+
+// One placement per row, from the census (out/parity/program/CMP2/census.md, derived from the original's own .esc by census.py):
+// the move of the body's centre from where the level places it to where its joint holds it, in px (+x right, +y down).
+struct Pull {
+    const char* level;
+    const char* name; // 1-based, as the game names it
+    double dx;
+    double dy;
+};
+constexpr Pull kPulls[] = {
+    {"level27a", "2-28", +0.6, +2.0},       // anchor 885 (460, 166), B (-102.4, 0); plank placed (357, 164)
+    {"level28a", "2-29", +0.6, 0.0},        // anchor 885 (460, 144), B (-102.4, 0)
+    {"level29a", "2-30", 0.0, 0.0},         // anchor 916 (256, 221) at -90 deg: (-32, 0) turned to (0, -32) = the plank's own centre
+    {"level30a", "2-31", -14.037, +28.496}, // anchor 957 (280, 270) at 187 deg, B (-64, 12.8): the seesaw 31.8 px away
+    {"level14b", "3-15", +4.0, 0.0},        // anchor 1011 (588, 216) at -90 deg
+    {"level18b", "3-19", 0.0, +8.0},        // anchor 1553 (128, 112) 256 x 32, B (32, 8); the plank is turned 90 deg
+    {"level19b", "3-20", -2.0, 0.0},        // anchor 1553 (448, 160) 256 x 32, B (-128, 0)
+    {"level21b", "3-22", 0.0, 0.0},         // anchor 1011 (386, 224) at -90 deg
+    {"level10c", "4-11", -0.4, 0.0},        // anchor 2131 (262, 128) 16 x 16, B (-6.4, 0)
+    {"level30c", "4-31", 0.0, -3.0},        // anchor 2095 (472, 80) 128 x 32, B (64, 0)
+};
+
+glm::dvec2 Turn(const glm::dvec2& v, double radians) {
+    const double c = std::cos(radians);
+    const double s = std::sin(radians);
+    return glm::dvec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+
+const Tscn::Node* NodeNamed(const Tscn::Scene& scene, const std::string& name) {
+    for (const Tscn::Node& node : scene.nodes) {
+        if (node.parent == "." && node.name == name) return &node;
+    }
+    return nullptr;
+}
+
+double Number(const Tscn::Node& node, const char* key) {
+    const Tscn::Value* value = node.Meta(key);
+    double read = 0.0;
+    if (value == nullptr || !value->AsNumber(read)) {
+        CHECK_MSG(false, node.name + " carries no metadata/" + key);
+        return 0.0;
+    }
+    return read;
+}
+
+glm::dvec2 PlacedAt(const Tscn::Node& node) {
+    const Tscn::Value* value = node.Find("position");
+    if (value == nullptr || value->kind != Tscn::Value::Kind::Vector2) return glm::dvec2(0.0);
+    return glm::dvec2(value->numbers[0], value->numbers[1]);
+}
+
+double TurnedBy(const Tscn::Node& node) {
+    const Tscn::Value* value = node.Find("rotation");
+    double read = 0.0;
+    return value != nullptr && value->AsNumber(read) ? read : 0.0;
+}
+
+glm::dvec2 BodyAtPx(Run& run, const Hinge::Hinged& hinged) {
+    return Units::ToPixels(run.registry.get<Supersonic::TransformComponent>(hinged.body).position);
+}
+
+// Where the joint of `swinging` holds A's centre, from the scene file alone: B's centre plus attach point B turned by B's
+// angle, less A's own attach point turned by A's (zero in all ten, so the centre; the term stays so the rule is whole).
+bool HeldAt(const Tscn::Scene& scene, const Tscn::Node& swinging, glm::dvec2& placed, glm::dvec2& held) {
+    const Tscn::Value* other = swinging.Meta("joint_other");
+    if (other == nullptr || other->kind != Tscn::Value::Kind::String) {
+        CHECK_MSG(false, swinging.name + " names no joint_other");
+        return false;
+    }
+    const Tscn::Node* anchor = NodeNamed(scene, other->text);
+    CHECK_MSG(anchor != nullptr, swinging.name + "'s joint_other " + other->text + " is placed");
+    if (anchor == nullptr) return false;
+    const glm::dvec2 attachB(Number(swinging, "joint_anchor_b_x"), Number(swinging, "joint_anchor_b_y"));
+    const glm::dvec2 attachA(Number(swinging, "joint_anchor_x"), Number(swinging, "joint_anchor_y"));
+    placed = PlacedAt(swinging);
+    held = PlacedAt(*anchor) + Turn(attachB, TurnedBy(*anchor)) - Turn(attachA, TurnedBy(swinging));
+    return true;
+}
+
+// WHERE EACH HINGED BODY STANDS. The ten census levels, at the start, a tick in, and well on: the body's centre is on its
+// joint's world point (to 0.01 px at the start, and the solver then adds nothing: 0.0003 px at the worst over 420 ticks,
+// under whatever the level puts on it), and the move from where the level placed it is the census's.
+void EveryHingedBodyStandsWhereItsJointHoldsIt() {
+    int moved = 0;
+    for (const Pull& pull : kPulls) {
+        const std::string level = std::string(pull.name) + " (" + pull.level + ")";
+        Run run;
+        if (!Begin(pull.level, run)) continue;
+        if (run.level.hinge.hinges.size() != 1) {
+            CHECK_MSG(false, level + " pins exactly one body");
+            continue;
+        }
+        const Hinge::Hinged& hinged = run.level.hinge.hinges.front();
+        const Tscn::Node* node = NodeNamed(run.data.scene, hinged.name);
+        if (node == nullptr) {
+            CHECK_MSG(false, level + ": " + hinged.name + " is a node of the scene");
+            continue;
+        }
+        glm::dvec2 placed(0.0);
+        glm::dvec2 held(0.0);
+        if (!HeldAt(run.data.scene, *node, placed, held)) continue;
+
+        // The arithmetic from the file against the census's numbers: the two come from different places (the original's
+        // own .esc, and this level's converted file).
+        CHECK_MSG(std::fabs((held.x - placed.x) - pull.dx) < 0.01 && std::fabs((held.y - placed.y) - pull.dy) < 0.01,
+                  level + ": the joint pulls the body (" + std::to_string(held.x - placed.x) + ", " +
+                      std::to_string(held.y - placed.y) + "), the census says (" + std::to_string(pull.dx) + ", " +
+                      std::to_string(pull.dy) + ")");
+
+        const glm::dvec2 start = BodyAtPx(run, hinged);
+        CHECK_MSG(std::fabs(start.x - held.x) < 0.01 && std::fabs(start.y - held.y) < 0.01,
+                  level + ": the body starts at (" + std::to_string(start.x) + ", " + std::to_string(start.y) +
+                      ") where its joint holds it (" + std::to_string(held.x) + ", " + std::to_string(held.y) + ")");
+        if (std::fabs(pull.dx) + std::fabs(pull.dy) > 0.0) ++moved;
+
+        glm::dvec2 worst(0.0);
+        const int stops[] = {1, 60, 420};
+        int tick = 0;
+        for (const int stop : stops) {
+            for (; tick < stop; ++tick) Tick(run);
+            const glm::dvec2 at = BodyAtPx(run, hinged);
+            worst = glm::max(worst, glm::abs(at - held));
+        }
+        CHECK_MSG(worst.x < 0.01 && worst.y < 0.01,
+                  level + ": the joint keeps the body on its point for 420 ticks, off by at most (" +
+                      std::to_string(worst.x) + ", " + std::to_string(worst.y) + ") px");
+        std::printf("  %s: placed (%.3f, %.3f) -> held (%.3f, %.3f), pull (%+.3f, %+.3f), start (%.3f, %.3f), off by at most (%.4f, %.4f)\n",
+                    level.c_str(), placed.x, placed.y, held.x, held.y, held.x - placed.x, held.y - placed.y, start.x,
+                    start.y, worst.x, worst.y);
+    }
+    // 8 of the 10 move: 2-30 and 3-22 are the two whose B anchor already is the plank's centre.
+    CHECK_EQ(moved, 8);
+}
+
+// THE TWO THAT DO NOT MOVE. 2-30 and 3-22 have an attach point B that already lands on the plank's centre: the old
+// arithmetic (the plank's pin seen from the anchor, turned by minus the anchor's angle) was verified on them by the level's
+// own play, so the new connectedAnchor, which is the attach point itself, has to agree with it - which is also what pins the
+// sense of B's turn, for a wrong one sends B's point 64 px away on both.
+void AJointWhoseEndsAlreadyMeetMovesNothing() {
+    for (const char* level : {"level29a", "level21b"}) {
+        Run run;
+        if (!Begin(level, run)) continue;
+        if (run.level.hinge.hinges.empty()) {
+            CHECK_MSG(false, std::string(level) + " pins a body");
+            continue;
+        }
+        const Hinge::Hinged& hinged = run.level.hinge.hinges.front();
+        const Tscn::Node* node = NodeNamed(run.data.scene, hinged.name);
+        const Tscn::Node* anchor = NodeNamed(run.data.scene, hinged.anchorName);
+        if (node == nullptr || anchor == nullptr) {
+            CHECK_MSG(false, std::string(level) + ": both ends are nodes");
+            continue;
+        }
+        const glm::dvec2 before = BodyAtPx(run, hinged);
+        CHECK_MSG(glm::length(before - PlacedAt(*node)) < 1e-3, std::string(level) + ": the body stays where it was placed");
+
+        // The old rule: the pin (the body's centre) in B's own frame.
+        const glm::dvec2 oldLocal = Turn(PlacedAt(*node) - PlacedAt(*anchor), -TurnedBy(*anchor));
+        const JointComponent& joint = run.registry.get<JointComponent>(hinged.body);
+        const glm::dvec2 newLocal(joint.connectedAnchor.x * Units::kPixelsPerMetre,
+                                  -joint.connectedAnchor.y * Units::kPixelsPerMetre);
+        CHECK_MSG(glm::length(newLocal - oldLocal) < 1e-3,
+                  std::string(level) + ": connectedAnchor (" + std::to_string(newLocal.x) + ", " +
+                      std::to_string(newLocal.y) + ") is where the old rule put it (" + std::to_string(oldLocal.x) +
+                      ", " + std::to_string(oldLocal.y) + ")");
+    }
+}
+
+// A level's file with each of its lines passed through `rewrite` (which edits the line in place and says whether to keep
+// it), written to the scratch folder under the level's own name and started: the scene a stale or edited conversion
+// would be.
+struct Scratched {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    std::string error;
+    bool loaded = false;
+    bool started = false;
+};
+
+template <typename Rewrite>
+void StartRewritten(const char* levelName, Scratched& out, Rewrite rewrite) {
+    std::ifstream file(kLevels + "/" + levelName + ".tscn", std::ios::binary);
+    if (!file) {
+        CHECK_MSG(false, std::string(levelName) + ".tscn is readable");
+        return;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    std::istringstream lines(buffer.str());
+    std::string text;
+    for (std::string line; std::getline(lines, line);) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (rewrite(line)) text += line + '\n';
+    }
+    const std::filesystem::path path = Scratch() / (std::string(levelName) + ".tscn");
+    {
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream << text;
+    }
+    out.loaded = Game::LoadData(path.string(), kData, Scratch(), out.data, out.error);
+    CHECK_MSG(out.loaded, std::string(levelName) + ": the rewritten scene still loads: " + out.error);
+    if (!out.loaded) return;
+    out.started = Game::Start(out.data, out.registry, out.level, out.error, true);
+}
+
+// A level converted before the converter carried attach point B would silently hold every plank at the anchor's centre
+// (the key reads as absent, so as zero, 100 px off on a real level): it is refused, saying what to do. The keys are
+// required, not defaulted, so a file that has the node but lost the numbers (an edited one) is refused as well.
+void ALevelWithoutItsAttachPointBIsRefused() {
+    for (const bool dropTheNodeToo : {true, false}) {
+        Scratched stale;
+        int dropped = 0;
+        StartRewritten("level30a", stale, [&dropped, dropTheNodeToo](std::string& line) {
+            const bool node = line.starts_with("metadata/joint_other");
+            const bool numbers = line.starts_with("metadata/joint_anchor_b_");
+            if ((dropTheNodeToo && node) || numbers) {
+                ++dropped;
+                return false;
+            }
+            return true;
+        });
+        const std::string which = dropTheNodeToo ? "no attach point B at all" : "joint_other but not its numbers";
+        CHECK_EQ(dropped, dropTheNodeToo ? 3 : 2);
+        if (!stale.loaded) continue;
+        CHECK_MSG(!stale.started, "a level with " + which + " does not start");
+        CHECK_MSG(stale.error.find("attach point B") != std::string::npos, "and says why: " + stale.error);
+    }
+}
+
+// The converter's choice of B and the custom datum have to name the same entity (`revoluteJoint = "anchor"`): a
+// joint_other that is another kind of node is a stale or edited file, and is refused rather than pinned to it.
+void ANodeThatIsNotTheEntityNamedIsRefused() {
+    Scratched edited;
+    int swapped = 0;
+    StartRewritten("level30a", edited, [&swapped](std::string& line) {
+        if (line.starts_with("metadata/joint_other = ")) {
+            ++swapped;
+            // The level's first platform, placed at (52, 160): not an `anchor`.
+            line = "metadata/joint_other = \"double_block_plat_no_emissive_ent_956\"";
+        }
+        return true;
+    });
+    CHECK_EQ(swapped, 1);
+    if (!edited.loaded) return;
+    CHECK_MSG(!edited.started, "a joint_other that is not the entity the datum names does not start");
+    CHECK_MSG(edited.error.find("is pinned to the entity 'anchor'") != std::string::npos,
+              "and says why: " + edited.error);
+}
+
+// A's OWN attach point, which is its centre in all ten placements and so moves nothing there: the rule is whole, though.
+// level30a with attach point A (20, -10) px: the body's centre stands where its anchor, (20, -10) turned with the body,
+// lands on B's point, which is B's point less that turned offset: 22 px from B's point itself.
+void ABodysOwnAttachPointStandsOnTheSamePoint() {
+    Scratched edited;
+    StartRewritten("level30a", edited, [](std::string& line) {
+        if (line.starts_with("metadata/joint_anchor_x = ")) line = "metadata/joint_anchor_x = 20";
+        if (line.starts_with("metadata/joint_anchor_y = ")) line = "metadata/joint_anchor_y = -10";
+        return true;
+    });
+    if (!edited.started || edited.level.hinge.hinges.empty()) {
+        CHECK_MSG(false, "level30a with an attach point A starts: " + edited.error);
+        return;
+    }
+    const Hinge::Hinged& hinged = edited.level.hinge.hinges.front();
+    const Tscn::Node* node = NodeNamed(edited.data.scene, hinged.name);
+    glm::dvec2 placed(0.0);
+    glm::dvec2 held(0.0);
+    if (node == nullptr || !HeldAt(edited.data.scene, *node, placed, held)) return;
+    const glm::dvec2 at = Units::ToPixels(edited.registry.get<Supersonic::TransformComponent>(hinged.body).position);
+    CHECK_MSG(std::fabs(at.x - held.x) < 0.01 && std::fabs(at.y - held.y) < 0.01,
+              "the body stands at (" + std::to_string(at.x) + ", " + std::to_string(at.y) +
+                  "), where its own attach point is on B's: (" + std::to_string(held.x) + ", " + std::to_string(held.y) +
+                  ")");
+    // B's world point is (341.962, 249.494) (the census); the body's centre is 22 px from it, not on it.
+    CHECK_MSG(std::hypot(held.x - 341.962, held.y - 249.494) > 20.0,
+              "and that is not B's point itself: A's attach point was subtracted");
+}
+
+// 2-29's STONE (WT-10, CMP-18): the stone sits on the hinged plank until the plank tips it. Attach B moves that plank 0.6 px
+// right, which is all this step may say about the stone's clock; what is printed is the plank's turn off its rest angle and
+// the stone's centre every 20 ticks, to be read before and after the rule and nothing more - nothing is pinned.
+void TheStoneOf2_29RidesThePlank() {
+    Run run;
+    if (!Begin("level28a", run)) return;
+    if (run.level.hinge.hinges.empty()) return;
+    const Hinge::Hinged& hinged = run.level.hinge.hinges.front();
+    entt::entity stone = entt::null;
+    for (const auto& [name, entity] : run.level.built.entities) {
+        if (name.starts_with("rolling_stone")) stone = entity;
+    }
+    if (stone == entt::null) {
+        CHECK_MSG(false, "2-29 places a rolling stone");
+        return;
+    }
+    int firstTurned = -1;
+    for (int tick = 0; tick <= 460; ++tick) {
+        const double turned = Hinge::AngleOf(run.registry, hinged) - hinged.restRad;
+        const glm::dvec2 stoneAt = Units::ToPixels(run.registry.get<Supersonic::TransformComponent>(stone).position);
+        if (firstTurned < 0 && std::fabs(turned) > 0.05) firstTurned = tick;
+        if (tick % 20 == 0) {
+            std::printf("  2-29 tick %3d: plank turned %+.4f rad, stone (%.2f, %.2f)\n", tick, turned, stoneAt.x, stoneAt.y);
+        }
+        Tick(run);
+    }
+    std::printf("  2-29: the plank first turns past 0.05 rad on tick %d\n", firstTurned);
+}
+
 void WithoutItsAnchorThereIsNoHinge() {
     // The anchor is static, so a level started without its statics has none, and
     // a joint attached to nothing would be worse than no joint at all.
@@ -248,6 +568,12 @@ void runTests() {
     TheAuthoredRangeIsMeasuredFromTheRestAngle();
     ASeesawStopsAtItsOwnEnds();
     WithoutItsAnchorThereIsNoHinge();
+    EveryHingedBodyStandsWhereItsJointHoldsIt();
+    AJointWhoseEndsAlreadyMeetMovesNothing();
+    ALevelWithoutItsAttachPointBIsRefused();
+    ANodeThatIsNotTheEntityNamedIsRefused();
+    ABodysOwnAttachPointStandsOnTheSamePoint();
+    TheStoneOf2_29RidesThePlank();
 }
 
 } // namespace
@@ -261,5 +587,5 @@ MP_SUITE_MAIN("test_mp_hinge") {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_hinge", 18);
+    return ::test::summary("test_mp_hinge", 80);
 }

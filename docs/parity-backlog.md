@@ -3590,6 +3590,39 @@ route; the row CMP-15 is closed by it, committed with these deviations by the ow
       recoil of the tick-183 shot (the fit: 0.000 u/s over ticks 156-181, -1.202 u/s from 186, predicted -1.182), not a push-out residue; the trace prints v as integers, so it is
       a fit, not an exact vy. Nothing to fix.
 
+**Step 174's recorded deviations** (a hinged body stands where its joint holds it, CMP-2, wave 4c-2; planning step 174 has the evidence, `RECORDED DEVIATIONS` 1-7;
+`out/parity/program/CMP2/` the reports, `impl.md`, `census.md`, `route_census.md` and `verify1.json`; GAMEPLAY: YES, ten levels' hinged bodies, and it moves the routes
+of 2-31, 3-19 and 3-20; the row CMP-2 is closed by it):
+- [x] **CMP2-1. Settled by the verifier: the sweep was taken on an executable the implementer relinked afterwards** (deviation 1). The sweep is on `MagicPortals.exe`
+      `3c818a2d`; the implementer relinked it (`3ea23c59`, then `83d5c069`) with no source change (`Hinge.cpp` `274a41ea`), and 15 launches were byte-identical with the
+      sweep. The verifier re-took the whole sweep on `83d5c069`: 128 of 128 PNGs equal. The commit relinked nothing (both exes are newer than every source; its edits are
+      record text). Nothing left.
+- [ ] **CMP2-2. No port-side mutation of this step was independently re-run, and one was never run** (deviation 2; the verifier's low). The first two (the body not placed,
+      the name check removed; B's attach point not turned by B's angle) were built by the role that was interrupted and the implementer's three (A's attach point not
+      subtracted; `connectedAnchor` 0; attach B's numbers optional: 16 failures of 102) by the resumed one; the verifier read the logs and re-ran none (each needs a
+      relinked runner, a Smart App Control exposure). Never run: the removal of "a missing `joint_other` is refused" alone (the next line dereferences it). Next: a role
+      that relinks the runner anyway runs that one.
+- [ ] **CMP2-3. `Hinged::placedPx` and `heldPx` have no reader outside `Hinge.cpp`** (deviation 3; the verifier's low; GAMEPLAY: none). The tests do their own arithmetic;
+      removing them rebuilds every translation unit that includes `Hinge.hpp`. Next: remove them with the next change that touches `Hinge.hpp`.
+- [x] **CMP2-4. Disclosed: the census file was overwritten by the implementer's re-run** (deviation 4). `census.md` now shows the three new keys in its section 4; what it
+      said before the re-conversion is `census_pre_conversion.md`. Nothing left.
+- [ ] **CMP2-5. Gate 6's route clause is NOT met as worded: five routes do not win and one moves, three of the five outside the census** (deviation 5; the verifier's
+      medium; the gate's text is not rewritten). 122 of 128 routes win on exactly their census tick, 3-19 wins on 827 (census 832) and **2-31 (died on tick 170) and 3-20
+      (not won by 585)** do not win: this step's. **2-01 (died on tick 283), 4-07 (not won by 470) and 4-29 (the tap of tick 525 is off the view)** do not win and the census
+      does not name them: inherited, the same signatures as in step 173's own run (`CMP15/route_census.md`), no joint in any of the three, their f420 frames byte-identical
+      before and after this step. The clause is met only against the route state step 173 recorded for HEAD `12ac5d5`, which was not rebuilt to re-measure it. `test_mp_routes`
+      2,291 checks, 10 failures. Next: the route phase (planning step 176) re-flies 2-31, 3-20, 2-01, 4-07 and 4-29 and re-checks 3-19; the push gate "128 of 128 routes win"
+      cannot be met before it.
+- [ ] **CMP2-6. Evidence not taken or not measurable at f420** (deviation 6; GAMEPLAY: none). 3-15 and 3-19: the hinged body is off the view (about x 17-444 u and 330-757
+      u, read from the player's start against where he stands on the frame; the frames are byte-identical before and after and the original's stills show neither body), so
+      their pulls (+4, 0) and (0, +8) are pinned by `test_mp_hinge` only. 2-29: not measurable by the edge-shift method (the stone's phase fills the plank's mask); the stone's
+      numbers are the sim's. 2-30: ONE pixel differs at f420 (294, 516; 4/255) where the spec predicted none; the cause (the old anchor derived through the rounded angle
+      1.5708, 1.2e-4 px) is INFERRED, not measured. Next: nothing owned; a clip with 3-15's seesaw or 3-19's plank in view would decide the first two.
+- [ ] **CMP2-7. The converter's datum-type pin does not detect the check's removal** (deviation 7; the verifier's low; GAMEPLAY: none). The verifier's mutation M10, a `float`
+      datum accepted as a string, passes all 121 converter tests: the parametrised "a datum the engine does not read" fixture in `test_joint.py` gives it the Value `'2'`,
+      which names no entity, so the joint is skipped either way. Not applied at the commit (a test change, not record text). Next: give the float and the other-typed datum a
+      Value that names an entity existing in the fixture (e.g. `'pivot'`), the next time the converter's joint code is touched.
+
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):
 - [x] **R4c1-1. Gate 4 (the sweep chain) failed as worded on one level, 4-12, and needed a scope ruling: RULED (a), 2026-10-12, and the wave pushed** (medium; the one finding of all three
@@ -3669,7 +3702,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       red key's light, CMP-7); (c) 2-02's player is redder than the original's, (46.4, 27.1, 33.0) against (29.6, 24.0, 30.1), inside its stills' range 27.7-41.8: a light on the
       figure, read with CMP-7 and CMP-8; (d) the 52 `differs` levels that differed by this cause alone are read again after the groups that remain. The deviations are rows
       CMP1-1 to CMP1-6 above. Closes G1a-11; section 1's "Script-driven emissive" stays open for its other items.
-- [ ] **CMP-2. Revolute-joint pose: the port drops attach point B, so a plank or arm stands where it was placed, not where the original's joint pulls it** (high;
+- [x] **CMP-2. Revolute-joint pose: the port drops attach point B, so a plank or arm stands where it was placed, not where the original's joint pulls it** (high;
       structural; `decoded`; MOVES ROUTES). Seen: 2-31 (box [0,480,520,720], `pairs/2-31_h63_pair.png`, identical in all three original stills and every port frame, so
       a static pose), 3-20 (box x720-1090 y395-505; best shift (+6, 0) on the plank, box x845-960 y395-505), 4-31 (box [960,190,1170,285], the bar's edges 9 px off,
       measured on columns 1100 and 1140). In scope, 10 hinge levels: 2-28, 2-29, 2-30, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31. Cause: `ETHRevoluteJoint.cpp:35-44`
@@ -3683,6 +3716,36 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       Gate: the four measured shifts reproduced to 0.5 u on f420 frames of 2-31, 3-20 and 4-31 with 2-30 unchanged; `test_mp_hinge` pins; then re-fly the nine routes
       (2-28, 2-29, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31), once, after the wave's other gameplay fixes. GAMEPLAY: yes (2-31's seesaw moves 29 u down and 14 u left,
       3-19's plank 8 u).
+      *Closed by step 174 (CMP2, wave 4c-2), 2026-10-12, resumed and finished 2026-10-14, WITH RECORDED DEVIATIONS (gate 6's route clause is NOT met as worded: CMP2-5); committed in wave 4c-2 (the commit titled "Magic Portals: a hinged body stands
+      where its joint holds it"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it
+      MOVES ROUTES: eight of the ten hinged bodies start somewhere else, 2-31's seesaw 31.8 px (89 px on screen) from where the level places it; 2-31's route no longer wins
+      (the player lands on the moved seesaw on tick 119 and dies on tick 170; census 405), 3-20's no longer wins (the shot of tick 255 ends on the plank; not won by 585;
+      census 555) and 3-19's wins on tick 827 (census 832); the other census levels' routes (2-28, 2-29, 2-30, 3-15, 3-22, 4-11, 4-31) win on exactly their ticks. So
+      `test_mp_routes` fails on FIVE routes until the route phase (planning step 176): 2-31 and 3-20 (this step) and 2-01, 4-07 and 4-29 (inherited from steps 171-173,
+      outside the census; CMP2-5), and 3-19 is to be re-checked.* Built as the Next says, on both sides of the `.tscn`: the converter reads `attachPointBX/BY`, the joint's
+      name, `otherEntityName` and the datum's type and writes, beside the eight `joint_*` keys, `metadata/joint_other` (B, found as `ResolveJoints` finds it, the first matching
+      instance) and `metadata/joint_anchor_b_x/y` (attach point B x half of B's box x B's `<Scale>`, in B's own frame); `Hinge::Find` requires the three keys (a level
+      converted earlier is refused and told to convert again), checks `joint_other` against the entity the datum names, puts the world point on B's centre plus attach point B
+      turned by B's `rotation`, places the body where that point less A's own attach point leaves it and gives the engine's hinge `anchor` = A's attach point and
+      `connectedAnchor` = attach point B (`ETHRevoluteJoint.cpp:35-44` and `:60-64`; `docs/ethanon-formats.md` has the citations). No tunable moved (`hinge.json`'s notes
+      cite the decode). The census (derived from the original's raw `.esc`, the four `.ent` that ship `<Joints>`, the 128 converted scenes and the listing; the hint exact):
+      10 joint instances in 10 levels, all `revoluteJoint` through a `string` datum, one B candidate each, A dynamic and B static, no motor, attach point A (0, 0), attach point B
+      nonzero. Pulls (units; 1 u = 2.8125 px): 2-28 (+0.6, +2.0), 2-29 (+0.6, 0), 2-30 none, **2-31 (-14.04, +28.49)**, 3-15 (+4, 0), 3-19 (0, +8), 3-20 (-2, 0), 3-22 none,
+      4-11 (-0.4, 0), 4-31 (0, -3). The re-conversion changed 10 of 128 `out/levels` files by exactly three added lines each (a fresh conversion is byte-identical to it; the
+      verifier's own is too). Measured: the f420 sweep (owner's seed, 128 launches, validation silent) changed 7 levels and left 121 byte-identical: 2-28, 2-29, 2-31, 3-20,
+      4-11, 4-31 and **2-30 by ONE pixel** (294, 516), 4/255, rounding of the old derived anchor, INFERRED (CMP2-6); 3-22 (pull 0) and 3-15 and 3-19 (the bodies are off
+      the view at f420) are unchanged, rightly. The plank against the original's stills, edge-shift, before -> after: 2-31 (-14.22, +28.44) -> (0, 0), 3-20 (-2.13, 0) -> (0, 0),
+      4-31 (0, -2.84) -> (0, 0) (predicted (-14.04, +28.49), (-2.0, 0), (0, -3.0)), 2-28 and 4-11 -> 0, 2-30 unchanged; `compare.py` ALL-GOLD h6.3 edge_iou / mean_abs 2-31
+      0.5191 / 5.51 -> 0.6369 / 2.56, 3-20 0.7427 / 4.26 -> 0.7830 / 3.88, 4-31 0.8278 / 1.64 -> 0.8605 / 1.31, 2-28 0.5166 / 5.65 -> 0.5674 / 5.36, 4-11 0.7627 / 6.46 ->
+      0.7790 / 6.32; the pair images of 2-31, 3-20 and 4-31 read by eye (the seesaw with its ball and diamonds, the plank with its pivot, the bar with its pivot, where the
+      original's are). Pins: `test_mp_hinge` 28 -> 102, `test_mp_levels` (`metaStrings` 17,774 -> 17,784, `metaNumbers` 80 -> 100), the converter's `test_joint.py` (9 tests;
+      121 passed, `ruff` clean); eight converter mutations and six port mutations (three builds; the last three together: 16 failures of 102) each fail a named pin. 57 suites, 56 pass, 33,390 checks
+      (`test_mp_routes` 2,291, 10 failures = 5 routes x 2), reachability 108 / 20 / 0, 0 warnings. Independently verified once (`CMP2/verify1.json`: pass; ten gates and the housekeeping check ok; its
+      medium, the route clause, and its lows are the rows below). 2-29's stone: the plank's first turn past 0.05 rad is tick 254 before and after and the stone is 1.04 u
+      farther along at tick 420, so the new pose does not by itself explain WT-10's / CMP-18's 125-135 px lag. **What it leaves**: (a) the five routes (CMP2-5; planning step 176); (b) WT-10
+      / CMP-18 stays open (the pose moves the stone 1 u of the 125-135 px; its trace, the stone against the plank and the hinge, is the next step on it); (c) 3-15, 3-19 and 2-29 not measurable at f420 and 2-30's pixel inferred (CMP2-6); (d) the
+      port-side mutations nobody re-ran (CMP2-2); (e) the converter's datum-type pin (CMP2-7); (f) `placedPx` / `heldPx` (CMP2-3). The deviations are rows CMP2-1 to CMP2-7
+      above the wave 4c-1 rows.
 - [x] **CMP-3. Equal-z pictures are drawn in scene-file order; the original orders them by 128-unit bucket** (high on 4-31, medium on the rest; structural; `decoded`;
       moves no route). Levels: 1-07, 1-11, 1-12, 1-20, 2-14, 2-30, 4-11, 4-16, 4-31. Evidence: 4-31 box [810,170,985,285] (`pairs/4-31_h63_pair.png` and `_overlay.png`:
       the arm's left half and pivot are hidden behind the anchor block in the port); 1-07 box (545,270)-(1080,715); 1-20 box 384,452,470,497 (the pillar drawn over the

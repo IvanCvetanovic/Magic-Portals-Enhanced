@@ -25,6 +25,10 @@ using Supersonic::WorldTransformComponent;
 // measures nothing.
 const glm::vec3 kAxis(0.0f, 0.0f, 1.0f);
 
+// The converter's keys for the joint's other end: the node that is B, and attach point B in B's own frame (px).
+constexpr const char* kOtherKey = "joint_other";
+constexpr const char* kAttachBKeys[2] = {"joint_anchor_b_x", "joint_anchor_b_y"};
+
 // A node's metadata as a number. The converter writes the eight joint_* keys
 // BARE (-1.5708) and the original's custom data quoted; AsNumber reads both.
 double Meta(const Tscn::Node& node, const char* key, double fallback) {
@@ -149,14 +153,12 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
     out.rules = rules;
     (void)roles; // A hinge is found by its joint data, not by its role.
 
-    // Every top-level node by the entity name it was placed from, which is how
-    // revoluteJoint names the other end.
-    std::unordered_map<std::string, const Tscn::Node*> byEntityName;
+    // Every top-level node by its own name, which is how joint_other names the other end: the converter resolved B the way
+    // the engine does (the first entity the joint's custom datum names) and wrote which node it is.
+    std::unordered_map<std::string, const Tscn::Node*> byNodeName;
     for (const Tscn::Node& node : scene.nodes) {
         if (node.parent != ".") continue;
-        const std::string entityName = Roles::EntityName(node);
-        if (entityName.empty()) continue;
-        byEntityName.emplace(entityName, &node);
+        byNodeName.emplace(node.name, &node);
     }
 
     for (const Tscn::Node& node : scene.nodes) {
@@ -164,12 +166,27 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         const Tscn::Value* pinned = node.Meta("revoluteJoint");
         if (pinned == nullptr || pinned->kind != Tscn::Value::Kind::String) continue;
 
-        const auto named = byEntityName.find(pinned->text);
-        if (named == byEntityName.end()) {
-            error = node.name + " is pinned to '" + pinned->text + "', which the level does not place";
+        // ATTACH POINT B. A level converted before the converter carried it would read as zero and hold every plank
+        // at the middle of its anchor, so the keys are required, not defaulted.
+        const Tscn::Value* other = node.Meta(kOtherKey);
+        if (other == nullptr || other->kind != Tscn::Value::Kind::String || node.Meta(kAttachBKeys[0]) == nullptr ||
+            node.Meta(kAttachBKeys[1]) == nullptr) {
+            error = node.name + " carries no attach point B (metadata/" + kOtherKey + ", " + kAttachBKeys[0] + ", " +
+                    kAttachBKeys[1] + "): the level was converted before the converter carried it, convert it again";
+            return false;
+        }
+        const auto named = byNodeName.find(other->text);
+        if (named == byNodeName.end()) {
+            error = node.name + " is pinned to '" + other->text + "', which the level does not place";
             return false;
         }
         const Tscn::Node& anchorNode = *named->second;
+        // The converter's choice and the custom datum say the same thing, or one of them is stale.
+        if (Roles::EntityName(anchorNode) != pinned->text) {
+            error = node.name + " is pinned to the entity '" + pinned->text + "' but its joint_other " + other->text +
+                    " is a '" + Roles::EntityName(anchorNode) + "'";
+            return false;
+        }
 
         glm::dvec2 atPx(0.0);
         glm::dvec2 anchorAtPx(0.0);
@@ -194,15 +211,20 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         const double rotation = RotationOf(node);
         const double anchorRotation = RotationOf(anchorNode);
 
-        // Where the pin is: the body's own attach point, turned with the body.
-        // It is (0, 0) in all ten placements, so this is the body's centre, but
-        // the arithmetic is here rather than the assumption.
+        // THE TWO ENDS (ETHRevoluteJoint.cpp:35-44, :60-64). A's own attach point and B's, each in its body's LOCAL frame
+        // and in px: the converter wrote attachPoint x half of that entity's scaled box. They are not on one world point
+        // when the level is placed: Box2D pulls the dynamic body, A, until they are.
+        //
+        // The convention: a node's `rotation` is Box2D's body angle (-radians of the .esc's, ETHPhysicsSimulator.cpp:76) and
+        // turns a local offset in the level's own space (+y down) by x' = c x - s y, y' = s x + c y (RotatePx). B's
+        // world point is B's centre plus its attach point turned by B's angle; A stands with ITS attach point turned by
+        // A's angle on that same point.
         const glm::dvec2 anchorPx(Meta(node, "joint_anchor_x", 0.0), Meta(node, "joint_anchor_y", 0.0));
-        const glm::dvec2 pinPx = atPx + RotatePx(anchorPx, rotation);
-
-        // The same point seen from the anchor: Box2D puts both ends of the joint
-        // on one world point, which is why B's dropped attach point costs nothing.
-        const glm::dvec2 anchorLocalPx = RotatePx(pinPx - anchorAtPx, -anchorRotation);
+        const glm::dvec2 attachBPx(Meta(node, kAttachBKeys[0], 0.0), Meta(node, kAttachBKeys[1], 0.0));
+        const glm::dvec2 pinPx = anchorAtPx + RotatePx(attachBPx, anchorRotation);
+        const glm::dvec2 heldPx = pinPx - RotatePx(anchorPx, rotation);
+        hinged.placedPx = atPx;
+        hinged.heldPx = heldPx;
 
         hinged.limited = Meta(node, "joint_enable_limit", 0.0) != 0.0;
         hinged.lowerRad = Meta(node, "joint_lower_angle", 0.0);
@@ -224,8 +246,8 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         Supersonic::JointComponent joint;
         joint.type = Supersonic::JointComponent::Type::Hinge;
         joint.connectedBody = hinged.anchor;
-        joint.anchor = OffsetToEngine(RotatePx(anchorPx, 0.0));
-        joint.connectedAnchor = OffsetToEngine(anchorLocalPx);
+        joint.anchor = OffsetToEngine(anchorPx);
+        joint.connectedAnchor = OffsetToEngine(attachBPx);
         joint.axis = kAxis;
         joint.connectedAxis = kAxis;
         joint.useLimit = hinged.limited;
@@ -236,6 +258,17 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         joint.stiffness = static_cast<float>(rules.stiffness);
         joint.enabled = true;
         registry.emplace_or_replace<Supersonic::JointComponent>(hinged.body, joint);
+
+        // THE BODY STARTS WHERE ITS JOINT HOLDS IT. Box2D's first step takes the whole error out of the joint's position
+        // constraint, and the body is B's static neighbour's to be pulled (A is dynamic, B static in all ten), so the level
+        // is on screen with the body already there. The engine's own solver would take the same pull out over its first
+        // ticks at the joint's stiffness; putting the body there first leaves it nothing to do, and the first tick starts
+        // from the original's pose rather than a jump.
+        if (auto* transform = registry.try_get<Supersonic::TransformComponent>(hinged.body)) {
+            const glm::vec3 held = Units::ToWorld(heldPx.x, heldPx.y);
+            transform->position.x = held.x;
+            transform->position.y = held.y;
+        }
 
         out.hinges.push_back(hinged);
     }
