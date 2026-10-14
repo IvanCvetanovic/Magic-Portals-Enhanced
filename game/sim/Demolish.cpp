@@ -1,16 +1,34 @@
 #include "sim/Demolish.hpp"
 
+#include "core/Components.hpp"
 #include "core/Json.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 
 namespace MagicPortals::Demolish {
 
 namespace {
+
+// The datum ETHBeginContactCallback_breakable_wall #42-60 reads on the stone, and entity_launcher #200-209 sets.
+constexpr const char* kDestroyableKey = "destroyable";
+
+// GetUInt('destroyable') == 1 (#52-53: CMPIu against the immediate 1, JNZ skips): exactly 1, which is not "set".
+bool IsOne(const Tscn::Node& node, const char* key) {
+    const Tscn::Value* value = node.Meta(key);
+    if (value == nullptr) return false;
+    double number = 0.0;
+    if (value->kind == Tscn::Value::Kind::String) {
+        char* end = nullptr;
+        number = std::strtod(value->text.c_str(), &end);
+        return end != value->text.c_str() && *end == '\0' && number == 1.0;
+    }
+    return value->AsNumber(number) && number == 1.0;
+}
 
 // hazards.gd:62-66: a flag is set when it is there and is neither "" nor "0".
 bool Flagged(const Tscn::Node& node, const char* key) {
@@ -86,6 +104,24 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.killsPlayerAbove = root["stone"]["kills_player_above"].AsNumber();
+    if (!has("wall", "breaks_above_m_s") || !has("wall", "entities")) return false;
+    if (!root["wall"]["breaks_above_m_s"].IsNumber() || !(root["wall"]["breaks_above_m_s"].AsNumber() > 0.0)) {
+        error = path + ": wall.breaks_above_m_s is not a number above 0";
+        return false;
+    }
+    read.wallBreaksAboveMs = root["wall"]["breaks_above_m_s"].AsNumber();
+    const Json::Value& wallEntities = root["wall"]["entities"];
+    if (!wallEntities.IsArray() || wallEntities.AsArray().empty()) {
+        error = path + ": wall.entities is not an array naming at least one entity";
+        return false;
+    }
+    for (const Json::Value& entity : wallEntities.AsArray()) {
+        if (!entity.IsString()) {
+            error = path + ": wall.entities lists something that is not a string";
+            return false;
+        }
+        read.wallEntities.push_back(entity.AsString());
+    }
     out = std::move(read);
     return true;
 }
@@ -101,20 +137,114 @@ bool State::HitPlayer(const std::string& stone, double hitIntensity) {
     return true;
 }
 
-void State::Tick(entt::registry& registry) {
+std::vector<entt::entity> State::Tick(entt::registry& registry, const Impacts::Watch& watch,
+                                      const std::vector<Impacts::Begin>& begins) {
+    contactsNow.clear();
+    takenNow.clear();
     const float margin = Units::ToMetres(rules.contactMarginPx);
+    using Pair = std::pair<entt::entity, entt::entity>;
+    std::vector<Pair> now;            // the wall pairs within reach this tick
+    std::vector<entt::entity> doomed; // destroyable stones that broke a wall, taken once after every contact of the step
     for (Breakable& breakable : breakables) {
         if (breakable.broken) continue;
         Trigger::Box reach = breakable.box;
         reach.half += glm::vec2(margin);
+        if (!breakable.wall) {
+            // Not this callback's: a stone breaks what it touches, at any speed (a carranca: its own row of the backlog).
+            for (const Stone& stone : stones) {
+                if (!registry.valid(stone.body) || !Trigger::Overlaps(registry, stone.body, reach)) continue;
+                breakable.broken = true;
+                breakable.brokenBy = stone.name;
+                if (registry.valid(breakable.body)) registry.destroy(breakable.body);
+                break;
+            }
+            continue;
+        }
+        // ETHBeginContactCallback_breakable_wall: every stone that BEGINS to touch the wall on this step is read, so two
+        // stones that begin together both go and the wall goes once.
+        bool wallBroke = false;
         for (const Stone& stone : stones) {
-            if (!registry.valid(stone.body) || !Trigger::Overlaps(registry, stone.body, reach)) continue;
+            if (!registry.valid(stone.body)) continue;
+            // The first look: the stone comes within reach of the wall. A pair that stood within reach after the last Tick has
+            // had its begin: a slow touch followed by a fast push breaks nothing.
+            bool atMargin = false;
+            if (Trigger::Overlaps(registry, stone.body, reach)) {
+                const Pair pair(breakable.body, stone.body);
+                now.push_back(pair);
+                atMargin = std::find(touching.begin(), touching.end(), pair) == touching.end();
+            }
+            // The second: the stones' watch finds the pair begun within Box2D's skin, which comes on the same step or a later one.
+            const auto skin = std::find_if(begins.begin(), begins.end(), [&](const Impacts::Begin& begin) {
+                return begin.body == stone.body && begin.other == breakable.body;
+            });
+            const bool atSkin = skin != begins.end();
+            if (!atMargin && !atSkin) continue;
+            Contact contact;
+            contact.stone = stone.name;
+            contact.wall = breakable.name;
+            contact.atMargin = atMargin;
+            contact.atSkin = atSkin;
+            if (atMargin) {
+                // #16-33: the whole velocity's length, the fastest the stone came along the line to the wall (Impacts::Begin). The
+                // watch's velocities are the original's own (px/s over SimRatio): a stone it does not hold reads as at rest.
+                glm::dvec2 along(0.0);
+                Impacts::Shape stoneShape;
+                Impacts::Shape wallShape;
+                if (registry.valid(breakable.body) && Impacts::ShapeOf(registry, stone.body, stoneShape) &&
+                    Impacts::ShapeOf(registry, breakable.body, wallShape)) {
+                    along = Impacts::Between(stoneShape, wallShape).normal;
+                }
+                Impacts::Begin read;
+                if (watch.Carried(stone.body, read)) {
+                    contact.historyMs = glm::length(read.HistoryApproaching(along)) / Units::kPixelsPerMetre;
+                }
+            }
+            if (atSkin) {
+                contact.replayMs = glm::length(skin->Approaching(skin->normal)) / Units::kPixelsPerMetre;
+                contact.freeFlight = skin->freeFlight;
+                contact.replayedSteps = skin->replayedSteps;
+            }
+            contact.speedMs = std::max(contact.historyMs, contact.replayMs);
+            if (contact.speedMs > rules.wallBreaksAboveMs) {
+                contact.broke = true;
+                if (!wallBroke) breakable.brokenBy = stone.name;
+                wallBroke = true;
+                // #42-60.
+                if (stone.destroyable) {
+                    contact.stoneDied = true;
+                    if (std::find(doomed.begin(), doomed.end(), stone.body) == doomed.end()) doomed.push_back(stone.body);
+                }
+            } else if (!atMargin) {
+                // The second look of a contact the first held, and it holds again: nothing new to say of it.
+                continue;
+            }
+            contactsNow.push_back(std::move(contact));
+        }
+        if (wallBroke) {
             breakable.broken = true;
-            breakable.brokenBy = stone.name;
             if (registry.valid(breakable.body)) registry.destroy(breakable.body);
-            break;
         }
     }
+    // The pairs that stand within reach after this tick; a wall that has gone has none.
+    touching.clear();
+    for (const Pair& pair : now) {
+        if (registry.valid(pair.first)) touching.push_back(pair);
+    }
+    std::vector<entt::entity> gone;
+    for (const entt::entity body : doomed) {
+        const auto found = std::find_if(stones.begin(), stones.end(), [body](const Stone& s) { return s.body == body; });
+        if (found == stones.end()) continue;
+        Taken taken;
+        taken.stone = *found;
+        if (const auto* transform = registry.try_get<Supersonic::TransformComponent>(body)) {
+            taken.atPx = Units::ToPixels(transform->position);
+        }
+        takenNow.push_back(std::move(taken));
+        stones.erase(found);
+        registry.destroy(body);
+        gone.push_back(body);
+    }
+    return gone;
 }
 
 entt::entity State::Break(entt::registry& registry, const std::string& name, const std::string& by) {
@@ -186,6 +316,10 @@ const Stone* State::FindStone(const std::string& name) const {
     for (const Stone& stone : stones) {
         if (stone.name == name) return &stone;
     }
+    // One the wall's callback destroyed on this very tick: the tick's latches still ask who broke what.
+    for (const Taken& taken : takenNow) {
+        if (taken.stone.name == name) return &taken.stone;
+    }
     return nullptr;
 }
 
@@ -214,7 +348,7 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
                 error = node.name + " is a rolling stone with no body";
                 return false;
             }
-            out.stones.push_back(Stone{node.name, found->second});
+            out.stones.push_back(Stone{node.name, found->second, IsOne(node, kDestroyableKey)});
             continue;
         }
 
@@ -258,6 +392,8 @@ bool Find(const Tscn::Scene& scene, const Roles::Table& roles, const LevelBuilde
         breakable.entity = entityName;
         breakable.body = found->second;
         breakable.flagged = flagged;
+        breakable.wall =
+            std::find(rules.wallEntities.begin(), rules.wallEntities.end(), entityName) != rules.wallEntities.end();
         // isBreakable reads the flag and nothing else, so a wall that breaks by
         // name alone is never in a blast's grab.
         breakable.blastBreaks = flagged && std::find(rules.blastEntities.begin(), rules.blastEntities.end(),

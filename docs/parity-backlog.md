@@ -1585,6 +1585,12 @@ work no step of §7 owns, and the owner's calls:
       other three clauses stay open.*
       *Step 164 (wave 4a): the routes of 1-19 (`level18`, won 271) and 1-20 (`level19`, 596) win BECAUSE the first clause is not built -
       the destroyable stone survives the wall it breaks (R4a-1); each is re-flown when it is built.*
+      *Step 175 (WALL, wave 4c-2), 2026-10-15: THE FIRST CLAUSE IS BUILT. GAMEPLAY: YES. A stone whose `destroyable` is exactly 1 dies at the first wall it breaks (12
+      placed stones on 10 levels: 1-13, 1-19, 1-20, 1-22, 3-10, 3-12, 3-13, 3-14, 3-18, 4-21; and every stone an `entity_launcher` throws, 1-24 and 1-25), and a stone
+      breaks a wall only if its first touch is faster than 75 u/s (the original's 1.5 m/s, `ETHBeginContactCallback_breakable_wall` #16-33, #42-60). It moves eight routes
+      (1-19, 1-20, 1-22, 2-29, 3-10, 3-12, 3-14, 4-21: no longer won) which the route phase (step 176) re-flies. The row stays open: its other clauses are not this step's
+      (the notes on steps 133, 115 and 118 above say which are built), and 1-19's and 1-20's re-flight is step 176's. Step 175's recorded deviations WALL-1 to WALL-11 are
+      below, after step 174's.*
 - [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
       u over the half line); static callbacks add their dust only while their bucket is drawn in the original
       (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
@@ -3059,6 +3065,10 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       keep it on the owner's list.
       *Step 164 (wave 4a): 1-22's route (`level21`, won 535) also breaks wall 2 with a stone creeping at hit 0.088, below the decoded gate
       (R4a-3); when the gate is built, re-fly it with a fast second stone (`rolling_stone_727`).*
+      *Step 175 (WALL, wave 4c-2), 2026-10-15: THE GATE IS BUILT and this row's decode is settled (`ETHBeginContactCallback_breakable_wall`, listing L68341, bytes
+      345591..345993: strictly above `scale(1.5)` = 75 u/s, the whole velocity, at the begin of the touch). GAMEPLAY: YES. 3-12's slab-stone exits the portal at rest
+      against the slab and reads 0.117 m/s: the slab HOLDS (tick 269) and the committed route's player dies on tick 449. Left open: the route phase (step 176) re-flies
+      3-12 with a stone above 75 u/s at the slab, and the speeds the port reads are unmeasured (WALL-3). Not ticked: the row ends in that re-flight.*
 - [ ] **R3b-3. `crate_low_emissive`'s held friction of 0.08 is a guess** (the amendment, deviation 10; marked `"_guess": true` since
       R3B FIX 2). Four levels' crates (3-13, 3-03, 3-05, 4-09) are held at 0.08 where every other body is held at 1: a knife-edge in
       the friction (the wedge in 3-13's slot lets go for every release from tick 180 only at 0.079 to 0.082, a combined 0.281-0.286,
@@ -3185,7 +3195,7 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
 
 **Step 162's recorded deviations** (planning step 162 has the evidence, `RECORDED DEVIATIONS` 1-8; `out/parity/program/STK9/` the decode, the arithmetic and the census):
 - [ ] **STK9-1. The player's, a knight's and a crate's begins keep the history's reading.** The same early braking offsets them by one to two steps. The player's gravity is the layer's own (`useGravity` is off, applied in `Player::Steer`, so the replay has no gravity step to add) and his landing shake was matched to F14 on the history's reading (step 104: 8.4 against the footage's 5 px); a knight is steered and a crate pushed. Next: hand each its own gravity step (the layer knows them), set `Watched::freeFlight` for them, and re-run F14's landing and the crates' sounds; the Box2D reading is the same (a player or a knight against a floor is circle against polygon, a crate polygon against polygon, two skins).
-- [ ] **STK9-2. A stone that breaks a wall is read from the history.** `Watch::Carried` serves `Demolish`'s strike (`latchImpacts`): the wall's body has gone before the watch can see it, so there is no shape to replay against. Its shake and hit sound keep the offset (not the kill, not the crush). Next: hand the replay the breakable's box (`Demolish::Breakable::box`) as the other.
+- [ ] **STK9-2. A stone that breaks a wall is read from the history.** `Watch::Carried` serves `Demolish`'s strike (`latchImpacts`): the wall's body has gone before the watch can see it, so there is no shape to replay against. Its shake and hit sound keep the offset (not the kill, not the crush). Next: hand the replay the breakable's box (`Demolish::Breakable::box`) as the other. *Step 175 (WALL, wave 4c-2): NARROWED, not closed.* A stone whose wall breaks on the first look still has its shake and sound read from the history by `latchImpacts` (the wall is gone before the layer's own watch sees the pair); one whose wall breaks on the second look (3-13) is read by the layer's watch itself (WALL-9).
 - [ ] **STK9-3. The begin still comes when the engine lets the stone arrive.** The reading is the original's; the TIME of the kill and the crush is the port's, up to eight ticks after the original's where the staged braking parks the stone (STK-3's kind; step 104's deviation 3).
 - [ ] **STK9-4. The replay is judged against where the other stands now, and two of its judgments are guesses.** A walking other is allowed its travel in the reach test (its velocity into the step) but the replay's touching test uses its current shape: an error of its travel over the replayed steps. The two judgments that sort the engine's steps into "this pair's brake" and "something else" are **guesses, now in `game/data/earthquake.json` `impacts.free_flight` (`_guess: true`)** - the verifier's one medium of round 1: they were `kBrakeReachSlackPx` (1 px) in `Impacts.cpp` and a friction coefficient of 1 written into a comparison. `brake_reach_slack_units` (1.0 level unit, not screen px) is what a change of velocity may stand past the engine's own reach (`PhysicsSystem.cpp:1164`, the two bodies' sweeps; the replay's reach is the stone's travel after gravity and the other's CURRENT speed over the steps since, an estimate), and `brake_friction_cone` (1.0) how much of that change may lie along the surfaces per unit taken out of the approach. `AFreeFallIsReadAsTheOriginalsStepReadsIt` holds the slack's lower edge (its stop at step 5, a gap of 3.43 against a reach of 2.78, is a brake only with more than 0.65) and lets each guess decide one case. **Measured (`fix1/sens_report.txt`, `sens_report2.txt`): over the 86 route replays and `test_mp_layer` the readings are identical for a slack of 0 to 1.5 and a cone of 0.5 to 1.0** (a slack of 2 or 4 moves one begin, the old 70 px knight case on a still-settling knight, 2.68 to 4.15; a cone of 0.25 moves two, 1.5 or 2 two, and 0 about 45 and five checks of the layer), so 1.0 / 1.0 is inside a plateau - and nothing measured on the original fixes either. `kFreePositionPx` (0.01 px) and `kFreeVelocityPxS` (0.05 px/s) stay in `Impacts.cpp`: the float state of the engine's integration, which is no game rule. Next: retune only against STK-1's capture.
 - [ ] **STK9-5. A circle pair's free flight that stops 0 to 0.178 u short of touching is read one step early.** The begin is found within `touch_px` of any pair, as before; for two circles the original's skin is none, so a flight whose free position stops in that band is read on the begin's own step, one quantum (0.333) low. The table's drops keep 0.3 u clear of every step.
@@ -3210,6 +3220,9 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       built); the port keeps it, so 1-19's third pair and 1-20's single stone for both walls exist only because of that (`R4/note_1-20_embedded_exit_trace.txt` traces 1-20's
       exit). Next, when that clause is built: 1-19 drops its last two taps (173, 208) and its second walk half; 1-20 is re-flown from tap 232 on with the level's second stone
       (`rolling_stone_1048` on plank 1058).
+      *Step 175 (WALL, wave 4c-2), 2026-10-15: THE CLAUSE IS BUILT. `rolling_stone_728` dies at the first wall it breaks (1-19: wall 731 on tick 109 at 4.000 m/s, the
+      stone destroyed at (450, 236.1); 1-20: wall 1061 on tick 159 at 2.667 m/s, destroyed at (539.9, 130.2), and wall 1056 stands) and both routes no longer win (1-19
+      not won by 285, 1-20 by 610). The re-flight is the route phase's (step 176); the row closes when the re-flown routes win.*
 - [ ] **R4a-2. 4-10 and 4-12 rest on a wall-slide the port's friction-0 player makes** (`level9c` 329, `level11c` 311). `Player.hpp` `kFriction` is 0 where `dark_mage.ent`
       has 0.9. 4-10 climbs a block face at 42 and 36 u/s (taps 4 to 6) and says plainly that it is a KNIFE-EDGE (taps 1 and 2 move together -4 to +2 only, taps 5 and 6 are not
       re-aimed); 4-12's tap 4 rises along a plat's face at 110 u/s for 28 ticks. Not measured on the original (`zerog.json` is silent). Next: measure a body kicked along a wall
@@ -3217,6 +3230,9 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
 - [ ] **R4a-3. 1-22 breaks wall 2 with a stone creeping at hit 0.088, below the decoded gate** (`level21` 535). `ETHBeginContactCallback_breakable_wall` #16-33 needs a
       stone faster than scale(1.5); the port breaks a wall on touch (R3b-2), and the tick-434 arrival moves 400 to 446 under a 1-tick change of any earlier input (the held-friction
       creep, R3-2). Next: when R3b-2's gate is built, re-fly 1-22 with a fast second stone (`rolling_stone_727`).
+      *Step 175 (WALL, wave 4c-2), 2026-10-15: THE GATE IS BUILT. 1-22's first stone (753) breaks wall 719 at 3.162 m/s on tick 308 and is destroyed; the second (727)
+      reads 0.119 m/s against wall 755 on tick 356 and HOLDS, so the route no longer wins (not won by 548). The re-flight with a fast second stone is the route phase's
+      (step 176); the row closes when it wins.*
 - [ ] **R4a-4. 1-24's door is reached only by a drop onto it over a kill box, and the reachability result does not cover the box** (`level23` 343). `destroyier_ent_1051`'s
       16 px box lies across the door's trigger and kills a walking player on tick 366 (STK-8: no listing callback makes a destroyier kill a player, the owner's testimony says it
       does); the route lands from above with his feet 5 units over the box (`R4/portgap_1-24_destroyier.md`). **`reachability.py` has no destroyier term, so 108 / 20 / 0 does
@@ -3622,6 +3638,58 @@ of 2-31, 3-19 and 3-20; the row CMP-2 is closed by it):
       datum accepted as a string, passes all 121 converter tests: the parametrised "a datum the engine does not read" fixture in `test_joint.py` gives it the Value `'2'`,
       which names no entity, so the joint is skipped either way. Not applied at the commit (a test change, not record text). Next: give the float and the other-typed datum a
       Value that names an entity existing in the fixture (e.g. `'pivot'`), the next time the converter's joint code is touched.
+
+**Step 175's recorded deviations** (the breakable wall's contact, WALL, wave 4c-2; planning step 175 has the evidence, `RECORDED DEVIATIONS` 1-11 and the notes N1-N6;
+`out/parity/program/WALL/` the reports, `impl.md`, `census.md`, `fix1.md`, `fix2.md`, `deviations.md` and `verify1.json` to `verify3.json`; GAMEPLAY: YES, 15 census
+levels, and it moves eight routes (1-19, 1-20, 1-22, 2-29, 3-10, 3-12, 3-14, 4-21); there is no CMP-n row for it, and the rows it works on, Order 11.1's first clause,
+R3b-2, R4a-1, R4a-3 and STK9-2, are annotated above and none is ticked, each ending in the route phase's re-flight; `test_mp_routes` fails 13 routes, the other 56 suites
+pass, 33,535 checks; committed with these deviations by the owner's delegation):
+- [ ] **WALL-1. Gate 6's route clause is NOT met as worded: six routes outside the census's levels are off their census tick** (deviation 1; the verifier's medium; the
+      gate's text is not rewritten). 2-01 dies on tick 283, 2-31 on tick 170, 3-20 is not won by 585, 4-07 by 470, 4-29's tap of tick 525 is off the view, and 3-19 wins
+      on 827 for 832: the same lines in `CMP2/routes_after.log` and in `WALL/routes_before.log` (the committed tree replayed before this step's first edit), inherited
+      from steps 171-174 and moved by none of this step. Required 0 off-tick, measured 6. It extends CMP2-5. The push gate "128 of 128 routes win" stays unmet until the
+      route phase. Next: planning step 176.
+- [ ] **WALL-2. The route census is 114 exact / 1 other tick / 13 not won, against the committed tree's 122 / 1 / 5** (deviation 2). The delta is eight routes, all on
+      census levels, each preceded by its `wall contact` line, failing by design (the route leaned on the behaviour the step corrects): 1-19, 1-20, 1-22 (its second
+      stone, 727, must be fast), 2-29, 3-10, 3-12 (R3b-2: a stone above 75 u/s at the slab), 3-14 and 4-21. 3-13, first thought broken, wins on its census tick 1043 since
+      fix 2 and needs no re-flight. Next: the route phase re-flies the eight and the six inherited ones.
+- [ ] **WALL-3. The speeds the port reads at the walls are unmeasured** (deviation 3; the verifier's medium; GAMEPLAY: the routes). The gate (75 u/s) and the death are
+      decoded; no clip shows a stone breaking a wall (D11_check C40: decode-only). Several natural stones read far under the gate on the port: 2-29 0.621 m/s, 4-21 0.470,
+      3-12 0.117, 1-22's second stone 0.119, 1-09's hand play 0.697. Cause: the port's physics reads, not the rule (planning step 175, note N1). Next: the route phase
+      proves a win on each with a stone clearly above 1.5 m/s (not a creep) and reports any level the rule seals; the owner may settle the unit with one rig clip of a
+      stone rolling or falling into a breakable wall.
+- [ ] **WALL-4. `reachability.py`'s 108 / 20 / 0 is not evidence for this rule** (deviation 4; GAMEPLAY: none). The script has no speed term and no
+      one-wall-per-destroyable-stone term (1-20 and 1-22 each have two walls and two destroyable stones), so it cannot show a level the gate newly seals. Next: the route
+      phase (a fly proves it); optionally give the script both terms, or record that it cannot.
+- [ ] **WALL-5. 3-13's wall verdict rests on a port inference and two marked guesses** (deviation 5; the verifier's medium). The history reads 1.333 m/s there (89 percent
+      of the gate, holds on tick 689) and the free-flight replay 2.000 (breaks on tick 690); "the larger of two readings judges" is the port's, the original's callback
+      runs once. It also rests on `earthquake.json` `impacts.free_flight` slack 1.0 and cone 1.0 (marked guesses, step 162's plateau edge). Cause: the port's engine
+      brakes a stone before the contact; no capture. Marked as inference in `demolish.json` `_note`. Next: the owner's rig clip; the route phase flies 3-13 with a throw
+      clearly above 1.5 m/s if it is re-flown anyway.
+- [ ] **WALL-6. Gate 4's pins have one hole, and the verifier ran none of its own mutations** (deviation 6; the verifier's low). The `Game::AfterStep` -> `Demolish::Tick`
+      hand-over (the stones' begins, `FreeFlightRules` from `Data::earthquake`) has no unit pin: an empty hand-over would be caught only by route 3-13, one of the red
+      routes, and only in a tick-by-tick census compare. Each mutation needs a relinked runner (a Smart App Control exposure), so gate 4 rests on the fixer's per-rule
+      mutation logs, audited by the verifier, whose counts equal the planning step's. Next: one non-route check on `Game::Tick` (3-13 or 1-24), or keep the route-census
+      compare as an explicit gate of step 176.
+- [ ] **WALL-7. Gate 7 (zero warnings) was not proven by a full rebuild after the sources were restored** (deviation 7). Fix 2's four builds read 0 warnings (`build_1` 53
+      steps, `build_2` 47, `build_3_final_runner`, which recompiled the restored `Demolish.cpp` and `Game.cpp`, and `build_4_relink_runner`) and the verifier compiled the
+      7 changed translation units at /W4 with 0 warnings; the commit role did not rebuild (no source changed: 16 of 16 md5s equal `WALL/fix2/final_source_md5.txt`). Next:
+      the next role that builds runs `port_build.bat` and reads zero warnings.
+- [ ] **WALL-8. Binary housekeeping: `MagicPortals.exe` `357fae09` predates the restored sources by modification time** (deviation 8; the verifier's low). It was linked
+      before the mutation runs from the same sources (the string `WALL_MUT` of the harness is absent from it; its `--route` replays print the final code's lines) and is
+      older than `Demolish.cpp` and `Game.cpp` only because the restore touched them; `test_mp.exe` `2c74ad04` was linked after it. The first build after the commit
+      relinks the game with a new md5 and the same code; no spot frame was taken (nothing was launched). Next: the first role that builds records the md5 and takes one
+      spot frame.
+- [x] **WALL-9. STK9-2 is narrowed, not closed** (deviation 9; GAMEPLAY: none). A stone whose wall breaks on the first look still has its shake and sound read from the
+      history by `latchImpacts`; one that breaks on the second look (3-13) is read by the layer's own watch. The row STK9-2 carries a step-175 note. Nothing left in this
+      row.
+- [ ] **WALL-10. Two decoded constants live in `Demolish.cpp`, not in `demolish.json`** (deviation 10; the verifier's low; GAMEPLAY: none). `kDestroyableKey`
+      ("destroyable") and the `== 1.0` literal (the `CMPIu` immediate of #52-53), both cited; every tunable is in JSON. Non-wall breakables keep the touch rule (the
+      existing row on a carranca; no live case in the 128 scenes; planning step 175, note N4). Next: move both into `demolish.json` `wall` at the next change that relinks
+      anyway.
+- [x] **WALL-11. Disclosed: no f420 frame changes** (deviation 11; GAMEPLAY: none). 128 of 128 PNGs are byte-identical to `CMP2/after/sweep`: the gate and the death are
+      play-time, so the sweep cannot show them, and the pair images of 1-24, 3-13, 4-21 and 1-09 read by eye show the same state as before. Not a failure; recorded so no
+      later role takes the byte-identity as proof of the rule. Nothing left.
 
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):

@@ -174,6 +174,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     // and its numbers are decoded where the other two are the Godot project's guesses.
     if (!Puzzle::LoadRules(portDataDirectory + "/movers.json", read.puzzle, error)) return false;
     if (!Demolish::LoadRules(portDataDirectory + "/demolish.json", read.demolish, error)) return false;
+    if (!Earthquake::LoadRules(portDataDirectory + "/earthquake.json", read.earthquake, error)) return false;
     if (!Launchers::LoadRules(portDataDirectory + "/launchers.json", read.launchers, error)) return false;
     if (!Shot::LoadRules(portDataDirectory + "/shot.json", read.shot, error)) return false;
     if (!Boss::LoadRules(portDataDirectory + "/boss.json", read.boss, error)) return false;
@@ -444,7 +445,9 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // places does.
     for (const Launchers::Thrown& thrown : level.launchers.Throw(registry, step.scriptS)) {
         if (thrown.is.teleportable) level.portals.travellers.push_back(thrown.body);
-        if (thrown.is.demolisher) level.demolish.stones.push_back(Demolish::Stone{thrown.name, thrown.body});
+        if (thrown.is.demolisher) {
+            level.demolish.stones.push_back(Demolish::Stone{thrown.name, thrown.body, thrown.is.destroyable});
+        }
     }
     // And what the carrancas spit. A fireball is a point and a radius with no
     // entity, so nothing here hands it to the portals as a thrown stone is
@@ -474,15 +477,44 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // destroyed (b2Contact::Destroy, b2Contact.cpp:105-109), so a knight over a wall that broke falls in the next step, as here.
     level.restingLooked.clear();
     level.restingWoken = Resting::Watch(registry, &level.restingLooked);
+    // What each stone carries into the step, for the breakable_wall callback to read at a begin (Demolish::State::Tick): the
+    // velocity as the tick has steered it, kept with the ones before it.
+    level.stoneWatch.BeforeStep(registry, WatchedStones(level, step));
+}
+
+std::vector<Impacts::Watched> WatchedStones(const Level& level, const ScriptClock::Step& step) {
+    std::vector<Impacts::Watched> stones;
+    stones.reserve(level.demolish.stones.size());
+    for (const Demolish::Stone& stone : level.demolish.stones) {
+        Impacts::Watched watched;
+        watched.body = stone.body;
+        watched.kind = Impacts::Kind::Stone;
+        watched.velocityScale = 1.0 / ScriptClock::SimRatio(step);
+        // The wall's callback reads the contact as the layer's impact watch does: a stone that came to the wall through the air
+        // by what Box2D's step would have read, not by the earlier speed the engine's solver leaves in the history (planning step
+        // 175, fix 2: 3-13's stone read 1.333 m/s by the history and 1.953 by the replay).
+        watched.freeFlight = true;
+        stones.push_back(watched);
+    }
+    return stones;
 }
 
 void AfterStep(const Data& data, entt::registry& registry, Level& level, const ScriptClock::Step& step) {
+    // The stones' pairs as the step left them, first of all, before anything after the step moves or takes a body: Box2D calls a
+    // begin-contact callback inside the step itself, so a wall a stone breaks still stands here. The same skin and the same
+    // free-flight judgments (earthquake.json) the layer's watch looks at a pair by, so one contact reads one speed.
+    const Impacts::FreeFlightRules flight{Earthquake::ToUnits(data.earthquake, data.earthquake.circleTouchPx),
+                                          data.earthquake.brakeReachSlackUnits, data.earthquake.brakeFrictionCone};
+    const std::vector<Impacts::Begin> stoneBegins = level.stoneWatch.AfterStep(
+        registry, Earthquake::ToUnits(data.earthquake, data.earthquake.touchPx), static_cast<double>(step.physicsS), flight);
     level.goals.Tick(registry, level.player, step.scriptS);
     level.hazards.Tick(registry, level.player);
     // The fireballs fly on where the step left the player, and judge it there,
     // as the hazards above them do.
     level.turrets.Tick(registry, level.player, step.scriptS);
-    level.demolish.Tick(registry);
+    // A stone that breaks a breakable_wall above the callback's speed, and is destroyable (every one a launcher throws, and 12 a
+    // level places), goes with it: the portals forget it as they forget any body the level takes away.
+    for (const entt::entity gone : level.demolish.Tick(registry, level.stoneWatch, stoneBegins)) Forget(level, gone);
     // The fire agents, what is burning down, and the bombs - before the portals,
     // which move things. What it takes away goes through Forget as a thrown body
     // does: a crate is teleportable, so a burning one can be in portals.travellers.

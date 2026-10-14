@@ -37,6 +37,9 @@ namespace MagicPortals::Launchers {
 struct Throwable {
     double radiusPx = 0.0;
     bool demolisher = false;
+    // entity_launcher sets `destroyable` = 1 on every entity it adds (#200-209): the wall it breaks destroys it too
+    // (ETHBeginContactCallback_breakable_wall #42-60; launchers.json).
+    bool destroyable = false;
     bool teleportable = false;
     std::string sprite; // the image its .ent shows, a file among the converted entities' art
     glm::dvec3 emissive{0.0}; // its .ent's <EmissiveColor>, which the layer draws it with

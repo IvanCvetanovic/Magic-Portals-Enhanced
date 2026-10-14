@@ -329,7 +329,7 @@ initial delay), and a `button`'s 300 on a 26×16 body cannot be a distance.
 
 | Flag | Only on | Effect |
 |---|---|---|
-| `demolisher` | rolling stones (27/27) | destroys anything `breakable` on contact |
+| `demolisher` | rolling stones (27/27) | breaks a `breakable_wall` it BEGINS to touch faster than 75 level units a second (below) |
 | `explosive` | barrel bombs (31/31) | detonates and chains — **on request, not on contact** |
 | `burnable` | crates, shock agents (65) | burns for a duration, then is **removed entirely** |
 | `breakable` | walls, carrancas | marks what can be smashed |
@@ -345,6 +345,26 @@ Notes that change implementation:
   only a per-frame callback whose one local is `brightness` — a "live bomb" emissive tell.
 - A shock field's ring is **drawn** at radius `areaRadius`; hiding it makes it unfair.
 - `blink` is **purely cosmetic** and must never gate anything.
+
+**DECODED** (`ETHBeginContactCallback_breakable_wall`, listing L68341, planning step 175). The wall's
+side of a stone's touch is one callback, called by Box2D once, when the pair first touches, before
+the step's solver has taken the approach out:
+1. `other.CheckCustomData('demolisher')` absent: nothing happens (#1-14). Only the two stone
+   entities carry it, and no other entity in the 128 levels.
+2. The stone's WHOLE velocity (`GetLinearVelocity().length()`, not a projection along the contact) must be
+   STRICTLY above `scale(1.5)` (#16-33, JNP skips on equal): in the scaled metres of the original's Box2D,
+   1.5 m/s, which is **75 level units a second** (the script's scale factor cancels against Ethanon's
+   50 px to the metre; D11_check C40 reads it the same). A slower touch does nothing at all: no break,
+   no death, no shake (#65 skips the whole arm).
+3. Above it: `destroy(wall)` (the wall's own callback then deletes it and adds its dust the same frame),
+   and `destroy(stone)` if the stone's `destroyable` is exactly 1 (#42-60), and `startEarthquake(30, 200)`.
+   The stone's own callback then adds `rolling_stone_destroy.ent` where the step left it and deletes it.
+4. `destroyable` is set on the 12 stones that 10 levels place (1-13, 1-19, 1-20, 1-22, 3-10, 3-12, 3-13, 3-14,
+   3-18, 4-21) and by `entity_launcher` on every stone it throws (#200-209), so a launcher's stone
+   dies at the first wall it breaks (1-24, 1-25).
+Because it is a begin-contact callback, a stone that touches a wall slowly and is later pushed faster while
+still touching does not break it: there is no second begin. A stone that parts from the wall and comes
+back fast has one.
 
 **DECODED** (`ETHCallback_fire_agent`, planning step 134). A fire agent reaches whatever stands
 within its sprite's width, 32 u, centre to centre, and runs four tests on each: it asks a

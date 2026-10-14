@@ -9526,6 +9526,9 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const Sc
                                              << puff.atPx.y << ") z " << puff.z << " x " << puff.scale << std::endl;
     };
     for (const Launchers::StoneGone& gone : m_level.launchers.despawnedNow) stoneGone(gone, "a despawner");
+    // ETHBeginContactCallback_breakable_wall #42-60: the wall a destroyable stone breaks destroys it, and its own callback
+    // adds the puff where the step left it (planning step 175).
+    for (const Demolish::Taken& taken : m_level.demolish.takenNow) stoneGone(Launchers::StoneGone{taken.stone.name, taken.atPx}, "a wall it broke");
     for (const Launchers::StoneGone& gone : m_level.boss.brokenNow) stoneGone(gone, "the beholder's level");
 
     // THE TRAIL A WEIGHTLESS PLAYER LEAVES (effects.json movement_trail):
@@ -10725,6 +10728,10 @@ void MagicPortalsLayer::latchImpacts(const std::vector<const Demolish::Breakable
         for (const Demolish::Stone& stone : m_level.demolish.stones) {
             if (stone.body == begin.body) return stone.name;
         }
+        // A destroyable stone the wall it broke has taken this tick (planning step 175): its begin is still this tick's.
+        for (const Demolish::Taken& taken : m_level.demolish.takenNow) {
+            if (taken.stone.body == begin.body) return taken.stone.name;
+        }
         for (const Minions::Minion& minion : m_level.minions.minions) {
             if (minion.body == begin.body) return minion.name;
         }
@@ -11745,6 +11752,22 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         stoneHits(registry);
         // So first what follows a step...
         Game::AfterStep(m_data, registry, m_level, step);
+        // The wall's callback (ETHBeginContactCallback_breakable_wall, planning step 175), as Game::AfterStep judged it: read at the
+        // margin (the history) and/or at the watch's begin (the free flight's replay), the larger reading judging.
+        for (const Demolish::Contact& contact : m_level.demolish.contactsNow) {
+            std::string read = contact.atMargin ? "first look at the margin, the history reads " + std::to_string(contact.historyMs) + " m/s"
+                                                : std::string("second look, at the watch's begin");
+            if (contact.atSkin) {
+                read += "; the watch's begin reads " + std::to_string(contact.replayMs) + " m/s" +
+                        (contact.freeFlight ? ", replayed " + std::to_string(contact.replayedSteps) + " step(s) past the brake"
+                                            : std::string(", from the history"));
+            }
+            SUPERSONIC_LOG_INFO("Magic Portals") << "wall contact: " << contact.stone << " begins on " << contact.wall << " at "
+                                                 << contact.speedMs << " m/s (the gate " << m_level.demolish.rules.wallBreaksAboveMs
+                                                 << "): " << (contact.broke ? "the wall breaks" : "the wall holds")
+                                                 << (contact.stoneDied ? ", the stone is destroyed" : "") << " on tick " << m_ticks
+                                                 << " (" << read << ")" << std::endl;
+        }
         // What the tick just did, remembered for the frame to play. Before the
         // branches below, which may put a screen up.
         latchSimSounds(step);

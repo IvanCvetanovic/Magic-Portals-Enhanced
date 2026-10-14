@@ -1139,7 +1139,8 @@
       "destroyier.ent (#73-105, earthquake.json stone_despawned) and, flagged destroyOnStaticHit, on a static",
       "body (#170-208, boss_rock_broken: the beholder's rocks); ETHCallback_beholder on a rolling_stone.ent rising",
       "into it (#399-464, beholder_hurt); and ETHBeginContactCallback_breakable_wall on a stone that is",
-      "`destroyable` as it breaks a wall (#42-60), which the port's Demolish does not do (planning step 109). ITS",
+      "`destroyable` as it breaks a wall faster than 75 u/s (#16-60; demolish.json wall), which the port's",
+      "Demolish does since planning step 175 (a third caller of this effect, beside the despawner's and the rock's). ITS",
       ".ent: no sprite; 2 smoke_particle.png all at once, a0, rep1, life 950 +- 100, size 68, growth 0.6,",
       "randAngleStart 273, randAngle 1.2, white from alpha 0.8 to 0. Temporary."
     ]

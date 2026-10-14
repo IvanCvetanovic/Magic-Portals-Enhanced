@@ -25,7 +25,9 @@
 // that, and for no other reader (FreeFlightVelocity in Impacts.cpp; planning step 162).
 //
 // Read only: nothing here writes the registry, draws a random number or reaches
-// Game::Level, so nothing the simulation does can change.
+// Game::Level, so the watch changes nothing it watches. Two readers use it: the layer's
+// (for its shakes and sounds) and the simulation's own over the stones (Game::Level::stoneWatch),
+// whose begins Demolish judges the breakable_wall's callback by (planning step 175).
 
 #include <cstddef>
 #include <utility>

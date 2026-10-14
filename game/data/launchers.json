@@ -16,6 +16,8 @@
       "_source": "the original's rolling_stone.ent: shape 2 (a circle), collision 60 x 60, CustomData demolisher 1 and teleportable 1, Sprite rolling_stone.png",
       "radius_px": 30.0,
       "demolisher": true,
+      "destroyable": true,
+      "_destroyable": "ETHCallback_entity_launcher #200-209 (MiscCallbacks, listing L69895, bytes 352675..353522): SetUInt('destroyable', 1) on the entity it has just added, on every throw (SetV4 v3, 1; CALLSYS ETHEntity::SetUInt). rolling_stone.ent itself carries no such datum (the census, out/parity/program/WALL/census.md), so a thrown stone dies at the first breakable_wall it breaks (ETHBeginContactCallback_breakable_wall #42-60; demolish.json wall; planning step 175).",
       "teleportable": true,
       "sprite": "rolling_stone.png",
       "emissive": [0.5, 0.5, 0.5],

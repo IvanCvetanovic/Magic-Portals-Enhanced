@@ -37,15 +37,16 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     for (const auto& [name, entry] : root["throwables"].AsObject()) {
         if (!name.empty() && name[0] == '_') continue;
         if (!entry.IsObject() || !entry.Has("radius_px") || !entry["radius_px"].IsNumber() ||
-            !entry.Has("demolisher") || !entry["demolisher"].IsBool() || !entry.Has("teleportable") ||
-            !entry["teleportable"].IsBool() || !entry.Has("sprite") || !entry["sprite"].IsString() ||
+            !entry.Has("demolisher") || !entry["demolisher"].IsBool() || !entry.Has("destroyable") ||
+            !entry["destroyable"].IsBool() || !entry.Has("teleportable") || !entry["teleportable"].IsBool() || !entry.Has("sprite") || !entry["sprite"].IsString() ||
             !entry["emissive"].IsArray() || entry["emissive"].AsArray().size() != 3) {
-            error = path + ": throwables." + name + " needs radius_px, demolisher, teleportable, sprite and emissive";
+            error = path + ": throwables." + name + " needs radius_px, demolisher, destroyable, teleportable, sprite and emissive";
             return false;
         }
         Throwable throwable;
         throwable.radiusPx = entry["radius_px"].AsNumber();
         throwable.demolisher = entry["demolisher"].AsBool();
+        throwable.destroyable = entry["destroyable"].AsBool();
         throwable.teleportable = entry["teleportable"].AsBool();
         throwable.sprite = entry["sprite"].AsString("");
         for (std::size_t i = 0; i < 3; ++i) {

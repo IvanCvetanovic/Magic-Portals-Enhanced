@@ -137,6 +137,8 @@ void ChapterOnesLaunchers() {
         // What launchers.json says rolling_stone.ent is, from its .ent.
         CHECK(launcher.throws.radiusPx == 30.0);
         CHECK(launcher.throws.demolisher);
+        // entity_launcher #200-209 sets `destroyable` 1 on every entity it adds (launchers.json).
+        CHECK_MSG(launcher.throws.destroyable, "a launcher's stone is destroyable");
         CHECK(launcher.throws.teleportable);
         CHECK_MSG(launcher.throws.sprite == "rolling_stone.png", "drawn as rolling_stone.ent is: " + launcher.throws.sprite);
         CHECK_MSG(launcher.throws.emissive == glm::dvec3(0.5), "and lit as it is: emissive 0.5");
@@ -169,6 +171,10 @@ void AThrowIsAStoneAtItsLauncher() {
     CHECK(!run.registry.get<RigidBodyComponent>(stone.body).isKinematic);
     CHECK(Travels(run, stone.body));
     CHECK(Demolishes(run, stone.body));
+    // The stone Demolish holds carries the flag the launcher set (ETHBeginContactCallback_breakable_wall #42-60 reads it).
+    const auto held = std::find_if(run.level.demolish.stones.begin(), run.level.demolish.stones.end(),
+                                   [&stone](const Demolish::Stone& s) { return s.body == stone.body; });
+    CHECK_MSG(held != run.level.demolish.stones.end() && held->destroyable, "and it is a destroyable stone for the wall's callback");
 
     // And one every stride after.
     const int stride = static_cast<int>(std::lround(launcher.strideS / kStep));
@@ -324,6 +330,19 @@ void AThrownStoneBreaksTheWall(const char* levelName, const char* wallName, cons
                 run.level.portals.traversals);
     CHECK_MSG(wall->broken, "the first stone, tick:(x, y)" + trace);
     CHECK_MSG(wall->brokenBy == "entity_launcher_923#1", "broken by " + wall->brokenBy);
+    // The wall it broke destroys the stone too (#42-60): taken this tick, forgotten by the portals and the demolisher list, and
+    // the launcher's own live list lets its record go on the next cull.
+    CHECK_MSG(run.level.demolish.takenNow.size() == 1 && run.level.demolish.takenNow.front().stone.name == "entity_launcher_923#1",
+              "the first stone is destroyed by the wall it broke");
+    CHECK_MSG(!run.level.demolish.takenNow.empty() && !run.registry.valid(run.level.demolish.takenNow.front().stone.body),
+              "its body is gone");
+    CHECK_MSG(run.level.demolish.contactsNow.size() == 1 && run.level.demolish.contactsNow.front().broke &&
+                  run.level.demolish.contactsNow.front().stoneDied,
+              "one begin, above the gate");
+    if (!run.level.demolish.contactsNow.empty()) {
+        std::printf("  %s: the stone read %.3f m/s at the wall (the gate is %.1f)\n", levelName,
+                    run.level.demolish.contactsNow.front().speedMs, run.level.demolish.rules.wallBreaksAboveMs);
+    }
     CHECK_EQ(run.level.portals.traversals, 1);
     CHECK(run.level.portals.placed.empty());
 }

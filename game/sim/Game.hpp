@@ -29,6 +29,7 @@
 #include "sim/Demolish.hpp"
 #include "sim/Diamonds.hpp"
 #include "sim/Dragon.hpp"
+#include "sim/Earthquake.hpp"
 #include "sim/Fields.hpp"
 #include "sim/Fire.hpp"
 #include "sim/Ghost.hpp"
@@ -81,6 +82,9 @@ struct Data {
     Mover::Rules movers;          // the port's own movers.json
     Puzzle::Rules puzzle;         // and its `button` and `door` blocks, which sim/Puzzle reads
     Demolish::Rules demolish;     // and demolish.json
+    // and earthquake.json, of which the stones' watch reads only the contact skin (touchPx: the layer's impact watch reads
+    // the same, so the two see a begin on one step)
+    Earthquake::Rules earthquake;
     Launchers::Rules launchers;   // and launchers.json
     Shot::Rules shot;             // and shot.json
     Boss::Rules boss;             // and boss.json
@@ -133,6 +137,12 @@ struct Level {
     Goals::State goals;
     Hazards::State hazards;
     Demolish::State demolish;
+    // The contact watch of the stones (planning step 175): ETHBeginContactCallback_breakable_wall reads a stone's speed by what
+    // Box2D's step had at the begin, so the wall is judged at a begin of this watch, read as the layer's own watch reads the same
+    // contact - the free flight's replay where the stone came through the air (Impacts.hpp, planning step 162), else the fastest
+    // the stone came toward the wall since it last met or left something. The layer's own watch holds the same stones for its
+    // shakes; this one is the simulation's, so a suite with no layer reads the same.
+    Impacts::Watch stoneWatch;
     Launchers::State launchers;
     Portals::State portals;
     Boss::State boss;
@@ -236,6 +246,12 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
 // ambient is not the darkest value), whether the game is finished, and where the player and the placed portals stand.
 // BeforeStep hands it to Minions::State::Tick; a suite asks it directly.
 Minions::Senses SensesOf(const Data& data, entt::registry& registry, const Level& level);
+
+// What the stones' watch (Level::stoneWatch) is told of each stone going into a step: its body, as a stone, read as Box2D's own
+// step reads a body that came to the wall through the air (Watched::freeFlight: the layer's impact watch reads the same contact
+// that way, planning step 162), at 1 / SimRatio of the body's own velocity (every body is carried at SimRatio times the
+// original's, ScriptClock.hpp). BeforeStep hands it to the watch; a suite asks it directly.
+std::vector<Impacts::Watched> WatchedStones(const Level& level, const ScriptClock::Step& step);
 
 void BeforeStep(const Data& data, entt::registry& registry, Level& level, float direction,
                 const ScriptClock::Step& step);

@@ -3,7 +3,10 @@
 // Rolling stones, and what they break: the Godot project's Demolisher
 // (hazards.gd:97-120), with one rule the owner settled.
 //
-// - A stone (role demolisher) breaks whatever breakable thing it touches.
+// - A stone (role demolisher) breaks whatever breakable thing it touches - a
+//   breakable_wall only when it BEGINS to touch it above demolish.json `wall`'s
+//   speed, and then a stone whose `destroyable` is 1 dies with it
+//   (ETHBeginContactCallback_breakable_wall, decoded whole in planning step 175).
 //   Breaking takes the entity away entirely, collision included, as
 //   Hazards.destroy frees the node. A stone is not a hazard that kills where it
 //   stands, and the player may stand beside one (level 1-9 spawns the player 58 px
@@ -42,15 +45,18 @@
 // a light wall, a shock agent and a minion read it too in the original, and are
 // left to their own modules (demolish.json `blast._not_built`).
 
+#include "sim/Impacts.hpp"
 #include "sim/LevelBuilder.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Trigger.hpp"
 #include "sim/Tscn.hpp"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <entt/entt.hpp>
+#include <glm/glm.hpp>
 
 namespace MagicPortals::Demolish {
 
@@ -64,6 +70,12 @@ struct Rules {
     // ETHBeginContactCallback_rolling_stone #107-129: the hitIntensity a stone's begin against the
     // player must be ABOVE to set his hp to 0 (demolish.json `stone.kills_player_above`).
     double killsPlayerAbove = 0.0;
+    // ETHBeginContactCallback_breakable_wall #16-33: the speed, in metres a second of the ORIGINAL's own physics, a
+    // body's whole velocity must be STRICTLY ABOVE for the wall it begins to touch to break (demolish.json
+    // `wall.breaks_above_m_s`; 1.5 = 75 level units a second).
+    double wallBreaksAboveMs = 0.0;
+    // The entities that callback is bound to, in either spelling (demolish.json `wall.entities`).
+    std::vector<std::string> wallEntities;
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -75,6 +87,35 @@ bool KillsPlayer(const Rules& rules, double hitIntensity);
 struct Stone {
     std::string name;
     entt::entity body = entt::null;
+    // The stone's `destroyable` datum is exactly 1 (a placed stone's node metadata, or the 1 entity_launcher sets on every
+    // stone it throws, #200-209): the wall it breaks destroys it too (ETHBeginContactCallback_breakable_wall #42-60).
+    bool destroyable = false;
+};
+
+// A stone the wall's callback destroyed, as it stood when the step left it: the layer draws rolling_stone_destroy there.
+struct Taken {
+    Stone stone;
+    glm::dvec2 atPx{0.0};
+};
+
+// One begin of a stone against a breakable_wall, as the callback judged it (for the log and the pins). The original's callback runs once,
+// inside the step; the port reads that one contact at up to two instants (planning step 175, fix 2): when the stone first comes within
+// reach of the wall (`atMargin`: the fastest it carried toward it, over the steps since it last met or left something) and when
+// the stones' watch finds the pair begun within Box2D's skin (`atSkin`: the free flight's replay where the stone came through the air,
+// Impacts::Begin::Approaching), which is the later one. Both are the engine's solver's braked estimates of one velocity, so the
+// larger judges.
+struct Contact {
+    std::string stone;
+    std::string wall;
+    double speedMs = 0.0;  // the whole velocity's length it judged by, metres a second of the original's physics: the larger reading
+    bool broke = false;    // above the gate: the wall was destroyed
+    bool stoneDied = false; // and the stone was destroyable
+    bool atMargin = false;  // the stone came within reach of the wall on this tick
+    bool atSkin = false;    // and/or the watch found the pair begun on this tick
+    double historyMs = 0.0; // the history's reading at the margin (0 when not atMargin)
+    double replayMs = 0.0;  // the watch's begin's reading (0 when not atSkin)
+    bool freeFlight = false; // that begin was read as a free flight (replayed)
+    int replayedSteps = 0;   // the steps the replay went on past the engine's brake
 };
 
 struct Breakable {
@@ -83,6 +124,9 @@ struct Breakable {
     entt::entity body = entt::null;
     Trigger::Box box;     // the shape's bounds, in world metres, not grown
     bool flagged = false; // by metadata/breakable, rather than by name
+    // Its entity's contact callback is ETHBeginContactCallback_breakable_wall (rules.wallEntities): a stone breaks it above
+    // a speed, at a begin, and a destroyable one dies with it. Any other breakable keeps the touch rule.
+    bool wall = false;
     bool blastBreaks = false; // flagged, and its entity in rules.blastEntities
     // The original's `destroy` datum, set by a blast's grab and read by the
     // wall's own callback (Destroyed), with what set it.
@@ -105,10 +149,26 @@ struct State {
     // (the first to do so names the death). Returns whether this call killed him.
     bool HitPlayer(const std::string& stone, double hitIntensity);
 
-    // One tick, after the physics step: each stone breaks what it touches. The
-    // wall's body goes and its handle is kept, which the layer's impact watch
-    // matches the stone's contact by.
-    void Tick(entt::registry& registry);
+    // This tick's begins of a stone against a breakable_wall, and the stones the callback destroyed (Tick clears both).
+    // A destroyed stone is kept in `takenNow` until the next Tick, so FindStone still answers for the tick's latches.
+    std::vector<Contact> contactsNow;
+    std::vector<Taken> takenNow;
+    // The (wall body, stone body) pairs that were within reach after the last Tick: a first look is a pair that is not.
+    std::vector<std::pair<entt::entity, entt::entity>> touching;
+
+    // One tick, after the physics step: each stone breaks what it touches. A breakable_wall is judged at the BEGIN of a stone's
+    // touch, by the speed the stone carried into the contact - the whole length of the velocity, over SimRatio (which the watch's
+    // Watched::velocityScale has already divided out) - above rules.wallBreaksAboveMs, strictly; it takes a destroyable stone with
+    // it. The begin is read at two instants and the larger reading judges (see Contact): when the stone first comes within
+    // rules.contactMarginPx of the wall's box (State::touching), by the fastest it had toward the wall since it last met or left
+    // something (`watch`, Impacts::Watch::Carried: the engine's solver brakes a closing pair before it meets, so the speed going
+    // into the last step is low); and when the stones' watch finds the pair begun within Box2D's skin (`begins`: the watch's
+    // AfterStep of this step, taken before anything after it moves or takes a body, so the wall still stands), by what Box2D's
+    // own step reads of a stone that came through the air (Impacts::Begin::Approaching: the free flight's replay) - the layer's impact
+    // watch reads the same contact so, on the same step. A second look only ever breaks a wall the first held. Any other
+    // breakable keeps the touch rule. The wall's body goes and its handle is kept, which the layer's impact watch matches the
+    // stone's contact by. Returns the bodies of the stones destroyed, for the caller's Forget.
+    std::vector<entt::entity> Tick(entt::registry& registry, const Impacts::Watch& watch, const std::vector<Impacts::Begin>& begins);
 
     // A script's deletion, now: the torch's light wall and the dark dragon's wall.
     // The body goes and the handle is cleared. Returns the body taken, for the

@@ -19,11 +19,14 @@
 #include "MpSuite.hpp"
 
 #include "core/Components.hpp"
+#include "core/PhysicsSettings.hpp"
 #include "sim/Boss.hpp"
 #include "sim/Demolish.hpp"
 #include "sim/Game.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/Units.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -72,7 +75,20 @@ bool Begin(const std::string& levelName, Run& run, bool byName = true) {
     return ok;
 }
 
-void Tick(Run& run, float direction = 0.0f) { Game::Tick(run.data, run.registry, run.level, direction, kStep); }
+int g_tick = 0; // this suite's tick, for the contact lines below
+std::vector<Demolish::Contact> g_seen; // every begin of a stone against a breakable_wall that Tick has seen
+
+void Tick(Run& run, float direction = 0.0f) {
+    Game::Tick(run.data, run.registry, run.level, direction, kStep);
+    ++g_tick;
+    // What the wall's callback judged on this tick (planning step 175): each begin of a stone against a breakable_wall.
+    for (const Demolish::Contact& contact : run.level.demolish.contactsNow) {
+        g_seen.push_back(contact);
+        std::printf("    tick %d: %s begins on %s at %.3f m/s (%s, the history reads %.3f): %s%s\n", g_tick, contact.stone.c_str(),
+                    contact.wall.c_str(), contact.speedMs, contact.freeFlight ? "replayed" : "from the history", contact.historyMs,
+                    contact.broke ? "the wall breaks" : "the wall holds", contact.stoneDied ? ", the stone dies" : "");
+    }
+}
 
 // A body put down at a point in the port's pixels, moving at a velocity in them.
 void Put(Run& run, entt::entity body, const glm::dvec2& atPx, const glm::dvec2& velocityPx = glm::dvec2(0.0)) {
@@ -309,7 +325,8 @@ void TheMarginIsTheEdge() {
         breakable.box.half = glm::vec2(Units::ToMetres(15.0), Units::ToMetres(63.0));
         state.breakables.push_back(breakable);
 
-        state.Tick(registry);
+        Impacts::Watch watch;
+        state.Tick(registry, watch, {});
         const bool within = gapPx < rules.contactMarginPx;
         CHECK_MSG(state.breakables.front().broken == within,
                   std::to_string(gapPx) + " px apart: " + (state.breakables.front().broken ? "broke" : "stood"));
@@ -438,6 +455,549 @@ void AStonesKillIsFoldedIntoHazardsAndTheBeholdersRocksAreLeftToBoss() {
               "folded in as a death area's death, named for the stone: " + run.level.hazards.killedBy);
 }
 
+
+// ---- planning step 175: the breakable wall's contact callback ------------------
+//
+// ETHBeginContactCallback_breakable_wall (listing L68341, demolish.json `wall`): a body with `demolisher` breaks the wall it
+// BEGINS to touch only above 1.5 m/s of the original's own physics (75 level units a second), judged on its whole velocity; a
+// stone whose `destroyable` is 1 dies with the wall it breaks. One rig, no level: a stone and walls built by hand, and the stones'
+// contact watch run over the steps by hand (Impacts::Watch, as Game keeps it), so each rule is pinned apart from the engine's solver.
+// The callback reads one contact at up to two instants and the larger reading judges (Demolish::Contact): when the stone comes within
+// contactMarginPx of the wall (the history: the fastest it carried toward it) and when the watch finds the pair begun within Box2D's
+// skin (Impacts::Begin::Approaching: the free flight's replay where the stone came through the air).
+
+struct Rig {
+    entt::registry registry;
+    Demolish::State state;
+    // What Game keeps for the stones (Level::stoneWatch): the callback judges the begins it finds.
+    Impacts::Watch watch;
+    // earthquake.json: the watch's skin and the free-flight replay's judgments, as Game hands them to it.
+    Earthquake::Rules quake;
+    // Whether the stones are watched as a flight, as Game::WatchedStones watches them (pinned apart in GameWatchesTheStones).
+    bool freeFlight = false;
+    std::vector<Impacts::Begin> begins; // the last step's
+
+    Rig() {
+        std::string error;
+        CHECK_MSG(Earthquake::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/earthquake.json", quake, error), error);
+    }
+};
+
+Demolish::Rules LoadedRules() {
+    Demolish::Rules rules;
+    std::string error;
+    CHECK_MSG(Demolish::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/demolish.json", rules, error), error);
+    return rules;
+}
+
+// The skin the watch finds a pair begun by, in level units: Box2D's polygon radius (earthquake.json impacts.touch_px).
+double SkinOf(const Rig& rig) { return Earthquake::ToUnits(rig.quake, rig.quake.touchPx); }
+
+// A stone of the game's 30 px at (atXPx, 0).
+entt::entity AddStone(Rig& rig, const char* name, double atXPx, bool destroyable) {
+    const entt::entity stone = rig.registry.create();
+    rig.registry.emplace<TransformComponent>(stone).position = Units::ToWorld(atXPx, 0.0);
+    rig.registry.emplace<SphereColliderComponent>(stone).radius = Units::ToMetres(30.0);
+    rig.registry.emplace<RigidBodyComponent>(stone);
+    rig.state.stones.push_back(Demolish::Stone{name, stone, destroyable});
+    return stone;
+}
+
+// A breakable of `sizePx` centred at `centrePx`. isWall is whether its entity's callback is the wall's.
+entt::entity AddBox(Rig& rig, const char* name, const glm::dvec2& centrePx, const glm::dvec2& sizePx, bool isWall) {
+    const entt::entity body = rig.registry.create();
+    const glm::vec3 centre = Units::ToWorld(centrePx.x, centrePx.y);
+    rig.registry.emplace<TransformComponent>(body).position = centre;
+    auto& box = rig.registry.emplace<Supersonic::BoxColliderComponent>(body);
+    box.size = glm::vec3(Units::ToMetres(sizePx.x), Units::ToMetres(sizePx.y), 1.0f);
+    Demolish::Breakable breakable;
+    breakable.name = name;
+    breakable.body = body;
+    breakable.wall = isWall;
+    breakable.box.centre = glm::vec2(centre.x, centre.y);
+    breakable.box.half = glm::vec2(Units::ToMetres(sizePx.x * 0.5), Units::ToMetres(sizePx.y * 0.5));
+    rig.state.breakables.push_back(breakable);
+    return body;
+}
+
+// A wall of 30 x 126 px whose left face stands at x = leftFacePx.
+entt::entity AddWall(Rig& rig, const char* name, double leftFacePx, bool isWall) {
+    return AddBox(rig, name, glm::dvec2(leftFacePx + 15.0, 0.0), glm::dvec2(30.0, 126.0), isWall);
+}
+
+glm::dvec2 PlaceOf(Rig& rig, entt::entity body) { return Units::ToPixels(rig.registry.get<TransformComponent>(body).position); }
+
+void Place(Rig& rig, entt::entity body, const glm::dvec2& atPx) {
+    rig.registry.get<TransformComponent>(body).position = Units::ToWorld(atPx.x, atPx.y);
+}
+
+// The stone going into a step at `velocityPx` (px/s of the original's physics, +y down), as Game::BeforeStep hands it to the
+// watch. A step carried at SimRatio 1 here.
+void GoingIn(Rig& rig, entt::entity stone, const glm::dvec2& velocityPx) {
+    rig.registry.get<RigidBodyComponent>(stone).velocity =
+        glm::vec3(Units::ToMetres(velocityPx.x), Units::ToMetres(-velocityPx.y), 0.0f);
+    std::vector<Impacts::Watched> watched;
+    for (const Demolish::Stone& held : rig.state.stones) {
+        Impacts::Watched one;
+        one.body = held.body;
+        one.kind = Impacts::Kind::Stone;
+        one.freeFlight = rig.freeFlight;
+        watched.push_back(one);
+    }
+    rig.watch.BeforeStep(rig.registry, watched);
+}
+
+// The step is over, the stones where it left them: the watch finds the pairs that began, and the callback judges them, as
+// Game::AfterStep does. Returns the stones the callback destroyed.
+std::vector<entt::entity> Stepped(Rig& rig) {
+    const Impacts::FreeFlightRules flight{Earthquake::ToUnits(rig.quake, rig.quake.circleTouchPx), rig.quake.brakeReachSlackUnits,
+                                          rig.quake.brakeFrictionCone};
+    rig.begins = rig.watch.AfterStep(rig.registry, SkinOf(rig), 1.0 / 60.0, flight);
+    return rig.state.Tick(rig.registry, rig.watch, rig.begins);
+}
+
+// The stone comes to where it stands now from `fromPx` away, going into the step at `velocityPx`: two steps, because the watch
+// finds the begin of a stone it has looked at before (a level's first step, or a stone just put, only marks its pairs).
+std::vector<entt::entity> Meets(Rig& rig, entt::entity stone, const glm::dvec2& velocityPx,
+                                const glm::dvec2& fromPx = glm::dvec2(-20.0, 0.0)) {
+    const glm::dvec2 at = PlaceOf(rig, stone);
+    Place(rig, stone, at + fromPx);
+    GoingIn(rig, stone, glm::dvec2(0.0));
+    Stepped(rig);
+    GoingIn(rig, stone, velocityPx);
+    Place(rig, stone, at);
+    return Stepped(rig);
+}
+
+void TheWallsGateIsTheCallbacks() {
+    const Demolish::Rules rules = LoadedRules();
+    // #16-33: scale(1.5) against the whole velocity's length, both in the scaled metres of the original's Box2D.
+    CHECK_MSG(rules.wallBreaksAboveMs == 1.5, "the gate is 1.5 m/s, got " + std::to_string(rules.wallBreaksAboveMs));
+    const double gatePx = rules.wallBreaksAboveMs * Units::kPixelsPerMetre;
+    CHECK_MSG(gatePx == 75.0, "which is 75 level units a second (D11_check C40), got " + std::to_string(gatePx));
+    CHECK(std::find(rules.wallEntities.begin(), rules.wallEntities.end(), "breakable_wall") != rules.wallEntities.end());
+    CHECK(std::find(rules.wallEntities.begin(), rules.wallEntities.end(), "breakable_wall.ent") != rules.wallEntities.end());
+
+    struct Case {
+        const char* what;
+        glm::dvec2 velocityPx;
+        bool breaks;
+    };
+    const Case cases[] = {
+        {"at rest", {0.0, 0.0}, false},
+        {"creeping at 4.4 px/s (1-22's stone against its wall 2: hit 0.088)", {4.4, 0.0}, false},
+        // The engine's velocity is a float, as the original's Box2D's is: a hundredth of a px/s either side is what it holds.
+        {"just under the gate", {gatePx - 0.01, 0.0}, false},
+        {"exactly the gate (JNP skips on equal)", {gatePx, 0.0}, false},
+        {"just over the gate", {gatePx + 0.01, 0.0}, true},
+        {"300 px/s", {300.0, 0.0}, true},
+        // The WHOLE velocity's length, not a projection along the wall's line: a stone going down past the face, and one at 45
+        // degrees whose components are each under the gate.
+        {"100 px/s along the wall's face (the length, not a projection)", {0.0, 100.0}, true},
+        {"60 px/s each way (84.9 whole)", {60.0, 60.0}, true},
+    };
+    for (const Case& c : cases) {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "stone", 0.0, false);
+        // The stone's edge at x = 30 and the wall's face 0.5 px past it: inside the contact margin, outside Box2D's skin.
+        const entt::entity wall = AddWall(rig, "wall", 30.5, true);
+        const std::vector<entt::entity> taken = Meets(rig, stone, c.velocityPx);
+        CHECK_MSG(rig.state.contactsNow.size() == 1, std::string(c.what) + ": one begin");
+        if (rig.state.contactsNow.size() != 1) continue;
+        const Demolish::Contact& contact = rig.state.contactsNow.front();
+        CHECK_MSG(contact.atMargin && !contact.atSkin, std::string(c.what) + ": read at the margin alone");
+        CHECK_MSG(contact.broke == c.breaks, std::string(c.what) + ": the wall " + (contact.broke ? "broke" : "held"));
+        CHECK_MSG(rig.registry.valid(wall) != c.breaks, std::string(c.what) + ": the wall's body " +
+                                                           (rig.registry.valid(wall) ? "stands" : "is gone"));
+        CHECK_MSG(rig.state.breakables.front().broken == c.breaks, std::string(c.what));
+        CHECK_MSG(std::fabs(contact.speedMs - glm::length(c.velocityPx) / Units::kPixelsPerMetre) < 1e-5,
+                  std::string(c.what) + ": read " + std::to_string(contact.speedMs) + " m/s");
+        CHECK_MSG(taken.empty() && rig.registry.valid(stone) && rig.state.stones.size() == 1,
+                  std::string(c.what) + ": a stone that is not destroyable is never taken");
+    }
+    // The contact margin is the same edge for a wall, a quarter pixel either side of it.
+    for (const double gapPx : {rules.contactMarginPx - 0.25, rules.contactMarginPx + 0.25}) {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "stone", 0.0, false);
+        const entt::entity wall = AddWall(rig, "wall", 30.0 + gapPx, true);
+        Meets(rig, stone, glm::dvec2(300.0, 0.0));
+        const bool within = gapPx < rules.contactMarginPx;
+        CHECK_MSG(rig.registry.valid(wall) != within, std::to_string(gapPx) + " px apart: the wall " + (within ? "breaks" : "stands"));
+    }
+    // And within Box2D's skin the watch finds the pair begun on that same step: one contact, read at both instants.
+    {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "stone", 0.0, false);
+        AddWall(rig, "wall", 30.1, true);
+        Meets(rig, stone, glm::dvec2(300.0, 0.0));
+        CHECK_EQ(rig.state.contactsNow.size(), std::size_t{1});
+        if (rig.state.contactsNow.size() == 1) {
+            const Demolish::Contact& contact = rig.state.contactsNow.front();
+            CHECK_MSG(contact.atMargin && contact.atSkin && contact.broke, "read at the margin and at the skin on one step");
+            CHECK_MSG(std::fabs(contact.speedMs - 6.0) < 1e-5 && std::fabs(contact.historyMs - 6.0) < 1e-5 && std::fabs(contact.replayMs - 6.0) < 1e-5,
+                      "6 m/s by both: " + std::to_string(contact.historyMs) + ", " + std::to_string(contact.replayMs));
+        }
+    }
+}
+
+void ADestroyableStoneDiesAtTheFirstWallItBreaks() {
+    const Demolish::Rules rules = LoadedRules();
+    // Two walls, one beside the stone and one under it, both begun on the same step: both break, and the stone goes once.
+    {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "thrown#1", 0.0, true);
+        const entt::entity beside = AddWall(rig, "right wall", 30.1, true);
+        const entt::entity under = AddBox(rig, "lower wall", glm::dvec2(0.0, 30.1 + 15.0), glm::dvec2(126.0, 30.0), true);
+        const std::vector<entt::entity> taken = Meets(rig, stone, glm::dvec2(150.0, 150.0), glm::dvec2(-20.0, -20.0));
+        CHECK_MSG(!rig.registry.valid(beside) && !rig.registry.valid(under), "both walls the stone began to touch on one step break");
+        CHECK_EQ(rig.state.contactsNow.size(), std::size_t{2});
+        CHECK_MSG(taken.size() == 1 && taken.front() == stone && !rig.registry.valid(stone), "the stone is destroyed, once");
+        CHECK_MSG(rig.state.stones.empty(), "and the level no longer holds it as a stone");
+        CHECK_EQ(rig.state.takenNow.size(), std::size_t{1});
+        if (rig.state.takenNow.size() == 1) {
+            const Demolish::Taken& gone = rig.state.takenNow.front();
+            CHECK_MSG(gone.stone.name == "thrown#1" && glm::distance(gone.atPx, glm::dvec2(0.0)) < 1e-3,
+                      "kept with its name and where the step left it, for the puff: " + gone.stone.name);
+        }
+        for (const Demolish::Contact& contact : rig.state.contactsNow) CHECK(contact.broke && contact.stoneDied);
+        // The tick's latches still ask who broke the wall: the name answers until the next Tick.
+        CHECK_MSG(rig.state.FindStone("thrown#1") != nullptr && rig.state.breakables.front().brokenBy == "thrown#1",
+                  "FindStone answers for the stone destroyed this tick");
+        rig.state.Tick(rig.registry, rig.watch, {});
+        CHECK_MSG(rig.state.FindStone("thrown#1") == nullptr && rig.state.takenNow.empty(), "and not for the next");
+    }
+    // A stone that is not destroyable lives; one that is, but touches slowly, lives, and the wall stands.
+    {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "placed", 0.0, false);
+        const entt::entity wall = AddWall(rig, "wall", 30.1, true);
+        const std::vector<entt::entity> taken = Meets(rig, stone, glm::dvec2(200.0, 0.0));
+        CHECK_MSG(!rig.registry.valid(wall) && rig.registry.valid(stone) && taken.empty() && rig.state.takenNow.empty(),
+                  "a stone with no `destroyable` breaks the wall and rolls on");
+        CHECK_MSG(!rig.state.contactsNow.empty() && !rig.state.contactsNow.front().stoneDied, "the contact says so");
+    }
+    {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "creeper", 0.0, true);
+        const entt::entity wall = AddWall(rig, "wall", 30.1, true);
+        const std::vector<entt::entity> taken = Meets(rig, stone, glm::dvec2(70.0, 0.0));
+        CHECK_MSG(rig.registry.valid(wall) && rig.registry.valid(stone) && taken.empty() && rig.state.takenNow.empty(),
+                  "a destroyable stone under the gate neither breaks the wall nor dies (#65 skips the whole arm)");
+    }
+}
+
+void AWallIsJudgedAtTheBeginOfTheTouch() {
+    const Demolish::Rules rules = LoadedRules();
+    Rig rig;
+    rig.state.rules = rules;
+    const entt::entity stone = AddStone(rig, "stone", 0.0, false);
+    const entt::entity wall = AddWall(rig, "wall", 30.1, true);
+    // It begins to touch at 10 px/s: held. It is then pushed to 300 px/s while still touching: no second begin, so the wall stands.
+    Meets(rig, stone, glm::dvec2(10.0, 0.0));
+    CHECK_MSG(rig.registry.valid(wall) && rig.state.contactsNow.size() == 1 && !rig.state.contactsNow.front().broke, "held at the begin");
+    for (int tick = 0; tick < 5; ++tick) {
+        GoingIn(rig, stone, glm::dvec2(300.0, 0.0));
+        Stepped(rig);
+        CHECK_MSG(rig.registry.valid(wall) && rig.state.contactsNow.empty(),
+                  "a stone that keeps touching and picks up speed is not a new begin: the wall stands");
+    }
+    // It leaves, and comes back fast: a begin, and the wall breaks.
+    GoingIn(rig, stone, glm::dvec2(300.0, 0.0));
+    Place(rig, stone, glm::dvec2(-20.0, 0.0));
+    Stepped(rig);
+    CHECK_MSG(rig.state.contactsNow.empty() && rig.state.touching.empty() && !rig.watch.Touching(stone, wall), "apart: no pair");
+    GoingIn(rig, stone, glm::dvec2(300.0, 0.0));
+    Place(rig, stone, glm::dvec2(0.0, 0.0));
+    Stepped(rig);
+    CHECK_MSG(!rig.registry.valid(wall) && rig.state.contactsNow.size() == 1 && rig.state.contactsNow.front().broke,
+              "back at 300 px/s it is a begin, and breaks it");
+}
+
+void ABreakableThatIsNotAWallKeepsTheTouchRule() {
+    const Demolish::Rules rules = LoadedRules();
+    // A carranca is a flagged breakable the stone breaks in the port only (a separate row of the backlog): the gate and the
+    // death are the WALL's callback's, so this one still goes on touch, at rest, with no stone taken - and with no begin of the
+    // watch's at all, which only the wall's callback reads.
+    Rig rig;
+    rig.state.rules = rules;
+    const entt::entity stone = AddStone(rig, "stone", 0.0, true);
+    const entt::entity thing = AddWall(rig, "carranca", 30.5, false);
+    const std::vector<entt::entity> taken = rig.state.Tick(rig.registry, rig.watch, {});
+    CHECK_MSG(!rig.registry.valid(thing) && rig.state.breakables.front().broken, "broken by touch, at rest");
+    CHECK_MSG(taken.empty() && rig.registry.valid(stone) && rig.state.contactsNow.empty(), "no contact of the wall's callback, no stone taken");
+}
+
+// The speed is read as the impact watch reads a stone, over the steps and not from the last one alone: the engine's solver brakes
+// a closing pair before it meets, so the velocity going into the step that meets it is already slow. A stone that came at 300
+// px/s and was braked to 20 by the time it touches reads as 300 - and one that never was fast reads as slow.
+void TheSpeedIsTheFastestTheStoneCameTowardTheWall() {
+    const Demolish::Rules rules = LoadedRules();
+    for (const bool wasFast : {true, false}) {
+        Rig rig;
+        rig.state.rules = rules;
+        const entt::entity stone = AddStone(rig, "stone", -20.0, false);
+        const entt::entity wall = AddWall(rig, "wall", 30.1, true);
+        // Two steps' worth of going in (the stone apart from the wall): fast, then braked; or slow throughout.
+        GoingIn(rig, stone, glm::dvec2(wasFast ? 300.0 : 30.0, 0.0));
+        Stepped(rig);
+        GoingIn(rig, stone, glm::dvec2(20.0, 0.0));
+        // The step has put it against the wall.
+        Place(rig, stone, glm::dvec2(0.0, 0.0));
+        Stepped(rig);
+        CHECK_EQ(rig.state.contactsNow.size(), std::size_t{1});
+        if (rig.state.contactsNow.size() != 1) continue;
+        const Demolish::Contact& contact = rig.state.contactsNow.front();
+        CHECK_MSG(contact.broke == wasFast && rig.registry.valid(wall) == !wasFast,
+                  std::string(wasFast ? "300 then 20" : "30 then 20") + ": read " + std::to_string(contact.speedMs) + " m/s, the wall " +
+                      (contact.broke ? "broke" : "held"));
+        CHECK_MSG(std::fabs(contact.speedMs - (wasFast ? 6.0 : 0.6)) < 1e-5, "the faster of the two: " + std::to_string(contact.speedMs));
+        CHECK_MSG(!contact.freeFlight && std::fabs(contact.historyMs - contact.speedMs) < 1e-9,
+                  "read from the history, which is what a body not in a free flight is read by");
+    }
+}
+
+// PLANNING STEP 175, FIX 2: a stone that came to the wall through the air is read, at the watch's begin, as Box2D's own step reads it
+// (Impacts.hpp, planning step 162), which is how the layer's impact watch reads the very same contact. A stone let go at rest `gapPx`
+// over a wall's top (y = 100), each step taken by hand as the engine would (gravity, then the position, then the brake), with the
+// layer's world gravity of 2000 px/s^2 on a 1/60 s tick (33.3 px/s a step). The engine's solver takes half of the approach out at the
+// end of step 3, so the stone carries 50 into step 4: the free fall is within the skin on step 4 and reads 4 g dt = 133.3 px/s =
+// 2.667 m/s as a free flight, where the history's fastest is the 66.7 it carried into step 3 = 1.333 m/s - under the gate. 3-13's
+// stone read 1.333 and 1.953 so, and the wall held where the layer's own read of the same contact says it breaks.
+struct Reading {
+    bool atMargin;
+    bool atSkin;
+    double historyMs;
+    double replayMs;
+    bool broke;
+};
+
+void AStoneThatCameThroughTheAirIsReadAsTheOriginalsStepReadsIt() {
+    const Demolish::Rules rules = LoadedRules();
+    constexpr double kStepS = 1.0 / 60.0;
+    constexpr double kGravityPxS2 = 2000.0;
+    constexpr double kGravityStepPx = kGravityPxS2 * kStepS;
+    constexpr double kMetre = 50.0; // px per metre of the original's physics (ETHPhysicsSimulator.cpp:27)
+    const double g = kGravityStepPx / kMetre; // one step of gravity, m/s
+    struct Case {
+        const char* what;
+        double gapPx;
+        int brakeAfter; // the step after which the solver halves the approach; 0 none
+        bool freeFlight;
+        std::vector<Reading> contacts; // what the callback judges, in order
+    };
+    const Case cases[] = {
+        // The stone is within reach of the wall (1 px) on step 3, 0.67 px from it: the history reads 2 g and the wall holds. On step 4
+        // the watch finds the pair begun (the braked stone's own position is 0.72 px in): the replay reads 4 g, and the wall breaks.
+        {"4 px, braked after step 3, a free flight: held at the margin, broken at the watch's begin", 4.0, 3, true,
+         {{true, false, 2.0 * g, 0.0, false}, {false, true, 0.0, 4.0 * g, true}}},
+        // The same fall without the flag: the watch's begin reads the history, 2 g again, and there is nothing new to say of it.
+        {"the same fall read by the history alone: held, and held again", 4.0, 3, false, {{true, false, 2.0 * g, 0.0, false}}},
+        // Within reach and begun on the same step (step 4): both readings of one contact, the larger judging.
+        {"4.8 px, braked after step 3, a free flight: both on step 4", 4.8, 3, true, {{true, true, 2.0 * g, 4.0 * g, true}}},
+        {"the same fall read by the history alone: both on step 4, 2 g by both", 4.8, 3, false, {{true, true, 2.0 * g, 2.0 * g, false}}},
+        // Never braked: the history holds what it carried into step 4, 3 g, a step below the free flight's own.
+        {"4.8 px, never braked, a free flight: 3 g by the history, 4 g by the replay", 4.8, 0, true,
+         {{true, true, 3.0 * g, 4.0 * g, true}}},
+    };
+    for (const Case& c : cases) {
+        Rig rig;
+        rig.state.rules = rules;
+        rig.freeFlight = c.freeFlight;
+        Supersonic::PhysicsSettings settings;
+        settings.gravity = glm::vec3(0.0f, -static_cast<float>(Units::ToMetres(kGravityPxS2)), 0.0f);
+        rig.registry.ctx().emplace<Supersonic::PhysicsSettings>(settings);
+        const entt::entity stone = AddStone(rig, "stone", 0.0, false);
+        const entt::entity wall = AddBox(rig, "wall", glm::dvec2(0.0, 115.0), glm::dvec2(126.0, 30.0), true);
+        glm::dvec2 at(0.0, 70.0 - c.gapPx);
+        glm::dvec2 carried(0.0);
+        std::vector<Demolish::Contact> seen;
+        for (int step = 1; step <= 8; ++step) {
+            const glm::dvec2 velocity = carried + glm::dvec2(0.0, kGravityStepPx);
+            const glm::dvec2 to = at + velocity * kStepS;
+            Place(rig, stone, at);
+            GoingIn(rig, stone, carried);
+            Place(rig, stone, to);
+            Stepped(rig);
+            for (const Demolish::Contact& contact : rig.state.contactsNow) seen.push_back(contact);
+            at = to;
+            carried = velocity;
+            if (step == c.brakeAfter) carried.y = velocity.y * 0.5;
+        }
+        CHECK_MSG(seen.size() == c.contacts.size(), std::string(c.what) + ": " + std::to_string(seen.size()) + " contact(s) judged");
+        for (std::size_t i = 0; i < seen.size() && i < c.contacts.size(); ++i) {
+            const Demolish::Contact& got = seen[i];
+            const Reading& want = c.contacts[i];
+            const std::string name = std::string(c.what) + ", contact " + std::to_string(i + 1);
+            CHECK_MSG(got.atMargin == want.atMargin && got.atSkin == want.atSkin, name + ": read at the margin / at the skin");
+            CHECK_MSG(std::fabs(got.historyMs - want.historyMs) < 1e-4, name + ": the history reads " + std::to_string(got.historyMs) +
+                                                                               " of " + std::to_string(want.historyMs));
+            CHECK_MSG(std::fabs(got.replayMs - want.replayMs) < 1e-4,
+                      name + ": the watch's begin reads " + std::to_string(got.replayMs) + " of " + std::to_string(want.replayMs));
+            CHECK_MSG(std::fabs(got.speedMs - std::max(want.historyMs, want.replayMs)) < 1e-4 && got.broke == want.broke,
+                      name + ": judged by " + std::to_string(got.speedMs) + ", the wall " + (got.broke ? "broke" : "held"));
+            CHECK_MSG(got.freeFlight == (want.atSkin && c.freeFlight), name + ": replayed or not");
+        }
+        const bool broke = !c.contacts.empty() && c.contacts.back().broke;
+        CHECK_MSG(rig.registry.valid(wall) != broke, std::string(c.what) + ": the wall " + (broke ? "is gone" : "stands"));
+    }
+}
+
+// Game keeps that watch for the stones (Level::stoneWatch) through every tick, whether or not a layer runs, and reads it in the
+// original's own units (every body is carried at SimRatio times its velocity, ScriptClock.hpp; a bare tick is SimRatio 1). It
+// watches each stone as a free flight, as the layer's own watch does: the wall's callback and the layer's impact row read one contact.
+void GameWatchesTheStones() {
+    Run run;
+    if (!Begin("level8", run)) return;
+    if (run.level.demolish.stones.size() != 1) return;
+    const entt::entity stone = run.level.demolish.stones.front().body;
+    const std::vector<Impacts::Watched> watched = Game::WatchedStones(run.level, ScriptClock::Step(kStep));
+    CHECK_EQ(watched.size(), std::size_t{1});
+    if (watched.size() == 1) {
+        CHECK_MSG(watched.front().body == stone && watched.front().kind == Impacts::Kind::Stone, "the level's stone, as a stone");
+        CHECK_MSG(watched.front().freeFlight, "read as a free flight where it came through the air");
+        CHECK_MSG(std::fabs(watched.front().velocityScale - 1.0) < 1e-12, "at the original's own velocity on a bare tick");
+    }
+    // At the layer's 60 Hz over the original's 1/30 s world step (SimRatio 2: the body carried at twice the original's
+    // velocity) it reports half.
+    const ScriptClock::Step doubled(1.0 / 60.0, 1.0f / 60.0f, 1.0 / 30.0, 60.0);
+    const std::vector<Impacts::Watched> ticked = Game::WatchedStones(run.level, doubled);
+    CHECK_MSG(ticked.size() == 1 && std::fabs(ScriptClock::SimRatio(doubled) - 2.0) < 1e-6 &&
+                  std::fabs(ticked.front().velocityScale - 0.5) < 1e-6,
+              "and 1 / SimRatio on the layer's tick");
+    Put(run, stone, glm::dvec2(100.0, 95.0), glm::dvec2(300.0, 0.0));
+    Tick(run);
+    Impacts::Begin read;
+    CHECK_MSG(run.level.stoneWatch.Carried(stone, read), "the stone is in the level's watch");
+    CHECK_MSG(std::fabs(read.velocityPx.x - 300.0) < 1e-3 && !read.recentPx.empty() && std::fabs(read.recentPx.front().x - 300.0) < 1e-3,
+              "300 px/s going into the step: " + Px(read.velocityPx));
+}
+
+// ETHBeginContactCallback_breakable_wall #52-53: CMPIu against the immediate 1 - `destroyable` is EXACTLY 1, which is not "set". 3-13's
+// stone with each value its node could carry.
+void DestroyableIsExactlyOne() {
+    Run run;
+    if (!Begin("level12b", run)) return;
+    struct Case {
+        const char* text;
+        bool destroyable;
+    };
+    const Case cases[] = {{"1", true}, {"2", false}, {"0", false}, {"", false}, {"1.5", false}};
+    for (const Case& c : cases) {
+        Tscn::Scene scene = run.data.scene;
+        bool set = false;
+        for (Tscn::Node& node : scene.nodes) {
+            if (node.name != "rolling_stone_1540") continue;
+            for (Tscn::Property& property : node.properties) {
+                if (property.key != "metadata/destroyable") continue;
+                property.value.kind = Tscn::Value::Kind::String;
+                property.value.text = c.text;
+                set = true;
+            }
+        }
+        CHECK_MSG(set, "3-13's stone carries the datum");
+        Demolish::State found;
+        std::string error;
+        CHECK_MSG(Demolish::Find(scene, run.data.roles, run.level.built, run.data.demolish, found, error), error);
+        const Demolish::Stone* stone = found.FindStone("rolling_stone_1540");
+        CHECK_MSG(stone != nullptr && stone->destroyable == c.destroyable,
+                  std::string("destroyable \"") + c.text + "\": " + (stone != nullptr && stone->destroyable ? "dies" : "lives"));
+    }
+    // And the datum missing altogether.
+    Tscn::Scene scene = run.data.scene;
+    for (Tscn::Node& node : scene.nodes) {
+        if (node.name != "rolling_stone_1540") continue;
+        node.properties.erase(std::remove_if(node.properties.begin(), node.properties.end(),
+                                             [](const Tscn::Property& p) { return p.key == "metadata/destroyable"; }),
+                              node.properties.end());
+    }
+    Demolish::State found;
+    std::string error;
+    CHECK_MSG(Demolish::Find(scene, run.data.roles, run.level.built, run.data.demolish, found, error), error);
+    const Demolish::Stone* stone = found.FindStone("rolling_stone_1540");
+    CHECK_MSG(stone != nullptr && !stone->destroyable, "no datum: it lives");
+}
+
+// ---- the levels: which stones are destroyable ---------------------------------
+
+void TheStonesTheOriginalMakesDestroyableAre() {
+    // The census (out/parity/program/WALL/census.md): 12 placed stones on 10 levels carry the uint `destroyable` 1; the other
+    // 15 placed stones, and what a launcher throws until entity_launcher sets it, do not.
+    struct Level {
+        const char* level;
+        std::vector<const char*> destroyable;
+        std::vector<const char*> plain;
+    };
+    const Level levels[] = {
+        {"level8", {}, {"rolling_stone_ent_597"}},
+        {"level12", {"rolling_stone_619"}, {}},
+        {"level18", {"rolling_stone_728"}, {}},
+        {"level19", {"rolling_stone_728", "rolling_stone_1048"}, {}},
+        {"level21", {"rolling_stone_727", "rolling_stone_753"}, {}},
+        {"level22", {}, {"rolling_stone_ent_877", "rolling_stone_ent_989"}},
+        {"level3a", {}, {"rolling_stone_808"}},
+        {"level28a", {}, {"rolling_stone_892"}},
+        {"level9b", {"rolling_stone_1198"}, {}},
+        {"level11b", {"rolling_stone_1198"}, {}},
+        {"level12b", {"rolling_stone_1540"}, {}},
+        {"level13b", {"rolling_stone_1231"}, {}},
+        {"level17b", {"rolling_stone_2090"}, {}},
+        {"level20c", {"rolling_stone_1759"}, {}},
+    };
+    int destroyable = 0;
+    for (const Level& level : levels) {
+        Run run;
+        if (!Begin(level.level, run)) continue;
+        for (const char* name : level.destroyable) {
+            const Demolish::Stone* stone = run.level.demolish.FindStone(name);
+            CHECK_MSG(stone != nullptr && stone->destroyable, std::string(level.level) + ": " + name + " is destroyable");
+            ++destroyable;
+        }
+        for (const char* name : level.plain) {
+            const Demolish::Stone* stone = run.level.demolish.FindStone(name);
+            CHECK_MSG(stone != nullptr && !stone->destroyable, std::string(level.level) + ": " + name + " is not");
+        }
+        // And the walls of the level are walls: every breakable_wall of these levels takes the callback.
+        for (const Demolish::Breakable& breakable : run.level.demolish.breakables) {
+            const bool aWall = breakable.entity == "breakable_wall" || breakable.entity == "breakable_wall.ent";
+            CHECK_MSG(breakable.wall == aWall, std::string(level.level) + ": " + breakable.name + " (" + breakable.entity + ")");
+        }
+    }
+    CHECK_MSG(destroyable == 12, "12 destroyable placed stones are listed, and found: " + std::to_string(destroyable));
+}
+
+// ---- the callback on a real level -----------------------------------------------
+
+void AStoneThatTouchesSlowlyBreaksNothingEvenWhenItFallsAlongTheWallAfter() {
+    // level8's stone, put 2 px from its wall's face and sent at 40 px/s: it begins to touch the wall under the gate (hit 0.8),
+    // then the ramp lets it drop with its side against the face, and its speed grows far past 75 px/s while it touches. The
+    // original calls the callback once, at the begin: the wall stands.
+    Run run;
+    if (!Begin("level8", run)) return;
+    if (run.level.demolish.stones.size() != 1) return;
+    const entt::entity stone = run.level.demolish.stones.front().body;
+    Put(run, stone, glm::dvec2(305.0 - 30.0 - 2.0, 95.0), glm::dvec2(40.0, 0.0));
+    std::vector<Demolish::Contact> seen;
+    for (int tick = 0; tick < 120; ++tick) {
+        Tick(run);
+        for (const Demolish::Contact& contact : run.level.demolish.contactsNow) seen.push_back(contact);
+    }
+    CHECK_MSG(!seen.empty(), "the stone begins to touch the wall");
+    for (const Demolish::Contact& contact : seen) {
+        std::printf("  level8's slow stone: begins on %s at %.3f m/s: %s\n", contact.wall.c_str(), contact.speedMs,
+                    contact.broke ? "breaks" : "holds");
+        CHECK_MSG(!contact.broke && contact.speedMs < run.data.demolish.wallBreaksAboveMs, "held at the begin");
+    }
+    CHECK_EQ(run.level.demolish.Broken(), 0);
+    CHECK(Built(run, "breakable_wall_625"));
+    CHECK_MSG(run.registry.valid(stone) && !run.level.demolish.stones.empty(), "and the stone is not taken");
+}
+
 // ---- level 1-9, played -------------------------------------------------------
 
 // Fires a shot and waits for it to land or fail. True when a portal opened.
@@ -464,8 +1024,14 @@ void Level8WithTwoShots() {
     // portal just ahead: walking right through it comes out behind the stone,
     // into the gap between it and the level's edge, and walking on pushes it off
     // the ledge.
+    //
+    // PLANNING STEP 175 (GAMEPLAY): this play used to break the wall and finish the level (4.87 s). The stone it pushes off the
+    // ledge comes down the ramp and reaches the wall at 0.70 m/s of the original's physics, under ETHBeginContactCallback_
+    // breakable_wall's 1.5 (#16-33), and the original calls that callback once, at the begin: the wall stands and the level is
+    // not finished by this play. The wave's route phase finds 1-09 a way that breaks it at speed.
     Run run;
     if (!Begin("level8", run)) return;
+    g_seen.clear();
     for (int tick = 0; tick < 30; ++tick) Tick(run);
     const entt::entity stone = run.level.demolish.stones.front().body;
     WalkRightTo(run, 195.0);
@@ -479,7 +1045,7 @@ void Level8WithTwoShots() {
     CHECK_EQ(run.level.portals.shotsFailed, 0);
     std::string trace;
     int tick = 0;
-    for (; tick < 1800 && !run.level.goals.completed && !run.level.hazards.playerDied; ++tick) {
+    for (; tick < 900 && !run.level.goals.completed && !run.level.hazards.playerDied; ++tick) {
         Tick(run, 1.0f);
         if (tick % 30 == 0) {
             trace += " " + std::to_string(tick) + ":" + Px(PxOf(run, run.level.player)) + Px(PxOf(run, stone)) +
@@ -489,8 +1055,13 @@ void Level8WithTwoShots() {
     std::printf("  level8 with two shots, holding right: %s after %.2f s, the wall %s\n",
                 run.level.goals.completed ? "completed" : "NOT completed", tick * kStep,
                 run.level.demolish.Broken() == 1 ? "broken" : "standing");
-    CHECK_MSG(run.level.demolish.Broken() == 1, "tick:player/stone/broken" + trace);
-    CHECK_MSG(run.level.goals.completed, "tick:player/stone/broken" + trace);
+    CHECK_MSG(!g_seen.empty(), "the pushed stone begins to touch the wall: tick:player/stone/broken" + trace);
+    for (const Demolish::Contact& contact : g_seen) {
+        CHECK_MSG(!contact.broke && contact.speedMs < run.data.demolish.wallBreaksAboveMs,
+                  "read " + std::to_string(contact.speedMs) + " m/s at the begin: under the gate");
+    }
+    CHECK_MSG(run.level.demolish.Broken() == 0, "the wall stands: tick:player/stone/broken" + trace);
+    CHECK_MSG(!run.level.goals.completed, "and the level is not finished by this play");
 }
 
 void runTests() {
@@ -506,6 +1077,16 @@ void runTests() {
     BreakAndRestoreByName();
     AStoneKillsThePlayerAboveTwoAndAHalfAndNotAtIt();
     AStonesKillIsFoldedIntoHazardsAndTheBeholdersRocksAreLeftToBoss();
+    TheWallsGateIsTheCallbacks();
+    ADestroyableStoneDiesAtTheFirstWallItBreaks();
+    AWallIsJudgedAtTheBeginOfTheTouch();
+    ABreakableThatIsNotAWallKeepsTheTouchRule();
+    TheSpeedIsTheFastestTheStoneCameTowardTheWall();
+    AStoneThatCameThroughTheAirIsReadAsTheOriginalsStepReadsIt();
+    GameWatchesTheStones();
+    TheStonesTheOriginalMakesDestroyableAre();
+    DestroyableIsExactlyOne();
+    AStoneThatTouchesSlowlyBreaksNothingEvenWhenItFallsAlongTheWallAfter();
     Level8WithTwoShots();
 }
 
@@ -523,5 +1104,5 @@ MP_SUITE_MAIN("test_mp_demolish") {
         return 77;
     }
     runTests();
-    return ::test::summary("test_mp_demolish", 40);
+    return ::test::summary("test_mp_demolish", 250);
 }

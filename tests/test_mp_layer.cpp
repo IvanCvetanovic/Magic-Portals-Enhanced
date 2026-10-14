@@ -1212,7 +1212,10 @@ void ABrokenWallTakesItsBoxWithIt() {
     const int pictures = Tagged(registry, "Magic Portals Sprite");
     const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
     auto& transform = registry.get<TransformComponent>(stone);
-    const glm::vec3 at = MagicPortals::Units::ToWorld(305.0 - 30.0 - 6.0, 95.0);
+    // From 20 px short and not 6 (planning step 175): a body put somewhere loses what it carried at its first step, so it reads the
+    // steps after; the wall's callback reads the speed the stone came at (#16-33) and the engine's solver closes the last 6 px at
+    // a creep.
+    const glm::vec3 at = MagicPortals::Units::ToWorld(305.0 - 30.0 - 20.0, 95.0);
     transform.position = glm::vec3(at.x, at.y, transform.position.z);
     registry.get<RigidBodyComponent>(stone).velocity = glm::vec3(MagicPortals::Units::ToMetres(300.0), 0.0f, 0.0f);
     for (int tick = 0; tick < 30 && layer.SimLevel()->demolish.Broken() == 0; ++tick) {
@@ -8119,7 +8122,10 @@ void AStoneThroughAWallShakesItsImpactThenTwenty() {
         double yPx;
         bool stoneCalls;
     };
-    for (const Throw& thrown : {Throw{300.0, 95.0, true}, Throw{85.0, 124.0, false}}) {
+    // The second is carried at 160 px/s, 80 of the original's (SimRatio 2), and the ramp it rolls down raises that to about 85 by the
+    // wall: above ETHBeginContactCallback_breakable_wall's 75 u/s (planning step 175; the 85 this said before was the carried speed,
+    // 42 of the original's, which the wall now holds against) and under the 100 along the line to the node.
+    for (const Throw& thrown : {Throw{300.0, 95.0, true}, Throw{160.0, 124.0, false}}) {
         const std::string row = "1-9 at " + std::to_string(static_cast<int>(thrown.speedPx)) + " px/s";
         entt::registry registry;
         publishViewport(registry);
@@ -18285,7 +18291,7 @@ void ABreakableWallLeavesItsDustTurnedByTheWall() {
         bool lying;
     };
     const Throw throws[] = {{"level8", "1-09", {320.0, 124.0}, {305.0 - 30.0 - 20.0, 95.0}, {300.0, 0.0}, false},
-                            {"level12", "1-13", {192.0, 282.0}, {192.0, 282.0 - 16.0 - 30.0 - 6.0}, {0.0, 300.0}, true}};
+                            {"level12", "1-13", {192.0, 282.0}, {192.0, 282.0 - 16.0 - 30.0 - 20.0}, {0.0, 300.0}, true}};
     for (const Throw& thrown : throws) {
         const std::string row = std::string(thrown.tag) + " (" + thrown.level + ")";
         entt::registry registry;
@@ -18434,6 +18440,72 @@ void The432WallsDustIsTwiceTheSize() {
     CHECK_MSG(read == 32 && spread.y > 120.0 && spread.y <= 204.0 + 12.0 && spread.x < 14.0,
               "4-32: its line twice as long, down the screen: " + std::to_string(spread.y) + " down, " +
                   std::to_string(spread.x) + " across");
+    layer.OnDetach(registry);
+}
+
+// A destroyable stone that breaks a wall (planning step 175), on 1-13 (level12): its stone is one of the twelve a level places
+// with `destroyable` 1, and ETHBeginContactCallback_breakable_wall #42-60 destroys it with the wall (the first it breaks). On the
+// tick nothing is added; on the frame one rolling_stone_destroy where the step left it, at depth 32 and 1.3 - and the wall's own
+// wall_destroy - and the stone is gone from the level: no body, no picture, no stone the demolisher or the portals hold.
+void ADestroyableStoneThatBreaksAWallLeavesItsPuffAndIsGone() {
+    if (!OriginalArtIsThere("ADestroyableStoneThatBreaksAWallLeavesItsPuffAndIsGone")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level12");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CHECK_MSG(layer.SimLevel()->demolish.stones.size() == 1 && layer.SimLevel()->demolish.stones.front().destroyable,
+              "1-13's one stone is destroyable");
+    if (layer.SimLevel()->demolish.stones.size() != 1) return;
+    CloseTheLevelStartPopup(layer, registry);
+    for (int tick = 0; tick < 3; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    const std::string name = layer.SimLevel()->demolish.stones.front().name;
+    const entt::entity stone = layer.SimLevel()->demolish.stones.front().body;
+    // Thrown down at its lying wall from 20 px short, at 300 carried px/s (150 of the original's: above the gate's 75).
+    auto& transform = registry.get<TransformComponent>(stone);
+    const glm::vec3 at = MagicPortals::Units::ToWorld(192.0, 282.0 - 16.0 - 30.0 - 20.0);
+    transform.position = glm::vec3(at.x, at.y, transform.position.z);
+    registry.get<RigidBodyComponent>(stone).velocity = glm::vec3(0.0f, -MagicPortals::Units::ToMetres(300.0), 0.0f);
+    int spawnedBefore = layer.EffectsSpawned();
+    bool broke = false;
+    for (int tick = 0; tick < 40 && !broke; ++tick) {
+        spawnedBefore = layer.EffectsSpawned();
+        tickWith(layer, registry, kRest, {}, {});
+        broke = layer.SimLevel()->demolish.Broken() == 1;
+        if (!broke) layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(broke, "the stone breaks 1-13's wall");
+    if (!broke) return;
+    const MagicPortals::Demolish::State& demolish = layer.SimLevel()->demolish;
+    CHECK_MSG(demolish.takenNow.size() == 1 && demolish.takenNow.front().stone.name == name,
+              "and the wall takes it: " + std::to_string(demolish.takenNow.size()));
+    if (demolish.takenNow.size() != 1) return;
+    const MagicPortals::Demolish::Taken gone = demolish.takenNow.front();
+    CHECK_MSG(!registry.valid(stone) && demolish.stones.empty() && demolish.FindStone(name) != nullptr,
+              "its body is gone and the level holds no stone - but the tick's latches can still name it");
+    CHECK_MSG(demolish.contactsNow.size() == 1 && demolish.contactsNow.front().broke && demolish.contactsNow.front().stoneDied &&
+                  demolish.contactsNow.front().speedMs > demolish.rules.wallBreaksAboveMs,
+              "one begin, above the gate, the stone destroyed");
+    int count = 0;
+    FirstEffect(layer, "rolling_stone_destroy.ent", count);
+    CHECK_MSG(layer.EffectsSpawned() == spawnedBefore && count == 0, "nothing is added on the tick");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    const MagicPortalsLayer::EffectReport puff = FirstEffect(layer, "rolling_stone_destroy.ent", count);
+    std::printf("  1-13: %s destroyed by the wall it broke: rolling_stone_destroy at %s z %.1f x%.2f\n", name.c_str(),
+                Point(puff.atPx).c_str(), puff.zUnits, puff.scriptScale);
+    CHECK_MSG(count == 1 && puff.atPx == gone.atPx && nearlyU(puff.zUnits, 32.0) && nearlyU(puff.scriptScale, 1.3),
+              "one rolling_stone_destroy at the stone " + Point(gone.atPx) + ", z 32, x1.3: " + Point(puff.atPx) + " z " +
+                  std::to_string(puff.zUnits));
+    int wallDust = 0;
+    FirstEffect(layer, "wall_destroy.ent", wallDust);
+    CHECK_MSG(wallDust == 1, "and the wall's own dust: " + std::to_string(wallDust));
+    // Nothing of it stays: a later tick has no taken stone, and no stone for the portals to carry.
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.SimLevel()->demolish.takenNow.empty() && layer.SimLevel()->demolish.stones.empty(), "gone for good");
     layer.OnDetach(registry);
 }
 
@@ -22059,6 +22131,7 @@ void runTests() {
     ABreakableWallLeavesItsDustTurnedByTheWall();
     The432WallsDustIsTwiceTheSize();
     AStoneADespawnerTakesLeavesItsPuff();
+    ADestroyableStoneThatBreaksAWallLeavesItsPuffAndIsGone();
     ALiftDoorLeavesItsDustAsItOpensAndCloses();
     AShockAgentWearsItsRing();
     AShockRingTurnsOnGameTimeAndJittersEveryFrame();
