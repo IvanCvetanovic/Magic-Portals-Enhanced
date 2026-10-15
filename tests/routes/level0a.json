@@ -1,16 +1,17 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-01, re-authored on the time-base build (wave 3b-1: every body in the original's 1/30 s step, the player's real capsule and mass), walking only. crate_no_emissive_796 is five times the player's weight now (0.538 against 0.104) and is pushed at about a fifth of",
-    "his pace from tick 61 (x 276), so there is no outrunning it: left along the top floor, the crate creeping ahead of him from x 238 to the floor's end, where it drops into the carranca's lane (tick ~305) and is burned by the fireball spat on tick 283",
-    "(burst and burn on 307). He steps off the same end (x ~120) on tick ~308 and lands on the ledge on tick ~331, into a lane the fireball has just emptied: the next is spat on 377, and he is 221 px ahead of it. Right from 330 down the ramp (the pillar at x 288 takes every",
-    "fireball; the nearest any comes to him over the whole run is 93 px, on the top floor, tick 252). Any left end from 308 to 335 and any right start from 320 to 360 wins. Won on tick 444."
+    "2-01, re-flown after CMP-16 (planning step 172: the crate's own scale 0.75 scales its body, so crate_no_emissive_796 weighs 0.303 against the player's 0.104, 2.9 players where it was 5.2), walking only. He walks left from tick 1 and pushes the crate",
+    "from tick 61 (x 276); the lighter crate no longer holds him to a fifth of his pace, so he is at the top floor's end (x ~135) on tick 173 and drops: the crate meets the ledge on tick 184, he lands on it on tick 188 (x ~108).",
+    "The fireball spat on tick 189 meets the crate and burns it (tick 197; it is 83 px behind him at the nearest, tick 196); the one spat on 95 ends on the hanging block (also 197), and the next, spat on 283, finds him already at x 350. He turns right on 186,",
+    "in the air, and walks the ledge and the ramp to the door: no shot, all five crystals (the two on the ledge on ticks 207 and 219), medal 3, no achievement. Any left end from 178 to 264 wins with the right start four ticks after it, and with a left end of 182 any right start",
+    "from 182 to 242 (a left end under 176 turns him back along the top floor and he never drops; one of 270 or more has the next fireball on him); the won tick follows the right start. Won on tick 307."
   ],
   "level": "level0a",
-  "win_by": 480,
+  "win_by": 320,
   "holds": [
-    {"walk": "left", "from": 1, "to": 320},
-    {"walk": "right", "from": 330, "to": 480}
+    {"walk": "left", "from": 1, "to": 182},
+    {"walk": "right", "from": 186, "to": 320}
   ],
   "taps": []
 }

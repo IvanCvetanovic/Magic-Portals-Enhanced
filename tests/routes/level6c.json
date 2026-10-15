@@ -28,10 +28,29 @@
     "(4, 12) u/s), but he is 43 px lower than the last note's (152, 92) when the door portal lands (439): at",
     "(153.5, 135.0) on 444. The tap that puts a portal on him is moved down to (155, 125), 10 u above his",
     "centre as it was, so it lands on its first callback and he goes through (445) and into the door on 446. A",
-    "tap on 438, 439, 440, 441, 450 or 460 wins too; one on 436 is refused, the door shot being still in flight."
+    "tap on 438, 439, 440, 441, 450 or 460 wins too; one on 436 is refused, the door shot being still in flight.",
+    "Re-flown for wave 4c-2 (CMP-15, planning step 173: a bounce slab is placed, not moved with a velocity; round 1 of",
+    "the route phase). The first recoil still throws the player onto the top of bounce_2107 (y 173.9 on tick 44) and",
+    "he stops at the face of bounce_2106 (x 74.4 on 70), but the slab no longer lifts him: the same flight left him",
+    "1 px lower when the lifts' recoils ended (87.1 on 283, 86.2 before), and that was enough. The left-edge shot",
+    "(5, 60) took him down onto the crate's top-right corner on 344 (his vertical speed went from 51 to 15 u/s), the",
+    "door shot's recoil left him drifting at (-10, -11) u/s instead of (4, 12), and the last tap, fixed in the file,",
+    "found him 36 px from where it was aimed when the door portal landed. Three taps changed. The second lift tap is",
+    "on 279 (was 282): the gap between the lift taps sets his altitude, and with the new aim below only a gap of 29 to",
+    "35 ticks from shot to shot wins; this one is 33, and the player stands at (72.6, 94.2) on 280. The left-edge shot",
+    "is aimed at (5, 80) (was (5, 60)): its recoil, 135 u/s along the line from him to the door, carries him from",
+    "(71.2, 93.5) to (152.0, 109.6) with about 5 px between his feet and the crate's top at 344, and the door shot's",
+    "recoil on 349 takes that velocity back, so he rests, drifting (-3, -1) u/s, at (148.0, 107.3) on 443. The last",
+    "tap is on (148, 98), 9 px above him (was (155, 125)): the portal lands on the next tick, he is carried through on",
+    "445 and stands in the door on 446, the same tick as before. The shot of 247 still ends on a body (button_2108 at",
+    "(72.8, 186), where it ended on bounce_2107 before): its recoil, 141 u/s up, is what it is for. Each tap moved alone",
+    "wins within these shifts in ticks: 29 -4 to +6, 149 and 312 and 348 -6 to +6, 182 -6 to +4, 246 -2 to +4, 279 -4",
+    "to +2 (the lift gap, as above) and 443 -6 to +6 (it wins on its tap + 3); an aim moved 3 px in x or y wins on",
+    "every tap but 348 moved right (457 is off the view, which ends at 455.1). No achievement is unlocked, as before;",
+    "won on tick 446 with 8 shots."
   ],
   "level": "level6c",
-  "win_by": 470,
+  "win_by": 460,
   "holds": [
   ],
   "taps": [
@@ -39,9 +58,9 @@
     {"tick": 149, "at": [110, 160]},
     {"tick": 182, "at": [286, 175]},
     {"tick": 246, "at": [74, 240]},
-    {"tick": 282, "at": [74, 20]},
-    {"tick": 312, "at": [5, 60]},
+    {"tick": 279, "at": [74, 20]},
+    {"tick": 312, "at": [5, 80]},
     {"tick": 348, "at": [454, 172]},
-    {"tick": 443, "at": [155, 125]}
+    {"tick": 443, "at": [148, 98]}
   ]
 }

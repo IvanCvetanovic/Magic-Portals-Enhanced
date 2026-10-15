@@ -1,37 +1,42 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-29 (wave 4a, R4 round 1). The door's room (the top of platform_no_emissive_ent_879, y 116) is shut by breakable_wall_883 (x 131 to 161) and by door_lift_823 (x 163 to 193, which button_827 at (482, 220) raises 102.4 u), and the player cannot climb to it:",
-    "the level's two loose bodies and six shots do it. THE LEVEL'S OWN CLOCK (nothing here touches it): rolling_stone_892 creeps left along anchor_885 from tick 14 (0.28 u a tick), tips spinning_platform_890 on ~340, falls off its end, lands on the floor on 366 and rolls left along it at 0.6 u a tick;",
+    "2-29 (wave 4a, R4 round 1; re-flown in wave 4c-2, round 1, after step 175). The door's room (the top of platform_no_emissive_ent_879, y 116) is shut by breakable_wall_883 (x 131 to 161) and by door_lift_823 (x 163 to 193, which button_827 at (482, 220) raises 102.4 u), and the player cannot climb to it:",
+    "the level's two loose bodies and six shots do it. THE LEVEL'S OWN CLOCK (nothing here touches it): rolling_stone_892 creeps left along anchor_885 from tick 14 (0.28 u a tick), tips spinning_platform_890 on ~340 and falls off its end (it is falling from ~347: 4.6 u a tick on 351, 9 u a tick by 360 in the idle level);",
     "the plank then settles on end (a pole at x ~357, y 82 to 206, by the idle level's captures) and stops the carranca's fireballs (spat on 127, 378, 628; the first bursts on the stone on 155, the second at x 376 on 428).",
     "The two floor crystals (crystal_ent_916, _917) lie on the line to the barrel but do not stop a shot (a tap at (124, 206) from the start, x 381, ends there): they are walked into for the medal (all 3 crystals is gold), and the walk puts the player at x 268.",
+    "STEP 175 (WALL) CHANGED THE STONE'S PART. A breakable_wall breaks only for a stone that BEGINS to touch it faster than 75 u a second of the original's physics (1.5 m/s, judged on its whole velocity). The old route's way, the stone landing on the floor, rolling at 0.62 m/s into a portal at (200, 200) and coming out against the wall, now leaves the wall standing (tick 388).",
+    "The stone is fast only where it FALLS, so the portal that catches it is put in its fall.",
     "THE ROUTE. Left (5-52) takes both crystals (28, 41) and stops at x 268. A shot to (482, 175) (tap 65, fired 66, placed 127) opens a portal in the air over the button, in the corridor under the anchor, and one to (124, 206) (tap 140, placed 178) beside barrel_bomb_ent_884, which enters it as it opens",
     "(a body already inside a portal when its partner opens does not go, so the near portal goes LAST) and comes out over the button on tick 178: the barrel's weight presses it, the door rises from 185 and is up by 245, and STAYS up for the rest of the level (a plate releases when its last body leaves).",
     "A traversal spends the pair. Right to x 330.6 (142-168), where a shot through the open door to (170, 55) (tap 245, fired 246, placed 308) puts a portal in the slot between the wall and the door: its ray passes x 194 at y 78, above the platform's corner (116), and ends at the tap",
-    "(a tap at x 161 or less lies on the wall's face and the shot fails; 162 to 178 were tried and win). Left to x 158 (247-318), under the platform's overhang and clear of the plank's swing (x 293 and up) and of the stone's landing (x 255 to 300);",
-    "a shot to (200, 200) (tap 320, placed 327) puts the other end in the stone's lane at the height of its centre, and the stone enters it as it rolls by on tick 387 and comes out at (170, 55) with its centre against breakable_wall_883, which it breaks on 388 (wall_broken; the pair is spent again).",
-    "The stone drops onto the platform's top, rolls off its end and lands on 427 at x ~259, where it rests (left edge 229). Right to x 213 (422-444: the walk waits for the landing; at tick 430 the stone's left edge is at 225). A shot to (185, 40) (tap 448, placed 495) puts a portal in the slot again:",
-    "from x 201 or more its ray passes the platform's corner at y under 116 (the walk's end may be 439 to 448, x 201 to 221; from x 199 it ends on the platform's end face and fails). A portal on the player (tap 508, (214, 202.5)): he is in the slot above the platform's top on tick 510 (the door still up),",
-    "lands on 522 and walks left (524-) through the broken wall's place and past crystal_ent_915 into the door: won on tick 569.",
-    "Margins, swept on this file: every tap tick and hold edge moved 1 to 4 ticks either way, and every tap point 2, 4 and 8 px in x and in y, all win (the win moves one tick a tick with the last walk's start, 565 to 573). Leans on R23 (the tap-time ray: a portal in the open air), G4 (a shot flies 3.2 u a tick), step 133 (the door's latch and the plate), the port's transit (the traveller set at the partner's own point; a traversal spends the pair) and Demolish (a stone's overlap breaks a wall).",
-    "NOT MEASURED ON THE ORIGINAL: the stone's clock. The library's stills put the original's stone at x ~316 at 2.8 s and on the floor at x ~130 at 6.3 s; the port's is at x 379 at 2.8 s (tick 168) and on the floor at x 250 at 6.3 s (tick 378) (WT-10, 'plank and stone not explained', backlog),",
-    "so the tap that waits for the stone (320) and its traversal on 387 are the port's. Unlocks: nothing (no achievement is tied to 2-29). Medal 3: 6 portals and all 3 crystals (304 and 272 on the way, 114 in the room)."
+    "(a tap at x 161 or less lies on the wall's face and the shot fails; 162 to 190 were tried and win). Left to x 251 (247-280), out of the plank's swing (x 293 and up). A shot to (290, 170) (tap 316, fired 317, placed 327; taps on 307 to 335 win; 306 and earlier are refused, a shot still in flight; from 336 the portal opens on 360 or later, after the stone's fall, and the stone enters it on the floor under the gate (1.34 m/s on 336) and the wall holds, but 338 wins at 1.64, a knife-edge not used)",
+    "puts the other end in the stone's fall under the plank's end: the stone, falling at about 4.8 u a tick (it was at (300.5, 127.2) on 351), enters it on tick 352 and comes out of the slot portal at (170, 56.5) with its velocity turned back, overlapping the wall, and begins to touch breakable_wall_883 at 2.96 m/s (the gate is 1.5, so twice it): the wall breaks on 353 (wall_broken; the pair is spent again).",
+    "Left to x 158 (317-354), under the platform's overhang. The stone strikes the block above the slot (stone_impact 2.55 on 353), is pushed out to x 187 and falls in an arc over the platform's end (x 194) without touching its top, lands on the floor at x ~270 on 385 (stone_impact 3.9), rolls right (x 286 on 390, 315 on 400)",
+    "and rests against the plank's pole at x 318 from 411 (asleep on 463): it never comes within 95 u of the player. Right to x 213 (417-439: the walk waits for the stone to rest). A shot to (185, 40) (tap 443, fired 444, placed 490) puts a portal in the slot again:",
+    "from x 201 or more its ray passes the platform's corner at y under 116 (the walk's end may be 434 to 448, x 201 to 232; from x 199 or less, an end on 433, the shot ends on the platform and fails). A portal on the player (tap 503, (214, 202.5)): he is in the slot above the platform's top on tick 505 (the door still up),",
+    "lands on 517 and walks left (519-) through the broken wall's place and past crystal_ent_915 into the door: won on tick 564.",
+    "Margins, swept on this file (200 runs, each one change): every tap tick and hold edge moved 1 to 4 ticks either way, and every tap point 2, 4 and 8 px in x and in y, all win (the win moves from 560 to 571 with the last walk's start). The fourth shot's point: every aim on a 6 px grid from x 262 to 316 and y 154 to 178 wins (and more beyond).",
+    "Leans on R23 (the tap-time ray: a portal in the open air), G4 (a shot flies 3.2 u a tick), step 133 (the door's latch and the plate), the port's transit (the traveller set at the partner's own point, its velocity turned back; a traversal spends the pair), Demolish and step 175's gate (a stone's overlap breaks a wall only above 1.5 m/s).",
+    "NOT MEASURED ON THE ORIGINAL: the stone's clock, nor its speed at the wall (step 175's deviation 3: the gate is the listing's, no clip shows a stone breaking a wall). The library's stills put the original's stone at x ~316 at 2.8 s and on the floor at x ~130 at 6.3 s; the port's is at x 379 at 2.8 s (tick 168) and on the floor at x 250 at 6.3 s (tick 378, in the level left alone) (WT-10, 'plank and stone not explained', backlog),",
+    "so the tap that waits for the stone (316) and its entry on 352 are the port's. Unlocks: nothing (no achievement is tied to 2-29). Medal 3: 6 portals and all 3 crystals (304 and 272 on the way, 114 in the room)."
   ],
   "level": "level28a",
-  "win_by": 582,
+  "win_by": 577,
   "holds": [
     {"walk": "left", "from": 5, "to": 52},
     {"walk": "right", "from": 142, "to": 168},
-    {"walk": "left", "from": 247, "to": 318},
-    {"walk": "right", "from": 422, "to": 444},
-    {"walk": "left", "from": 524, "to": 700}
+    {"walk": "left", "from": 247, "to": 280},
+    {"walk": "left", "from": 317, "to": 354},
+    {"walk": "right", "from": 417, "to": 439},
+    {"walk": "left", "from": 519, "to": 700}
   ],
   "taps": [
     {"tick": 65, "at": [482, 175]},
     {"tick": 140, "at": [124, 206]},
     {"tick": 245, "at": [170, 55]},
-    {"tick": 320, "at": [200, 200]},
-    {"tick": 448, "at": [185, 40]},
-    {"tick": 508, "at": [214, 202.5]}
+    {"tick": 316, "at": [290, 170]},
+    {"tick": 443, "at": [185, 40]},
+    {"tick": 503, "at": [214, 202.5]}
   ]
 }

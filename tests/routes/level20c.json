@@ -1,27 +1,44 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "4-21 (step 133, re-flown on the timing build, wave 3a round 1): a portal over breakable_wall_1751 at (420, 120)",
-    "(shot on 30, placed on 110) and one beside rolling_stone_1759 at (70, 146) (shot on 116, from the spawn",
-    "platform's x 139.6: from further right the ray meets the platform's corner): the stone drops through onto the",
-    "wall and breaks it (136), then rises to gravity_agent_1758 and stays there. Since G10 a walk off the platform's",
-    "end no longer crosses the pit to the button (the fall is 3.3 x as fast), so a second pair carries the player:",
-    "he walks right to x 250 (120-169; the view must show x 470, the camera at 242.5 or more), shoots a portal over",
-    "the bared button at (470, 115) (186, placed on 248) and one on himself (256), and comes out at (471, 123),",
-    "drops onto button_1723 (door_lift_1721 opens on 266) and, right held, walks to the door's face at x 489.8.",
-    "Once the rising door's bottom clears his head (~355) he drifts under it and reaches the exit on tick 387."
+    "4-21 (step 133; re-flown for the wall's speed gate, planning step 175, in the route phase of wave 4c-2, round 1).",
+    "rolling_stone_1759 (32, 144) is destroyable, and breakable_wall_1751 (x 371 to 497, y 139 to 169), which covers",
+    "button_1723, now breaks only for a stone above 1.5 m/s at its first touch, and kills the stone with it (WALL). The old",
+    "route set the stone down above the wall and it fell on it at 0.47: held. The gravity agent (460, 36) pulls at most 1.5 x",
+    "gravity at the owner's 60 Hz, so it beats gravity only inside about 190 units of it: a stone set down above the wall is",
+    "lifted away from it, and the stone can only get fast against the wall from UNDER it. The only place with a line into the",
+    "pit under the wall is the lower platform (a shot from the spawn platform's end meets the wall's top), so he walks left off",
+    "the spawn platform (5-38; crystals (128, 96) on 17 and (96, 144) on 35) and lands on the lower platform at x 95.4 on 45.",
+    "Tap 1 (50, at (395, 199.5)) opens the exit portal in the pit on 138, 32 units under the wall: the stone set down there",
+    "at rest has its top 3 units under the wall's underside, and the well pulls it right along it (about a third of the pull",
+    "is sideways), so it touches the wall on 184 at 1.94 m/s - the callback reads the WHOLE velocity, and the touch is",
+    "sideways - and the wall breaks and the stone dies. He walks to x 155 (56-80; the crystal at (160, 192) on 74) and tap 2",
+    "(144, at (70, 146)) opens the entry beside the stone on 168; it must come AFTER the exit, for a stone that sleeps in a",
+    "portal that stood before its partner does not go. The stone is out at the exit on 168. He walks on to x 246.6 (145-182:",
+    "tap 3's view must reach x 465, which needs the camera at 238 or more, and the lower platform ends at 256, where he falls).",
+    "Tap 3 (190, at (465, 150)) opens a portal over the bared button on 254, a shot after the wall has gone (184), and tap 4",
+    "(256, on himself, 2 ticks after it lands) puts him out of it on 258: the crystal at (480, 152) on 259 and the button",
+    "pressed on landing (door_lift_1721 opens on 258). Right held from 262 he presses on the door's face from 273, drifts under",
+    "it once its bottom clears his head, and reaches the exit on tick 360. Four of the five crystals, medal 2, 4 portals, no",
+    "achievement (as the old route). EXCEPTIONAL: a KNIFE-EDGE. The stone's first touch must come fast, and a stone set",
+    "down a little lower touches the wall late and slowly and the wall holds (aim (395, 200.8): 0.54 m/s). The exit's aim wins",
+    "for y 198.5 to 200.5 at x 395 and for x 392 to 401 at y 199.5, a band that slides right as y rises (speeds 1.5 to 2.2);",
+    "edges: tap 1 holds 5 ticks early and 16 late, tap 2 5 early and 4 late, tap 3 4 early and 3 late (tap 4 waits for its",
+    "landing), tap 4 3 early and 12 late, the first walk 5 early and 6 late, the second walk's end 2 either way (x 241.8 to",
+    "251.4). Leans on the wall's gate (demolish.json), the well's pull (gravitywell.json), the spent pair, and R23's ray."
   ],
   "level": "level20c",
-  "win_by": 440,
+  "win_by": 372,
   "holds": [
-    {"walk": "left", "from": 5, "to": 20},
-    {"walk": "right", "from": 120, "to": 165},
-    {"walk": "right", "from": 260, "to": 700}
+    {"walk": "left", "from": 5, "to": 38},
+    {"walk": "right", "from": 56, "to": 80},
+    {"walk": "right", "from": 145, "to": 182},
+    {"walk": "right", "from": 262, "to": 700}
   ],
   "taps": [
-    {"tick": 29, "at": [420, 120]},
-    {"tick": 115, "at": [70, 146]},
-    {"tick": 185, "at": [470, 115]},
-    {"tick": 255, "at": [250, 98.5]}
+    {"tick": 50, "at": [395, 199.5]},
+    {"tick": 144, "at": [70, 146]},
+    {"tick": 190, "at": [465, 150]},
+    {"tick": 256, "at": [246.6, 186]}
   ]
 }

@@ -1,33 +1,45 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-31, re-authored in planning step 134 (G8), re-timed in R3 round 1 for the timing group (G4's shot, G10's decoded",
-    "walk and fall) and in 3b-1's round 1 for the time-base group (the walk is let go earlier). The way comes at the agent from UNDER its pocket, over seesaw_915. A portal at (437, 205) (a 252-unit",
-    "shot, open on 102; 1.3 u outside antiportal_958's 192 (193.3 from its centre; 2 at the y 207 it is placed at), so it",
-    "is the route's thin margin) and, once it is open, one ON the player on the start platform (tap 108: the old route's",
-    "second portal 'under him' as he fell off the platform cannot be had - a shot at (598, 276) from the platform runs into",
-    "it, and from the edge it opens after he has fallen past): he comes out of (437, 205) at once, falls onto the plank",
-    "near its right end and, walking left from tick 110, climbs it (the plank takes his weight: the walk must be on as he",
-    "lands - waiting for him to stand first, or landing from (445, 200) or lower, tips the plank to its stop and he slides",
-    "off its end), and once he is past the pivot (x 342) the plank tips left-down and he slides onto anchor_957",
-    "(lands on it on tick 222 at x 272.3, and stands: the idle player holds there). The walk is let go on tick 218,",
-    "as he drops toward the anchor: on the build before the time-base group it ran to 283 and stopped him at x 278,",
-    "but he now lands sooner and a walk past 224 takes him on to x 220.4, from where the shot to (60, 90) ends against a body at (180, 204)",
-    "go (the hold's end on 214-224 wins, on 226 and later it does not). From there a shot at the agent (286) kills it on 313,",
-    "the ring goes. A portal at (60, 90) over the door's ledge (320; a 75-tick flight, open on 395) and one on the player",
-    "(399, at (278.2, 232.6), 6 u from where he stands): into the door. Won on tick 405, no shot burned. Leans on the port's",
-    "hinge solver (the plank's tip), G10 (the player's walk up the plank and his weight on it) and G4."
+    "2-31, re-authored in planning step 134 (G8), re-timed in R3 round 1 and in 3b-1's round 1, and flown again from",
+    "the start in R4c2 round 1 (planning step 176) for step 174's pose (CMP-2): the seesaw now stands where its joint holds it,",
+    "its centre on the corner of anchor_957 (342, 249.5), 14 u left and 29 u down of where the level placed it. The old way,",
+    "a plank pivoting in the air from which he slid left onto the anchor, is gone (it died on tick 170): the plank now turns",
+    "AT the anchor's right end and passes through it (collideConnected is false, ETHRevoluteJoint.cpp:38), so the anchor is",
+    "under the plank's left half and the way across is over the plank itself, which turns with him on it.",
+    "A portal at (418, 247) (a 278-unit shot, open on 110, 5 u outside antiportal_958's 192: 197.0 from its centre; x 414 to",
+    "422 at that y works) and one ON the player on the start platform (tap 113, open on 115): he comes out of (418, 247)",
+    "at once and lands on the plank's right half on tick 116, 76 u right of the pivot, walking left (held from 111 to 221).",
+    "His weight on the right of the pivot swings the plank's left end UP (about 65 to 70 degrees by tick 170, read off the",
+    "window's frames), and he walks up it as it rises: he passes the pivot's x (342) on tick 163 and tops out on tick 180",
+    "at (338, 194), where his weight is on the left of it and the plank tips back down under him (about 45 degrees on tick",
+    "200, nearly level on 220) while he walks on down its left half; it tips away from under him on tick 224 and he drops",
+    "the last 8 u onto anchor_957 (lands on tick 229 at (291, 235)) and stands (the walk is let go on 221). The plank",
+    "swings up steeply again from about tick 232 and, a little later, settles on his head, so from then on every line from",
+    "him to the agent crosses it: a shot at the agent (294, 112) kills it on a tap from 198 to 226 (this one on 212, fired",
+    "213, kills on 230: it flies up the open underside of the agent's pocket, beside the post that blocks every shot from",
+    "the right) and the ring goes; a tap from 230 on ends on the plank. He then waits for moving_platform_959 (a vertical",
+    "swing of 68 u about y 226 at 0.8 rad/s) to be",
+    "out of the line to the door: a shot toward (56, 90) fired on a tap before about 330 ends on its right edge (180, 180)",
+    "and one from 330 to about 650 gets through; this one goes on 360 (a 71-tick flight, open on 432, over the door's ledge)",
+    "and one on the player (440, at (255, 239.3), on him) takes him into the door. Won on tick 446, 5",
+    "shots, no shot burned, no achievement (as before).",
+    "THIN: the walk's start 106 to 116 and end 204 to 236, the first portal's x 414 to 422, the second portal's tap 110 to 118",
+    "and the agent's tap 198 to 226 are the windows measured on this build; the pivot crossing is the port's plank (the .ent's",
+    "density 1 over 254 x 14 px: 1.42 against the player's 0.104, and G10's walk) and has NOT been measured on the original:",
+    "no clip of 2-31 shows him cross it, and the route stands on the hinge solver's reading of CMP-2's pose. Leans on the",
+    "port's hinge solver, G10 (the player's walk up the plank and his weight on it), G4's shot and the moving platform's decode."
   ],
   "level": "level30a",
-  "win_by": 435,
+  "win_by": 460,
   "holds": [
-    {"walk": "left", "from": 110, "to": 218}
+    {"walk": "left", "from": 111, "to": 221}
   ],
   "taps": [
-    {"tick": 29, "at": [437, 205]},
-    {"tick": 108, "at": [696, 226.5]},
-    {"tick": 286, "at": [294, 112]},
-    {"tick": 320, "at": [60, 90]},
-    {"tick": 399, "at": [278.2, 232.6]}
+    {"tick": 29, "at": [418, 247]},
+    {"tick": 113, "at": [696, 226.5]},
+    {"tick": 212, "at": [294, 112]},
+    {"tick": 360, "at": [56, 90]},
+    {"tick": 440, "at": [255, 239.3]}
   ]
 }
