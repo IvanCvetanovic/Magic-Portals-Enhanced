@@ -103,6 +103,8 @@ tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapter
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
 tools/parity/      emulator driver, reference-library capture, frame comparison, the reachability
                    check, port_build.bat
+tools/art/         make_mr_controls.py: Magic Rampage's control buttons, read from its package into the gitignored
+                   reference/magic-rampage/ for the modern controls (code only; docs/magic-rampage-controls.md)
 docs/              format notes, the original's behaviour, parity rig and backlog, permission record
 docs/planning/     the port's planning records
 reference/         ⛔ gitignored in full — not present in a fresh clone (see below)
@@ -477,6 +479,7 @@ well, so they also go under `out/parity/`, never inside `engine/`.
   all §3's rule that the portal mechanic's values are measured, not guessed
 - `tools/asbc/` — AngelScript bytecode reader, ported from the engine's own deserialiser
 - `tools/converter/README.md` — the converter's modules, its checks and its test-fixture rule
+- `docs/magic-rampage-controls.md` — the modern controls' art: where it comes from, what the tool writes, the rights caveat
 - `docs/planning/2026-09-11-magic-portals-remaster.md` — the port's record: every step,
   with its gates; beside it, the port's plan and the spike that started it
 - `engine/README.md`, `engine/AGENTS.md`, `engine/ARCHITECTURE.md` — the engine the port
