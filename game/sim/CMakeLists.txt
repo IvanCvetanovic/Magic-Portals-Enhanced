@@ -49,6 +49,7 @@ add_library(MagicPortalsSim STATIC
     Motion.cpp
     Notificator.cpp
     Mover.cpp
+    PadArt.cpp
     Particles.cpp
     Pause.cpp
     Pictures.cpp

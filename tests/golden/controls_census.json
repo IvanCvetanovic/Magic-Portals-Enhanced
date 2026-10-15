@@ -1,0 +1,990 @@
+{
+  "_about": [
+    "The census of the modern controls' default layout (design 1.9): of the 128 recorded winning routes, which levels have a shot that NO camera position the level's",
+    "bounds allow can bring clear of a control's hit rectangle, so that the control would swallow a shot the route needs. The accepted list is `shapes`, per window shape.",
+    "VALID ONLY FOR THE LAYOUT IN `valid_for`, in particular for hit.grow_px = 0 on every control (the owner's answer to Q0, 2026-10-15: desktop and touch both, growth 0 in the",
+    "data). test_mp_census fails if controls.json differs from `valid_for` in any number, and fails if the levels this list names are not the levels it computes, in either",
+    "direction. A changed growth (a thumb's, a later measured data change) means the census is RE-RUN and the list re-signed by the owner before CTL-13 flips the default; it",
+    "is never edited here to make the suite pass. The tables below it are the design's own arithmetic, kept as data so that the test has an oracle which is not the code it tests.",
+    "Labels and counts only: no level bound, spawn point or tap is written here (those are the original's and live under out/)."
+  ],
+  "_source": [
+    "DERIVED from the design's python, run by out/parity/program/CTL/CTL4/oracle_golden.py at the exact window widths 256 x aspect: CTL/arith2/final_layout.py (places, hits, the",
+    "census at EM 0, 8, 16 and slack 0, 4, 8), CTL/arith2/deadzone_census.py (forced_rect, forced_disc, the first pass's pair_rect, the spawn estimate), census2.py (the corner",
+    "buttons) and census_aspects.py (the nine window shapes). docs/planning/2026-10-15-modern-controls.md section 1.9 and Appendix A name the headline numbers."
+  ],
+  "valid_for": {
+    "preset": "uniform",
+    "size": 0.7,
+    "margin_px": {
+      "side": 44,
+      "top": 44,
+      "bottom": 44
+    },
+    "gap_px": 32,
+    "box_px": 128,
+    "corner_box_factor": 0.9,
+    "corner_min_size": 1.0,
+    "hit": {
+      "seam_px": 32,
+      "edge_reach_px": 48,
+      "grow_px": {
+        "walk_left": 0,
+        "walk_right": 0,
+        "restart": 0,
+        "pause": 0,
+        "clear_portals": 0
+      }
+    },
+    "census": {
+      "em_units": 16,
+      "slack_units": 0
+    }
+  },
+  "inputs": {
+    "routes": 128,
+    "levels_with_bounds": 128,
+    "levels_with_a_spawn": 128,
+    "gravity_levels": 110,
+    "weightless_levels": [
+      "4-02",
+      "4-03",
+      "4-04",
+      "4-05",
+      "4-06",
+      "4-07",
+      "4-08",
+      "4-09",
+      "4-10",
+      "4-11",
+      "4-12",
+      "4-13",
+      "4-14",
+      "4-15",
+      "4-16",
+      "4-17",
+      "4-18",
+      "4-19"
+    ],
+    "shot_taps": 691,
+    "shot_taps_on_gravity_levels": 613
+  },
+  "shapes": [
+    {
+      "name": "5:4",
+      "aspect": [
+        5,
+        4
+      ],
+      "blocked": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "3-14"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20",
+        "3-27"
+      ]
+    },
+    {
+      "name": "4:3",
+      "aspect": [
+        4,
+        3
+      ],
+      "blocked": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "3-14"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20",
+        "3-27"
+      ]
+    },
+    {
+      "name": "3:2",
+      "aspect": [
+        3,
+        2
+      ],
+      "blocked": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "3-14"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20",
+        "3-27"
+      ]
+    },
+    {
+      "name": "16:10",
+      "aspect": [
+        16,
+        10
+      ],
+      "blocked": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "3-14"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20",
+        "3-27"
+      ]
+    },
+    {
+      "name": "16:9",
+      "aspect": [
+        16,
+        9
+      ],
+      "blocked": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [
+          "2-06"
+        ],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "3-14"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [
+          "2-06"
+        ],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20",
+        "3-27"
+      ]
+    },
+    {
+      "name": "18:9",
+      "aspect": [
+        18,
+        9
+      ],
+      "blocked": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [
+          "2-06",
+          "4-23"
+        ],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20",
+          "3-27"
+        ],
+        "restart": [
+          "2-06",
+          "4-23"
+        ],
+        "pause": [],
+        "clear_portals": [
+          "1-09",
+          "2-24",
+          "3-14"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20",
+        "3-27"
+      ]
+    },
+    {
+      "name": "20:9",
+      "aspect": [
+        20,
+        9
+      ],
+      "blocked": {
+        "pair": [
+          "1-20"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20"
+      ]
+    },
+    {
+      "name": "21:9",
+      "aspect": [
+        21,
+        9
+      ],
+      "blocked": {
+        "pair": [
+          "1-20"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09"
+        ]
+      },
+      "blocked_em0": {
+        "pair": [
+          "1-20"
+        ],
+        "restart": [],
+        "pause": [],
+        "clear_portals": [
+          "1-09"
+        ]
+      },
+      "blocked_pair_slack4": [
+        "1-20"
+      ]
+    },
+    {
+      "name": "32:9",
+      "aspect": [
+        32,
+        9
+      ],
+      "blocked": {
+        "pair": [],
+        "restart": [],
+        "pause": [],
+        "clear_portals": []
+      },
+      "blocked_em0": {
+        "pair": [],
+        "restart": [],
+        "pause": [],
+        "clear_portals": []
+      },
+      "blocked_pair_slack4": []
+    }
+  ],
+  "zones_16x9": {
+    "walk_left": {
+      "box": [
+        15.644444444444444,
+        208.49777777777777,
+        47.50222222222222,
+        240.35555555555555
+      ],
+      "hit": [
+        0.0,
+        208.49777777777777,
+        53.19111111111111,
+        256.0
+      ]
+    },
+    "walk_right": {
+      "box": [
+        58.88,
+        208.49777777777777,
+        90.73777777777778,
+        240.35555555555555
+      ],
+      "hit": [
+        53.19111111111111,
+        208.49777777777777,
+        90.73777777777778,
+        256.0
+      ]
+    },
+    "pause": {
+      "box": [
+        398.50666666666666,
+        15.644444444444444,
+        439.46666666666664,
+        56.60444444444445
+      ],
+      "hit": [
+        392.8177777777778,
+        0.0,
+        455.1111111111111,
+        56.60444444444445
+      ]
+    },
+    "restart": {
+      "box": [
+        346.1688888888889,
+        15.644444444444444,
+        387.12888888888887,
+        56.60444444444445
+      ],
+      "hit": [
+        346.1688888888889,
+        0.0,
+        392.8177777777778,
+        56.60444444444445
+      ]
+    },
+    "clear_portals": {
+      "box": [
+        15.644444444444444,
+        15.644444444444444,
+        56.60444444444445,
+        56.60444444444445
+      ],
+      "hit": [
+        0.0,
+        0.0,
+        56.60444444444445,
+        56.60444444444445
+      ]
+    }
+  },
+  "growth_table": {
+    "_about": "counts of levels blocked at 16:9, [EM 0, 8, 16][slack 0, 4, 8], for the pair grown by 0 and by 16 px on all four sides of both arrows",
+    "counts": {
+      "uniform": {
+        "0": [
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ],
+        "16": [
+          [
+            8,
+            2,
+            2
+          ],
+          [
+            8,
+            2,
+            2
+          ],
+          [
+            8,
+            2,
+            2
+          ]
+        ]
+      },
+      "balanced": {
+        "0": [
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ],
+        "16": [
+          [
+            14,
+            5,
+            2
+          ],
+          [
+            14,
+            5,
+            2
+          ],
+          [
+            14,
+            5,
+            2
+          ]
+        ]
+      },
+      "mr": {
+        "0": [
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ],
+        "16": [
+          [
+            16,
+            9,
+            2
+          ],
+          [
+            16,
+            9,
+            2
+          ],
+          [
+            16,
+            9,
+            2
+          ]
+        ]
+      }
+    }
+  },
+  "growth_16_lists": {
+    "uniform": [
+      "1-11",
+      "1-12",
+      "1-16",
+      "1-20",
+      "1-30",
+      "3-16",
+      "3-27",
+      "4-28"
+    ],
+    "balanced": [
+      "1-07",
+      "1-11",
+      "1-12",
+      "1-16",
+      "1-20",
+      "1-23",
+      "1-30",
+      "2-18",
+      "2-23",
+      "3-09",
+      "3-16",
+      "3-27",
+      "3-29",
+      "4-28"
+    ],
+    "mr": [
+      "1-07",
+      "1-11",
+      "1-12",
+      "1-14",
+      "1-16",
+      "1-20",
+      "1-23",
+      "1-30",
+      "2-18",
+      "2-23",
+      "3-09",
+      "3-16",
+      "3-27",
+      "3-29",
+      "4-23",
+      "4-28"
+    ]
+  },
+  "size_sweep": {
+    "_about": "the pair at the uniform margin (44 px) and growth 0, 16:9, EM 16, slack 0: its top, and the levels it blocks",
+    "rows": [
+      {
+        "size_steps": 4,
+        "size": 0.4,
+        "pair_top": 222.1511111111111,
+        "blocked": []
+      },
+      {
+        "size_steps": 5,
+        "size": 0.5,
+        "pair_top": 217.6,
+        "blocked": [
+          "1-20"
+        ]
+      },
+      {
+        "size_steps": 6,
+        "size": 0.6,
+        "pair_top": 213.04888888888888,
+        "blocked": [
+          "1-20",
+          "3-27"
+        ]
+      },
+      {
+        "size_steps": 7,
+        "size": 0.7,
+        "pair_top": 208.49777777777777,
+        "blocked": [
+          "1-20",
+          "3-27"
+        ]
+      },
+      {
+        "size_steps": 8,
+        "size": 0.8,
+        "pair_top": 203.94666666666666,
+        "blocked": [
+          "1-11",
+          "1-12",
+          "1-16",
+          "1-20",
+          "3-16",
+          "3-27",
+          "4-28"
+        ]
+      },
+      {
+        "size_steps": 9,
+        "size": 0.9,
+        "pair_top": 199.39555555555555,
+        "blocked": [
+          "1-07",
+          "1-11",
+          "1-12",
+          "1-16",
+          "1-20",
+          "1-23",
+          "1-30",
+          "2-18",
+          "2-23",
+          "3-09",
+          "3-16",
+          "3-21",
+          "3-27",
+          "3-29",
+          "4-23",
+          "4-25",
+          "4-28"
+        ]
+      },
+      {
+        "size_steps": 10,
+        "size": 1.0,
+        "pair_top": 194.84444444444443,
+        "blocked": [
+          "1-07",
+          "1-11",
+          "1-12",
+          "1-14",
+          "1-16",
+          "1-20",
+          "1-23",
+          "1-30",
+          "2-15",
+          "2-18",
+          "2-23",
+          "3-08",
+          "3-09",
+          "3-16",
+          "3-21",
+          "3-27",
+          "3-29",
+          "4-23",
+          "4-25",
+          "4-28"
+        ]
+      },
+      {
+        "size_steps": 11,
+        "size": 1.1,
+        "pair_top": 190.29333333333332,
+        "blocked": [
+          "1-07",
+          "1-10",
+          "1-11",
+          "1-12",
+          "1-14",
+          "1-16",
+          "1-20",
+          "1-23",
+          "1-30",
+          "2-15",
+          "2-17",
+          "2-18",
+          "2-23",
+          "2-29",
+          "3-08",
+          "3-09",
+          "3-16",
+          "3-21",
+          "3-26",
+          "3-27",
+          "3-29",
+          "4-23",
+          "4-25",
+          "4-28"
+        ]
+      },
+      {
+        "size_steps": 12,
+        "size": 1.2,
+        "pair_top": 185.7422222222222,
+        "blocked": [
+          "1-07",
+          "1-10",
+          "1-11",
+          "1-12",
+          "1-14",
+          "1-16",
+          "1-20",
+          "1-23",
+          "1-30",
+          "2-15",
+          "2-17",
+          "2-18",
+          "2-23",
+          "2-29",
+          "3-08",
+          "3-09",
+          "3-16",
+          "3-21",
+          "3-26",
+          "3-27",
+          "3-29",
+          "4-23",
+          "4-25",
+          "4-28"
+        ]
+      },
+      {
+        "size_steps": 13,
+        "size": 1.3,
+        "pair_top": 181.1911111111111,
+        "blocked": [
+          "1-07",
+          "1-10",
+          "1-11",
+          "1-12",
+          "1-14",
+          "1-16",
+          "1-20",
+          "1-23",
+          "1-30",
+          "2-09",
+          "2-10",
+          "2-11",
+          "2-15",
+          "2-17",
+          "2-18",
+          "2-20",
+          "2-22",
+          "2-23",
+          "2-29",
+          "3-08",
+          "3-09",
+          "3-16",
+          "3-21",
+          "3-26",
+          "3-27",
+          "3-29",
+          "4-23",
+          "4-25",
+          "4-28"
+        ]
+      },
+      {
+        "size_steps": 14,
+        "size": 1.4,
+        "pair_top": 176.64,
+        "blocked": [
+          "1-07",
+          "1-10",
+          "1-11",
+          "1-12",
+          "1-14",
+          "1-16",
+          "1-17",
+          "1-20",
+          "1-23",
+          "1-30",
+          "2-09",
+          "2-10",
+          "2-11",
+          "2-15",
+          "2-17",
+          "2-18",
+          "2-19",
+          "2-20",
+          "2-22",
+          "2-23",
+          "2-25",
+          "2-29",
+          "3-08",
+          "3-09",
+          "3-16",
+          "3-21",
+          "3-26",
+          "3-27",
+          "3-29",
+          "4-23",
+          "4-25",
+          "4-28"
+        ]
+      }
+    ]
+  },
+  "corners_16x9": {
+    "restart": {
+      "em0_slack0": [
+        "2-06"
+      ],
+      "em0_slack4": [
+        "2-06"
+      ],
+      "em16_slack0": [
+        "2-06"
+      ],
+      "em16_slack4": [
+        "2-06"
+      ]
+    },
+    "pause": {
+      "em0_slack0": [],
+      "em0_slack4": [],
+      "em16_slack0": [],
+      "em16_slack4": []
+    },
+    "clear_portals": {
+      "em0_slack0": [
+        "1-09",
+        "2-24",
+        "3-14"
+      ],
+      "em0_slack4": [
+        "1-09",
+        "2-24",
+        "3-14"
+      ],
+      "em16_slack0": [
+        "1-09",
+        "3-14"
+      ],
+      "em16_slack4": [
+        "1-09",
+        "3-14"
+      ]
+    }
+  },
+  "first_pass": {
+    "_about": "size s, margin 44 px, 32 px of growth and a 16 px snap on the pair as ONE rectangle (the review's placement), levels blocked at EM [0, 4, 8, 12, 16, 24]",
+    "ems": [
+      0,
+      4,
+      8,
+      12,
+      16,
+      24
+    ],
+    "size_1_0": {
+      "zone": [
+        0,
+        183.46666666666667,
+        129.42222222222222,
+        256.0
+      ],
+      "design": [
+        25,
+        25,
+        25,
+        25,
+        25,
+        24
+      ],
+      "box_only": [
+        5,
+        5,
+        5,
+        5,
+        20,
+        19
+      ]
+    },
+    "size_1_4": {
+      "zone": [
+        0,
+        165.26222222222222,
+        165.83111111111108,
+        256.0
+      ],
+      "design": [
+        37,
+        37,
+        37,
+        37,
+        37,
+        36
+      ],
+      "box_only": [
+        10,
+        10,
+        10,
+        10,
+        32,
+        31
+      ]
+    }
+  },
+  "classic_discs": {
+    "ems": [
+      0,
+      4,
+      8,
+      12,
+      16,
+      24
+    ],
+    "blocked": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "character_behind_the_pair": {
+    "_about": "levels whose spawn marker, seen through the camera that opens on it, stands inside the pair's BOX at 16:9 (an estimate: the marker, not the sprite)",
+    "uniform": [
+      "2-02"
+    ],
+    "balanced": [
+      "2-02",
+      "2-25",
+      "3-16",
+      "3-24",
+      "3-29"
+    ],
+    "mr": [
+      "2-02",
+      "2-25",
+      "3-16",
+      "3-24",
+      "3-29"
+    ]
+  }
+}

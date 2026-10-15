@@ -1,0 +1,291 @@
+{
+  "_about": [
+    "The modern on-screen controls: Magic Rampage's inset pad, laid out for Magic Portals. The numbers of the layout, the hit",
+    "rule, the tuning grids and the art's margins, read by game/sim/Controls (planning step 180; the design is",
+    "docs/planning/2026-10-15-modern-controls.md, sections 1, 3.1 and 4.2). The CLASSIC controls are not here: they are ui.json's",
+    "hud block, untouched, and sim/Controls forwards to them.",
+    "",
+    "Every number says where it came from. `_source` is an array of lines, each naming the key it is about; `_guess` is true",
+    "where the number is the port's own decision and not a measurement (a per-key `_guess_<key>` where one object holds both).",
+    "A test walks this tree and fails on a number with neither. The tags (docs/planning/2026-10-15-modern-controls.md 1.1):",
+    "DECODED = Penumbra's docs/spec/42-magic-rampage-screenpad.md (another repository, read only; its line numbers are cited as",
+    "`spec 42 l.N`), MEASURED = a tool run on a file, OWNER = the owner's decisions of 2026-10-15, PORT = a decision of this port.",
+    "",
+    "Units: Magic Rampage's reference is 1280x720 and is converted BY HEIGHT: a px here is view height / reference.height_px units",
+    "(256 / 720 = 0.35556 at the port's view, 2.8125 px to a unit: ui.json _about). Nothing below is in units except where its name says so.",
+    "",
+    "sim/Controls.LoadRules reads this file STRICTLY: every key below that does not begin with an underscore must be there with its",
+    "own type and range, or the file is refused and the run plays the classic controls. Unknown keys are ignored, so a later step",
+    "may add one. `layout.presets.<name>.margin_bottom_px` alone is optional (it falls back to `layout.margin_px.bottom`)."
+  ],
+
+  "_source": [
+    "clearance_px 16: DECODED spec 42 l.121: collapseButtons moves a pad button while `a.isOverlapping(b, 16 px)`. It is the adjust",
+    "screen's overlap rule (design 3.3), read by CTL-11 and kept here so the layout's numbers live in one file."
+  ],
+  "clearance_px": 16,
+
+  "reference": {
+    "_source": [
+      "height_px 720: DECODED spec 42 l.48: the layer file's 1280x720 reference; every px below is in it, converted by height."
+    ],
+    "height_px": 720
+  },
+
+  "layout": {
+    "_source": [
+      "version 1: PORT. The number of the default arrangement (design 2.4). Whoever changes a default place bumps kLayoutVersion in",
+      "sim/Controls.hpp and this number together, so a saved move that was made against another arrangement is dropped, not misapplied.",
+      "gap_px 32: DECODED spec 42 l.78: 32 px between neighbours (the two arrows; restart and pause).",
+      "box_px 128: DECODED spec 42 l.77-78: the sprites are 128 px; the sprite box is the layout unit, flush at its edge.",
+      "corner_box_factor 0.9: the VALUE is DECODED spec 42 l.77 (the pause is 0.9 x the pad scale); the APPLICATION to restart and",
+      "clear-portals as well is PORT.",
+      "corner_min_size 1.0: PORT: a corner button never shrinks below 128 x 0.9 px = 40.96 units, whose solid face is exactly 32.0",
+      "units, the classic corner button's size, so a small arrow does not shrink restart, pause or clear.",
+      "face_inset 0.109375: MEASURED (Pillow, alpha >= 250, dpad-left/right/frame, 14 px of 128; CTL/mapC_art.md): the solid face is the",
+      "box shrunk by this fraction of the box on every side. The art's own transparent margin is art.<tier>.<id>.body_inset."
+    ],
+    "_guess_version": true,
+    "version": 1,
+    "gap_px": 32,
+    "box_px": 128,
+    "face_inset": 0.109375,
+
+    "margin_px": {
+      "_source": [
+        "side 44, top 44, bottom 44: the VALUE is DECODED spec 42 l.78 (44 px from the screen's side edges). The APPLICATION is the",
+        "OWNER's of 2026-10-15, 'inset from the corner by the same margin': the same 44 px on both edges of every corner, the bottom",
+        "included (Magic Rampage's own bottom row is flush). The margin is to the BOX, never to the visible face (design 1.1)."
+      ],
+      "side": 44,
+      "top": 44,
+      "bottom": 44
+    },
+
+    "corner_box_factor": 0.9,
+    "corner_min_size": 1.0,
+    "_guess_corner_box_factor": true,
+    "_guess_corner_min_size": true,
+
+    "presets": {
+      "_source": [
+        "The three looks (design 1.1, Q3). size is the arrow's scale on Magic Rampage's grid; margin_bottom_px is the pair's margin to the",
+        "bottom edge. Chosen FROM THE CENSUS (design 1.9): at the default the pair's top must sit below the character's row (206 units).",
+        "uniform 0.7 / 44 px: the owner's 'same margin' literally, pair top 208.50, the recommended default.",
+        "balanced 0.8 / 34 px: a larger arrow, 10 px under the margin at the bottom, pair top 207.50.",
+        "mr 1.0 / 11 px: Magic Rampage's own arrow size (spec 42 l.74-76), pair top 206.58."
+      ],
+      "_guess": true,
+      "uniform": {
+        "_source": [ "size 0.7, margin_bottom_px 44: see presets." ],
+        "_guess": true,
+        "size": 0.7,
+        "margin_bottom_px": 44
+      },
+      "balanced": {
+        "_source": [ "size 0.8, margin_bottom_px 34: see presets." ],
+        "_guess": true,
+        "size": 0.8,
+        "margin_bottom_px": 34
+      },
+      "mr": {
+        "_source": [ "size 1.0, margin_bottom_px 11: see presets." ],
+        "_guess": true,
+        "size": 1.0,
+        "margin_bottom_px": 11
+      }
+    },
+    "default_preset": "uniform",
+    "_default_preset": "PORT, design D1/Q3: the look the owner is shown first. One data line to change."
+  },
+
+  "hit": {
+    "_source": [
+      "seam_px 32: PORT (equal to layout.gap_px): a gap of at most this between two boxes is split at its middle (design 1.4 rule 2).",
+      "edge_reach_px 48: PORT (= the 44 px margin + 4 px): a side whose box edge is within this of the view's (safe-area) edge extends",
+      "to the edge, so the strip beside a box is the control's and a missed corner tap is not a portal (design 1.4 rule 3)."
+    ],
+    "_guess": true,
+    "seam_px": 32,
+    "edge_reach_px": 48,
+
+    "grow_px": {
+      "_source": [
+        "walk_left, walk_right, restart, pause, clear_portals: PORT, 0 each. Growth toward the world, per control. Magic Rampage grows its",
+        "touch areas 4 to 8 steps of 16 px (spec 42 l.80); 0 is right for a mouse and for a thumb on a margin (the owner's answer Q0 of",
+        "2026-10-15: desktop AND touch, growth 0 in the data; a thumb's growth is a later, MEASURED data change, and then the census of",
+        "tests/golden/controls_census.json is re-run before the list is signed). 16 px of growth costs 8, 14 or 16 levels' recorded shots",
+        "at uniform, balanced or mr (design 1.9)."
+      ],
+      "_guess": true,
+      "walk_left": 0,
+      "walk_right": 0,
+      "restart": 0,
+      "pause": 0,
+      "clear_portals": 0
+    }
+  },
+
+  "corner": {
+    "_source": [
+      "act_on release: PORT, design D11 and Q8: restart, pause and clear-portals act on the RELEASE inside their hit rectangle after a",
+      "press inside it, which is the original's own Button rule (MagicPortalsLayer.cpp 8741); the classic style keeps its recorded",
+      "deviation, the press. `press` is the other value."
+    ],
+    "_guess": true,
+    "act_on": "release"
+  },
+
+  "size": {
+    "_source": [
+      "min 0.4, max 1.4, step 0.1: DECODED spec 42 l.75-76: the pad scale, 0.4 to 1.4 in steps of 0.1, eleven values; the tuning keeps whole",
+      "steps and divides once (design 3.1), so a chain of steps ends exactly on the limits."
+    ],
+    "min": 0.4,
+    "max": 1.4,
+    "step": 0.1
+  },
+
+  "opacity": {
+    "_source": [
+      "min 0.2, max 1.8, step 0.2: DECODED spec 42 l.87: a multiplier, 0.2 to 1.8 in steps of 0.2, nine values.",
+      "default 1.0: DECODED spec 42 l.86 (screenPadTransparency, 1.0).",
+      "base_alpha_byte 120: DECODED + MEASURED: ui.json hud.opacity.alpha_byte, the classic controls' alpha, which the modern byte",
+      "MULTIPLIES and does not replace, so toggling the style does not change the brightness. Kept here as the number a test",
+      "compares with ui.json's.",
+      "idle_scale 1.0: PORT. Magic Rampage's own base alpha is min(0.25 / s^2, 0.25) (spec 42 l.89): 0.53 here would reproduce its ghost",
+      "look (0.25 / 0.4706). 1.0 leaves the classic byte unchanged (Q10)."
+    ],
+    "_guess_idle_scale": true,
+    "min": 0.2,
+    "max": 1.8,
+    "step": 0.2,
+    "default": 1.0,
+    "base_alpha_byte": 120,
+    "idle_scale": 1.0
+  },
+
+  "pressed": {
+    "_source": [
+      "boost_byte 38: PORT, a guess: a held arrow or button draws this many bytes brighter (Penumbra's pressed look is +0.15 of 255 = 38.25).",
+      "Magic Rampage's own pressed look is a flash to opaque white (spec 42 l.90, 'likely'). Read by CTL-7."
+    ],
+    "_guess": true,
+    "boost_byte": 38
+  },
+
+  "ring": {
+    "_source": [
+      "size_over_box 3.125: PORT, derived: the classic ring is 200 units over a 64-unit pad (ui.json hud.pads.ring.size_units over",
+      "hud.pads.size_units); the modern ring is that many boxes across, so it follows the arrow's size."
+    ],
+    "_guess": true,
+    "size_over_box": 3.125
+  },
+
+  "hint": {
+    "_source": [
+      "margin_units 8: PORT: 1-21's hint text (camera.json hint) ends this far inside the view's right edge when the pair pushes it right",
+      "(design 1.6)."
+    ],
+    "_guess": true,
+    "margin_units": 8
+  },
+
+  "art": {
+    "_about": [
+      "Which picture each control is drawn with, per tier, and the transparent margin that picture carries (design 1.3, 4.2). A tier's",
+      "file is searched for in its own place: mr = reference/magic-rampage/controls (gitignored, never committed); original = the",
+      "original's own sprite folder, through the layer's menuImage; generated = the pad art the port draws itself (sim/PadArt) into prisms.",
+      "The first tier whose picture is present is used; a tier's `body_inset` is the fraction of its picture that is transparent on each side."
+    ],
+    "mr": {
+      "walk_left": {
+        "_source": [ "body_inset 0.109375: MEASURED (alpha >= 250, 14 px of 128, CTL/mapC_art.md) on dpad-left.png." ],
+        "file": "walk_left.png",
+        "body_inset": 0.109375
+      },
+      "walk_right": {
+        "_source": [ "body_inset 0.109375: MEASURED (alpha >= 250, 14 px of 128, CTL/mapC_art.md) on dpad-right.png." ],
+        "file": "walk_right.png",
+        "body_inset": 0.109375
+      },
+      "restart": {
+        "_source": [ "body_inset 0.109375: MEASURED (alpha >= 250, 14 px of 128, CTL/mapC_art.md) on dpad-frame.png, which carries the glyph." ],
+        "file": "restart.png",
+        "body_inset": 0.109375
+      },
+      "pause": {
+        "_source": [ "body_inset 0.109375: MEASURED (alpha >= 250, 14 px of 128, CTL/mapC_art.md) on dpad-frame.png, which carries the glyph." ],
+        "file": "pause.png",
+        "body_inset": 0.109375
+      },
+      "clear_portals": {
+        "_source": [ "body_inset 0.109375: MEASURED (alpha >= 250, 14 px of 128, CTL/mapC_art.md) on dpad-frame.png, which carries the glyph." ],
+        "file": "clear_portals.png",
+        "body_inset": 0.109375
+      }
+    },
+    "original": {
+      "restart": {
+        "_source": [ "body_inset 0: the original's restart_level_button.png (ui.json hud.restart.sprite) is opaque to its box." ],
+        "file": "restart_level_button.png",
+        "body_inset": 0.0
+      },
+      "pause": {
+        "_source": [ "body_inset 0: the original's main_menu_shortcut.png (ui.json hud.pause.sprite) is opaque to its box." ],
+        "file": "main_menu_shortcut.png",
+        "body_inset": 0.0
+      },
+      "clear_portals": {
+        "_source": [ "body_inset 0: the original's clear_portals_button.png (ui.json hud.clear_portals.sprite) is opaque to its box." ],
+        "file": "clear_portals_button.png",
+        "body_inset": 0.0
+      }
+    },
+    "generated": {
+      "walk_left": {
+        "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws its glyphs with the same margin as Magic Rampage's, so a tier change does not move the face." ],
+        "file": "modern_walk_left.png",
+        "body_inset": 0.109375
+      },
+      "walk_right": {
+        "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws its glyphs with the same margin as Magic Rampage's, so a tier change does not move the face." ],
+        "file": "modern_walk_right.png",
+        "body_inset": 0.109375
+      },
+      "restart": {
+        "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws its glyphs with the same margin as Magic Rampage's, so a tier change does not move the face." ],
+        "file": "modern_restart.png",
+        "body_inset": 0.109375
+      },
+      "pause": {
+        "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws its glyphs with the same margin as Magic Rampage's, so a tier change does not move the face." ],
+        "file": "modern_pause.png",
+        "body_inset": 0.109375
+      },
+      "clear_portals": {
+        "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws its glyphs with the same margin as Magic Rampage's, so a tier change does not move the face." ],
+        "file": "modern_clear_portals.png",
+        "body_inset": 0.109375
+      }
+    }
+  },
+
+  "census": {
+    "_source": [
+      "em_units 16: PORT (review 2 F1): the nearest to the view's edge a player parks a target; the census result at the default does not",
+      "change with it from 0 to 16 (CTL/arith2/final_layout.py, census_aspects.py).",
+      "slack_units 0: PORT: the hit rectangle is not shrunk when a recorded shot is judged unreachable.",
+      "character_row_units 206: MEASURED, the standard waist line of the character in view units (review 2 F1; CTL/arith2/final_layout.py):",
+      "the default pair's top must sit at or below it."
+    ],
+    "_guess": true,
+    "em_units": 16,
+    "slack_units": 0,
+    "character_row_units": 206
+  },
+
+  "default_mode": "classic",
+  "_default_mode": "PORT, design 2.1: the style a player's run plays when nothing is saved. classic until CTL-13 flips it to modern (the owner's, Q4)."
+}

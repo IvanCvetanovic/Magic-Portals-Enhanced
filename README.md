@@ -66,7 +66,7 @@ ctest --test-dir build
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
 compiles from a fresh clone, but it plays nothing until the original's levels are converted
-locally, and 28 of the 47 suites skip without them: *Local setup* below, steps 5-8.
+locally, and 29 of the 47 suites skip without them: *Local setup* below, steps 5-8.
 
 ## How it fits together
 
@@ -97,7 +97,8 @@ through CMake cache paths baked in when `build/` is configured (steps 5 and 7 be
 CMakeLists.txt     the build: engine/ as a subproject, then game/ and tests/
 engine/            Supersonic-Engine, a git submodule pinned to one commit
 game/              the port: main.cpp, MagicPortalsLayer, LevelVisit, sim/, spike/, and data/ (its own JSON)
-tests/             the port's test_mp_* suites, in one runner (test_mp); tests/routes/ the win routes test_mp_routes replays
+tests/             the port's test_mp_* suites, in one runner (test_mp); tests/routes/ the win routes test_mp_routes replays;
+                   tests/golden/ the constants the controls are pinned to (the classic claim map and HUD digest, the modern census's accepted list)
 data/              Enhanced's gameplay JSON, committed; the port reads entity_roles.json, player.json, portals.json
 tools/converter/   ethanon2godot — Python 3; .esc/.ent → out/levels, chapters.json, entity art, lightmaps
 tools/asbc/        AngelScript bytecode reader; achievements.py writes out/data/achievements.json
@@ -304,10 +305,10 @@ hand, `build/tests/test_mp.exe test_mp_<suite>` runs one suite (the `test_mp_` m
 `build/tests/test_mp.exe` runs them all in one process and ends with a tally, and `--list` names
 them. Convert the levels (step 3) before running them. Without the converted levels:
 
-- 28 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
+- 29 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
   `hazards`, `demolish`, `launchers`, `shot`, `boss`, `layer`, `zerog`, `bounce`, `wells`,
   `dragon`, `darkdragon`, `turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`,
-  `diamonds`, `fields`, `routes`) exit 77 and print the path they looked in, which ctest reports as
+  `diamonds`, `fields`, `routes`, `census`) exit 77 and print the path they looked in, which ctest reports as
   SKIPPED: each carries `SKIPS_WITH_77` on its `add_mp_test` line in `tests/CMakeLists.txt`
   (a mark made in Supersonic-Engine `80a4ed2`, before the port moved here; before it, the
   last nine were missing from the skip list, so ctest would have reported them as Failed);

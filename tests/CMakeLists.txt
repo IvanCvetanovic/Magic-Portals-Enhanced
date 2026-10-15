@@ -231,8 +231,16 @@ add_mp_test(test_mp_sounds)
 add_mp_test(test_mp_hud)
 
 # The five on-screen controls' geometry - sim/Controls, the one place that says where each is drawn and where a
-# touch counts as on it (planning step 179). Pure, reading only the port's own committed data, so it never skips.
+# touch counts as on it (planning step 179) - and, from planning step 180, the MODERN controls: game/data/controls.json,
+# the layout, the hit rule, the tuning and the policy of which style a run plays. Pure, reading only the port's own
+# committed data (ui.json, camera.json and controls.json, from MP_TEST_PORTDATA when a mutation test sets it), so it
+# never skips. Its scratch files go to the temporary directory, never to game/data.
 add_mp_test(test_mp_controls)
+
+# The modern controls' fallback pictures, sim/PadArt (planning step 180): two arrows, restart, pause, clear-portals and a gear, drawn by
+# arithmetic into a bitmap in memory, the body's margin the data's. Pure; the one file it reads is the port's own controls.json (from
+# MP_TEST_PORTDATA when a mutation test sets it), so it never skips.
+add_mp_test(test_mp_padart)
 
 # How a level ends: the finished and lost screens and the HUD going - ui.json's
 # level_end and sim/LevelEnd's arithmetic, pinned against Enhanced's ui2 spec.
@@ -286,6 +294,16 @@ set_property(SOURCE test_mp_layer.cpp APPEND PROPERTY
 add_mp_test(test_mp_routes SKIPS_WITH_77)
 set_property(SOURCE test_mp_routes.cpp APPEND PROPERTY
              COMPILE_DEFINITIONS "MAGICPORTALS_ROUTES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/routes\"")
+
+# What the modern controls' default layout costs the levels (planning step 180, design 1.9): of the 128 recorded winning routes, which levels
+# have a shot no camera can bring clear of a control's hit rectangle. Pure geometry over tests/routes/*.json and the converted levels, so it
+# skips with 77 without them. The accepted list and the design's tables are data, tests/golden/controls_census.json, found through this one
+# source's definitions as the routes' and the classic goldens' directories are: a corrected golden is a file, never a relink. The list is
+# valid only for the hit growth that ships (0), and the suite fails the moment controls.json says otherwise.
+add_mp_test(test_mp_census SKIPS_WITH_77)
+set_property(SOURCE test_mp_census.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_ROUTES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/routes\""
+                                 "MAGICPORTALS_GOLDEN_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/golden\"")
 
 # And the static check beside it: no level's door sealed off in the port, rerun over the
 # converted levels this build reads and compared with tools/parity/reachability.json. It is
