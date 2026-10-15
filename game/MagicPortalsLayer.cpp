@@ -8040,7 +8040,7 @@ void MagicPortalsLayer::layOutControls() {
     // the tick reads no input for a level while a pause is up.
     // A popup stops game time the same way, and the pads go with it (spec 5.2).
     const bool pads = (playing || (ended && m_padEndByte > 0)) && !m_level.portals.noGravity && !GameTimeStopped();
-    const double padAlpha = playing ? Hud::PadOpacity(m_hudRules, m_levelAgeMs, tutorialPads())
+    const double padAlpha = playing ? Controls::ClassicWalkOpacity(m_hudRules, m_levelAgeMs, tutorialPads())
                                     : static_cast<double>(m_padEndByte) / 255.0;
     // Restart, pause and clear-portals: CUT at the door, in one frame (gain
     // 0.4705 -> -0.034), and DISMISSED at a death as UIButtons, 700 ms out along
@@ -8052,38 +8052,40 @@ void MagicPortalsLayer::layOutControls() {
     // there to see, and they slide in once it has gone (spec 5.4, A-H9). On any
     // other level the entrance is over at 700 ms, under the opening's black.
     // Clear-portals keeps the flat 120 it had: PortalManager adds it with each
-    // portal, and no capture shows its entrance.
-    const auto corner = [&](const Hud::Placement& placement, bool present) {
-        if (playing && &placement != &m_hudRules.clearPortals) {
+    // portal, and no capture shows its entrance. It is told from restart and pause
+    // by which control it is, not by which of the rules' members it was handed.
+    const auto corner = [&](Control kind, bool present) {
+        const Hud::Placement& placement = Controls::ClassicPlacement(m_hudRules, kind);
+        if (playing && kind != Control::Clear) {
             const LevelEnd::Dismissed in =
                 LevelEnd::HudEntered(m_levelEndRules, placement, m_hudRules.alphaByte, view, m_levelAgeMs);
             return std::make_tuple(in.rect, present && in.shown, in.alpha);
         }
-        if (playing) return std::make_tuple(Hud::Place(placement, view), present, Hud::Opacity(m_hudRules));
+        if (playing) {
+            return std::make_tuple(Controls::ClassicPlace(m_hudRules, kind, view), present, Hud::Opacity(m_hudRules));
+        }
         if (m_dying && present) {
             const LevelEnd::Dismissed out =
                 LevelEnd::HudDismissed(m_levelEndRules, placement, m_hudRules.alphaByte, view, m_dyingClockMs);
             return std::make_tuple(out.rect, out.shown, out.alpha);
         }
-        return std::make_tuple(Hud::Place(placement, view), false, 0.0);
+        return std::make_tuple(Controls::ClassicPlace(m_hudRules, kind, view), false, 0.0);
     };
     for (ControlButton& button : m_controls) {
         switch (button.kind) {
         case Control::Left:
-            button.rect = Hud::PadRect(m_hudRules, Hud::Side::Left, view, m_levelAgeMs);
+        case Control::Right: {
+            const Controls::Frame frame = Controls::ClassicWalkFrame(m_hudRules, button.kind, view, m_levelAgeMs);
+            button.rect = frame.rect;
+            button.hit = frame.hit;
             button.shown = pads;
             button.alpha = padAlpha;
             break;
-        case Control::Right:
-            button.rect = Hud::PadRect(m_hudRules, Hud::Side::Right, view, m_levelAgeMs);
-            button.shown = pads;
-            button.alpha = padAlpha;
-            break;
+        }
         case Control::Reset:
-            std::tie(button.rect, button.shown, button.alpha) = corner(m_hudRules.restart, true);
-            break;
         case Control::Menu:
-            std::tie(button.rect, button.shown, button.alpha) = corner(m_hudRules.pause, true);
+            std::tie(button.rect, button.shown, button.alpha) = corner(button.kind, true);
+            button.hit = Controls::ClassicCornerFrame(button.rect).hit;
             break;
         case Control::Clear:
             // PortalManager::update: none in a level that grants no portal, and
@@ -8091,8 +8093,9 @@ void MagicPortalsLayer::layOutControls() {
             // dismissed with the other two if it was up (INFERRED: the spec's
             // recordings had no portal placed).
             std::tie(button.rect, button.shown, button.alpha) = corner(
-                m_hudRules.clearPortals,
+                Control::Clear,
                 playing ? m_level.portals.budget > 0 && !m_level.portals.placed.empty() : m_clearShownAtEnd);
+            button.hit = Controls::ClassicCornerFrame(button.rect).hit;
             break;
         }
     }
@@ -8396,10 +8399,10 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     // The pulse stops when a level ends, and the ring with it.
     if (const Hud::Ring ring = Hud::RingAt(m_hudRules, m_levelAgeMs, tutorial);
         ring.shown && padsShown && !m_finishing && !m_dying && !m_ringImage.empty()) {
-        for (const Hud::Side side : {Hud::Side::Left, Hud::Side::Right}) {
+        for (const Control walk : {Control::Left, Control::Right}) {
             Hud::Rect rect;
             rect.size = glm::dvec2(ring.sizeUnits);
-            rect.min = Hud::PadCorner(m_hudRules, side, view, m_levelAgeMs) - rect.size * 0.5;
+            rect.min = Controls::ClassicRingCentre(m_hudRules, walk, view, m_levelAgeMs) - rect.size * 0.5;
             add(rect, m_ringImage, white(ring.alpha));
         }
     }
@@ -8567,28 +8570,19 @@ const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(c
     // under it: touchThisTick leaves `over` false on exactly those.
     if (!touch.over) return nullptr;
     // The pointer as a place on the VIEW: the viewport is the view, stretched
-    // to it, so no camera is needed to say which control a tap is on.
-    const glm::dvec2 view = ViewPx();
+    // to it, so no camera is needed to say which control a tap is on. Each control
+    // answers with the area it was laid out with, at the age of the layout this tick
+    // began with, and the first of them in build order - the claim order - wins.
     const glm::dvec2 at = touch.atView;
     for (const ControlButton& button : m_controls) {
         if (!button.shown) continue;
-        bool on = false;
-        switch (button.kind) {
-        case Control::Left:
-            on = Hud::OnPad(m_hudRules, Hud::Side::Left, view, m_levelAgeMs, at);
-            break;
-        case Control::Right:
-            on = Hud::OnPad(m_hudRules, Hud::Side::Right, view, m_levelAgeMs, at);
-            break;
-        case Control::Reset:
-        case Control::Menu:
-        case Control::Clear:
-            on = button.rect.Contains(at);
-            break;
-        }
-        if (on) return &button;
+        if (button.hit.Contains(at)) return &button;
     }
     return nullptr;
+}
+
+bool MagicPortalsLayer::onWalkControl(const glm::dvec2& viewPoint) const {
+    return Controls::ClassicOnWalkControl(m_hudRules, ViewPx(), m_levelAgeMs, viewPoint);
 }
 
 float MagicPortalsLayer::keyDirection() const {
@@ -8632,8 +8626,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // whether the pads walk the player - ScreenPad::isMoving, which a walk key sets
     // as the pad does (arrowKeysMove) and which no_gravity levels never set, as the
     // original skips the pad's update there. The camera's tick takes both.
-    const bool onPad = touch.over && (Hud::OnPad(m_hudRules, Hud::Side::Left, ViewPx(), m_levelAgeMs, touch.atView) ||
-                                      Hud::OnPad(m_hudRules, Hud::Side::Right, ViewPx(), m_levelAgeMs, touch.atView));
+    const bool onPad = touch.over && onWalkControl(touch.atView);
     m_cameraFeel = Camera::Track(m_cameraTouch, touch.pressed, touch.held, touch.over, touch.atView, onPad);
     m_cameraPadMoving = !m_level.noGravity && direction != 0.0f;
     // AND THE HANDLES' (handle.json, sim/Handle.hpp), whatever takes the touch below:
@@ -9997,11 +9990,7 @@ void MagicPortalsLayer::latchDarkDragonDeath() {
 
 void MagicPortalsLayer::tapHandsAway(entt::registry& registry, const Portals::TouchRelease& release) {
     // ScreenPad::isValidPoint (#48-58): a release on a walk pad takes no hand.
-    const glm::dvec2 view = ViewPx();
-    if (Hud::OnPad(m_hudRules, Hud::Side::Left, view, m_levelAgeMs, release.atView) ||
-        Hud::OnPad(m_hudRules, Hud::Side::Right, view, m_levelAgeMs, release.atView)) {
-        return;
-    }
+    if (onWalkControl(release.atView)) return;
     // getReleasePos(t) + GetCameraPos(): the last point it was held at, through the
     // camera the shot reads the same release through.
     glm::dvec2 releasePx(0.0);
@@ -12463,7 +12452,8 @@ void MagicPortalsLayer::endHud() {
     // The pads decay from the byte they were last drawn with: the pulse stops
     // where it was (ScreenPad::draw, a <- uint(a * 0.98)). A weightless level
     // has none to decay.
-    m_padEndByte = m_level.portals.noGravity ? 0 : Hud::PadAlphaByte(m_hudRules, m_levelAgeMs, tutorialPads());
+    m_padEndByte =
+        m_level.portals.noGravity ? 0 : Controls::ClassicWalkAlphaByte(m_hudRules, m_levelAgeMs, tutorialPads());
     m_clearShownAtEnd = m_level.portals.budget > 0 && !m_level.portals.placed.empty();
 }
 

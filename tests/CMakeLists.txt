@@ -230,6 +230,10 @@ add_mp_test(test_mp_sounds)
 # reads only the port's own committed data, so it runs anywhere and never skips.
 add_mp_test(test_mp_hud)
 
+# The five on-screen controls' geometry - sim/Controls, the one place that says where each is drawn and where a
+# touch counts as on it (planning step 179). Pure, reading only the port's own committed data, so it never skips.
+add_mp_test(test_mp_controls)
+
 # How a level ends: the finished and lost screens and the HUD going - ui.json's
 # level_end and sim/LevelEnd's arithmetic, pinned against Enhanced's ui2 spec.
 # Pure, reading only the port's own committed data, so it never skips.

@@ -28,6 +28,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Achievements.hpp"
 #include "sim/Camera.hpp"
 #include "sim/Chapters.hpp"
+#include "sim/Controls.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Cutscene.hpp"
 #include "sim/Dashboard.hpp"
@@ -1184,8 +1185,9 @@ public:
     //
     // The on-screen controls, in the original's order of drawing: the walk pads
     // in the bottom corners, restart and pause flush in the top-right, and the
-    // clear-portals button in the top-left while a placed portal is alive.
-    enum class Control { Left, Right, Reset, Menu, Clear };
+    // clear-portals button in the top-left while a placed portal is alive. Their
+    // geometry is sim/Controls', which this names for the suites.
+    using Control = Controls::Id;
 
     // ui.json, as read at attach. HudError says why nothing could start when
     // the port's data - ui.json among it - would not read; empty otherwise.
@@ -3194,6 +3196,9 @@ private:
         Control kind{Control::Left};
         std::string image; // the picture, empty when it could not be read
         Hud::Rect rect;    // on the view, as last laid out
+        // Where a touch counts as on it, laid out with `rect`: a claim reads this and
+        // nothing else, so the control a touch works is the one it is drawn as.
+        Controls::HitShape hit;
         bool shown{false};
         double alpha{0.0}; // display-space, as last laid out
     };
@@ -3419,6 +3424,11 @@ private:
     // a shot is fired, because a tap that works a control must not also open a
     // portal under it - a scheduled tap's as much as a real press's.
     const ControlButton* controlUnderPointer(const Touch& touch) const;
+    // Whether a point on the view is on either walk control, at this view and this age.
+    // The camera's `onPad`, the lift gate and the tutorial hand's gate all ask this, and it
+    // reads the layout rules and not the controls built for the level: it does not depend on
+    // the pads being shown or their pictures being there.
+    bool onWalkControl(const glm::dvec2& viewPoint) const;
     // Whether the level being played is the one whose pads pulse long and ring.
     bool tutorialPads() const;
 
