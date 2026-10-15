@@ -62,6 +62,15 @@ constexpr const char* kBossTrack = "boss";
 // 116676..118260) #166-181 sets noMusic on its presence (CheckCustomData).
 constexpr const char* kNoMusicFlag = "no_music";
 
+// The modern controls' table, and the INFO lines a run says which controls it plays with
+// (planning step 181). Whoever greps a capture's log for `controls: modern` (the design's N1) reads
+// kControlsModernRequested, whose first words are the line CTL-6 keeps when it takes the rest away.
+constexpr const char* kControlsFile = "/controls.json";
+constexpr const char* kControlsClassicFlag = "controls: classic (--controls classic)";
+constexpr const char* kControlsModernRequested = "controls: modern requested, drawn classic until the layer plays it";
+constexpr const char* kControlsClassicDefault = "controls: classic (the shipped default)";
+constexpr const char* kControlsClassicUnavailable = "controls: classic (modern is unavailable: see the error above)";
+
 // Markers - buttons, crystals, the exit, portals - stand in front of the bodies.
 constexpr float kMarkerZ = 0.5f;
 constexpr float kMarkerDepth = 0.1f;
@@ -346,6 +355,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // ui.json is the port's own and committed, so a HUD that will not read is a
     // fault in this repository and stops the start as loudly as a missing level.
     m_hudReady = read;
+    // Which controls this run plays: after the chain and outside it, before any level is built.
+    resolveControls();
     // The tick's two deltas before the first tick runs: what a constructor that moves
     // by "a frame" (the space sky's planet, the loading screen) is handed.
     m_step = ScriptClock::TickStep(m_clockRules, kTick);
@@ -459,6 +470,54 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     }
     buildHud(registry);
     updateHud(registry);
+}
+
+void MagicPortalsLayer::resolveControls() {
+    const Controls::Policy& policy = m_paths.controls;
+    m_controlsRules = Controls::Rules{};
+    m_controlsTuning = Controls::Tuning{};
+    m_controlsStyle = Controls::Style::Classic;
+    m_modernReady = false;
+    m_controlsLine.clear();
+    m_controlsError.clear();
+
+    // The feature does not exist in this run (design 2.1): a bare layer, a developer's run, --controls
+    // classic. Nothing is read, so a table that will not read cannot touch such a run. Only the flag
+    // says anything, because it was asked for; the other two say nothing, so their log is the log
+    // they always had.
+    if (!policy.available) {
+        if (policy.forced == Controls::Style::Classic) {
+            m_controlsLine = kControlsClassicFlag;
+            SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
+        }
+        return;
+    }
+
+    // A run that can play modern needs the table and the flag's keys on the table's grids. Either
+    // failing costs the modern controls and the run plays classic, with one error that says why.
+    std::string why;
+    const std::string file = m_paths.portData + kControlsFile;
+    if (!Controls::LoadRules(file, m_controlsRules, why)) {
+        // `why` names the file and the key, as LoadRules says them.
+        m_controlsError = "modern controls are unavailable: " + why;
+    } else if (!Controls::Tuning::FromFlag(policy.flag, m_controlsRules, m_controlsTuning, why)) {
+        m_controlsTuning = Controls::Tuning{};
+        m_controlsError = "modern controls are unavailable: --controls is refused: " + why;
+    }
+    if (!m_controlsError.empty()) {
+        // Not ready means no table at all, never half of one.
+        m_controlsRules = Controls::Rules{};
+        SUPERSONIC_LOG_ERROR("Magic Portals") << m_controlsError << std::endl;
+        m_controlsLine = kControlsClassicUnavailable;
+        SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
+        return;
+    }
+
+    m_modernReady = true;
+    // Nothing is saved yet (the store is CTL-9's), so a player's run takes the shipped default.
+    m_controlsStyle = Controls::ResolveStyle(policy, std::nullopt, m_controlsRules.defaultMode);
+    m_controlsLine = m_controlsStyle == Controls::Style::Modern ? kControlsModernRequested : kControlsClassicDefault;
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
 }
 
 void MagicPortalsLayer::OnDetach(entt::registry& registry) {

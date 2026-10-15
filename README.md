@@ -414,6 +414,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--levels <dir>` | read the converted levels from here instead of the configured path |
 | `--art <dir>` | the directory the levels' art paths resolve against (default: the one above the levels) |
 | `--data <dir>` | read Enhanced's `data/` from here instead of the configured path |
+| `--controls <classic\|modern>[,key=value...]` | which on-screen controls the run plays: the original's (`classic`) or Magic Rampage's inset ones (`modern`; keys `preset=uniform\|balanced\|mr`, `size=`, `opacity=` and a move as `<control>=<dx>:<dy>`). A run with none of the rig's flags (`--fixed-step`, `--route`, `--visit-levels`) may play either, a rig run is classic unless this says otherwise, and the flag writes nothing. **Plumbing only until the layer plays the modern layout (CTL-6 of the modern-controls plan): it draws classic whatever is asked, and logs `controls: modern requested, drawn classic until the layer plays it`; every key is checked against the table's grids and held on the tuning, and none has an effect until the layer draws modern.** A flag that is neither style, or a key that is not one, exits 1 with the usage; `docs/planning/2026-10-15-modern-controls.md` |
 | `--light-masks-off` | DEV: draw lights and halos but let no light reach a sprite |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |

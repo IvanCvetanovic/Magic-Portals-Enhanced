@@ -28,6 +28,7 @@
 #include "LevelVisit.hpp"
 #include "MagicPortalsLayer.hpp"
 #include "Route.hpp"
+#include "sim/Controls.hpp"
 
 namespace {
 
@@ -136,10 +137,28 @@ int main(int argc, char** argv) {
     // DEV ONLY: with --route, print Route::Trace every n ticks, on each tap and at the
     // end - test_mp_routes --trace's lines, from the window (planning step 114).
     int routeTrace = 0;
+    // `--controls <classic|modern>[,key=value...]`, as given: which on-screen controls the run plays
+    // (docs/planning/2026-10-15-modern-controls.md 2.1, 2.2). Taken out here, before the engine's parser,
+    // which refuses what it does not know; resolved below, once the rig's own flags are all read.
+    std::optional<std::string> controlsFlag;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--light-masks-off") {
             lightMasksOff = true;
+            continue;
+        }
+        if (arg == "--controls") {
+            if (i + 1 >= argc) {
+                std::cerr << "--controls needs a value; " << MagicPortals::Controls::FlagUsage() << "\n";
+                return EXIT_FAILURE;
+            }
+            // Twice is a mistake, not an override: a capture that meant one style and ran the other
+            // would say nothing about either.
+            if (controlsFlag) {
+                std::cerr << "--controls is given twice; " << MagicPortals::Controls::FlagUsage() << "\n";
+                return EXIT_FAILURE;
+            }
+            controlsFlag = std::string(argv[++i]);
             continue;
         }
         if (arg == "--route") {
@@ -417,6 +436,15 @@ int main(int argc, char** argv) {
                   << "  --level <name>    the level to start at, as chapters.json names it. Without it\n"
                   << "                    the game opens its menu.\n"
                   << "  --levels <dir>    the converted levels (default " << paths.levels << ")\n"
+                  << "  " << MagicPortals::Controls::FlagUsage() << "\n"
+                  << "                    which on-screen controls the run plays: the original's (classic)\n"
+                  << "                    or Magic Rampage's inset ones (modern, built step by step:\n"
+                  << "                    docs/planning/2026-10-15-modern-controls.md). Until the layer plays\n"
+                  << "                    the modern ones it draws classic whatever is asked, and its log\n"
+                  << "                    line says so; the size, opacity and move keys are read and checked,\n"
+                  << "                    not yet applied. A developer's run (--fixed-step, --route,\n"
+                  << "                    --visit-levels) is classic unless the flag says otherwise. Writes\n"
+                  << "                    nothing\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
                   << "  --data <dir>      Enhanced's data directory (default " << paths.data << ")\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json), the sound and music\n"
@@ -475,6 +503,20 @@ int main(int argc, char** argv) {
     if (!options.ok) {
         std::cerr << options.error << "\n";
         return EXIT_FAILURE;
+    }
+
+    // WHICH CONTROLS THIS RUN PLAYS (planning step 181), resolved once and handed down: the flag and the kind
+    // of run (the rig's three flags make it a developer's, whose controls are the classic ones whatever the
+    // data says). After --help, which needs no valid flag, and before anything is opened, so a refused
+    // flag costs nothing. Until CTL-6 the layer plays classic whatever this resolves and says so.
+    {
+        MagicPortals::Controls::Policy policy = MagicPortals::Controls::ResolvePolicy(
+            controlsFlag, paths.fixedStep, !routeFile.empty(), !visit.levels.empty());
+        if (!policy.valid) {
+            std::cerr << policy.error << "\n";
+            return EXIT_FAILURE;
+        }
+        paths.controls = std::move(policy);
     }
 
     // The diagnostics to a FILE as well as the console.

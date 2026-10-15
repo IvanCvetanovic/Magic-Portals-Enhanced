@@ -98,6 +98,7 @@ using MagicPortals::MagicPortalsLayer;
 namespace Selector = MagicPortals::Selector;
 namespace EdgeCover = MagicPortals::EdgeCover;
 namespace Hud = MagicPortals::Hud;
+namespace Controls = MagicPortals::Controls;
 namespace ScriptClock = MagicPortals::ScriptClock;
 
 namespace {
@@ -23273,6 +23274,336 @@ void TheClassicHudQuadsOfEveryLevelArePinned() {
     PtrCheckGolden("classic_hud.json", now);
 }
 
+// ---- which controls a run plays (planning step 181, CTL-5) ----------------------------------------------------------------
+//
+// The policy and the flag, plumbing only: Paths::controls is what main's Controls::ResolvePolicy made of `--controls` and of
+// the kind of run, the layer resolves a style from it and from game/data/controls.json, and UNTIL CTL-6 it draws and claims the
+// classic controls whatever that says. These cases hold the plumbing: who reads the table (only a run in which the feature
+// exists), what a table that will not read costs (the modern controls, never a run), what each kind of run resolves to, and that
+// nothing is written. The policy is built by the REAL ResolvePolicy, as main builds it, so a row of the design's truth table
+// (2.1) is a row here. Every case reads ControlsStyle() before it claims a modern behaviour (the design's N1).
+
+const std::string kControlsLineModern = "controls: modern requested, drawn classic until the layer plays it";
+const std::string kControlsLineDefault = "controls: classic (the shipped default)";
+const std::string kControlsLineFlag = "controls: classic (--controls classic)";
+const std::string kControlsLineUnavailable = "controls: classic (modern is unavailable: see the error above)";
+
+using ControlsRewrite = std::function<std::optional<std::string>(const std::string&)>;
+
+std::string ReadWholeFile(const std::filesystem::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    std::stringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+// A copy of the port's data directory with controls.json rewritten (or removed, when `rewrite` answers nothing): how a case
+// makes the table unreadable without touching game/data, which another session may be reading. Returns the copy's path.
+std::string ControlsScratchData(const std::string& name, const ControlsRewrite& rewrite) {
+    namespace fs = std::filesystem;
+    const fs::path from = TestPaths().portData;
+    // A name made of words: the directory's has no space in it.
+    std::string slug = name;
+    std::replace(slug.begin(), slug.end(), ' ', '-');
+    const fs::path to = fs::temp_directory_path() / ("supersonic-test-mp-layer-controls-" + slug);
+    std::error_code ec;
+    fs::remove_all(to, ec);
+    fs::create_directories(to, ec);
+    int copied = 0;
+    for (const auto& entry : fs::directory_iterator(from, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+        fs::copy_file(entry.path(), to / entry.path().filename(), fs::copy_options::overwrite_existing, ec);
+        if (!ec) ++copied;
+    }
+    CHECK_MSG(copied > 20 && fs::is_regular_file(to / "controls.json", ec), name + ": the scratch copy of the data holds " + std::to_string(copied) + " files");
+    const fs::path file = to / "controls.json";
+    const std::string text = ReadWholeFile(file);
+    fs::remove(file, ec);
+    if (const std::optional<std::string> edited = rewrite(text)) {
+        std::ofstream out(file, std::ios::binary);
+        out << *edited;
+    }
+    return to.string();
+}
+
+std::string ControlsScratchSaves(const std::string& name) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("supersonic-test-mp-layer-controls-saves-" + name);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    return dir.string();
+}
+
+bool ControlsFileExistsIn(const std::string& dir) {
+    std::error_code ec;
+    return std::filesystem::exists(std::filesystem::path(dir) / "controls.json", ec);
+}
+
+// What a layer says about its controls once attached on `level30`, and the HUD it draws after 800 ms of the level. The layer
+// is built, attached, ticked and detached inside, so a case holds none of them.
+struct ControlsRun {
+    bool attached = false;
+    Controls::Style style = Controls::Style::Classic;
+    bool ready = false;
+    std::string line;
+    std::string error;
+    std::string loadError;
+    std::string hudError;
+    bool levelLoaded = false;
+    int layoutVersion = 0;
+    Controls::Policy policy;
+    Controls::Tuning tuning;
+    Controls::Rules rules;
+    std::uint64_t hud = 0;     // PtrHashQuads of the settled HUD; 0 when not taken
+    std::vector<int> claims;   // ControlAt on a grid of the view, as the enum or -1; empty when not taken
+    int leftPads = 0;          // the left pad's pictures in that HUD
+};
+
+ControlsRun RunControls(const std::string& what, const Controls::Policy& policy, const std::string& portData = "",
+                        const std::string& saveDir = "", bool takeHud = false) {
+    ControlsRun run;
+    MagicPortalsLayer::Paths paths = TestPaths();
+    if (!portData.empty()) paths.portData = portData;
+    paths.saveDir = saveDir;
+    paths.controls = policy;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level30");
+    if (takeHud) {
+        run.attached = PtrReady(registry, layer, what);
+    } else {
+        layer.OnAttach(registry);
+        run.attached = true;
+    }
+    run.style = layer.ControlsStyle();
+    run.ready = layer.ModernReady();
+    run.line = layer.ControlsLine();
+    run.error = layer.ControlsError();
+    run.loadError = layer.LoadError();
+    run.hudError = layer.HudError();
+    run.levelLoaded = layer.SimLevel() != nullptr;
+    run.layoutVersion = layer.ControlsRules().layoutVersion;
+    run.policy = layer.ControlsPolicy();
+    run.tuning = layer.ControlsTuning();
+    run.rules = layer.ControlsRules();
+    if (takeHud && run.attached) {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        run.hud = PtrHashQuads(frame);
+        run.leftPads = CountImage(frame, layer.HudRules().pads.leftSprite);
+        const glm::dvec2 view = layer.ViewPx();
+        for (double y = 0.0; y <= view.y; y += 16.0) {
+            for (double x = 0.0; x <= view.x; x += 16.0) {
+                const std::optional<MagicPortalsLayer::Control> claim = layer.ControlAt(glm::dvec2(x, y));
+                run.claims.push_back(claim ? static_cast<int>(*claim) : -1);
+            }
+        }
+    }
+    // A few ticks of the level, so that anything a run opened a store for would have been written by now.
+    for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+    layer.OnDetach(registry);
+    return run;
+}
+
+Controls::Policy PolicyOf(const std::optional<std::string>& flag, bool fixedStep = false, bool route = false, bool visit = false) {
+    const Controls::Policy policy = Controls::ResolvePolicy(flag, fixedStep, route, visit);
+    CHECK_MSG(policy.valid, "the flag " + flag.value_or("(none)") + " resolves: " + policy.error);
+    return policy;
+}
+
+std::string Describe(const ControlsRun& run) {
+    return std::string("style ") + Controls::NameOf(run.style) + (run.ready ? ", ready" : ", not ready") + ", line '" + run.line + "', error '" + run.error + "'";
+}
+
+// A run that loaded: no failure of the data the chain reads, and the level on its feet.
+void CheckLoaded(const ControlsRun& run, const std::string& what) {
+    CHECK_MSG(run.attached && run.loadError.empty() && run.hudError.empty() && run.levelLoaded,
+              what + " loads and plays: '" + run.loadError + "' '" + run.hudError + "'");
+}
+
+// ---- the cases ----------------------------------------------------------------------------------------------------------
+
+void ABareLayerIsClassicAndHasNoStore() {
+    // The defaults of Paths::controls are "classic, nothing": the policy of a run with no such thing.
+    const MagicPortalsLayer::Paths bare;
+    CHECK_MSG(bare.controls.valid && !bare.controls.available && !bare.controls.forced && !bare.controls.saveAllowed &&
+                  !bare.controls.flag.Any() && bare.controls.error.empty(),
+              "a bare Paths has the policy of no feature at all");
+
+    // Over a table that WILL NOT READ: no run in which the feature does not exist reads it, so none can fail on it.
+    const std::string broken = ControlsScratchData("bare-broken", [](const std::string&) { return std::optional<std::string>("{\"layout\": "); });
+    const std::string saves = ControlsScratchSaves("bare");
+    struct Row {
+        const char* what;
+        Controls::Policy policy;
+        std::string line; // empty: the run says nothing about its controls
+    };
+    const std::vector<Row> rows = {
+        {"a bare layer (every suite)", Controls::Policy{}, ""},
+        {"a developer's run, --fixed-step", PolicyOf(std::nullopt, true), ""},
+        {"a developer's run, --route", PolicyOf(std::nullopt, false, true), ""},
+        {"a developer's run, --visit-levels", PolicyOf(std::nullopt, false, false, true), ""},
+        {"--controls classic", PolicyOf("classic"), kControlsLineFlag},
+        {"--controls classic on a developer's run", PolicyOf("classic", true), kControlsLineFlag},
+    };
+    for (const Row& row : rows) {
+        const ControlsRun run = RunControls(row.what, row.policy, broken, saves);
+        CheckLoaded(run, row.what);
+        CHECK_MSG(!run.policy.available && !run.policy.saveAllowed, std::string(row.what) + ": the feature does not exist in the run");
+        CHECK_MSG(run.style == Controls::Style::Classic && !run.ready, std::string(row.what) + ": classic, and not ready for modern: " + Describe(run));
+        CHECK_MSG(run.error.empty() && run.layoutVersion == 0,
+                  std::string(row.what) + ": controls.json is not read, so the table that will not read costs nothing: " + Describe(run));
+        CHECK_MSG(run.line == row.line, std::string(row.what) + ": says '" + run.line + "', wanted '" + row.line + "'");
+        CHECK_MSG(!ControlsFileExistsIn(saves), std::string(row.what) + ": no controls.json in the save directory");
+    }
+
+    // Nor does a player's run open a store: nothing keeps the setting until CTL-9, so a save directory gains no controls.json
+    // from any run (the owner's own save holds scores.json alone).
+    const ControlsRun player = RunControls("a player's run", PolicyOf(std::nullopt), "", saves);
+    CheckLoaded(player, "a player's run");
+    CHECK_MSG(player.policy.available && player.policy.saveAllowed, "a player's run may save");
+    CHECK_MSG(!ControlsFileExistsIn(saves), "and still no controls.json appears: the store is CTL-9's");
+    const ControlsRun forced = RunControls("--controls modern", PolicyOf("modern"), "", saves);
+    CheckLoaded(forced, "--controls modern");
+    CHECK_MSG(!ControlsFileExistsIn(saves), "--controls modern writes nothing");
+}
+
+void ControlsStyleReportsTheResolvedStyle() {
+    const std::string saves = ControlsScratchSaves("style");
+    // The shipped data says classic; a scratch copy says modern, which is the one way to see the default decide.
+    const std::string modernDefault = ControlsScratchData("default-modern", [](const std::string& text) {
+        const std::string from = "\"default_mode\": \"classic\"";
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, "controls.json has the default_mode line this case rewrites");
+        std::string edited = text;
+        if (at != std::string::npos) edited.replace(at, from.size(), "\"default_mode\": \"modern\"");
+        return std::optional<std::string>(edited);
+    });
+    struct Row {
+        const char* what;
+        std::optional<std::string> flag;
+        bool fixedStep;
+        bool modernData; // the data says modern
+        Controls::Style style;
+        bool ready;
+        std::string line;
+    };
+    const std::vector<Row> rows = {
+        // design 2.1, the data saying classic (what ships until CTL-13)
+        {"a player's run", std::nullopt, false, false, Controls::Style::Classic, true, kControlsLineDefault},
+        {"a developer's run", std::nullopt, true, false, Controls::Style::Classic, false, ""},
+        {"--controls classic", "classic", false, false, Controls::Style::Classic, false, kControlsLineFlag},
+        {"--controls modern", "modern", false, false, Controls::Style::Modern, true, kControlsLineModern},
+        {"--controls modern on a developer's run", "modern", true, false, Controls::Style::Modern, true, kControlsLineModern},
+        // and the data saying modern: the default decides a player's run and nothing else
+        {"a player's run on data that says modern", std::nullopt, false, true, Controls::Style::Modern, true, kControlsLineModern},
+        {"a developer's run on data that says modern", std::nullopt, true, true, Controls::Style::Classic, false, ""},
+        {"--controls classic on data that says modern", "classic", false, true, Controls::Style::Classic, false, kControlsLineFlag},
+    };
+    for (const Row& row : rows) {
+        const ControlsRun run = RunControls(row.what, PolicyOf(row.flag, row.fixedStep), row.modernData ? modernDefault : "", saves);
+        CheckLoaded(run, row.what);
+        CHECK_MSG(run.style == row.style && run.ready == row.ready,
+                  std::string(row.what) + ": style " + Controls::NameOf(run.style) + (run.ready ? " ready" : " not ready") + ", wanted " +
+                      Controls::NameOf(row.style) + (row.ready ? " ready" : " not ready"));
+        CHECK_MSG(run.line == row.line, std::string(row.what) + ": says '" + run.line + "', wanted '" + row.line + "'");
+        CHECK_MSG(run.error.empty(), std::string(row.what) + ": no error: " + run.error);
+        CHECK_MSG(row.ready == (run.layoutVersion == Controls::kLayoutVersion), std::string(row.what) + ": the table is read exactly when it can be used");
+    }
+
+    // The flag's keys ride on the table: preset= is the one in force before CTL-10, and a key that is not on the table's grids
+    // costs the modern controls with one error, never the run.
+    const ControlsRun balanced = RunControls("modern,preset=balanced", PolicyOf("modern,preset=balanced"), "", saves);
+    CHECK_MSG(balanced.style == Controls::Style::Modern && balanced.ready && balanced.tuning.PresetIn(balanced.rules) == Controls::Preset::Balanced,
+              "preset=balanced is the look in force: " + Describe(balanced));
+    const ControlsRun plain = RunControls("modern", PolicyOf("modern"), "", saves);
+    CHECK_MSG(plain.ready && plain.tuning.PresetIn(plain.rules) == plain.rules.defaultPreset && plain.tuning.IsDefault(plain.rules),
+              "and with no key the look is the data's default and the tuning is the base");
+    const ControlsRun sized = RunControls("modern,size=1.2", PolicyOf("modern,size=1.2"), "", saves);
+    CHECK_MSG(sized.ready && sized.tuning.Size(sized.rules) == 1.2, "size=1.2 is read onto the grid: " + Describe(sized));
+    const ControlsRun offGrid = RunControls("modern,size=1.25", PolicyOf("modern,size=1.25"), "", saves);
+    CheckLoaded(offGrid, "--controls modern,size=1.25");
+    CHECK_MSG(offGrid.style == Controls::Style::Classic && !offGrid.ready && offGrid.line == kControlsLineUnavailable &&
+                  offGrid.error.find("--controls is refused") != std::string::npos,
+              "a size off the grid costs the modern controls with one error: " + Describe(offGrid));
+    CHECK_MSG(!ControlsFileExistsIn(saves), "no run writes a controls.json");
+}
+
+void AForcedModernResolvesModernAndThePolicyIsRecorded() {
+    const std::string saves = ControlsScratchSaves("forced");
+    const Controls::Policy policy = PolicyOf("modern,preset=mr,size=0.9");
+    const ControlsRun forced = RunControls("--controls modern", policy, "", saves, true);
+    CheckLoaded(forced, "--controls modern");
+    // What main resolved is what the layer holds.
+    CHECK_MSG(forced.policy.valid && forced.policy.available && forced.policy.forced == Controls::Style::Modern && !forced.policy.saveAllowed,
+              "the policy is recorded as given: available, forced modern, nothing saved");
+    CHECK_MSG(forced.policy.flag.preset == Controls::Preset::Mr && forced.policy.flag.size == 0.9, "with the flag's keys");
+    // N1: modern engaged, so a gate that claims a modern behaviour may read it.
+    CHECK_MSG(forced.style == Controls::Style::Modern && forced.ready, "it resolves modern and is ready: " + Describe(forced));
+    CHECK_MSG(forced.line == kControlsLineModern, "and says what the plan names: '" + forced.line + "'");
+    CHECK_MSG(forced.layoutVersion == Controls::kLayoutVersion && forced.tuning.PresetIn(forced.rules) == Controls::Preset::Mr &&
+                  forced.tuning.Size(forced.rules) == 0.9,
+              "the table is read and the tuning is the flag's");
+
+    // ... AND IT DRAWS AND CLAIMS CLASSIC, which is what "plumbing only" means: the HUD of the same level at the same age, and
+    // the claim of every 16th unit of the view, are the bare layer's to the bit.
+    if (!OriginalArtIsThere("AForcedModernResolvesModernAndThePolicyIsRecorded: the drawn half")) return;
+    const ControlsRun bare = RunControls("a bare layer", Controls::Policy{}, "", saves, true);
+    CHECK_MSG(bare.hud != 0 && forced.hud != 0 && bare.leftPads == 1 && forced.leftPads == 1,
+              "both draw the left pad (" + std::to_string(bare.leftPads) + ", " + std::to_string(forced.leftPads) + ")");
+    CHECK_MSG(forced.hud == bare.hud, "the HUD of --controls modern is the classic HUD, bit for bit: " + PtrHex(forced.hud) + " against " + PtrHex(bare.hud));
+    long claimed = 0;
+    for (const int claim : bare.claims) claimed += claim >= 0 ? 1 : 0;
+    CHECK_MSG(!bare.claims.empty() && forced.claims == bare.claims && claimed > 0,
+              "and so is its claim over the view (" + std::to_string(claimed) + " of " + std::to_string(bare.claims.size()) + " points are on a control)");
+    CHECK_MSG(!ControlsFileExistsIn(saves), "it writes nothing");
+}
+
+void ABrokenControlsDataLeavesClassicAlone() {
+    const std::string saves = ControlsScratchSaves("broken");
+    struct Row {
+        const char* what;
+        ControlsRewrite rewrite;
+    };
+    const std::vector<Row> rows = {
+        {"a table cut off", [](const std::string& text) { return std::optional<std::string>(text.substr(0, text.size() / 2)); }},
+        {"a table that is not JSON", [](const std::string&) { return std::optional<std::string>("controls"); }},
+        {"a table that is empty", [](const std::string&) { return std::optional<std::string>("{}"); }},
+        {"no table at all", [](const std::string&) { return std::optional<std::string>(); }},
+    };
+    // The control: the same copy, rewritten to itself, reads and plays modern, so the failures below are the table's.
+    const std::string whole = ControlsScratchData("broken-control", [](const std::string& text) { return std::optional<std::string>(text); });
+    const ControlsRun control = RunControls("an untouched copy", PolicyOf("modern"), whole, saves);
+    CheckLoaded(control, "an untouched copy");
+    CHECK_MSG(control.style == Controls::Style::Modern && control.ready && control.error.empty(), "the copy itself reads: " + Describe(control));
+
+    const bool art = OriginalArtIsThere("ABrokenControlsDataLeavesClassicAlone: the drawn half");
+    const ControlsRun bare = RunControls("a bare layer", Controls::Policy{}, "", saves, art);
+    for (const Row& row : rows) {
+        const std::string data = ControlsScratchData(std::string("broken-") + row.what, row.rewrite);
+        for (const bool forced : {true, false}) {
+            const std::string what = std::string(row.what) + (forced ? " under --controls modern" : " in a player's run");
+            const ControlsRun run = RunControls(what, PolicyOf(forced ? std::optional<std::string>("modern") : std::nullopt), data, saves, art);
+            // NOTHING FATAL: the chain of loaders the run needs is untouched, the level loads and plays.
+            CheckLoaded(run, what);
+            CHECK_MSG(run.style == Controls::Style::Classic && !run.ready, what + ": classic, modern unavailable: " + Describe(run));
+            CHECK_MSG(run.error.find("controls.json") != std::string::npos && run.error.find("modern controls are unavailable") != std::string::npos,
+                      what + ": one error, naming the file: '" + run.error + "'");
+            CHECK_MSG(run.line == kControlsLineUnavailable, what + ": says '" + run.line + "'");
+            CHECK_MSG(run.layoutVersion == 0 && !run.tuning.preset && !run.tuning.sizeSteps && !run.tuning.opacitySteps,
+                      what + ": no half of a table is kept");
+            if (art) {
+                CHECK_MSG(run.hud == bare.hud && run.claims == bare.claims, what + ": and draws and claims what a bare layer does");
+            }
+        }
+        // And a run in which the feature does not exist never meets the table at all.
+        const ControlsRun dev = RunControls(row.what, PolicyOf(std::nullopt, true), data, saves);
+        CheckLoaded(dev, std::string(row.what) + ", a developer's run");
+        CHECK_MSG(dev.error.empty() && dev.line.empty() && dev.style == Controls::Style::Classic,
+                  std::string(row.what) + ": a developer's run neither reads it nor says a word: " + Describe(dev));
+    }
+    CHECK_MSG(!ControlsFileExistsIn(saves), "and no controls.json is written");
+}
+
 // `test_mp test_mp_layer --record-golden <dir>`: writes the two goldens on the code as it stands. It refuses to overwrite
 // a file: a golden is recorded once, on the unmodified claim code, and is never re-recorded to make a refactor pass (delete
 // the file by hand to record it again).
@@ -23591,6 +23922,11 @@ void runTests() {
     TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath();
     TheClassicClaimMapIsPinned();
     TheClassicHudQuadsOfEveryLevelArePinned();
+    // Which controls a run plays: the policy and the flag, plumbing only (planning step 181).
+    ABareLayerIsClassicAndHasNoStore();
+    ControlsStyleReportsTheResolvedStyle();
+    AForcedModernResolvesModernAndThePolicyIsRecorded();
+    ABrokenControlsDataLeavesClassicAlone();
 }
 
 } // namespace

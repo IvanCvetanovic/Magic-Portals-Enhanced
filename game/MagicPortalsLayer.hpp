@@ -191,6 +191,15 @@ public:
         // display is measured and every picture is drawn at its tick's place whatever
         // pictures.json says (planning step 150). Set by main from the engine's flag.
         bool fixedStep = false;
+
+        // WHICH CONTROLS THE RUN PLAYS (planning step 181, CTL-5; the design's 2.1): what main's
+        // Controls::ResolvePolicy made of --controls and of the kind of run. The default is the
+        // policy of a run with no such thing - "classic, nothing": the feature does not exist, no
+        // store is opened and controls.json is not read - which is what every suite's bare Paths
+        // is, so the suites and the parity rig cannot meet the feature by accident. The plan's
+        // fuller list (the art directory, a test's safe-area insets, the classic-claims variant)
+        // is added by the step that first reads each.
+        Controls::Policy controls;
     };
 
     // The last level cleared: the portals spent against its golden score, which
@@ -1208,6 +1217,34 @@ public:
     // Right, Reset, Menu, Clear: the first wins), or none; and the camera put at a centre, not clamped.
     std::optional<Control> ControlAt(const glm::dvec2& viewPoint) const;
     void PlaceCameraForTest(entt::registry& registry, const glm::dvec2& centrePx);
+
+    // ---- which controls the run plays (planning step 181, CTL-5) ---------------------------------
+    //
+    // The style the run RESOLVED to (sim/Controls ResolveStyle over Paths::controls and
+    // game/data/controls.json): Classic for a run in which the feature does not exist (a bare
+    // layer, a developer's run, --controls classic), for a run whose controls.json would not
+    // read, and for a player's run while the shipped default is classic; Modern for
+    // --controls modern, and for a player's run once the data's default_mode says so.
+    //
+    // PLUMBING ONLY UNTIL CTL-6. The layer DRAWS AND CLAIMS THE CLASSIC CONTROLS whatever this
+    // says, and the INFO line says so ("modern requested, drawn classic until the layer plays
+    // it"); nothing on the classic path reads it, so a classic run is the classic run it was.
+    // Whoever asserts a modern behaviour reads this first and fails unless it is Modern (the
+    // design's N1), and CTL-6 takes that wording out of the line.
+    Controls::Style ControlsStyle() const { return m_controlsStyle; }
+    // What main resolved, as the layer was given it.
+    const Controls::Policy& ControlsPolicy() const { return m_paths.controls; }
+    // controls.json (game data) and the flag's tuning were read and the run may play modern. False
+    // whenever the policy says the feature does not exist, and when either would not read.
+    bool ModernReady() const { return m_modernReady; }
+    const Controls::Rules& ControlsRules() const { return m_controlsRules; }
+    // The flag's tuning applied to those rules (preset= is the one key in force before CTL-10).
+    const Controls::Tuning& ControlsTuning() const { return m_controlsTuning; }
+    // The INFO line the run logged once at attach, or empty where it logs none: a developer's or a
+    // bare run is silent, so its log is the log it always was. And the one ERROR line, or empty:
+    // why controls.json or the flag's tuning would not read.
+    const std::string& ControlsLine() const { return m_controlsLine; }
+    const std::string& ControlsError() const { return m_controlsError; }
 
     // The no-portal sign's rectangle on the view as the last tick left it, in
     // design units; false in a level that places none.
@@ -3207,6 +3244,19 @@ private:
     Hud::Rules m_hudRules;
     bool m_hudReady{false};
     std::string m_hudError;
+
+    // Which controls the run plays (planning step 181). Resolved once at attach by resolveControls, from
+    // Paths::controls and, only where the feature exists in the run, game/data/controls.json, which is
+    // read OUTSIDE the chain of loaders above: a table that will not read costs the modern controls and
+    // never a classic run, the parity rig or a suite.
+    void resolveControls();
+    Controls::Rules m_controlsRules;
+    Controls::Tuning m_controlsTuning;
+    Controls::Style m_controlsStyle{Controls::Style::Classic};
+    bool m_modernReady{false};
+    std::string m_controlsLine;
+    std::string m_controlsError;
+
     double m_levelAgeMs{0.0};
     // The frame time the level's age last gained (the script's, ScriptClock::Ms): what a wall's colour
     // call reads its doubled clock one add behind (art.json breakable_wall). Held through a pause.
