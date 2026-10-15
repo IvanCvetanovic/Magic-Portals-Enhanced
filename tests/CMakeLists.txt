@@ -265,6 +265,11 @@ add_mp_test(test_mp_select)
 # The layer, attached to a bare registry: no window, no Vulkan. It drives taps
 # through the camera, and plays level30 from the spawn to the exit.
 add_mp_test(test_mp_layer SKIPS_WITH_77)
+# The classic goldens, tests/golden/*.json, are read at run time and found through this one source's definition, as the routes'
+# directory is: a corrected golden is a file, never a relink. `test_mp test_mp_layer --record-golden <dir>` writes them on the
+# unmodified claim code and refuses to overwrite a file (planning step 178).
+set_property(SOURCE test_mp_layer.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_GOLDEN_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/golden\"")
 
 # Every level a win route plays from its start to its door (game/Route.hpp): the
 # routes are tests/routes/<level>.json, found at run time, so a route is added

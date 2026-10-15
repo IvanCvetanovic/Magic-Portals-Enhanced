@@ -1,0 +1,26 @@
+{
+  "_about": "The classic claim map: which control a point of the view is on, every 4th unit, at 16:9 and 4:3, at several ticks of a level's age, clear-portals hidden and shown. Recorded by `test_mp test_mp_layer --record-golden` on the CLASSIC claim and HUD code as it stood at commit 3926faf (planning step 178, CTL-2), where the only production change is the two test seams ControlAt and PlaceCameraForTest, before the controls were refactored (CTL-3). EXTENDED ONCE, before CTL-3 began and on the same unmodified claim code, by the states a review found missing (a level younger than 700 ms with clear-portals shown, the pads mid-slide, the door tick): the entries recorded first (14 claim, 138 HUD) kept their values byte for byte. A golden is never re-recorded to make a refactor pass: if the classic path really changed on purpose, the step says so and records why. Hashes are FNV-1a over float bits and picture file names; no pixel and no Asantee byte is here.",
+  "entries": {
+    "claim 16:9 clear=0 tick 1 age 16 ms": "c6e22d54ef4dea81 114x65 none=7373 left=0 right=0 reset=32 menu=5 clear=0",
+    "claim 16:9 clear=0 tick 15 age 240 ms": "fbceb421280aa33d 114x65 none=7330 left=4 right=0 reset=48 menu=28 clear=0",
+    "claim 16:9 clear=0 tick 22 age 352 ms": "3ad52010c07e82e5 114x65 none=7180 left=72 right=60 reset=56 menu=42 clear=0",
+    "claim 16:9 clear=0 tick 30 age 480 ms": "833b9006751c7228 114x65 none=6993 left=155 right=142 reset=64 menu=56 clear=0",
+    "claim 16:9 clear=0 tick 313 age 5008 ms": "4288988dfd984859 114x65 none=6849 left=214 right=203 reset=72 menu=72 clear=0",
+    "claim 16:9 clear=0 tick 40 age 640 ms": "f11f9e2e52316b3f 114x65 none=6872 left=212 right=198 reset=64 menu=64 clear=0",
+    "claim 16:9 clear=0 tick 44 age 704 ms": "4288988dfd984859 114x65 none=6849 left=214 right=203 reset=72 menu=72 clear=0",
+    "claim 16:9 clear=0 tick 7 age 112 ms": "db5af70df19e5955 114x65 none=7358 left=0 right=0 reset=40 menu=12 clear=0",
+    "claim 16:9 clear=1 tick 100 age 1600 ms": "2eb6fe1e245c46b8 114x65 none=6768 left=214 right=203 reset=72 menu=72 clear=81",
+    "claim 16:9 clear=1 tick 313 age 5008 ms": "2eb6fe1e245c46b8 114x65 none=6768 left=214 right=203 reset=72 menu=72 clear=81",
+    "claim 16:9 clear=1 tick 32 age 512 ms (an early shot)": "3f60786ff4dc03b7 114x65 none=6880 left=171 right=158 reset=64 menu=56 clear=81",
+    "claim 4:3 clear=0 tick 1 age 16 ms": "99a16698ef86d9f5 86x65 none=5558 left=0 right=0 reset=24 menu=8 clear=0",
+    "claim 4:3 clear=0 tick 15 age 240 ms": "d4a73fdf53972719 86x65 none=5506 left=4 right=2 reset=48 menu=30 clear=0",
+    "claim 4:3 clear=0 tick 22 age 352 ms": "8db0314a9e88efeb 86x65 none=5353 left=72 right=67 reset=56 menu=42 clear=0",
+    "claim 4:3 clear=0 tick 30 age 480 ms": "68903734321440e8 86x65 none=5165 left=155 right=150 reset=64 menu=56 clear=0",
+    "claim 4:3 clear=0 tick 313 age 5008 ms": "bd7580a31e7cff0d 86x65 none=5021 left=214 right=211 reset=72 menu=72 clear=0",
+    "claim 4:3 clear=0 tick 40 age 640 ms": "7b786843ea51c8d9 86x65 none=5045 left=212 right=205 reset=64 menu=64 clear=0",
+    "claim 4:3 clear=0 tick 44 age 704 ms": "bd7580a31e7cff0d 86x65 none=5021 left=214 right=211 reset=72 menu=72 clear=0",
+    "claim 4:3 clear=0 tick 7 age 112 ms": "0026c8b455a91809 86x65 none=5543 left=0 right=0 reset=32 menu=15 clear=0",
+    "claim 4:3 clear=1 tick 100 age 1600 ms": "23f36ef7c3b6edb8 86x65 none=4940 left=214 right=211 reset=72 menu=72 clear=81",
+    "claim 4:3 clear=1 tick 313 age 5008 ms": "23f36ef7c3b6edb8 86x65 none=4940 left=214 right=211 reset=72 menu=72 clear=81"
+  }
+}

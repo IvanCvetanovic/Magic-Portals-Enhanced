@@ -8107,6 +8107,19 @@ bool MagicPortalsLayer::ControlRect(Control control, Hud::Rect& out) const {
     return false;
 }
 
+std::optional<MagicPortalsLayer::Control> MagicPortalsLayer::ControlAt(const glm::dvec2& viewPoint) const {
+    Touch touch;
+    touch.over = true;
+    touch.atView = viewPoint;
+    const ControlButton* under = controlUnderPointer(touch);
+    return under != nullptr ? std::optional<Control>(under->kind) : std::nullopt;
+}
+
+void MagicPortalsLayer::PlaceCameraForTest(entt::registry& registry, const glm::dvec2& centrePx) {
+    m_follow.centrePx = centrePx;
+    placeCamera(registry);
+}
+
 bool MagicPortalsLayer::NoPortalSignRect(Hud::Rect& out) const {
     if (!m_sign.present) return false;
     out = m_sign.onView;

@@ -1202,6 +1202,11 @@ public:
     // the view's top-left, in design units; false when it is not shown.
     bool ControlRect(Control control, Hud::Rect& out) const;
 
+    // TEST SEAMS (planning step 178). The shown control a view point is on as the claim reads it (Left,
+    // Right, Reset, Menu, Clear: the first wins), or none; and the camera put at a centre, not clamped.
+    std::optional<Control> ControlAt(const glm::dvec2& viewPoint) const;
+    void PlaceCameraForTest(entt::registry& registry, const glm::dvec2& centrePx);
+
     // The no-portal sign's rectangle on the view as the last tick left it, in
     // design units; false in a level that places none.
     bool NoPortalSignRect(Hud::Rect& out) const;

@@ -36,6 +36,7 @@
 #include "core/Components.hpp"
 #include "core/Input.hpp"
 #include "core/InterpolationSystem.hpp"
+#include "core/Json.hpp"
 #include "core/PhysicsSettings.hpp"
 #include "core/PhysicsSystem.hpp"
 #include "core/RenderSettings.hpp"
@@ -76,6 +77,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -113,9 +116,36 @@ constexpr double kScriptMs = 16.0;
 int TicksOf(double ms) { return static_cast<int>(std::ceil(ms / kScriptMs - 1e-9)); }
 int Ticks(int ticksAt60Hz) { return TicksOf(static_cast<double>(ticksAt60Hz) * 1000.0 / 60.0); }
 
+// An environment variable's text, or empty. _dupenv_s on Windows: std::getenv is C4996 there, and the build is warning-free.
+std::string EnvText(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t length = 0;
+    if (_dupenv_s(&value, &length, name) != 0 || value == nullptr) return {};
+    std::string text(value);
+    std::free(value);
+    return text;
+#else
+    const char* value = std::getenv(name);
+    return value != nullptr ? value : "";
+#endif
+}
+
 MagicPortalsLayer::Paths TestPaths() {
     MagicPortalsLayer::Paths paths;
     paths.prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer";
+    // TEST ONLY (planning step 178, CTL-2): the port's own data from a COPY, so that a mutation test changes one number in the
+    // copy and runs this same binary, without touching game/data (which another session may be reading) and without a relink.
+    if (const std::string portData = EnvText("MP_TEST_PORTDATA"); !portData.empty()) {
+        paths.portData = portData;
+        // Said once a run, so that a stray variable left in a shell cannot make a normal run fail or pass for no visible reason.
+        static bool said = false;
+        if (!said) {
+            said = true;
+            std::printf("test_mp_layer: MUTATION - MP_TEST_PORTDATA is set, the port's data is read from %s, not from game/data\n",
+                        portData.c_str());
+        }
+    }
     return paths;
 }
 
@@ -21916,6 +21946,1383 @@ void ARedKeyAddsItsOwnLightOneTickBehindItsPicture() {
     }
 }
 
+// ---- The classic pointer path, pinned (planning step 178, CTL-2) ---------------------------------------------------------
+//
+// Nothing pressed a pad before this: Hud::OnPad was pinned as geometry and no case held a touch on one. These cases go in
+// BEFORE the controls move (docs/planning/2026-10-15-modern-controls.md, CTL-3 to CTL-6), on the unmodified claim code, so
+// that the refactor's evidence is "the same cases, green on the old code and on the new". Each case observes ONE consumer
+// of the pad's geometry, with a positive control beside it, so that a mutation removing one rule fails the case that owns it:
+//   camera `onPad` (readInput -> Camera::Track)    AHeldTouchOnAPadKeepsTheCameraFollowing (a pad touch follows) with
+//                                                   AHeldTouchInTheWorldStopsIt (its control), and the weightless pair
+//   the lift gate (`!onPad` before movers.Press)   APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt
+//   the hand gate (tapHandsAway's OnPad)           AReleaseOnAPadTakesNoTutorialHand
+//   the pad's hit circle (radius 64, strictly <)   ThePadHitCircleIsStrictlyInside, the held-touch walks, the slide,
+//                                                   TheClassicClaimMapIsPinned
+//   the pad's drawn size (64 units)                TheSettledControlsAreTheirDrawnRectangles, the HUD digest
+// ControlAt (the claim as the tick laid it out) and PlaceCameraForTest are the two seams the cases stand on.
+
+using PtrControl = MagicPortalsLayer::Control;
+using PtrClaim = std::optional<PtrControl>;
+using GoldenEntries = std::map<std::string, std::string>;
+
+// tests/golden/, where classic_claim.json and classic_hud.json are read from at run time (a per-source definition, as
+// MAGICPORTALS_ROUTES_DIR is): a corrected golden is a new file, never a new binary.
+const std::string kGoldenDir = MAGICPORTALS_GOLDEN_DIR;
+
+std::string PtrName(const PtrClaim& claim) {
+    if (!claim) return "none";
+    switch (*claim) {
+    case PtrControl::Left:
+        return "Left";
+    case PtrControl::Right:
+        return "Right";
+    case PtrControl::Reset:
+        return "Reset";
+    case PtrControl::Menu:
+        return "Menu";
+    case PtrControl::Clear:
+        return "Clear";
+    }
+    return "?";
+}
+
+std::string PtrNum(double value) {
+    char text[64];
+    std::snprintf(text, sizeof(text), "%.4f", value);
+    return text;
+}
+
+// Where a point on the view shows on a viewport of `window` pixels, which is what a pointer carries.
+glm::vec2 PtrPixel(const MagicPortalsLayer& layer, const glm::dvec2& onView,
+                   const glm::vec2& window = glm::vec2(1280.0f, 720.0f)) {
+    const glm::dvec2 view = layer.ViewPx();
+    return glm::vec2(static_cast<float>(onView.x / view.x * static_cast<double>(window.x)),
+                     static_cast<float>(onView.y / view.y * static_cast<double>(window.y)));
+}
+
+// Attached, the level-start popup closed where there is one, and ticked until the level is 800 ms old: the pads have
+// slid home (700 ms), the first shot is allowed (400 ms) and the player has landed.
+bool PtrReady(entt::registry& registry, MagicPortalsLayer& layer, const std::string& what) {
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || layer.SimLevel() == nullptr) {
+        CHECK_MSG(false, what + " loads: " + layer.LoadError());
+        return false;
+    }
+    CloseTheLevelStartPopup(layer, registry);
+    for (int guard = 0; guard < 300 && layer.LevelAgeMs() < 800.0; ++guard) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.LevelAgeMs() >= 800.0, what + " is 800 ms old: " + std::to_string(layer.LevelAgeMs()));
+    return true;
+}
+
+// One tick with the touch down at `pixel`: the press edge on its first tick, held after. `alsoDown` are keys held too.
+void PtrHold(MagicPortalsLayer& layer, entt::registry& registry, const glm::vec2& pixel, bool first,
+             std::vector<std::string> alsoDown = {}) {
+    alsoDown.push_back(MagicPortalsLayer::kTap);
+    tickWith(layer, registry, pixel, std::move(alsoDown),
+             first ? std::vector<std::string>{MagicPortalsLayer::kTap} : std::vector<std::string>{});
+}
+
+void PtrRest(MagicPortalsLayer& layer, entt::registry& registry, int ticks) {
+    for (int tick = 0; tick < ticks; ++tick) tickWith(layer, registry, kRest, {}, {});
+}
+
+glm::dvec2 PtrLastTap(const MagicPortalsLayer& layer) {
+    return layer.SimLevel()->portals.lastTap.atPx;
+}
+
+bool PtrLatched(const MagicPortalsLayer& layer, const std::string& sound) {
+    const std::vector<std::string> sounds = layer.LatchedSounds();
+    return std::find(sounds.begin(), sounds.end(), sound) != sounds.end();
+}
+
+// A held touch on a pad: the player walks that way, and the release, where it went down, fires nothing.
+void PtrAHeldTouchOnAPad(bool left) {
+    const char* const testName = left ? "AHeldTouchOnTheLeftPadWalksThePlayerLeft" : "AHeldTouchOnTheRightPadWalksThePlayerRight";
+    if (!OriginalArtIsThere(testName)) return;
+    const std::string side = left ? "left" : "right";
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    if (!PtrReady(registry, layer, "level30")) return;
+    const glm::dvec2 view = layer.ViewPx();
+    // 42.4 units from its corner, well inside the 64.
+    const glm::dvec2 point(left ? 30.0 : view.x - 30.0, view.y - 30.0);
+    const glm::vec2 pixel = PtrPixel(layer, point);
+    CHECK_MSG(layer.ControlAt(point) == PtrClaim(left ? PtrControl::Left : PtrControl::Right),
+              side + " pad: the claim at " + Point(point) + " is " + PtrName(layer.ControlAt(point)));
+    // The control: with no touch down the player stands where he landed.
+    const double landed = playerPx(registry, layer).x;
+    PtrRest(layer, registry, 20);
+    const double standing = playerPx(registry, layer).x;
+    CHECK_MSG(std::fabs(standing - landed) < 0.5, side + " pad: with no touch down he stands: moved " +
+                                                       PtrNum(standing - landed));
+    const int fired = layer.SimLevel()->portals.shotsFired;
+    const glm::dvec2 lastTap = PtrLastTap(layer);
+    for (int tick = 0; tick < 30; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+    const double walked = (playerPx(registry, layer).x - standing) * (left ? -1.0 : 1.0);
+    CHECK_MSG(walked > 40.0, side + " pad held 30 ticks walks him " + side + " (2.4 units a tick): moved " +
+                                 PtrNum(walked) + " units that way");
+    std::printf("  %s pad held 30 ticks: he walked %.1f units (standing %.2f)\n", side.c_str(), walked, standing - landed);
+    lift(layer, registry, pixel);
+    CHECK_MSG(layer.SimLevel()->portals.shotsFired == fired && PtrLastTap(layer) == lastTap,
+              side + " pad: the release where it went down fires nothing: " + Point(PtrLastTap(layer)) + " after " +
+                  Point(lastTap));
+    // And with the touch up he stops.
+    PtrRest(layer, registry, 10);
+    const double stopped = playerPx(registry, layer).x;
+    PtrRest(layer, registry, 10);
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - stopped) < 0.5,
+              side + " pad: with the touch up he stands again: " + PtrNum(playerPx(registry, layer).x - stopped));
+    layer.OnDetach(registry);
+}
+
+void AHeldTouchOnTheLeftPadWalksThePlayerLeft() {
+    PtrAHeldTouchOnAPad(true);
+}
+
+void AHeldTouchOnTheRightPadWalksThePlayerRight() {
+    PtrAHeldTouchOnAPad(false);
+}
+
+// ScreenPad::getTargetButton -> isPointInSphere: the hit disc is STRICTLY inside its radius of 64 units about the pad's
+// corner. 63.99 and 64.01 along the screen's edge, up its side and on the diagonal (never exactly 64.0: a float pixel is
+// not that exact), from both corners, hard-coded, never read from the rules: inside, the claim is the pad's, the player
+// walks and the release fires nothing; outside, the claim is none and the release fires toward where it was held.
+void ThePadHitCircleIsStrictlyInside() {
+    if (!OriginalArtIsThere("ThePadHitCircleIsStrictlyInside")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    if (!PtrReady(registry, layer, "level30")) return;
+    const glm::dvec2 view = layer.ViewPx();
+    const double diagonal = 1.0 / std::sqrt(2.0);
+    int walkedInside = 0;
+    int firedOutside = 0;
+    for (const bool left : {true, false}) {
+        const glm::dvec2 corner(left ? 0.0 : view.x, view.y);
+        const double inward = left ? 1.0 : -1.0;
+        for (const double distance : {63.99, 64.01}) {
+            const bool inside = distance < 64.0;
+            const struct {
+                const char* along;
+                glm::dvec2 offset;
+            } ways[] = {
+                {"along the bottom edge", glm::dvec2(inward * distance, 0.0)},
+                {"up the screen's side", glm::dvec2(0.0, -distance)},
+                {"on the diagonal", glm::dvec2(inward * distance * diagonal, -distance * diagonal)},
+            };
+            for (const auto& way : ways) {
+                const glm::dvec2 point = corner + way.offset;
+                const std::string where =
+                    std::string(left ? "left" : "right") + " pad, " + PtrNum(distance) + " units " + way.along;
+                const PtrClaim want = inside ? PtrClaim(left ? PtrControl::Left : PtrControl::Right) : PtrClaim{};
+                CHECK_MSG(layer.ControlAt(point) == want,
+                          where + ": claimed by " + PtrName(layer.ControlAt(point)) + ", wanted " + PtrName(want));
+                const glm::vec2 pixel = PtrPixel(layer, point);
+                const double before = playerPx(registry, layer).x;
+                const int firedBefore = layer.SimLevel()->portals.shotsFired;
+                const glm::dvec2 lastBefore = PtrLastTap(layer);
+                if (inside) {
+                    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+                    const double walked = (playerPx(registry, layer).x - before) * (left ? -1.0 : 1.0);
+                    CHECK_MSG(walked > 8.0, where + ": inside, he walks " + (left ? "left" : "right") + ": " + PtrNum(walked));
+                    if (walked > 8.0) ++walkedInside;
+                    lift(layer, registry, pixel);
+                    CHECK_MSG(layer.SimLevel()->portals.shotsFired == firedBefore && PtrLastTap(layer) == lastBefore,
+                              where + ": inside, the release fires nothing");
+                } else {
+                    tap(layer, registry, pixel);
+                    glm::dvec2 aimed(0.0);
+                    CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), where + ": the pixel maps into the level");
+                    lift(layer, registry, pixel);
+                    const bool fired = glm::distance(PtrLastTap(layer), aimed) < 0.01;
+                    CHECK_MSG(fired, where + ": outside, the release fires toward " + Point(aimed) + ": the last tap is " +
+                                         Point(PtrLastTap(layer)));
+                    if (fired) ++firedOutside;
+                    CHECK_MSG(std::fabs(playerPx(registry, layer).x - before) < 3.0,
+                              where + ": outside, he does not walk: " + PtrNum(playerPx(registry, layer).x - before));
+                }
+                // Stand again, and let the 400 ms between taps pass.
+                PtrRest(layer, registry, 30);
+            }
+        }
+    }
+    std::printf("  hit circle: %d inside probes walked, %d outside probes fired\n", walkedInside, firedOutside);
+    CHECK_MSG(walkedInside == 6 && firedOutside == 6, "six inside walks and six outside shots: " +
+                                                          std::to_string(walkedInside) + " and " + std::to_string(firedOutside));
+    // EXACTLY 64 is off the pad, from BOTH corners: the disc is strict (isPointInSphere), so a closed `<=` claims these and a
+    // `<` does not. Their squared distance is exactly 4096 = 64 x 64 in doubles (a point and its corner are the same double
+    // minus 64, and a settled corner has no slide left), and the view's height is exactly 256. The claim map's 4-unit lattice
+    // reaches 64 from the LEFT corner alone (the view's width is not a multiple of 4), so the right corner is probed here.
+    // Claims only: no touch, so the walk and shot counts above stand.
+    const struct {
+        const char* where;
+        glm::dvec2 point;
+    } exactly64[] = {
+        {"left pad, exactly 64 along the bottom edge", glm::dvec2(64.0, view.y)},
+        {"left pad, exactly 64 up the screen's side", glm::dvec2(0.0, view.y - 64.0)},
+        {"right pad, exactly 64 along the bottom edge", glm::dvec2(view.x - 64.0, view.y)},
+        {"right pad, exactly 64 up the screen's side", glm::dvec2(view.x, view.y - 64.0)},
+    };
+    for (const auto& probe : exactly64) {
+        CHECK_MSG(!layer.ControlAt(probe.point), std::string(probe.where) + " " + Point(probe.point) + " is off the pad: claimed by " +
+                                                     PtrName(layer.ControlAt(probe.point)));
+    }
+    layer.OnDetach(registry);
+}
+
+// A touch that goes down in the world and is slid onto a pad walks from the tick it is on it, and one slid off stops: the
+// pad is asked of the touch's present place every tick (ScreenPad::getTargetButton over the touches in the DOWN state).
+// A scheduled drag is the one pointer path's moving finger. The model is the claim itself: on every tick that is steady
+// (the claim the same a tick before and a tick after, so a tick's lag cannot matter) he walks exactly when the claim is
+// the left pad's.
+void ATouchSlidOntoAPadWalksAndOffItStops() {
+    if (!OriginalArtIsThere("ATouchSlidOntoAPadWalksAndOffItStops")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    if (!PtrReady(registry, layer, "level30")) return;
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::dvec2 world(150.0, 160.0);
+    const glm::dvec2 pad(4.0, view.y - 4.0);
+    struct Leg {
+        const char* what;
+        glm::dvec2 from;
+        glm::dvec2 to;
+    };
+    const int span = 40;
+    for (const Leg& leg : {Leg{"world to pad", world, pad}, Leg{"pad to world", pad, world}}) {
+        const int first = layer.LayerTicks() + 3;
+        layer.ScheduleDevDrag(first, leg.from / view, leg.to / view, first + span);
+        std::map<int, bool> claimed;
+        std::map<int, double> at;
+        at[layer.LayerTicks()] = playerPx(registry, layer).x;
+        while (layer.LayerTicks() < first + span + 2) {
+            tickWith(layer, registry, kRest, {}, {});
+            const int n = layer.LayerTicks();
+            at[n] = playerPx(registry, layer).x;
+            if (n >= first && n < first + span) {
+                const double along = static_cast<double>(n - first) / static_cast<double>(span);
+                const glm::dvec2 position = (leg.from / view + (leg.to / view - leg.from / view) * along) * view;
+                claimed[n] = layer.ControlAt(position) == PtrClaim(PtrControl::Left);
+            }
+        }
+        int steadyOn = 0;
+        int steadyOff = 0;
+        int wrong = 0;
+        std::string firstWrong;
+        for (int n = first + 1; n < first + span - 1; ++n) {
+            if (claimed[n - 1] != claimed[n] || claimed[n + 1] != claimed[n]) continue;
+            const double moved = at[n + 1] - at[n];
+            const bool walks = moved < -1.0;
+            const bool stands = std::fabs(moved) < 0.3;
+            (claimed[n] ? steadyOn : steadyOff) += 1;
+            if (claimed[n] ? !walks : !stands) {
+                if (wrong == 0) firstWrong = "tick " + std::to_string(n) + " claimed " + std::to_string(static_cast<int>(claimed[n])) + " moved " + PtrNum(moved);
+                ++wrong;
+            }
+        }
+        std::printf("  slide %s: %d steady ticks on the pad, %d off it, %d differ\n", leg.what, steadyOn, steadyOff, wrong);
+        CHECK_MSG(steadyOn >= 4 && steadyOff >= 4, std::string(leg.what) + ": steady ticks on the pad " + std::to_string(steadyOn) +
+                                                       ", off it " + std::to_string(steadyOff) + " (the drag must cross the disc)");
+        CHECK_MSG(wrong == 0, std::string(leg.what) + ": he walks exactly while the touch is on the left pad: " +
+                                  std::to_string(wrong) + " steady ticks differ, the first " + firstWrong);
+        PtrRest(layer, registry, 40);
+    }
+    layer.OnDetach(registry);
+}
+
+// The camera's centre x after each of `ticks` ticks of level30 in which the player is walked right, by the key (mode 0) or by a
+// touch held on the right pad (mode 1). 55 ticks take him from the spawn (182) to about 312, short of the crate at 352.
+struct PtrCameraTrace {
+    bool ok{false};
+    std::vector<double> centreX;
+    double playerFrom{0.0};
+    double playerTo{0.0};
+};
+
+PtrCameraTrace PtrCameraRun(int mode, int ticks, const std::string& what) {
+    PtrCameraTrace trace;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    if (!PtrReady(registry, layer, what)) return trace;
+    trace.ok = true;
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::vec2 padPixel = PtrPixel(layer, glm::dvec2(view.x - 30.0, view.y - 30.0));
+    trace.playerFrom = playerPx(registry, layer).x;
+    for (int tick = 0; tick < ticks; ++tick) {
+        if (mode == 0) {
+            tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, {});
+        } else {
+            PtrHold(layer, registry, padPixel, tick == 0);
+        }
+        trace.centreX.push_back(layer.CameraCentrePx().x);
+    }
+    trace.playerTo = playerPx(registry, layer).x;
+    layer.OnDetach(registry);
+    return trace;
+}
+
+// camera.json `drag`, hasAnyTouch: the follow waits while a touch is held OFF the walk pads, and runs while it is held ON
+// one (ScreenPad::getTargetButton != 0). A touch held on the right pad walks him as the right key does and the camera
+// follows exactly as it follows the key.
+void AHeldTouchOnAPadKeepsTheCameraFollowing() {
+    if (!OriginalArtIsThere("AHeldTouchOnAPadKeepsTheCameraFollowing")) return;
+    const int ticks = 55;
+    const PtrCameraTrace key = PtrCameraRun(0, ticks, "the key run");
+    const PtrCameraTrace pad = PtrCameraRun(1, ticks, "the pad run");
+    if (!key.ok || !pad.ok) return;
+    const double keyMoved = key.centreX.back() - key.centreX.front();
+    const double padMoved = pad.centreX.back() - pad.centreX.front();
+    std::printf("  camera over 55 ticks: key %.1f, pad %.1f; the two end %.4f apart\n", keyMoved, padMoved,
+                std::fabs(pad.centreX.back() - key.centreX.back()));
+    CHECK_MSG(keyMoved > 30.0, "the control: walking right on the key, the camera follows: " + PtrNum(keyMoved));
+    CHECK_MSG(pad.playerTo - pad.playerFrom > 80.0, "a held touch on the right pad walks him: " + PtrNum(pad.playerTo - pad.playerFrom));
+    CHECK_MSG(padMoved > 30.0, "and the camera follows him while the touch is held on the pad: " + PtrNum(padMoved));
+    CHECK_MSG(std::fabs(pad.centreX.back() - key.centreX.back()) < 0.5,
+              "exactly where the key's follow had it: " + PtrNum(pad.centreX.back()) + " against " + PtrNum(key.centreX.back()));
+}
+
+// The other side: a touch held in the world holds the view where it was. A standing player, the camera put 80 units to the
+// right of where it would rest, and then 20 ticks of nothing (the control: the follow draws it back) or of a touch held in the
+// world: the press tick itself follows (the original's GSKS_HIT frame has no hold yet) and the ticks after it do not.
+void AHeldTouchInTheWorldStopsIt() {
+    if (!OriginalArtIsThere("AHeldTouchInTheWorldStopsIt")) return;
+    struct Run {
+        bool ok{false};
+        double placed{0.0};
+        std::vector<double> centreX;
+    };
+    const auto run = [](bool touch) {
+        Run out;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, touch ? "the held run" : "the control run")) return out;
+        const glm::dvec2 view = layer.ViewPx();
+        const glm::dvec2 target = MagicPortals::Camera::Clamp(playerPx(registry, layer), view, layer.BoundsPx());
+        const glm::dvec2 placed = MagicPortals::Camera::Clamp(target + glm::dvec2(80.0, 0.0), view, layer.BoundsPx());
+        out.ok = std::fabs(placed.x - target.x) >= 60.0;
+        CHECK_MSG(out.ok, "the camera can be put 60 units off its target: " + PtrNum(placed.x) + " against " + PtrNum(target.x));
+        out.placed = placed.x;
+        layer.PlaceCameraForTest(registry, placed);
+        const glm::vec2 pixel = PtrPixel(layer, glm::dvec2(view.x * 0.5, 60.0));
+        for (int tick = 0; tick < 20; ++tick) {
+            if (touch) {
+                PtrHold(layer, registry, pixel, tick == 0);
+            } else {
+                tickWith(layer, registry, kRest, {}, {});
+            }
+            out.centreX.push_back(layer.CameraCentrePx().x);
+        }
+        layer.OnDetach(registry);
+        return out;
+    };
+    const Run loose = run(false);
+    const Run held = run(true);
+    if (!loose.ok || !held.ok) return;
+    CHECK_MSG(loose.placed - loose.centreX.back() > 40.0,
+              "the control: with no touch the follow draws the camera back from " + PtrNum(loose.placed) + " to " + PtrNum(loose.centreX.back()));
+    CHECK_MSG(held.placed - held.centreX.front() > 5.0 && std::fabs(held.centreX.front() - loose.centreX.front()) < 1e-9,
+              "the press tick itself follows, as it does with no touch: " + PtrNum(held.centreX.front()) + " against " +
+                  PtrNum(loose.centreX.front()));
+    double worst = 0.0;
+    for (std::size_t tick = 1; tick < held.centreX.size(); ++tick) {
+        worst = std::max(worst, std::fabs(held.centreX[tick] - held.centreX[0]));
+    }
+    std::printf("  camera put 80 off: with no touch it came back %.1f; held in the world it moved %.12f after the press tick\n",
+                loose.placed - loose.centreX.back(), worst);
+    CHECK_MSG(worst < 1e-9, "and a touch held in the world holds it from the tick after: moved " + PtrNum(worst));
+}
+
+// movers.json `lift`: a touch that goes down inside a lift's picture, OFF the walk pads (ScreenPad::isValidPoint), sends
+// it. The lift of 2-02 stands at its first marker, 64 x 32 units; the camera is put so that it is centred at (40, 240) on
+// the view, which holds a point on the left pad ((10, 230): 27.9 from its corner) and a point off it ((70, 250): 70.3) in
+// one picture. The press on the pad sends nothing and the press just outside it sends the lift.
+void APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt() {
+    if (!OriginalArtIsThere("APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1a");
+    if (!PtrReady(registry, layer, "level1a")) return;
+    CHECK_MSG(!layer.SimLevel()->movers.lifts.empty(), "2-02 has a lift");
+    if (layer.SimLevel()->movers.lifts.empty()) return;
+    const MagicPortals::Mover::Lift& theLift = layer.SimLevel()->movers.lifts.front();
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::dvec2 onView(40.0, 240.0);
+    const glm::dvec2 onPad(10.0, 230.0);
+    const glm::dvec2 offPad(70.0, 250.0);
+    const auto centreFor = [&]() { return theLift.motion.atPx - onView + view * 0.5; };
+    CHECK_MSG(layer.ControlAt(onPad) == PtrClaim(PtrControl::Left) && !layer.ControlAt(offPad),
+              "the two points are on the pad and off it: " + PtrName(layer.ControlAt(onPad)) + " and " +
+                  PtrName(layer.ControlAt(offPad)));
+    const glm::dvec2 liftAt = theLift.motion.atPx;
+    CHECK_MSG(theLift.motion.Holds(centreFor() - view * 0.5 + onPad, theLift.sizeUnits) &&
+                  theLift.motion.Holds(centreFor() - view * 0.5 + offPad, theLift.sizeUnits),
+              "both points are inside the lift's picture, " + Point(liftAt) + " " + Point(theLift.sizeUnits));
+    const int sends = theLift.motion.sends;
+    // The follow eases the camera on the press tick, so it is put again before every tick that matters.
+    layer.PlaceCameraForTest(registry, centreFor());
+    tap(layer, registry, PtrPixel(layer, onPad));
+    const int sentByThePad = theLift.motion.sends - sends;
+    CHECK_MSG(sentByThePad == 0, "a press on the pad over the lift sends it nowhere: " + std::to_string(sentByThePad) + " sends");
+    lift(layer, registry, PtrPixel(layer, onPad));
+    CHECK_MSG(theLift.motion.sends == sends && theLift.motion.atPx == liftAt, "and its release sends nothing either");
+    layer.PlaceCameraForTest(registry, centreFor());
+    tap(layer, registry, PtrPixel(layer, offPad));
+    CHECK_MSG(theLift.motion.sends == sends + 1, "the control: a press just off the pad, over the same lift, sends it: " +
+                                                   std::to_string(theLift.motion.sends - sends) + " sends");
+    std::printf("  lift %s: %d sends from the press on the pad, then %d from the press beside it\n", theLift.name.c_str(),
+                sentByThePad, theLift.motion.sends - sends - sentByThePad);
+    layer.OnDetach(registry);
+}
+
+// effects.json smoke_vanish_hand_tap: a release on a walk pad takes no tutorial hand (ScreenPad::isValidPoint, #48-58);
+// the same release off the pads, within the hand's 30 units, does. 1-02's hand_tap, the camera put so that the hand is
+// under the release both times; the pad's release first, so the hand is still there for the control.
+void AReleaseOnAPadTakesNoTutorialHand() {
+    if (!OriginalArtIsThere("AReleaseOnAPadTakesNoTutorialHand")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level1");
+    if (!PtrReady(registry, layer, "level1")) return;
+    const char* const hand = "hand_tap_ent_622";
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.DrawnPicture(hand).drawn, "1-02's hand stands before any touch");
+    if (!layer.DrawnPicture(hand).drawn) return;
+    const glm::dvec2 view = layer.ViewPx();
+    // A touch down and up with the hand under `onView` on both ticks: the hand's own place (the picture's, as the last
+    // frame left it) put at that point of the view through the camera.
+    const auto release = [&](const glm::dvec2& onView) {
+        const glm::vec2 pixel = PtrPixel(layer, onView);
+        const auto handUnder = [&]() {
+            layer.PlaceCameraForTest(registry, layer.DrawnPicture(hand).ownerPx - onView + view * 0.5);
+        };
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        handUnder();
+        tap(layer, registry, pixel);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        handUnder();
+        lift(layer, registry, pixel);
+        return layer.DrawnPicture(hand).drawn;
+    };
+    const glm::dvec2 onPad(30.0, view.y - 30.0);
+    const glm::dvec2 offPad(view.x * 0.5, view.y * 0.5);
+    CHECK_MSG(layer.ControlAt(onPad) == PtrClaim(PtrControl::Left) && !layer.ControlAt(offPad),
+              "the two points are on the pad and off it");
+    CHECK_MSG(release(onPad), "a release on the left pad, the hand right under it, leaves the hand standing");
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_MSG(layer.DrawnPicture(hand).drawn, "and it still stands a frame later");
+    CHECK_MSG(!release(offPad), "the control: the same release off the pads takes it, on the release's tick");
+    layer.OnDetach(registry);
+}
+
+// A narrow window, so that controls overlap: the claim goes in the order Left, Right, Reset, Menu, Clear and the first hit
+// wins, and the rectangles are closed (a point on a shared edge is in both). At 240 x 720 the view is 85.3 units wide: the
+// two pad circles overlap in the middle, restart (21.3 to 53.3) lies over clear-portals (0 to 32) from 21.3 to 32. At
+// 160 x 720 (56.9 wide) pause (24.9 to 56.9) lies over clear-portals. At 1440 x 720 (512 wide, every number exact) restart
+// and pause share the edge x = 480.
+void TheClaimOrderIsLeftRightResetMenuClear() {
+    if (!OriginalArtIsThere("TheClaimOrderIsLeftRightResetMenuClear")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    if (!PtrReady(registry, layer, "level30")) return;
+    // A portal, so that clear-portals is shown (ATapLandsWhereItPoints' first landing aim).
+    shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+    landShot(layer, registry);
+    CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, "a portal is placed, so clear-portals is shown");
+    const auto windowed = [&](const glm::vec2& window) {
+        publishViewport(registry, window);
+        PtrRest(layer, registry, 3);
+    };
+    Hud::Rect reset;
+    Hud::Rect menu;
+    Hud::Rect clear;
+
+    windowed(glm::vec2(240.0f, 720.0f));
+    glm::dvec2 view = layer.ViewPx();
+    CHECK_MSG(std::fabs(view.x - 256.0 / 3.0) < 1e-3, "the narrow view is 85.3 units wide: " + PtrNum(view.x));
+    CHECK_MSG(layer.ControlRect(PtrControl::Reset, reset) && layer.ControlRect(PtrControl::Menu, menu) &&
+                  layer.ControlRect(PtrControl::Clear, clear),
+              "restart, pause and clear-portals are all shown");
+    const glm::dvec2 middle(view.x * 0.5, view.y - 10.0);
+    CHECK_MSG(layer.ControlAt(middle) == PtrClaim(PtrControl::Left),
+              "a point both pads' circles hold is the LEFT's: " + PtrName(layer.ControlAt(middle)));
+    const glm::dvec2 resetOverClear(26.0, 16.0);
+    CHECK_MSG(reset.Contains(resetOverClear) && clear.Contains(resetOverClear), "restart and clear-portals both hold (26, 16)");
+    CHECK_MSG(layer.ControlAt(resetOverClear) == PtrClaim(PtrControl::Reset),
+              "and the claim is RESTART's: " + PtrName(layer.ControlAt(resetOverClear)));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(5.0, 16.0)) == PtrClaim(PtrControl::Clear) &&
+                  layer.ControlAt(glm::dvec2(40.0, 16.0)) == PtrClaim(PtrControl::Reset) &&
+                  layer.ControlAt(glm::dvec2(70.0, 16.0)) == PtrClaim(PtrControl::Menu),
+              "off the overlaps each is its own: " + PtrName(layer.ControlAt(glm::dvec2(5.0, 16.0))) + ", " +
+                  PtrName(layer.ControlAt(glm::dvec2(40.0, 16.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(70.0, 16.0))));
+
+    windowed(glm::vec2(160.0f, 720.0f));
+    view = layer.ViewPx();
+    CHECK_MSG(layer.ControlRect(PtrControl::Menu, menu) && layer.ControlRect(PtrControl::Clear, clear) &&
+                  layer.ControlRect(PtrControl::Reset, reset),
+              "all three are shown at 160 x 720");
+    const glm::dvec2 menuOverClear(28.0, 16.0);
+    CHECK_MSG(menu.Contains(menuOverClear) && clear.Contains(menuOverClear) && !reset.Contains(menuOverClear),
+              "pause and clear-portals both hold (28, 16), restart does not: " + std::to_string(view.x));
+    CHECK_MSG(layer.ControlAt(menuOverClear) == PtrClaim(PtrControl::Menu),
+              "and the claim is PAUSE's: " + PtrName(layer.ControlAt(menuOverClear)));
+
+    windowed(glm::vec2(1440.0f, 720.0f));
+    view = layer.ViewPx();
+    CHECK_MSG(view.x == 512.0, "the 2:1 view is exactly 512 wide: " + PtrNum(view.x));
+    CHECK_MSG(layer.ControlRect(PtrControl::Reset, reset) && layer.ControlRect(PtrControl::Menu, menu),
+              "restart and pause are shown at 2:1");
+    CHECK_MSG(reset.min.x == 448.0 && reset.Max().x == 480.0 && menu.min.x == 480.0 && menu.Max().x == 512.0,
+              "restart is 448 to 480 and pause 480 to 512: " + ShowRect(reset) + " " + ShowRect(menu));
+    const glm::dvec2 shared(reset.Max().x, 16.0);
+    CHECK_MSG(reset.Contains(shared) && menu.Contains(shared),
+              "restart's right edge is inside pause too, the rectangles being closed: " + Point(shared));
+    CHECK_MSG(layer.ControlAt(shared) == PtrClaim(PtrControl::Reset),
+              "a point on the edge they share is RESTART's: " + PtrName(layer.ControlAt(shared)));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(512.0, 16.0)) == PtrClaim(PtrControl::Menu) &&
+                  layer.ControlAt(glm::dvec2(500.0, 0.0)) == PtrClaim(PtrControl::Menu) &&
+                  layer.ControlAt(glm::dvec2(512.0, 32.0)) == PtrClaim(PtrControl::Menu),
+              "the rectangles are closed: the view's own edge and the button's top and bottom edges are inside");
+    // Restart's own LEFT edge, hard-coded (x = 448): a rectangle closed on the right only, (min.x, max.x], would pass the
+    // checks above and fail these, as would one open at the top or the bottom.
+    CHECK_MSG(layer.ControlAt(glm::dvec2(448.0, 16.0)) == PtrClaim(PtrControl::Reset) &&
+                  layer.ControlAt(glm::dvec2(448.0, 0.0)) == PtrClaim(PtrControl::Reset) &&
+                  layer.ControlAt(glm::dvec2(448.0, 32.0)) == PtrClaim(PtrControl::Reset),
+              "restart's left edge is inside it too, top to bottom: " + PtrName(layer.ControlAt(glm::dvec2(448.0, 16.0))) + ", " +
+                  PtrName(layer.ControlAt(glm::dvec2(448.0, 0.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(448.0, 32.0))));
+    CHECK_MSG(!layer.ControlAt(glm::dvec2(500.0, 32.001)) && !layer.ControlAt(glm::dvec2(447.999, 16.0)),
+              "and a thousandth outside is not");
+    layer.OnDetach(registry);
+}
+
+// readInput's corner controls act on the PRESS (the port's recorded deviation from the original's release) and a corner
+// control spends the whole shot touch: pressed, restart reloads, pause opens, clear-portals clears, on the press's own
+// tick, and the touch fires nothing when it comes up - not even slid off the control first.
+void RestartPauseAndClearActOnThePressAndSpendTheTouch() {
+    if (!OriginalArtIsThere("RestartPauseAndClearActOnThePressAndSpendTheTouch")) return;
+    // Restart, on level30 half a second in.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, "level30")) return;
+        Hud::Rect reset;
+        CHECK_MSG(layer.ControlRect(PtrControl::Reset, reset), "restart is shown");
+        const glm::dvec2 centre = reset.Centre();
+        const double age = layer.LevelAgeMs();
+        const glm::vec2 down = PtrPixel(layer, centre);
+        CHECK_MSG(!PtrLatched(layer, "level_button"), "nothing has played the teleport yet");
+        PtrHold(layer, registry, down, true);
+        CHECK_MSG(age > 700.0 && layer.LevelAgeMs() == 0.0 && PtrLatched(layer, "level_button"),
+                  "the press itself reloads the level (age " + PtrNum(age) + " -> " + PtrNum(layer.LevelAgeMs()) + ") with its sound");
+        // Held a tick where it went down, then slid 17 units down (off the 32-unit button, within scale(18) of the press) and let
+        // go there: the shot track was spent on the press, so nothing is fired.
+        PtrHold(layer, registry, down, false);
+        const glm::vec2 slid = PtrPixel(layer, centre + glm::dvec2(0.0, 17.0));
+        PtrHold(layer, registry, slid, false);
+        CHECK_MSG(!layer.ControlAt(centre + glm::dvec2(0.0, 17.0)), "17 units below its centre is off restart");
+        lift(layer, registry, slid);
+        CHECK_MSG(layer.SimLevel()->portals.shotsFired == 0 && PtrLastTap(layer) == glm::dvec2(0.0),
+                  "and its touch, slid off and let go within 18 units, fires nothing: " + Point(PtrLastTap(layer)));
+        layer.OnDetach(registry);
+    }
+    // Pause: opened on the press.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, "level30")) return;
+        Hud::Rect menu;
+        CHECK_MSG(layer.ControlRect(PtrControl::Menu, menu), "pause is shown");
+        const glm::vec2 down = PtrPixel(layer, menu.Centre());
+        CHECK_MSG(!layer.Paused(), "not paused before the press");
+        PtrHold(layer, registry, down, true);
+        CHECK_MSG(layer.Paused(), "the press itself opens the pause");
+        lift(layer, registry, down);
+        CHECK_MSG(layer.SimLevel()->portals.shotsFired == 0 && layer.Paused(), "and its release fires nothing and closes nothing");
+        layer.OnDetach(registry);
+    }
+    // Clear-portals, with a portal placed.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, "level30")) return;
+        shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+        landShot(layer, registry);
+        CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, "a portal is placed");
+        Hud::Rect clear;
+        CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear), "so clear-portals is shown");
+        const int fired = layer.SimLevel()->portals.shotsFired;
+        const glm::dvec2 lastTap = PtrLastTap(layer);
+        const glm::vec2 down = PtrPixel(layer, clear.Centre());
+        PtrHold(layer, registry, down, true);
+        CHECK_MSG(layer.SimLevel()->portals.placed.empty() && PtrLatched(layer, "portal_spent"),
+                  "the press itself clears the placed portals, with its sound");
+        PtrHold(layer, registry, down, false);
+        const glm::vec2 slid = PtrPixel(layer, clear.Centre() + glm::dvec2(10.0, 0.0));
+        PtrHold(layer, registry, slid, false);
+        lift(layer, registry, slid);
+        CHECK_MSG(layer.SimLevel()->portals.shotsFired == fired && PtrLastTap(layer) == lastTap && !layer.SimLevel()->portals.flight,
+                  "and its touch, slid 10 units and let go, fires nothing into the corner it left");
+        layer.OnDetach(registry);
+    }
+}
+
+// THE QUIRK: readInput asks Hud::OnPad of the touch whatever the pads' `shown` says, so a touch resting in the corner of a
+// WEIGHTLESS level (no pads are drawn or claimed there) is still "on a pad" to the camera and the follow keeps running;
+// off the corner it holds the view. 4-02 (level1c) is the first weightless level; 4-01 (level0c) has gravity and shows its
+// pair, the negative control: both sides are pinned, so a refactor that gates `onPad` by `shown` fails on level1c. The
+// camera is put 30 or more units off its target first, so that a follow has something to do.
+void ARestingTouchInAWeightlessCornerStillCountsAsOnAPad() {
+    if (!OriginalArtIsThere("ARestingTouchInAWeightlessCornerStillCountsAsOnAPad")) return;
+    struct Probe {
+        const char* level;
+        bool corner;
+    };
+    for (const Probe& probe : {Probe{"level1c", true}, Probe{"level1c", false}, Probe{"level0c", true}, Probe{"level0c", false}}) {
+        const std::string where = std::string(probe.level) + (probe.corner ? ", a touch resting in the corner" : ", a touch resting in the world");
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), probe.level);
+        if (!PtrReady(registry, layer, probe.level)) continue;
+        const bool weightless = layer.SimLevel()->portals.noGravity;
+        CHECK_MSG(weightless == (std::string(probe.level) == "level1c"), where + ": weightless is " + std::to_string(weightless));
+        const glm::dvec2 view = layer.ViewPx();
+        const glm::dvec2 point = probe.corner ? glm::dvec2(30.0, view.y - 30.0) : glm::dvec2(view.x * 0.5, 40.0);
+        Hud::Rect pad;
+        CHECK_MSG(layer.ControlRect(PtrControl::Left, pad) == !weightless, where + ": the left pad is shown exactly where there is gravity");
+        const PtrClaim wantClaim = probe.corner && !weightless ? PtrClaim(PtrControl::Left) : PtrClaim{};
+        CHECK_MSG(layer.ControlAt(point) == wantClaim, where + ": the claim is " + PtrName(layer.ControlAt(point)) + ", wanted " + PtrName(wantClaim));
+        const glm::dvec2 player = playerPx(registry, layer);
+        const glm::dvec2 bounds = layer.BoundsPx();
+        const glm::dvec2 target = MagicPortals::Camera::Clamp(player, view, bounds);
+        glm::dvec2 placed = target;
+        for (const double side : {90.0, -90.0}) {
+            const glm::dvec2 want = MagicPortals::Camera::Clamp(target + glm::dvec2(side, 0.0), view, bounds);
+            if (std::fabs(want.x - target.x) >= 30.0) {
+                placed = want;
+                break;
+            }
+        }
+        CHECK_MSG(std::fabs(placed.x - target.x) >= 30.0, where + ": the camera can be put 30 units off its target " + Point(target) +
+                                                              " in a level " + Point(bounds) + " wide");
+        layer.PlaceCameraForTest(registry, placed);
+        const glm::vec2 pixel = PtrPixel(layer, point);
+        double atSecond = 0.0;
+        for (int tick = 1; tick <= 20; ++tick) {
+            PtrHold(layer, registry, pixel, tick == 1);
+            if (tick == 2) atSecond = layer.CameraCentrePx().x;
+        }
+        const double moved = std::fabs(layer.CameraCentrePx().x - atSecond);
+        std::printf("  %s: the camera moved %.3f over 18 ticks\n", where.c_str(), moved);
+        if (probe.corner) {
+            CHECK_MSG(moved > 5.0, where + ": the follow keeps running, the camera moves " + PtrNum(moved));
+        } else {
+            CHECK_MSG(moved < 1e-9, where + ": the follow waits, the camera moves " + PtrNum(moved));
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// Nothing reads a control's touch while a pause is up, a popup, from the door on or from a death on: readInput does not
+// run there (the level stops, or "nothing is pressable"). Observed by what a press does - the level reloads (its age goes to
+// zero) and plays the teleport - and the claim map's own answers are pinned as the facts they are: ControlAt is the
+// tick's layout, so restart and pause stay `shown` under a pause and while they are dismissed at a death (nothing claims
+// them), and the pads go with the pause and decay after the door.
+void NothingClaimsUnderAPauseAPopupOrAfterTheDoorOrADeath() {
+    if (!OriginalArtIsThere("NothingClaimsUnderAPauseAPopupOrAfterTheDoorOrADeath")) return;
+    // The control: in play a press on restart reloads and plays level_button.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, "level30")) return;
+        Hud::Rect reset;
+        CHECK(layer.ControlRect(PtrControl::Reset, reset));
+        tap(layer, registry, PtrPixel(layer, reset.Centre()));
+        CHECK_MSG(layer.LevelAgeMs() == 0.0 && PtrLatched(layer, "level_button"), "the control: in play a press on restart reloads the level");
+        layer.OnDetach(registry);
+    }
+    // A pause.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, "level30")) return;
+        Hud::Rect reset;
+        Hud::Rect menu;
+        CHECK(layer.ControlRect(PtrControl::Reset, reset) && layer.ControlRect(PtrControl::Menu, menu));
+        press(layer, registry, MagicPortalsLayer::kBack);
+        CHECK_MSG(layer.Paused(), "Escape pauses");
+        const double age = layer.LevelAgeMs();
+        const double x = playerPx(registry, layer).x;
+        // On the left pad (56.9 from its corner) and clear of the pause's own sound and music switches, which sit in the bottom-left.
+        const glm::dvec2 padPoint(10.0, 200.0);
+        tap(layer, registry, PtrPixel(layer, reset.Centre()));
+        lift(layer, registry, PtrPixel(layer, reset.Centre()));
+        tap(layer, registry, PtrPixel(layer, padPoint));
+        lift(layer, registry, PtrPixel(layer, padPoint));
+        CHECK_MSG(layer.Paused() && layer.LevelAgeMs() == age && !PtrLatched(layer, "level_button") &&
+                      playerPx(registry, layer).x == x,
+                  "under the pause a press where restart is, or on the left pad, reloads, walks and unpauses nothing");
+        Hud::Rect rect;
+        CHECK_MSG(layer.ControlAt(reset.Centre()) == PtrClaim(PtrControl::Reset) && !layer.ControlRect(PtrControl::Left, rect) &&
+                      !layer.ControlAt(padPoint),
+                  "(the layout, under a pause: restart is still shown, the pad is not)");
+        layer.OnDetach(registry);
+    }
+    // A popup: 1-02's, raised as it loads and closed by a touch.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level1");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        PtrRest(layer, registry, 2);
+        CHECK_MSG(layer.PopupOpen(), "1-02 raises its popup as it loads");
+        const Hud::Rect home = Hud::Place(layer.HudRules().restart, layer.ViewPx());
+        tap(layer, registry, PtrPixel(layer, home.Centre()));
+        lift(layer, registry, PtrPixel(layer, home.Centre()));
+        CHECK_MSG(!PtrLatched(layer, "level_button"), "a touch where restart will be, under the popup, reloads nothing");
+        // Closed (by this touch or by the one that closes it), the level runs, and now the same press reloads it.
+        CloseTheLevelStartPopup(layer, registry);
+        PtrRest(layer, registry, 60);
+        CHECK_MSG(!layer.PopupOpen() && layer.LevelAgeMs() > 0.0, "the popup is gone and the level runs: " + PtrNum(layer.LevelAgeMs()));
+        Hud::Rect reset;
+        CHECK_MSG(layer.ControlRect(PtrControl::Reset, reset), "restart is shown once the popup has gone");
+        tap(layer, registry, PtrPixel(layer, reset.Centre()));
+        CHECK_MSG(layer.LevelAgeMs() == 0.0 && PtrLatched(layer, "level_button"), "the control: a press on it now reloads the level");
+        layer.OnDetach(registry);
+    }
+    // The door.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        const int door = WalkLevel0IntoItsDoor(layer, registry);
+        CHECK_MSG(door > 0 && layer.Finishing(), "level0's door is reached");
+        if (door < 0) return;
+        const Hud::Rect home = Hud::Place(layer.HudRules().restart, layer.ViewPx());
+        const glm::dvec2 padPoint(30.0, layer.ViewPx().y - 30.0);
+        const double age = layer.LevelAgeMs();
+        const int pad = layer.EndPadAlphaByte();
+        tap(layer, registry, PtrPixel(layer, home.Centre()));
+        lift(layer, registry, PtrPixel(layer, home.Centre()));
+        tap(layer, registry, PtrPixel(layer, padPoint));
+        lift(layer, registry, PtrPixel(layer, padPoint));
+        CHECK_MSG(layer.Finishing() && layer.LevelAgeMs() > age && !PtrLatched(layer, "level_button") && !layer.Paused(),
+                  "after the door a press where restart was reloads nothing and the level runs on");
+        Hud::Rect rect;
+        CHECK_MSG(pad > 0 && !layer.ControlRect(PtrControl::Reset, rect) && !layer.ControlAt(home.Centre()),
+                  "(the layout after the door: restart is cut)");
+        layer.OnDetach(registry);
+    }
+    // A death.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level5");
+        layer.OnAttach(registry);
+        if (layer.SimLevel() == nullptr) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        PtrRest(layer, registry, 300);
+        const MagicPortals::Hazards::Hazard* hazard = layer.SimLevel()->hazards.FindHazard("death_area_ent_800");
+        CHECK(hazard != nullptr);
+        if (hazard == nullptr) return;
+        auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+        transform.position = glm::vec3(hazard->box.centre, transform.position.z);
+        PtrRest(layer, registry, 2);
+        CHECK_MSG(layer.Dying(), "the player is dead");
+        Hud::Rect reset;
+        CHECK_MSG(layer.ControlRect(PtrControl::Reset, reset), "restart is being dismissed, still shown");
+        const double age = layer.LevelAgeMs();
+        tap(layer, registry, PtrPixel(layer, reset.Centre()));
+        lift(layer, registry, PtrPixel(layer, reset.Centre()));
+        CHECK_MSG(layer.Dying() && layer.LevelAgeMs() > age && !PtrLatched(layer, "level_button"),
+                  "after a death a press on the restart being dismissed reloads nothing");
+        layer.OnDetach(registry);
+    }
+}
+
+// The settled controls are their drawn rectangles, hard-coded, in three window shapes: the pads 64 units square flush in
+// the bottom corners, restart and pause 32 flush in the top-right, and the claim holds each one's centre.
+void TheSettledControlsAreTheirDrawnRectangles() {
+    if (!OriginalArtIsThere("TheSettledControlsAreTheirDrawnRectangles")) return;
+    struct Window {
+        const char* name;
+        glm::vec2 size;
+    };
+    for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)},
+                                 Window{"2:1", glm::vec2(1440.0f, 720.0f)}}) {
+        entt::registry registry;
+        publishViewport(registry, window.size);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        if (!PtrReady(registry, layer, "level30")) return;
+        PtrRest(layer, registry, 5);
+        const glm::dvec2 view = layer.ViewPx();
+        const std::string in = std::string(" at ") + window.name;
+        const Hud::Rules& rules = layer.HudRules();
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const struct {
+            PtrControl control;
+            const std::string& file;
+            Hud::Rect want;
+        } expected[] = {
+            {PtrControl::Left, rules.pads.leftSprite, {glm::dvec2(0.0, view.y - 64.0), glm::dvec2(64.0)}},
+            {PtrControl::Right, rules.pads.rightSprite, {glm::dvec2(view.x - 64.0, view.y - 64.0), glm::dvec2(64.0)}},
+            {PtrControl::Reset, rules.restart.sprite, {glm::dvec2(view.x - 64.0, 0.0), glm::dvec2(32.0)}},
+            {PtrControl::Menu, rules.pause.sprite, {glm::dvec2(view.x - 32.0, 0.0), glm::dvec2(32.0)}},
+        };
+        for (const auto& one : expected) {
+            Hud::Rect laid;
+            CHECK_MSG(layer.ControlRect(one.control, laid) && SameRect(laid, one.want, 1e-9),
+                      PtrName(one.control) + in + " laid out at " + ShowRect(laid) + ", wanted " + ShowRect(one.want));
+            const int at = IndexOfImage(frame, one.file);
+            CHECK_MSG(at >= 0 && SameRect(OnView(layer, frame[static_cast<std::size_t>(at < 0 ? 0 : at)]), one.want, 1e-3),
+                      PtrName(one.control) + in + " drawn where it is laid out");
+            CHECK_MSG(layer.ControlAt(one.want.Centre()) == PtrClaim(one.control),
+                      PtrName(one.control) + in + ": its centre is its own claim: " + PtrName(layer.ControlAt(one.want.Centre())));
+        }
+        layer.OnDetach(registry);
+    }
+}
+
+// ---- the entrance: what only a level younger than 700 ms shows -------------------------------------------------------------
+//
+// Restart and pause are GameLayer's UIButtons and come in over 700 ms (LevelEnd::HudEntered); clear-portals is PortalManager's,
+// added with the first portal, and keeps the flat place and the flat 120 Hud::Place and Hud::Opacity give it (layOutControls'
+// `corner`: the identity test `&placement != &m_hudRules.clearPortals`). Past 700 ms the two paths are bit-identical, and every
+// other state in this suite with clear-portals shown is 1600 ms old or more (the landing aim of ATapLandsWhereItPoints flies
+// for 20 ticks and the first tap waits 400 ms): without the case below nothing fails when clear-portals is made a corner.
+
+// An aim 25 units up and to the right of level30's player, in the open: its shot is over in a tick or two. Taken on the first tick
+// the level allows a tap (27, released on 28) the portal is placed on tick 29 or 30 (about 480 ms).
+const glm::dvec2 kEarlyAim(200.0, 185.0);
+// 512 ms old: clear-portals has been up two ticks or more, restart and pause are 2.8 units out and a third faded.
+constexpr int kEarlyTick = 32;
+
+// An attached level30 with its first shot taken at once and ticked until the portal is placed. False, with the failure
+// said, when no portal is placed while the level is 400 to 600 ms old: the cases built on it would then be testing the
+// settled path and passing for the wrong reason.
+bool PtrLandEarly(entt::registry& registry, MagicPortalsLayer& layer, const glm::vec2& window, const std::string& what) {
+    waitForFirstTap(layer, registry);
+    shoot(layer, registry, screenOf(registry, kEarlyAim) * (window / glm::vec2(1280.0f, 720.0f)));
+    for (int guard = 0; guard < 6 && layer.SimLevel()->portals.placed.empty(); ++guard) tickWith(layer, registry, kRest, {}, {});
+    const bool placed = layer.SimLevel()->portals.placed.size() == 1u;
+    const bool young = layer.LevelAgeMs() >= 400.0 && layer.LevelAgeMs() <= 600.0;
+    CHECK_MSG(placed && young, what + ": an early shot places a portal while the level is 400 to 600 ms old: " +
+                                   (placed ? "placed" : "none placed") + " at " + PtrNum(layer.LevelAgeMs()) + " ms");
+    CHECK_MSG(layer.LayerTicks() <= kEarlyTick, what + ": the portal is placed before tick " + std::to_string(kEarlyTick) + ": at tick " +
+                                                    std::to_string(layer.LayerTicks()));
+    return placed && young && layer.LayerTicks() <= kEarlyTick;
+}
+
+void TheClearButtonIsFlatWhileRestartAndPauseSlideIn() {
+    if (!OriginalArtIsThere("TheClearButtonIsFlatWhileRestartAndPauseSlideIn")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level30");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || layer.SimLevel() == nullptr) {
+        CHECK_MSG(false, "level30 loads: " + layer.LoadError());
+        return;
+    }
+    if (!PtrLandEarly(registry, layer, glm::vec2(1280.0f, 720.0f), "level30")) {
+        layer.OnDetach(registry);
+        return;
+    }
+    while (layer.LayerTicks() < kEarlyTick) tickWith(layer, registry, kRest, {}, {});
+    const double age = layer.LevelAgeMs();
+    CHECK_MSG(NearD(age, static_cast<double>(kEarlyTick) * kScriptMs, 1e-9) && age < 700.0,
+              "the level is " + std::to_string(kEarlyTick) + " ticks, 512 ms old, inside the 700 ms entrance: " + PtrNum(age));
+    const glm::dvec2 view = layer.ViewPx();
+    const Hud::Rules& rules = layer.HudRules();
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    const auto alphaOf = [&frame](const std::string& file) {
+        const int at = IndexOfImage(frame, file);
+        return at < 0 ? -1.0 : static_cast<double>(frame[static_cast<std::size_t>(at)].color.a);
+    };
+    constexpr double kHalfPi = 1.5707963267948966;
+    const double flat = 120.0 / 255.0;
+
+    // Clear-portals: where it will stay, at its flat 120, and the claim holds its centre.
+    Hud::Rect clear;
+    CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear), "clear-portals is shown the tick after its portal is placed");
+    CHECK_MSG(clear.min == glm::dvec2(0.0) && clear.size == glm::dvec2(32.0),
+              "clear-portals is flush top left, 32 x 32, from its first frame (no entrance): " + ShowRect(clear));
+    CHECK_MSG(std::fabs(alphaOf(rules.clearPortals.sprite) - flat) < 1e-6,
+              "and drawn at the flat 120 of 255: " + PtrNum(alphaOf(rules.clearPortals.sprite)) + " against " + PtrNum(flat));
+    CHECK_MSG(layer.ControlAt(clear.Centre()) == PtrClaim(PtrControl::Clear),
+              "and its centre is its claim: " + PtrName(layer.ControlAt(clear.Centre())));
+
+    // Restart and pause, GameLayer's: not home yet, and not at their 120. Worked from the literals (32 units out along the ray
+    // from the view's centre, smoothEnd = sin(bias x pi/2) of the 700 ms, the alpha byte uint(bias x 255) of 255 and of 120).
+    const double away = 32.0 * (1.0 - std::sin(age / 700.0 * kHalfPi));
+    const double enteringAlpha = 120.0 / 255.0 * std::floor(age / 700.0 * 255.0) / 255.0;
+    const struct {
+        PtrControl control;
+        const char* name;
+        const std::string& sprite;
+        Hud::Rect home;
+    } corners[] = {
+        {PtrControl::Reset, "restart", rules.restart.sprite, {glm::dvec2(view.x - 64.0, 0.0), glm::dvec2(32.0)}},
+        {PtrControl::Menu, "pause", rules.pause.sprite, {glm::dvec2(view.x - 32.0, 0.0), glm::dvec2(32.0)}},
+    };
+    for (const auto& corner : corners) {
+        Hud::Rect now;
+        CHECK_MSG(layer.ControlRect(corner.control, now), std::string(corner.name) + " is shown, coming in");
+        const glm::dvec2 shift = now.min - corner.home.min;
+        CHECK_MSG(NearD(glm::length(shift), away, 1e-6) && shift.x > 0.0 && shift.y < 0.0 && now.size == corner.home.size,
+                  std::string(corner.name) + " is " + PtrNum(away) + " units out from home along the ray from the centre, up and to the right: " +
+                      Point(shift));
+        CHECK_MSG(std::fabs(alphaOf(corner.sprite) - enteringAlpha) < 1e-6 && enteringAlpha < flat - 0.05,
+                  std::string(corner.name) + " is drawn at " + PtrNum(enteringAlpha) + ", well below the flat " + PtrNum(flat) + ": " +
+                      PtrNum(alphaOf(corner.sprite)));
+        CHECK_MSG(layer.ControlAt(now.Centre()) == PtrClaim(corner.control),
+                  std::string(corner.name) + "'s claim follows its sliding rectangle: " + PtrName(layer.ControlAt(now.Centre())));
+    }
+
+    // The case can fail: clear-portals made a corner would be both somewhere else and fainter.
+    const MagicPortals::LevelEnd::Dismissed asCorner =
+        MagicPortals::LevelEnd::HudEntered(layer.LevelEndRules(), rules.clearPortals, rules.alphaByte, view, age);
+    CHECK_MSG(glm::length(asCorner.rect.min - clear.min) > 1.0 && asCorner.alpha < flat - 0.05,
+              "(clear-portals as a corner would be " + Point(asCorner.rect.min) + " at " + PtrNum(asCorner.alpha) + ")");
+    std::printf("  tick %d (%.0f ms): clear-portals flat at %s and %.4f; restart and pause %.2f units out at %.4f\n", kEarlyTick, age,
+                Point(clear.min).c_str(), alphaOf(rules.clearPortals.sprite), away, enteringAlpha);
+    layer.OnDetach(registry);
+}
+
+// The pads' byte at the end of a level is the pulse's byte at the age the level had BEFORE the ending tick's 16 ms were added
+// (endHud() runs where the door or the death is decided, ahead of `m_levelAgeMs += dtMs`), and nothing in the layer's own
+// numbers may stand in for it: ScreenPad::computeButtonColor, worked here by hand from ui.json's literals (a 300 ms stride, a
+// byte of 120, odd strides run down, uint(bias x variation) truncates, variation 90 in the tutorial and 40 elsewhere).
+// uint(a x 0.98) merges neighbouring bytes (158 and 159 both end at 77 thirty ticks on), so the byte itself is read at the tick.
+void TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath() {
+    if (!OriginalArtIsThere("TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath")) return;
+    // 1-01, the tutorial, at its door: tick 217 (the game's own log, "door reached on tick 217, pads at 163"), so the age the
+    // byte is made at is 216 ticks = 3456 ms = 11 strides and 156 ms; 11 is odd, so bias = 1 - 156/300 = 0.48; uint(0.48 x 90) =
+    // uint(43.2) = 43; 120 + 43 = 163. The neighbours a mistake gives: 158 (the age after the tick, 3472 ms: 0.4267 x 90 = 38.4),
+    // 139 (the variation of 40 instead of the tutorial's 90) and the flat 120.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        const int door = WalkLevel0IntoItsDoor(layer, registry);
+        CHECK_MSG(door == 217, "holding right reaches level0's door on tick 217: " + std::to_string(door));
+        CHECK_MSG(NearD(layer.LevelAgeMs(), 3472.0, 1e-9), "the level is 3472 ms old after that tick: " + PtrNum(layer.LevelAgeMs()));
+        CHECK_MSG(layer.EndPadAlphaByte() == 163, "the pads' end byte at 1-01's door is 163 (the pulse at 3456 ms): " +
+                                                      std::to_string(layer.EndPadAlphaByte()));
+        layer.OnDetach(registry);
+    }
+    // 2-10 (level9a), not the tutorial: the right key held from tick 60 walks him into fire_agent_ent_930 and he dies on tick 80
+    // (the game's own log, "player died on tick 80, pads at 128"): the age is 79 ticks = 1264 ms = 4 strides and 64 ms; 4 is
+    // even, so bias = 64/300 = 0.2133; uint(0.2133 x 40) = uint(8.53) = 8; 120 + 8 = 128. A mistake gives 130 (the age after the
+    // tick, 1280 ms: 10.67), 139 (the tutorial's variation of 90: 19.2) or the flat 120.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level9a");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        layer.ScheduleDevHold(60, 240, 1.0f);
+        int died = -1;
+        for (int tick = 1; tick <= 200 && died < 0; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (layer.Dying()) died = layer.LayerTicks();
+        }
+        CHECK_MSG(died == 80, "2-10 kills the walking player on tick 80: " + std::to_string(died));
+        CHECK_MSG(layer.EndPadAlphaByte() == 128, "the pads' end byte at that death is 128 (the pulse at 1264 ms, not the tutorial's): " +
+                                                      std::to_string(layer.EndPadAlphaByte()));
+        layer.OnDetach(registry);
+    }
+}
+
+// ---- the goldens: FNV-1a over what the classic controls claim and draw -----------------------------------------------
+
+constexpr std::uint64_t kFnvBasis = 14695981039346656037ULL;
+
+std::uint64_t PtrFnv(std::uint64_t hash, const void* bytes, std::size_t count) {
+    const auto* byte = static_cast<const unsigned char*>(bytes);
+    for (std::size_t i = 0; i < count; ++i) {
+        hash ^= byte[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::uint64_t PtrFnvFloat(std::uint64_t hash, float value) {
+    std::uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return PtrFnv(hash, &bits, sizeof(bits));
+}
+
+std::string PtrHex(std::uint64_t value) {
+    char text[32];
+    std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(value));
+    return text;
+}
+
+// Every field of every quad EmitHud produced, in order: the rectangle, the uv, the colour, the turn, the clamp and the
+// picture's FILE NAME (its folder is the machine's, and this repository's folder has been renamed before).
+std::uint64_t PtrHashQuads(const std::vector<ScreenOverlay::Quad>& quads) {
+    std::uint64_t hash = kFnvBasis;
+    for (const ScreenOverlay::Quad& quad : quads) {
+        const float numbers[] = {quad.min.x, quad.min.y, quad.max.x, quad.max.y, quad.uvMin.x, quad.uvMin.y, quad.uvMax.x,
+                                 quad.uvMax.y, quad.color.r, quad.color.g, quad.color.b, quad.color.a, quad.basis[0][0],
+                                 quad.basis[0][1], quad.basis[1][0], quad.basis[1][1]};
+        for (const float number : numbers) hash = PtrFnvFloat(hash, number);
+        const std::size_t slash = quad.texture.find_last_of("/\\");
+        const std::string file = slash == std::string::npos ? quad.texture : quad.texture.substr(slash + 1);
+        hash = PtrFnv(hash, file.data(), file.size());
+        const unsigned char tail = quad.clampToEdge ? 1 : 0;
+        hash = PtrFnv(hash, &tail, 1);
+    }
+    return hash;
+}
+
+// "<hash> quads=N left=.. right=.. restart=.. pause=.. clear=.. black=..": the hash is the pin, the counts say what a
+// failure was about.
+std::string PtrDescribeHud(const MagicPortalsLayer& layer, entt::registry& registry) {
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    const Hud::Rules& rules = layer.HudRules();
+    char text[256];
+    std::snprintf(text, sizeof(text), "%s quads=%zu left=%d right=%d restart=%d pause=%d clear=%d black=%zu",
+                  PtrHex(PtrHashQuads(frame)).c_str(), frame.size(), CountImage(frame, rules.pads.leftSprite),
+                  CountImage(frame, rules.pads.rightSprite), CountImage(frame, rules.restart.sprite),
+                  CountImage(frame, rules.pause.sprite), CountImage(frame, rules.clearPortals.sprite),
+                  BlackIndices(frame).size());
+    return text;
+}
+
+// The claim of every 4th unit of the view (x and y from 0, both edges included where they land on the grid): one byte a
+// point - 0 none, 1 Left, 2 Right, 3 Reset, 4 Menu, 5 Clear - hashed, with the count of each.
+std::string PtrClaimSnapshot(const MagicPortalsLayer& layer) {
+    const glm::dvec2 view = layer.ViewPx();
+    std::uint64_t hash = kFnvBasis;
+    int counts[6] = {0, 0, 0, 0, 0, 0};
+    int columns = 0;
+    int rows = 0;
+    for (double y = 0.0; y <= view.y; y += 4.0) {
+        ++rows;
+        columns = 0;
+        for (double x = 0.0; x <= view.x; x += 4.0) {
+            ++columns;
+            const PtrClaim claim = layer.ControlAt(glm::dvec2(x, y));
+            const unsigned char code = claim ? static_cast<unsigned char>(1 + static_cast<int>(*claim)) : 0;
+            ++counts[code];
+            hash = PtrFnv(hash, &code, 1);
+        }
+    }
+    char text[160];
+    std::snprintf(text, sizeof(text), "%s %dx%d none=%d left=%d right=%d reset=%d menu=%d clear=%d", PtrHex(hash).c_str(),
+                  columns, rows, counts[0], counts[1], counts[2], counts[3], counts[4], counts[5]);
+    return text;
+}
+
+// The claim map at 16:9 and 4:3, at ticks that reach 16, 112, 352, 704 and 5008 ms of the level's age with clear-portals
+// hidden, and with a portal landed and clear-portals shown at ticks 100 and 313 (a level's age is the script's 16 ms a tick,
+// so 0, 100, 350, 700 and 5000 ms are not reachable; the key says the age that was).
+GoldenEntries PtrClaimEntries() {
+    GoldenEntries entries;
+    struct Window {
+        const char* name;
+        glm::vec2 size;
+    };
+    for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)}}) {
+        for (const bool clearShown : {false, true}) {
+            entt::registry registry;
+            publishViewport(registry, window.size);
+            MagicPortalsLayer layer(TestPaths(), "level30");
+            layer.OnAttach(registry);
+            if (!layer.LoadError().empty() || layer.SimLevel() == nullptr) {
+                CHECK_MSG(false, "level30 loads: " + layer.LoadError());
+                continue;
+            }
+            if (clearShown) {
+                waitForFirstTap(layer, registry);
+                shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)) * (window.size / glm::vec2(1280.0f, 720.0f)));
+                landShot(layer, registry);
+                CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, std::string(window.name) + ": a portal is placed");
+            }
+            // Ticks 15, 30 and 40 (240, 480 and 640 ms) are inside the pads' slide: the circle first enters the view at 233 ms,
+            // and the claim of the pad is the one thing that changes with the age until 700 ms.
+            const std::vector<int> ticks = clearShown ? std::vector<int>{100, 313} : std::vector<int>{1, 7, 15, 22, 30, 40, 44, 313};
+            for (const int tick : ticks) {
+                CHECK_MSG(layer.LayerTicks() <= tick, std::string(window.name) + ": the layer is not past tick " + std::to_string(tick));
+                while (layer.LayerTicks() < tick) tickWith(layer, registry, kRest, {}, {});
+                Hud::Rect clear;
+                CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear) == clearShown,
+                          std::string(window.name) + " tick " + std::to_string(tick) + ": clear-portals is " + (clearShown ? "shown" : "hidden"));
+                char key[96];
+                std::snprintf(key, sizeof(key), "claim %s clear=%d tick %d age %.0f ms", window.name, clearShown ? 1 : 0, tick,
+                              layer.LevelAgeMs());
+                entries[key] = PtrClaimSnapshot(layer);
+            }
+            layer.OnDetach(registry);
+        }
+    }
+    // Clear-portals shown while the level is younger than 700 ms, at 16:9: the one state where its flat place differs from a
+    // corner's entrance (TheClearButtonIsFlatWhileRestartAndPauseSlideIn), so restart and pause are still sliding in.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level30");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty() || layer.SimLevel() == nullptr) {
+            CHECK_MSG(false, "level30 loads: " + layer.LoadError());
+        } else if (PtrLandEarly(registry, layer, glm::vec2(1280.0f, 720.0f), "16:9")) {
+            while (layer.LayerTicks() < kEarlyTick) tickWith(layer, registry, kRest, {}, {});
+            Hud::Rect clear;
+            CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear), "16:9 tick " + std::to_string(kEarlyTick) + ": clear-portals is shown");
+            char key[96];
+            std::snprintf(key, sizeof(key), "claim 16:9 clear=1 tick %d age %.0f ms (an early shot)", kEarlyTick, layer.LevelAgeMs());
+            entries[key] = PtrClaimSnapshot(layer);
+        }
+        layer.OnDetach(registry);
+    }
+    return entries;
+}
+
+// One snapshot of the HUD of `level`, after `script` has played it: the key and "<hash> <counts>".
+template <class Script>
+void PtrHudSnapshot(GoldenEntries& entries, const std::string& key, const char* level, const glm::vec2& window, Script script) {
+    entt::registry registry;
+    publishViewport(registry, window);
+    MagicPortalsLayer layer(TestPaths(), level);
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || layer.SimLevel() == nullptr) {
+        CHECK_MSG(false, key + ": " + layer.LoadError());
+        return;
+    }
+    script(layer, registry);
+    entries[key] = PtrDescribeHud(layer, registry);
+    layer.OnDetach(registry);
+}
+
+// The classic HUD, hashed: every one of the 128 levels at tick 420 with no input (the f420 sweep's own frame), and the
+// states that frame never reaches - the slide, the pulse and the ring, clear-portals shown, the end decay, a death's
+// dismissal, the pause, 1-21's hint, two other window shapes (A1-A9 of the capture catalogue, in process).
+GoldenEntries PtrHudEntries() {
+    GoldenEntries entries;
+    MagicPortals::Chapters::Table table;
+    std::string error;
+    if (!MagicPortals::Chapters::Load(kChapters, table, error)) {
+        CHECK_MSG(false, error);
+        return entries;
+    }
+    const glm::vec2 wide(1280.0f, 720.0f);
+    const auto rest = [](int ticks) {
+        return [ticks](MagicPortalsLayer& layer, entt::registry& registry) { PtrRest(layer, registry, ticks); };
+    };
+    for (const MagicPortals::Chapters::Level& level : table.levels) {
+        char label[16];
+        std::snprintf(label, sizeof(label), "%d-%02d", level.world + 1, level.index + 1);
+        PtrHudSnapshot(entries, std::string("sweep ") + label + " " + level.name + " tick 420", level.name.c_str(), wide, rest(420));
+    }
+    // A1 and A2: inside the slide and a pulse, the tutorial's ring.
+    PtrHudSnapshot(entries, "level0 tick 20 (the slide)", "level0", wide, rest(20));
+    PtrHudSnapshot(entries, "level1 tick 20 (1-02's popup is up)", "level1", wide, rest(20));
+    PtrHudSnapshot(entries, "level0 tick 120 (ring and pulse)", "level0", wide, rest(120));
+    // A3: clear-portals shown. The plan's recipe (--tap 247,141@60 on 4-29) lights a torch on this build and places no portal,
+    // so level30 with the landing aim of ATapLandsWhereItPoints, (250, 150), which is pixel (703, 422) of 1280x720.
+    PtrHudSnapshot(entries, "level30 tick 240 after a tap at 703,422 on tick 60 (clear shown)", "level30", wide,
+                   [](MagicPortalsLayer& layer, entt::registry& registry) {
+                       layer.ScheduleDevTap(60, glm::dvec2(703.0 / 1280.0, 422.0 / 720.0));
+                       PtrRest(layer, registry, 240);
+                       Hud::Rect clear;
+                       CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear), "A3: the tap on tick 60 placed a portal, so clear-portals is shown");
+                   });
+    // The clear-portals button flat while restart and pause still slide in: level30, a portal landed by an early shot, tick 32.
+    PtrHudSnapshot(entries, "level30 tick 32 after an early shot (clear shown flat, restart and pause sliding in)", "level30", wide,
+                   [](MagicPortalsLayer& layer, entt::registry& registry) {
+                       if (!PtrLandEarly(registry, layer, glm::vec2(1280.0f, 720.0f), "the early shot")) return;
+                       while (layer.LayerTicks() < kEarlyTick) tickWith(layer, registry, kRest, {}, {});
+                       Hud::Rect clear;
+                       CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear), "the early shot's portal puts clear-portals up");
+                   });
+    // A4: the end decay - the right key held to the door, then 30 ticks.
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+        } else {
+            const int door = WalkLevel0IntoItsDoor(layer, registry);
+            CHECK_MSG(door > 0, "A4: holding right reaches level0's door");
+            // The door's own tick, with the byte the pads were left at (the decay below merges neighbouring bytes, so this is
+            // the entry that says what the byte was).
+            entries["level0 right held to the door (tick " + std::to_string(door) + "), the door tick itself"] =
+                PtrDescribeHud(layer, registry) + " endbyte=" + std::to_string(layer.EndPadAlphaByte());
+            PtrRest(layer, registry, 30);
+            entries["level0 right held to the door (tick " + std::to_string(door) + ") then 30 ticks (the decay)"] =
+                PtrDescribeHud(layer, registry);
+        }
+        layer.OnDetach(registry);
+    }
+    // A5: a death's dismissal, 25 ticks after the player is put in 2-06's death area.
+    PtrHudSnapshot(entries, "level5 died, then 25 ticks (the dismissal)", "level5", wide,
+                   [](MagicPortalsLayer& layer, entt::registry& registry) {
+                       PtrRest(layer, registry, 300);
+                       const MagicPortals::Hazards::Hazard* hazard = layer.SimLevel()->hazards.FindHazard("death_area_ent_800");
+                       CHECK_MSG(hazard != nullptr, "A5: 2-06 has its death area");
+                       if (hazard == nullptr) return;
+                       auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+                       transform.position = glm::vec3(hazard->box.centre, transform.position.z);
+                       PtrRest(layer, registry, 26);
+                       CHECK_MSG(layer.Dying(), "A5: the player is dead");
+                   });
+    // A6: the pause over a level, --press pause@120, frame 160.
+    PtrHudSnapshot(entries, "level0 paused on tick 120, tick 160", "level0", wide, [](MagicPortalsLayer& layer, entt::registry& registry) {
+        layer.ScheduleDevPress(120, MagicPortalsLayer::DevPress::Pause);
+        PtrRest(layer, registry, 160);
+        CHECK_MSG(layer.Paused(), "A6: the pause is up");
+    });
+    // A7: 1-21's hint.
+    PtrHudSnapshot(entries, "level20 tick 90 (1-21's hint)", "level20", wide, rest(90));
+    // A9: the controls hug the corners of any window shape.
+    PtrHudSnapshot(entries, "level0 tick 420 at 960x720", "level0", glm::vec2(960.0f, 720.0f), rest(420));
+    PtrHudSnapshot(entries, "level0 tick 420 at 1680x720", "level0", glm::vec2(1680.0f, 720.0f), rest(420));
+    return entries;
+}
+
+// Read tests/golden/<file>: {"entries": {"<what>": "<hash and counts>", ...}}.
+bool PtrReadGolden(const std::string& path, GoldenEntries& out, std::string& error) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = path + " cannot be opened";
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string text = buffer.str();
+    Supersonic::Json::Value root;
+    Supersonic::Json::Parser parser(text);
+    if (!parser.Parse(root)) {
+        error = path + ": " + parser.Error();
+        return false;
+    }
+    if (!root.IsObject() || !root["entries"].IsObject()) {
+        error = path + ": no \"entries\" object";
+        return false;
+    }
+    for (const auto& [key, value] : root["entries"].AsObject()) {
+        if (!value.IsString()) {
+            error = path + ": \"" + key + "\" is not a string";
+            return false;
+        }
+        out[key] = value.AsString();
+    }
+    return true;
+}
+
+// The goldens are checked entry by entry, and an entry in either set and not the other is a failure.
+void PtrCheckGolden(const char* file, const GoldenEntries& now) {
+    GoldenEntries golden;
+    std::string error;
+    const bool read = PtrReadGolden(kGoldenDir + "/" + file, golden, error);
+    CHECK_MSG(read, error + " - record it with: test_mp test_mp_layer --record-golden <tests/golden>");
+    if (!read) return;
+    for (const auto& [key, value] : now) {
+        const auto found = golden.find(key);
+        CHECK_MSG(found != golden.end() && found->second == value,
+                  std::string(file) + ": \"" + key + "\" is now " + value + ", the golden has " +
+                      (found == golden.end() ? std::string("no such entry") : found->second));
+    }
+    for (const auto& [key, value] : golden) {
+        CHECK_MSG(now.find(key) != now.end(), std::string(file) + ": the golden's \"" + key + "\" was not produced now");
+    }
+}
+
+void TheClassicClaimMapIsPinned() {
+    if (!OriginalArtIsThere("TheClassicClaimMapIsPinned")) return;
+    const GoldenEntries now = PtrClaimEntries();
+    // 2 windows x (8 ticks clear hidden + 2 ticks clear shown) + 1 early-shot state.
+    CHECK_MSG(now.size() == 21u, "21 claim snapshots: " + std::to_string(now.size()));
+    PtrCheckGolden("classic_claim.json", now);
+}
+
+void TheClassicHudQuadsOfEveryLevelArePinned() {
+    if (!OriginalArtIsThere("TheClassicHudQuadsOfEveryLevelArePinned")) return;
+    const GoldenEntries now = PtrHudEntries();
+    CHECK_MSG(now.size() == 128u + 12u, "128 sweep frames and 12 states: " + std::to_string(now.size()));
+    PtrCheckGolden("classic_hud.json", now);
+}
+
+// `test_mp test_mp_layer --record-golden <dir>`: writes the two goldens on the code as it stands. It refuses to overwrite
+// a file: a golden is recorded once, on the unmodified claim code, and is never re-recorded to make a refactor pass (delete
+// the file by hand to record it again).
+bool PtrWriteGolden(const std::string& path, const std::string& about, const GoldenEntries& entries) {
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec)) {
+        std::printf("test_mp_layer: %s exists; a golden is never overwritten (delete it by hand to record it again)\n", path.c_str());
+        return false;
+    }
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        std::printf("test_mp_layer: cannot write %s\n", path.c_str());
+        return false;
+    }
+    out << "{\n  \"_about\": \"" << about << "\",\n  \"entries\": {\n";
+    std::size_t left = entries.size();
+    for (const auto& [key, value] : entries) {
+        out << "    \"" << key << "\": \"" << value << "\"" << (--left > 0 ? "," : "") << "\n";
+    }
+    out << "  }\n}\n";
+    std::printf("test_mp_layer: wrote %zu entries to %s\n", entries.size(), path.c_str());
+    return true;
+}
+
+int PtrRecordGoldens(const std::string& dir) {
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const std::string provenance =
+        "Recorded by `test_mp test_mp_layer --record-golden` on the CLASSIC claim and HUD code as it stood at commit 3926faf "
+        "(planning step 178, CTL-2), where the only production change is the two test seams ControlAt and PlaceCameraForTest, "
+        "before the controls were refactored (CTL-3). EXTENDED ONCE, before CTL-3 began and on the same unmodified claim "
+        "code, by the states a review found missing (a level younger than 700 ms with clear-portals shown, the pads mid-slide, "
+        "the door tick): the entries recorded first (14 claim, 138 HUD) kept their values byte for byte. A golden is never "
+        "re-recorded to make a refactor pass: if the classic path really changed on purpose, the step says so and records why. "
+        "Hashes are FNV-1a over float bits and picture file names; no pixel and no Asantee byte is here.";
+    const GoldenEntries claim = PtrClaimEntries();
+    const GoldenEntries hud = PtrHudEntries();
+    bool wrote = !claim.empty() && !hud.empty();
+    wrote = wrote && PtrWriteGolden(dir + "/classic_claim.json",
+                                    "The classic claim map: which control a point of the view is on, every 4th unit, at 16:9 and "
+                                    "4:3, at several ticks of a level's age, clear-portals hidden and shown. " + provenance,
+                                    claim);
+    wrote = wrote && PtrWriteGolden(dir + "/classic_hud.json",
+                                    "The classic HUD: a hash of every quad EmitHud produces, for each of the 128 levels at tick 420 "
+                                    "and for the states that frame never reaches. " + provenance,
+                                    hud);
+    const int result = ::test::summary("test_mp_layer --record-golden", 0);
+    return wrote ? result : 1;
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -22166,11 +23573,40 @@ void runTests() {
     AStoneRestingAgainstThePlayerKillsNothing();
     AKnightsSightingKeepsTheStealthAchievementFromTheDoor();
     ARedKeyAddsItsOwnLightOneTickBehindItsPicture();
+    // The classic pointer path, pinned before the controls move (planning step 178).
+    AHeldTouchOnTheLeftPadWalksThePlayerLeft();
+    AHeldTouchOnTheRightPadWalksThePlayerRight();
+    ThePadHitCircleIsStrictlyInside();
+    ATouchSlidOntoAPadWalksAndOffItStops();
+    AHeldTouchOnAPadKeepsTheCameraFollowing();
+    AHeldTouchInTheWorldStopsIt();
+    APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt();
+    AReleaseOnAPadTakesNoTutorialHand();
+    TheClaimOrderIsLeftRightResetMenuClear();
+    RestartPauseAndClearActOnThePressAndSpendTheTouch();
+    ARestingTouchInAWeightlessCornerStillCountsAsOnAPad();
+    NothingClaimsUnderAPauseAPopupOrAfterTheDoorOrADeath();
+    TheSettledControlsAreTheirDrawnRectangles();
+    TheClearButtonIsFlatWhileRestartAndPauseSlideIn();
+    TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath();
+    TheClassicClaimMapIsPinned();
+    TheClassicHudQuadsOfEveryLevelArePinned();
 }
 
 } // namespace
 
-MP_SUITE_MAIN("test_mp_layer") {
+MP_SUITE_MAIN_ARGS("test_mp_layer", argc, argv) {
+    // --record-golden <dir>: writes tests/golden's two files on the code as it stands instead of running the suite.
+    std::string recordDir;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--record-golden" && i + 1 < argc) {
+            recordDir = argv[++i];
+        } else {
+            std::printf("test_mp test_mp_layer [--record-golden <dir for classic_claim.json and classic_hud.json>]\n");
+            return 2;
+        }
+    }
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec) || !std::filesystem::is_regular_file(kChapters, ec) ||
         !std::filesystem::is_regular_file(kData + "/entity_roles.json", ec) ||
@@ -22183,6 +23619,7 @@ MP_SUITE_MAIN("test_mp_layer") {
                     kLevels.c_str(), kChapters.c_str(), kData.c_str());
         return 77;
     }
+    if (!recordDir.empty()) return PtrRecordGoldens(recordDir);
     runTests();
     return ::test::summary("test_mp_layer", 60);
 }

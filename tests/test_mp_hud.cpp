@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -36,7 +37,28 @@ using namespace MagicPortals;
 
 namespace {
 
-const std::string kUi = std::string(MAGICPORTALS_PORT_DATA_DIR) + "/ui.json";
+// The port's own data: MP_TEST_PORTDATA when it is set (TEST ONLY, planning step 178: a mutation test runs this same binary
+// on a copy of game/data with one number changed), else the build's own. _dupenv_s: std::getenv is C4996 on Windows.
+std::string PortDataDir() {
+    std::string text;
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t length = 0;
+    if (_dupenv_s(&value, &length, "MP_TEST_PORTDATA") == 0 && value != nullptr) {
+        text = value;
+        std::free(value);
+    }
+#else
+    if (const char* value = std::getenv("MP_TEST_PORTDATA"); value != nullptr) text = value;
+#endif
+    if (text.empty()) return MAGICPORTALS_PORT_DATA_DIR;
+    // Said, so that a stray variable left in a shell cannot make a normal run fail or pass for no visible reason.
+    std::printf("test_mp_hud: MUTATION - MP_TEST_PORTDATA is set, the port's data is read from %s, not from game/data\n",
+                text.c_str());
+    return text;
+}
+
+const std::string kUi = PortDataDir() + "/ui.json";
 
 // The original's captures: 1280x720, and 2.8125 screen px to a design unit.
 constexpr double kPxPerUnit = 2.8125;
@@ -907,10 +929,65 @@ void WhatThePauseRefuses() {
             "centre_of_screen");
 }
 
+// The pad's rectangle and its hit circle at every slide age, from numbers stated HERE and never read from the rules (ScreenPad's
+// interpolators, ui.json hud.pads): a pad is 64 units square, starts 128 units outside its corner and eases in by
+// sin(bias x pi/2) over 700 ms, and the hit disc is 64 units about that sliding corner, STRICTLY inside (isPointInSphere).
+// Three window shapes. Exactly 64 is tested where the arithmetic is exact (the settled pad and a corner at 0 or at the
+// view's own width): there it is outside.
+void ThePadRectAndHitCircleAtEverySlideAge() {
+    const Hud::Rules rules = Load();
+    constexpr double kHalfPi = 1.5707963267948966;
+    const double diagonal = 1.0 / std::sqrt(2.0);
+    const glm::dvec2 views[] = {kView720, glm::dvec2(256.0 * 4.0 / 3.0, 256.0), glm::dvec2(256.0 * 21.0 / 9.0, 256.0)};
+    const double ages[] = {0.0, 16.0, 112.0, 233.3, 352.0, 466.7, 600.0, 699.0, 700.0, 704.0, 5000.0};
+    for (const glm::dvec2& view : views) {
+        for (const double age : ages) {
+            const double slide = 128.0 * (1.0 - std::sin(std::clamp(age / 700.0, 0.0, 1.0) * kHalfPi));
+            for (const bool left : {true, false}) {
+                const std::string where = std::string(left ? "left" : "right") + " pad, " + Num(view.x) + " wide, " + Num(age) + " ms";
+                const Hud::Side side = left ? Hud::Side::Left : Hud::Side::Right;
+                const glm::dvec2 corner(left ? -slide : view.x + slide, view.y);
+                const glm::dvec2 gotCorner = Hud::PadCorner(rules, side, view, age);
+                CHECK_MSG(Near(gotCorner.x, corner.x, 1e-9) && Near(gotCorner.y, corner.y, 1e-9),
+                          where + ": the corner is " + Num(corner.x) + ", " + Num(corner.y) + ": " + Num(gotCorner.x) + ", " +
+                              Num(gotCorner.y));
+                const Hud::Rect rect = Hud::PadRect(rules, side, view, age);
+                const glm::dvec2 wantMin(left ? corner.x : corner.x - 64.0, view.y - 64.0);
+                CHECK_MSG(Near(rect.min.x, wantMin.x, 1e-9) && Near(rect.min.y, wantMin.y, 1e-9) && rect.size == glm::dvec2(64.0),
+                          where + ": the rectangle is (" + Num(wantMin.x) + ", " + Num(wantMin.y) + ") 64 x 64, not " + ShowPx(rect));
+                const double inward = left ? 1.0 : -1.0;
+                for (const double distance : {63.99, 64.01}) {
+                    const bool inside = distance < 64.0;
+                    const glm::dvec2 along = corner + glm::dvec2(inward * distance, 0.0);
+                    const glm::dvec2 up = corner + glm::dvec2(0.0, -distance);
+                    const glm::dvec2 slant = corner + glm::dvec2(inward * distance * diagonal, -distance * diagonal);
+                    CHECK_MSG(Hud::OnPad(rules, side, view, age, along) == inside,
+                              where + ": " + Num(distance) + " units along the bottom edge is " + (inside ? "on" : "off") + " the pad");
+                    CHECK_MSG(Hud::OnPad(rules, side, view, age, up) == inside,
+                              where + ": " + Num(distance) + " units up the side is " + (inside ? "on" : "off") + " the pad");
+                    CHECK_MSG(Hud::OnPad(rules, side, view, age, slant) == inside,
+                              where + ": " + Num(distance) + " units on the diagonal is " + (inside ? "on" : "off") + " the pad");
+                }
+                // Settled, exactly 64: off the pad - strictly inside.
+                if (age >= 700.0) {
+                    CHECK_MSG(!Hud::OnPad(rules, side, view, age, glm::dvec2(corner.x, view.y - 64.0)),
+                              where + ": exactly 64 up the side is off the pad");
+                    if (left) {
+                        CHECK_MSG(!Hud::OnPad(rules, side, view, age, glm::dvec2(64.0, view.y)),
+                                  where + ": exactly 64 along the bottom edge is off the pad");
+                    }
+                    CHECK_MSG(Hud::OnPad(rules, side, view, age, corner), where + ": the corner itself is on it");
+                }
+            }
+        }
+    }
+}
+
 void runTests() {
     TheFileSaysWhatWasMeasuredAndDecoded();
     TheButtonsSitWhereTheCapturesPutThem();
     ThePadsSlideInAndSitInTheCorners();
+    ThePadRectAndHitCircleAtEverySlideAge();
     ThePadsPulseAsComputeButtonColorSays();
     TheTutorialRingGrowsAndFades();
     TheLevelOpensInTheDark();
