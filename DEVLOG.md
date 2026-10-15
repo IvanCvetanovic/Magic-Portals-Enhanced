@@ -3769,3 +3769,98 @@ CMP15 6, CMP2 7, WALL 11, R4c2 13), 24 settled. Smart App Control refusals 10 (4
 
 **Inferred mood:** a guess from the facts - the wave ended better than it ran: two days of steps that each broke routes and each came out of verification with a "not met literally" attached, a pause in the middle, and then one round in which fourteen
 authors turned 13 red routes green. The losses are small and specific (one achievement, two fragile routes) and every one is written down with what would settle it, so the day probably ended feeling like a reckoning rather than a setback.
+
+### 2026-10-15 11:08 - Session 32: program wave 4d-1 - the comparison re-taken
+
+*Written 2026-10-15 at the close by this run's close role, from the records - the capture role's `pairing.md` and scripts, the 16 chunks and the audit, the triage's `per_level.md`, `residuals.md`, `groups.json` and
+`old_vs_new.md`, and the verifier's `verify1.json`, all under the gitignored `out/parity/program/R4d/` - and git, not from a transcript. 11:08 is the capture role's first query (`R4d/CMP/start_time.txt`), not a
+measured start; the verifier's report is stamped 13:31. The run was on the owner's order of 2026-10-15, "continue with the next step" (the same message asked for modernised on-screen controls: see Where it stands).
+Every number below is one a record states, or one this role measured and says so. This role built nothing and launched no executable: it checked the state, read the reports, edited the two tracked files and
+`out/parity/BASELINE.txt`, ran the image purge and commits the two files. The wave committed nothing; `origin/main` was `fe37df6` when this close started.*
+
+**Built:**
+- **The comparison re-taken on the fixed build** (a read-only measuring pass, wave 4b's over again; no source, data, test or route file edited, nothing relinked). The capture role ran 134 launches of `MagicPortals.exe` `f27dde1a` (129
+  for the 128-level sweep, 1-12 twice; 2 popup runs; 3 runs of the owner's seed at f90) on the same pairings and the all-gold seed as wave 4b, and the 128 f420 frames equal `WALL/after/sweep` byte for byte (126 as taken, 1-02 and
+  1-03 in their popup-up form). 16 readers of 8 levels (chunk 8 read twice) and an audit of 16 levels read them against the library's stills; one rule, the old pass's, turned 490 residuals (2 high, 74 medium, 414 low) into
+  verdicts. **61 `match`, 65 `minor`, 2 `differs`, against 26 / 44 / 58** (the readers' own labels 58 / 68 / 2). Of the 58 levels that differed, 22 now match, 34 are minor and **2 still differ: 1-30 (CMP-4) and 3-05 (CMP-5)**; the 52
+  that differed by CMP-1 alone read 19 match and 33 minor; no level shows a lit player or arch any more. 107 levels differ from the old pass at f420 and 21 are byte-equal, exactly the record's list. 21 groups: 8 fixed (CMP-1, -2, -3, -6,
+  -7, -10, -15, -16), 1 partly (CMP-9), 9 open and unchanged plus CMP-low, 2 new (CMP-19, the fireball's glow; CMP-20, a burned crate's flame and fade). One verdict got worse, 1-15 (match -> minor), and it is a re-grade of an old
+  under-grade; the one f420 `mean_abs` that rose is 1-22 (4.73 -> 4.77, a blink phase); no regression of the build was found.
+- **The independent verification** (`R4d/verify1.json`): 10 gates, pass, 4 low. It re-derived the counts and the transition matrix from the chunks, compared the 128 frames with the sweep by md5, re-ran `compare.py` on three levels and
+  read 19 pair images; it did not launch anything. Its lows (the counts need their lower-bound sentence; one light cause is graded unevenly across readers; three stills' HUD reads moved untraced; two group checks cannot show the fix
+  on the group's first level) are R4d1-3 and R4d1-4 and the notes of the rows.
+- **The close (this role)**: `docs/parity-backlog.md` - the date line; section 5's RE-TAKEN annotation (the new counts, the matrix in a sentence, the regressions, the audit against the first; the box is NOT ticked, because CMP-4, -5,
+  -11, -17 and -18 are unchanged) and its stale pointer to the purged R4b images; the definition-of-done bullet annotated (it stays open); the old "wave 4d" list bracketed; a "Wave 4d-1" paragraph (what was measured, the counts, the
+  groups table of 21 with id, levels, kind, fixability, moves routes and status, how far to trust it, suites, Smart App Control, baseline, purge, GAMEPLAY, rows); "What the next wave should take (wave 4d-2)" in the order the
+  owner's run asked for (the decoded groups, the rig checks, the owner's calls, the modernised controls, the ship preparation); a 'Re-taken' note on each of the 20 rows CMP-1 to CMP-18, CMP-low and CMP-R1 (CMP-9 stays `[x]` with its
+  low residuals named); the two new rows CMP-19 and CMP-20; and four rows R4d1-1 to R4d1-4 (the two regressions, what the re-take left untraced, the counts' limits). 6 rows opened, none closed.
+- **The wave's image purge** (the owner's standing order, 2026-10-03: delete images once finished with them). `out/parity/BASELINE.txt` first: its comment line and exactly `program/WALL/after/sweep`, `program/R4d/CMP/port_f420` and
+  `program/R4d/CMP/pairs` (it said `program/R4b/CMP/port_f420` and `pairs` for the last two). I checked all three folders before and after (PNG signature, closing IEND chunk with no NUL padding, 1280 x 720 or 640 x 720): 128, 130 (128
+  frames and the two popup-up frames) and 256 images, all opening, and the md5 of all 514 identical before and after the purge. The purge tool's `all` tiers, tallied by folder before deleting (2,283 files, 1.491 GB, 0 refused):
+  `R4d/CMP/pairs_other` 1,280, `port_other` 616, the earlier pass's `R4b/CMP` `port_f420` and `pairs` 386, and one file under `program/CTL`. **Deleted 2,282 images, 1.491 GB (1,490,599,825 bytes); free disk 99.07 -> 100.48 GiB**
+  (Python's `shutil.disk_usage`). The capture role had already deleted its own scratch `--saves` folders: no `scores.json` or `achievements.json` newer than 10:50 is left anywhere under `out/`, and nothing under
+  `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/` was touched (the first two re-hashed: `40bfef3a`, `09268640`). `R4d/CMP/crops` holds scripts only (62 `.py`, 6 `.pyc`, 1 `.json`), no image, and stays. **One image was left on
+  purpose**: `program/CTL/CTL1/sheet.png` (35 KB), the contact sheet of the modernised controls' art tool, written at 13:18 by a concurrent workflow, not this wave's; see Decision.
+
+**Broke / dead ends:**
+- **1-12's first launch of the sweep** exited 0 after `Window close requested` at about tick 50, with no input the script scheduled (no `DEV tap`, `portal_launch` or `Escape` in its log): something closed the capture window. The one retry
+  gave f420 `ab373cd0`, equal to the baseline. Nothing else misbehaved in 134 launches.
+- **The first reading of chunk 8 (2-25 to 2-32) missed a medium on 5 of its 8 levels** (CMP-14 on 2-26, 2-27, 2-30 and 2-31, the fireball halo on 2-28); the audit found 2-28's, so the chunk was read again from scratch
+  (`chunk_8_r2.json`). The other 15 chunks were not re-read, and the audit's sample holds no lightmapped chapter-2 level, so the 61 `match` levels may hold an unlisted medium of those two kinds (R4d1-4). The first audit had found
+  16 of 16 and 0 missed; this one found 15 of 16 on the same sample size, so the earlier 16 of 16 was not a guarantee.
+- **The triage's first fireball profile was wrong**: it snapped to the brightest 5 x 5 block and landed 13-19 px above the core on 2-02; it was redone on the core's centroid and checked on the pair image. **CMP-19 still carries a conflict it
+  could not resolve**: the profile says the port's halo is weaker beyond about 8 u on three near-matched pairs, and the Order 7.2 rows of steps 85 and 94 say the port's tail is longer on 2-01's pair. Different baselines, one pair against
+  three; the row's first step is a read-only reconciliation.
+- **CMP-14's cause is not isolated**: the 128-level contrast census is consistent with the lightmap path (67 lightmapped levels 0.977 against 0.995 on the 60 unlit) but cannot separate a lightmap from the lights that come with one, and its
+  noise on star-sky levels is as large as the effect; only chapter 2's lit-stone boxes separate them.
+- **Three stills' HUD reads moved with a cause nobody traced** (2-09, 2-29, 4-30: an old negative read, now 0.0), and the old pass's non-f420 frames were purged, so there is no before / after. The pairing and the mover fit were not
+  re-run. Two group checks (CMP-2 on 2-28, CMP-6 on 3-09) cannot show their fix on the group's first level; the verifier used 2-31 and 4-29.
+- **Smart App Control: 0 refusals in the wave.** The capture role's 134 launches, the verifier's none and this close's none; a CodeIntegrity 3033/3077 query from 11:00, by the verifier and again by this role, finds no event (the log
+  is readable: 296 events in the last three days, the last 3033/3077 pair 2026-10-15 00:22:53, wave 4c-2's last refusal). Earlier waves: 83, 19, 2, 4, 9, 3, 13, 5, 10. The owner's folder holds `scores.json` alone (164 bytes, md5
+  `40bfef3a`).
+- **My own slips**: my first PNG-check script died on a backslash a heredoc lost (a syntax error before it read a file) and I rewrote it without backslashes; the Write tool refused one invented parameter; my first dry run of the
+  real purge script ran from the wrong directory (`out/out/parity`: no such file, nothing executed) and I reran it from the root. In the drafts of the backlog, one sentence said the chapter-2 fire-agent halos are graded medium by CMP-8
+  (its medium list holds no chapter-2 level; the verifier meant CMP-19 and CMP-14) and one said the old crops were purged at wave 4c's close (it was 4b's); both were caught against `groups.json` and the 4b paragraph before the patch ran.
+
+**Decision:**
+- **Section 5's box is NOT ticked, and nothing was re-ticked**: CMP-4, CMP-5, CMP-11, CMP-17 and CMP-18 are unchanged and wait on a clip or on a call. The eight fixed rows were already `[x]` from their steps and carry the re-take's
+  evidence; CMP-9 stays `[x]` and is annotated as partly.
+- **The counts are quoted as the rule's, with the readers' tally and the lower-bound sentence** (the verifier's first low), and 1-15 is called a re-grade, not a regression, with the evidence (0 changed pixels in its box).
+- The regressions and the untraced are rows of the wave's own prefix, `R4d1-1` to `R4d1-4` (the existing prefixes are `R4c1-n`, `R4c2-n`), and the old "wave 4d" list is bracketed, not deleted, as every earlier list was.
+- **The purge ran through the tool's own functions, not `purge_images.py all --delete` as typed, so as to leave one concurrent file**: the tool would also take `program/CTL/CTL1/sheet.png`, the controls art tool's sheet, which is
+  another workflow's evidence (35 KB, regenerable by its tool, but not mine to delete). I tallied the tool's four tiers first, deleted the same set minus that file, and then ran the tool's own dry run: it lists 1 file, 0.00 GB. The next
+  purge takes it. `BASELINE.txt` stays at its three paths. No planning step was written (a read-only pass is not a step), and the commit's last line is the previous step's, 176.
+- `hud_ticks.json` was kept as the old pass wrote it (the capture role's decision, recorded in `pairing.md` and R4d1-3), so that old and new numbers sit against the same ticks.
+- I launched nothing and did not run `port_build.bat`: the controls steps relink under Smart App Control, and a close is not the place.
+
+**Where it stands / next:** nothing of wave 4d-1 is open on the push side beyond this commit. Next is wave 4d-2, listed in the backlog in the order the owner's run asked for: (1) CMP-20, the one decoded group still open (drawing only,
+no route), beside the measurements CMP-19, CMP-14 and CMP-18 need first; (2) the rig clips (CMP-4, CMP-5, CMP-13, CMP-9's two, R3c-11, R4a-2, the wall clip, 1-20's footage); (3) the owner's calls (the halo scale CMP-8 with the new
+per-entity numbers, the friction and restitution steps, R24, CAP-2, the clock offset, and the standing ones); (4) **the owner's new ask, modernised on-screen controls from Magic Rampage**: the walk arrows, restart, pause and
+clear-portals are flush in the screen corners today and he wants them inset, with the classic mode kept as the parity rig's. A read-only design exists (`out/parity/program/CTL/design.md`: 14 steps CTL-1 to CTL-14 from planning step 177,
+stops after CTL-3, CTL-6, CTL-9 and CTL-13; questions Q0 to Q16 for the owner, among them the rights to Magic Rampage's art, since `docs/permission.md` is still the placeholder), and CTL-1 (the art tool, Python and docs) is staged under
+`out/parity/program/CTL/CTL1/stage/` and is not in this commit. The re-take's `port_f420` and `pairs` are the "before" the controls step compares its classic frames against, byte for byte. (5) The ship preparation:
+`docs/permission.md`, the play build, README and LICENSE, the release zip and the repository's going public, which needs the owner's explicit word.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and the backlog edits, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference | wc -l` prints 0), and the engine pin is untouched (`git submodule status` still `710bffc`). The forbidden-extension grep over the staged names
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, `^out/`, `^reference/`, `^engine/`) printed nothing. The owner's save folder (`C:/Users/icvet/AppData/Roaming/Magic Portals/`) holds `scores.json` alone (164 bytes, md5
+`40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** 134 launches of `MagicPortals.exe` `f27dde1a`, 0 refused; 128 f420 frames equal to `WALL/after/sweep`. Verdicts 61 / 65 / 2 (old 26 / 44 / 58; readers 58 / 68 / 2); matrix match 25 / 1 / 0, minor 14 / 30 / 0, differs 22 / 34 / 2;
+better 70, same 57, worse 1 (1-15, a re-grade). By chapter (match / minor / differs) 1: 13 / 18 / 1, 2: 7 / 25 / 0, 3: 9 / 22 / 1, 4: 32 / 0 / 0. 490 residuals (2 / 74 / 414; old 468: 82 / 125 / 261). 21 groups: 8 fixed, 1 partly, 9
+unchanged plus CMP-low, 2 new. f420 against the old pass: 107 levels differ, 21 equal. `mean_abs` medians h6.3 / f420 4.645 -> 3.62, f450 4.49 -> 3.435, f75 6.805 -> 6.18, f135 6.105 -> 5.265, own HUD tick 4.485 -> 3.34, f240
+4.665 -> 3.885. Audit 15 of 16 agree, 1 miss (2-28); the second reading of chunk 8 found a medium missed on 5 of 8. Verifier 10 gates, 4 low, 19 pair images read. Rows opened 6 (CMP-19, CMP-20, R4d1-1 to R4d1-4), closed 0. Images deleted
+2,282, 1.491 GB; free disk 99.07 -> 100.48 GiB; 514 kept images unchanged by md5. Smart App Control refusals 0. This close's commit is two files.
+
+**Inferred mood:** a guess from the facts - an ordinary measuring day with a satisfying result: 70 levels better, 22 of the 58 that differed now matching, and a re-take that found nothing the build had broken. The mood is probably tempered by what
+the second look uncovered (two new groups, a 5-in-8 miss rate on the one chunk read twice, a fireball conflict nobody could settle) and by the fact that the two levels still `differs` are the two that need the original running in an emulator
+again, which is not a thing a quiet afternoon fixes.

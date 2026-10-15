@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-10-15 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-10-15, after wave 4d-1: the final comparison re-taken on the fixed build (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Enhanced/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -1703,7 +1703,18 @@ work no step of §7 owns, and the owner's calls:
       calibrated on chapters 1-3 only), the seed is the all-gold save the library's stills were taken on (`09268640`, not the owner's
       `40bfef3a`), and the readers' audit covers 16 of 128 levels with 0 missed: see "Wave 4b" in section 6 and row CMP-R1 for the limits.
       Evidence: `out/parity/program/R4b/CMP/` (`pairing.md`, `per_level.md`, `residuals.md`, `groups.json`, `audit.json`; the pair and overlay
-      images `pairs/<id>_h63_pair.png` and `_overlay.png`, and the port's frames `port_f420/`, are kept and named in `out/parity/BASELINE.txt`).
+      images `pairs/<id>_h63_pair.png` and `_overlay.png`, and the port's frames `port_f420/`, were purged at wave 4d-1's close, 2026-10-15; the text files stay).
+      *RE-TAKEN 2026-10-15 (wave 4d-1; NOT ticked, and not ticked until its structural groups are fixed: CMP-4, CMP-5, CMP-11, CMP-17 and CMP-18 are all unchanged).* The
+      port at f420 on the fixed build (`fe37df6`, `MagicPortals.exe` `f27dde1a`, steps 166-176) against the same stills at the same pairings, read the same way (16
+      readers of 8 levels, one rule): **61 `match`, 65 `minor`, 2 `differs`** of 128 (the readers' own tally 58 / 68 / 2) against 26 / 44 / 58. By the old verdict: of the
+      58 that differed, 22 now `match`, 34 are `minor` and **2 still `differs` (1-30, CMP-4's pile; 3-05, CMP-5's knight A)**; of the 44 `minor`, 14 now `match` and 30
+      stay; of the 26 `match`, 25 stay and 1 (1-15) reads `minor`, a re-grade of a cause no step touched, not a regression of the build. The 52 levels that differed by
+      CMP-1 alone read 19 `match` and 33 `minor`: no level shows a lit player or arch any more. 490 residuals (2 high, 74 medium, 414 low; the old pass 82, 125, 261),
+      every high and medium in a group: 8 groups fixed (CMP-1, -2, -3, -6, -7, -10, -15, -16), 1 partly (CMP-9), 9 open and unchanged plus CMP-low, 2 new (CMP-19 and
+      CMP-20: new to the list, not new in the build). The audit found 15 of 16 levels agree and one miss (2-28's fireball halo), against 16 of 16 the first time, so the
+      counts are the readers' and a lower bound on medium residuals (R4d1-4). The pairing is unchanged (h6.3 = f420 is still a convention, CMP-R1) and the seed is the
+      all-gold save. Evidence: `out/parity/program/R4d/CMP/` (`pairing.md`, `old_vs_new.md`, `per_level.md`, `residuals.md`, `groups.json`, `audit.json`, `numbers.json`),
+      the verifier `out/parity/program/R4d/verify1.json`, and the kept images `port_f420/` and `pairs/` there, named in `out/parity/BASELINE.txt`.
 
 ## 6. After the 2026-09-29 audit: the program to "only the owner's testing left"
 
@@ -1878,6 +1889,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   4-31), each toward the stills where measured. "The largest fixed" is met for the nine decoded groups (CMP-1, -2, -3, -6, -7, -9, -10, -15, -16); it is NOT met as a whole:
   the comparison has not been re-taken on the fixed build, and CMP-4, -5, -8, -11, -12, -13, -14, -17, -18 and CMP-low stay open (the rig clips, the owner's calls and the
   untraced). This bullet stays open until the re-take.*
+  *Wave 4d-1, 2026-10-15: the comparison is RE-TAKEN on the fixed build (`R4d/CMP/`): 61 `match`, 65 `minor`, 2 `differs` against 26 / 44 / 58, no regression caused by
+  the build, eight decoded groups confirmed fixed on the stills (CMP-1, -2, -3, -6, -7, -10, -15, -16) and CMP-9 fixed in kind with low residuals left. The bullet STAYS
+  OPEN: 1-30 (CMP-4) and 3-05 (CMP-5) still differ, CMP-8, -11, -12, -13, -14, -17, -18 and the two new groups CMP-19 and CMP-20 are open (the rig clips, the owner's
+  calls, one decoded drawing group and the untraced), and the section-5 box is not ticked.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2567,7 +2582,7 @@ joints hold them, 2-31's seesaw 31.8 px away (174); a stone breaks a breakable w
 **The wave's rows**: the five steps' blocks CMP6-1 to CMP6-9, CMP16-1 to CMP16-7, CMP15-1 to CMP15-6, CMP2-1 to CMP2-7 and WALL-1 to WALL-11 (40) and R4c2-1 to R4c2-13 (13): 53 opened, 24 closed or settled by this close (CMP6-1, -2, -6, -7; CMP16-1, -3, -4, -7; CMP15-2, -4, -6; CMP2-1, -4, -5; WALL-1, -2, -4, -8, -9, -11; R4c2-10 to R4c2-13), 29 open. Older rows closed: CMP-2, CMP-6,
 CMP-15 and CMP-16 (4 of the comparison's 20; with wave 4c-1's five, 9), R4a-1, R4a-3 and R3b-2 (by the re-flown routes), CMP7-3 and CMP3-6 (by the mutations); Order 11.1 (first clause built and re-flown, the row stays open for its others), STK9-2 (narrowed), CMP-18 (CMP-2 is not the cause) and R4c1-3 (b) are annotated.
 
-**What the next wave should take (wave 4d)**, in this order. (1) **The final comparison RE-TAKEN on the fixed build** (a read-only measuring pass, wave 4b's over again, from `tools/parity` and `out/parity/program/wave_scripts/gen4b.py`): which of the 58 levels that differed still differ, and with which CMP groups; against the kept
+**What the next wave should take (wave 4d)** *[wave 4d-1 took (1)'s re-taken comparison: its record is the "Wave 4d-1" paragraph that follows, and what is left is re-listed there as wave 4d-2's]*, in this order. (1) **The final comparison RE-TAKEN on the fixed build** (a read-only measuring pass, wave 4b's over again, from `tools/parity` and `out/parity/program/wave_scripts/gen4b.py`): which of the 58 levels that differed still differ, and with which CMP groups; against the kept
 `R4b/CMP/port_f420` and `R4b/CMP/pairs` (the "before"), at f420 and at the level's own HUD tick or f450 where a mover or the spiral is in frame (CMP-R1), reading a blink, a pulse or a bounce as a RANGE across the six stills and the port's frames around f420-f504 (h6.3 is not exactly f420: step 165); the capture seed is the ALL-GOLD one (`out/parity/ui1/saves_gold/scores.json`,
 md5 `09268640`; 1-02 and 1-03 need `--tap 1178,358@300-305`) and the standing sweep stays on the owner's seed. The section-5 box ticks only when the structural groups are fixed: CMP-4, CMP-5, CMP-11, CMP-17 and CMP-18 are not. (2) **What stays**: the rig clips (`docs/parity.md` sections 1-2): the arrival at 1-30's pile (CMP-4), 3-05 for 10 s without moving and 3-22 for 14 s (CMP-5), the static portals' ring
 brightness against the 58 footage frames (CMP-13), R3c-11's list and R4a-2's zero-g wall-slide, **and now one clip of a stone rolling and falling into a breakable wall (WALL-3, WALL-5, R4c2-2) and footage of 1-20 (R4c2-1)**; the port-only experiment (CMP-14: 2-17 with the lightmap off and at full resolution); **CMP-18 / WT-10** (2-29's stone 125-135 px behind: CMP-2 is not the cause, so the trace of the stone against the plank and the hinge is the next step on it,
@@ -2576,6 +2591,152 @@ R4c2-3), R25, `crate_low_emissive`'s guessed 0.08 (R3b-3), 2-32 ahead of the dra
 `kDestroyableKey` and the `== 1.0` literal into `demolish.json` (WALL-10); `Hinged::placedPx` / `heldPx` (CMP2-3) and the converter's datum-type pin (CMP2-7); G3-4's `PlaceKinematic` for platforms, lifts and doors (CMP15-5); `win_by` of the 114 untouched routes (R4c2-9, R3b-6, R3c-9); 3-20's knife-edge (R3-4); the comment-only fixes that wait for their file's next real edit (the two comments of `game/sim/Resting.hpp` among them: a widely included header), WAKE-7's tests with R4a-10's one check,
 the literal and the clear that two steps left in source (CMP1-4, CMP3-3), and the two clips that settle three rows (1-09 or 2-14 for the wall's period and depth, CMP9-3 and CMP9-6; 1-02 or 1-10 from the load frame for the block's phase, CMP10-4). (4) **The ship preparation**: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder, so the record of the scope is incomplete: the owner's to fill), the play build
 (`tools\parity\play_build.bat` exists; no play build has been made), the README and LICENSE, the release zip, and **the repository's going public, which still needs the owner's explicit word**. For the next wave's gates: future route gates compare against `R4c2/census_after_round1.md` (128 won; 117 exact, 11 on another tick), and a step's scope is derived by a census of `out/levels` and the original's files, never typed.
+
+**Wave 4d-1 (the final comparison re-taken on the fixed build: a read-only measuring pass; 2026-10-15 11:08 to 13:31; closed 2026-10-15; the close's two docs files are its only commit).** One
+capture role, sixteen readers and an audit, a triage and an independent verification, on the owner's order of 2026-10-15 ("continue with the next step"). It edited no
+source, data, test or route file, relinked nothing, launched no test runner and committed nothing: `HEAD` stayed `fe37df6`, `git status` was clean before and after, the
+engine pin is `710bffc`. 11:08 is the capture role's first query (`R4d/CMP/start_time.txt`), 13:31 the verifier's report; the evidence is `out/parity/program/R4d/CMP/`
+(`pairing.md`, `old_vs_new.md`, `per_level.md`, `residuals.md`, `groups.json`, `audit.json`, `numbers.json`, the 16 chunks) and `out/parity/program/R4d/verify1.json`, and
+the close's own report is `R4d/close.md`. The build is the committed one of step 176: `MagicPortals.exe` `f27dde1a` (checked by md5 at the start and the end of the sweep)
+and `test_mp.exe` `2c74ad04` (not launched). **The pass repeats wave 4b's**: the same pairings (the ticks, the sets and the save rule were not re-derived: h6.3 against
+f420, with f450, f75, f135, each level's own HUD tick and f240 as extra sets), the same all-gold seed (`09268640`), the same one rule for the verdict. 134 launches of
+`MagicPortals.exe` (129 for the 128-level sweep, 1-12 twice; 2 popup runs; 3 runs of the owner's seed at f90), **0 Smart App Control refusals**, validation active and
+silent in all 128 sweep logs. All 128 f420 frames are byte-identical to `WALL/after/sweep` (126 as taken; 1-02 and 1-03 are taken with the popup closed and their popup-up
+frames equal the sweep), so the committed exe renders the baseline.
+
+**What it found: 61 `match`, 65 `minor`, 2 `differs`** of 128, against 26 / 44 / 58 (the readers' own labels read 58 / 68 / 2; the rule re-grades 3-17, 3-19 and 3-23 to
+`match`, every residual of them low, as the old pass did for its five). By the old verdict:
+
+| old \ new | match | minor | differs | total |
+|---|---:|---:|---:|---:|
+| match | 25 | 1 | 0 | 26 |
+| minor | 14 | 30 | 0 | 44 |
+| differs | 22 | 34 | 2 | 58 |
+| total | 61 | 65 | 2 | 128 |
+
+Better 70 levels, the same 57, worse 1. **Of the 58 levels that differed, 22 now match, 34 are minor and 2 still differ: 1-30 (CMP-4, the pile) and 3-05 (CMP-5, knight
+A).** The 52 that differed by CMP-1 alone read 19 `match` and 33 `minor`; of the six with their own cause, 1-30 and 3-05 still differ, 2-31 reads `minor` and 4-20, 4-29
+and 4-31 `match`. The 34 that are minor keep only medium causes: CMP-14 on 10 (chapter 2's lightmapped levels), CMP-19 on 9, CMP-8 on 9, CMP-20 on 3, CMP-4 on 2, CMP-11
+on 2, CMP-18 on 1, CMP-17 on 1 (a level can hold two); 30 of the 65 minor levels are minor by CMP-8 alone. By chapter (match / minor / differs, old -> new): chapter 1 11
+/ 20 / 1 -> 13 / 18 / 1, chapter 2 0 / 0 / 32 -> 7 / 25 / 0, chapter 3 0 / 19 / 13 -> 9 / 22 / 1, chapter 4 15 / 5 / 12 -> 32 / 0 / 0. 490 residuals (2 high, 74 medium,
+414 low; the old pass's 468 were 82, 125 and 261), every high and medium in a group. **No level shows a lit player or exit arch any more.** The section-5 box is not
+ticked: CMP-4, CMP-5, CMP-11, CMP-17 and CMP-18, the structural groups, are all unchanged.
+
+**No regression caused by the build was found.** The one level whose verdict got worse is 1-15 (`match` -> `minor`), a re-grade: its portal box holds 0 changed pixels
+against the old frame and the pair images, old and new, show the pink disc against the original's grey-white iris plainly, so the old `match` was an under-grade (R4d1-1,
+CMP-13). The one level whose f420 `mean_abs` rose is 1-22 (4.73 -> 4.77, a blink at its dim end, CMP9-6), and 22 levels show a medium the old reading did not list at
+medium (23 residuals: CMP-19 on 9, CMP-14 on 7, CMP-8 on 3, CMP-20 on 3, CMP-13 on 1), every one in a box that holds the old frame's pixels or only the player, arch and
+blink pixels that steps 166 and 169 changed (R4d1-2). **The f420 pixels against the old pass: 107 levels differ and 21 are byte-for-byte equal, exactly the union of the
+levels the record lists as changed by steps 166-175 and exactly the levels it says nothing changed** (none differs that the record does not list, none is equal that it
+does). `compare.py`'s ranking (not proof): the `mean_abs` medians fell, h6.3 / f420 4.645 -> 3.62, f450 4.49 -> 3.435, h0.3 / f75 6.805 -> 6.18, f135 6.105 -> 5.265, the
+level's own HUD tick 4.485 -> 3.34 and h2.8 / f240 4.665 -> 3.885, on 97, 99, 96, 101, 100 and 99 levels (higher on 1, 3, 5, 3, 2 and 3); the largest falls at f420 are
+2-01 7.04 -> 3.31, 2-31 5.86 -> 2.56, 2-28 8.47 -> 5.36, 2-14 5.32 -> 2.39, 2-06 6.02 -> 3.13, 2-23 5.42 -> 2.57 and 2-13 9.30 -> 6.50; the top five now are 2-32 14.97
+(the game-over timing, unchanged), 4-18 11.38, 4-12 10.30, 4-10 8.45 and 4-15 8.32.
+
+**How far to trust it.** (a) The audit (16 levels, one per chunk) found 15 agree and **one miss, 2-28's fireball halo, medium** (the first audit: 16 of 16), and 0
+residuals not real; the second reading of chunk 8 (2-25 to 2-32), taken after the audit, found a medium the first reading missed on 5 of its 8 levels (CMP-14 on 2-26,
+2-27, 2-30 and 2-31, the fireball on 2-28), and a chunk chosen because of the audit's miss makes that an upper bound; the other 15 chunks were not re-read and the audit's
+sample holds no lightmapped chapter-2 level. So **61 / 65 / 2 are the rule's counts on the readers' verdicts and a lower bound on medium residuals**; the misses are
+likely of two classes (lit-stone softness, a light effect on a moving object) on the chunks not re-read (R4d1-4). On the 21 levels no step touched, the two readings agree
+on the verdict on 20 of 20 (the 21st, 2-32, is a fix seen at another tick), so the differences elsewhere are the build or a sharper look, not reader drift. (b) The
+pairing is as wave 4b left it: the script-clock fit (four chapter 1-3 platform levels) and the two-clock reading were NOT re-run, h6.3 is not exactly f420, and a blink, a
+pulse or a mover reads as a range (CMP-R1). (c) The independent verification (`R4d/verify1.json`: 10 gates, pass, 4 low) re-derived the counts and the matrix from the
+chunks, checked the 128 frames against the sweep by md5, re-ran `compare.py` on three levels and read 19 of the 128 pair images (4-20, 1-13, 1-30, 3-05, 2-28, 4-12, 1-15,
+1-22, 2-01, 2-31, 4-29, 1-05, 2-29, 2-32, 4-18, 3-19, 4-31, 3-28, 3-09): the claims it read held; the other readers' claims were checked structurally, not re-read. Its lows: the
+counts quoted without the lower-bound sentence (R4d1-4); the grading of one light cause not uniform across readers; three stills' HUD reads moved by an untraced cause
+(R4d1-3); two of the group status checks cannot show the fix on the group's first listed level (the verifier used 2-31 and 4-29).
+
+The groups after the re-take (21: 8 fixed, 1 partly, 9 open and unchanged plus CMP-low, 2 new; one row each in the block before "Blockers", each annotated; `movesRoutes`
+= the fix changes a physics or sim number a winning route leans on, so GAMEPLAY; the fixed rows show their old reach):
+
+| Id | Levels | Kind | Fixability | Moves routes | Status | Title |
+|---|---|---|---|---|---|---|
+| CMP-4 | 4 | structural | needs-rig | yes | unchanged | piles at rest in the original topple or creep in the port (1-30 high; 2-13, 2-05; 3-12 low) |
+| CMP-5 | 2 | structural | needs-rig | yes | unchanged | 3-05's knight A absent for 8 s in the original; 3-22's knight leaves its plank early |
+| CMP-8 | 57 | light | owner-call | no | unchanged | lights and halos read weaker (`halo_brightness_scale` 0.6 a `_guess`; 50 levels before, 37 medium) |
+| CMP-14 | 12 | light | unknown | no | unchanged | lit stone reads softer on lightmapped levels (all 10 of chapter 2 read it; 3 before) |
+| CMP-19 | 10 | light | unknown | no | **new** | the carranca fireball's glow reads weaker beyond its core (2-01 to 2-08, 2-28, 2-32) |
+| CMP-11 | 5 | structural | owner-call | yes | unchanged | crates and barrels creep or rest elsewhere (friction, restitution: G10-14, WT-1) |
+| CMP-17 | 5 | structural | owner-call | yes | unchanged | knights rest off the original's rest: 3-08 30 px; 4-30, 4-28, 3-02, 3-20 6-12 px (R24) |
+| CMP-12 | 4 | particles | unknown | no | unchanged | the blue lamp's orb smaller and bluer, its bracket dark |
+| CMP-13 | 4 | particles | needs-rig | no | unchanged | static portals' rings cover the original's grey spoked iris (1-15 raised to medium) |
+| CMP-20 | 3 | particles | decoded | no | **new** | a burned crate draws no flame and no fade (`fire32`, 1000 ms) |
+| CMP-18 | 1 | structural | unknown | yes | unchanged | 2-29's stone 222 px behind at f420 (WT-10) |
+| CMP-low | 128 | phase | unknown | if CAP-2 | unchanged | clock and phase, the 2 px rest skin, opening camera, bob centre, tone: no step |
+| CMP-9 | 11 | light | needs-rig | no | partly | script blinks built; low residuals left (walls at the dim end at f420, static crates' clock) |
+| CMP-1 | 0 (was 78) | light | decoded | no | fixed, 166 | the player and the exit arch drawn lit |
+| CMP-2 | 0 (was 10) | structural | decoded | yes | fixed, 174 | the revolute joint's attach point B |
+| CMP-3 | 0 (was 9) | structural | decoded | no | fixed, 167 | equal-z pictures in the 128-unit bucket order |
+| CMP-6 | 0 (was 2) | structural | decoded | yes | fixed, 171 | the two markers that spawn no knight |
+| CMP-7 | 0 (was 2) | light | decoded | no | fixed, 168 | the red key's own light |
+| CMP-10 | 0 (was 13) | structural | decoded | no | fixed, 170 | the help block at alpha 0.76 breathing 1.05-1.13x |
+| CMP-15 | 0 (was 1) | structural | decoded | yes | fixed, 173 | 4-02's bounce slab placed, not moved with a velocity |
+| CMP-16 | 0 (was 1) | structural | decoded | yes | fixed, 172 | 2-01's crate carries scale 0.75 |
+
+**Suites and checks**: none launched (the pass is read-only and the close launched nothing); the committed numbers of wave 4c-2 stand: 57 suites, 33,730 checks,
+`test_mp_routes` 128 of 128 on 2,365 checks, reachability 108 / 20 / 0. **Zero warnings** rests on wave 4c-2's records (no build ran). **Smart App Control**: **0
+refusals** in the wave (CodeIntegrity 3033/3077 queried from 11:00 by the verifier and again by this close: none; the log is readable, its last pair is 2026-10-15 00:22,
+wave 4c-2's last refusal). Earlier waves: 1: 83, 2: 19, 3a: 2, 3b-1: 4, 3b-2: 9, 4a: 3, 4b: 13, 4c-1: 5, 4c-2: 10. The owner's folder holds `scores.json` alone (164
+bytes, md5 `40bfef3a`) before and after every role and at this close; every launch of the pass had its own `--saves` folder holding a copy of its seed, and none is left.
+The wave ran beside a read-only design workflow for the owner's modernised controls (item (4) below): it wrote only under `out/parity/program/CTL/`, touched no tracked
+file and nothing under `build/`.
+
+**The standing f420 baselines** are now `out/parity/program/WALL/after/sweep` (128 PNGs, 1280 x 720, the owner's seed; its caveat, that it was taken on `357fae09`, is
+closed by this wave: the committed exe `f27dde1a` renders all 128 frames byte for byte), and the re-take's `R4d/CMP/port_f420` (130 PNGs: the 128 frames, 1-02 and 1-03
+with the popup closed, and their popup-up frames in `popup_up/`) and `R4d/CMP/pairs` (256: 128 pairs of 640 x 720 and 128 overlays); `out/parity/BASELINE.txt` names
+exactly those three. **The next measurements (the controls step, then the fixes) compare against this re-take**, as this one compared against `R4b/CMP`. **The wave's
+image purge** (the owner's standing order of 2026-10-03): the re-take's scratch `R4d/CMP/pairs_other` (1,280), `port_other` (616) and the earlier pass's
+`R4b/CMP/port_f420` and `pairs` (386), **2,282 images, 1.491 GB (1,490,599,825 bytes); free disk 99.07 -> 100.48 GiB**. Before and after, the 514 kept images (the
+baseline, `port_f420`, `pairs`) have the same md5 and all open at their size with the IEND chunk and no NUL padding. The capture role had already deleted its own
+`--saves` folders (no `scores.json` or `achievements.json` newer than 10:50 is left anywhere under `out/`) and its frame dumps. **One image was left on purpose**:
+`program/CTL/CTL1/sheet.png` (35 KB), the contact sheet of the modernised controls' art tool, written at 13:18 by a concurrent workflow that is not this wave's; the purge
+tool's dry run still lists it, and the next purge takes it once that work has committed. The R4b `pairs_other`, `port_other` and crops were purged at wave 4b's close, so
+what is quoted from the old pass's non-f420 sets here comes from its reports, not from a picture.
+
+**GAMEPLAY changed in wave 4d-1: none.** R24, R25, G10-2's matched 60 Hz, 2-30's creep (R3-2), 3-13's 0.08 (R3b-3) and the engine pin were not touched. **The wave's
+rows**: CMP-19 and CMP-20 (2 new groups) and R4d1-1 to R4d1-4 (4): 6 opened, none closed (CMP-1, -2, -3, -6, -7, -10, -15 and -16 were already ticked by their steps and
+are annotated with the re-take's evidence; CMP-9 stays ticked, with its low residuals named). The CMP-4, -5, -8, -11 to -14, -17, -18, CMP-low and CMP-R1 rows are
+annotated and stay open.
+
+**What the next wave should take (wave 4d-2)**, in this order. (1) **The groups whose fixability is `decoded`: one is open, CMP-20** (a burned crate's flame and its fade
+over 1000 ms: drawing only, moves no route; the gates are in its row: the f420-f504 frames of 2-22 and 2-08, a sweep that changes only levels where a crate burns by f420,
+a pin in `test_mp_effects`, 3-30's 63-tick stand unchanged). The eight fixed groups need nothing (keep their pins). Beside it, the groups that need neither the rig nor an
+owner's call but a measurement first: **CMP-19** (a read-only reconciliation on one pair against step 85's rows first, then `lighting.json` `fireball`), **CMP-14** (the
+port-only experiment: 2-17 with the lightmap off and at full resolution) and **CMP-18 / WT-10** (the trace of the stone against the plank and the hinge; its fix would
+move 2-29's route), with CMP-12 after CMP-8's call, and the cheapest low item, CMP-low (d), one bob-centre fit (about 60-70 levels, 3-8 px, drawing only). **No group of
+this list moves a route except CMP-18's, and a route a fix moves is re-flown ONCE after it** (2-29 from tap 320, R4a-6), not after each step. (2) **The rig checks** that
+need the emulator or a clip (`docs/parity.md` sections 1-2): the arrival at 1-30's pile (CMP-4), 3-05 for 10 s without moving and 3-22 for 14 s (CMP-5), the static
+portals' rings against the 58 footage frames (CMP-13; 1-15's grey iris is the plain case), the two clips of CMP-9 (1-09 or 2-14 for the wall's period and depth, G3-2's
+bucket clock for the static crates; 1-02 or 1-10 from the load frame for the help block's phase, CMP10-4), R3c-11's list, R4a-2's zero-g wall-slide, one clip of a stone
+rolling and falling into a breakable wall (WALL-3, WALL-5, R4c2-2) and footage of 1-20 (R4c2-1); and the re-take's own, the pairing's clock on chapter 4 with the mover
+fit re-run (CMP-R1, R4d1-3) and one more chunk of lit levels re-read before 61 is quoted outside this file (R4d1-4). (3) **The owner's calls the groups name**: the halo
+scale (CMP-8: one global scale, per-entity scales or leave; this re-take's per-entity numbers favour per-entity; CMP-12 follows it and CMP-19 only if the scale is the
+knob), the engine's friction and restitution steps (CMP-11: G10-14, WT-1; 1-22's coast re-times with them: R4c2-2), R24 (CMP-17: five knights, 3-08's 30 px), CMP-low (a)
+whether the HUD / world clock offset is modelled and (b) the engine's contact margin (CAP-2: it would move every route's rest heights; CMP16-5's 2 px), and the standing
+ones: 2-30's creep (R3-2), STK-8, G10-2's matched 60 Hz (4-21's aim band moves with it: R4c2-3), R25, `crate_low_emissive`'s guessed 0.08 (R3b-3), 2-32 ahead of the
+dragon's camera (R3-3), PIC-1's smoothing above 80 Hz and CMP-9's pulse scope (R4c1-1). The section-5 box ticks only when CMP-4, CMP-5, CMP-11, CMP-17 and CMP-18 are
+fixed, and each of those waits on a clip or on a call above. (4) **The owner's new ask (2026-10-15, with "continue with the next step"): modernised on-screen controls
+taken from Magic Rampage.** Today the walk arrows are flush in the bottom corners (64 design units, the hit a quarter circle about the corner), restart and pause flush
+top-right and clear-portals flush top-left (`game/data/ui.json` `hud`, `game/sim/Hud.*`); he wants a Magic Rampage layout away from the corners. **It moves the HUD on
+every frame**, which is why the classic HUD was measured first (this re-take) and why **the classic mode is kept, as the mode of the parity rig**, every suite and every
+route. Its own steps from planning step 177 (each takes the next free number when it lands): the design is `out/parity/program/CTL/design.md` (a read-only design
+workflow, second pass after two reviews): 14 steps CTL-1 to CTL-14, natural stops after CTL-3, CTL-6, CTL-9 and CTL-13, decided with the owner on 2026-10-15: both walk
+arrows grouped bottom-left, inset from the corner (the right thumb stays free to fire), restart / pause / clear-portals inset by the same margin, a toggle between modern
+and classic in an Options screen (not a developer flag), Magic Rampage's own button art, and its adjustment screen (size 0.4-1.4, opacity, lock and drag, restore) as a
+later step. Defaults: `--controls classic|modern` (a developer run, a route and every suite are classic; modern becomes the default for a player only at CTL-13), the
+`uniform` preset (size 0.7, a 44 px margin on every edge). **The gate that holds the rest: classic reproduces `R4d/CMP/port_f420` and `WALL/after/sweep` byte for byte at
+every step.** The art is read at run time from a gitignored folder, made by a committed tool that holds no Asantee bytes, with a drawn fallback (the hard rule); Magic
+Rampage is another Asantee game that `docs/permission.md` (still the placeholder) does not record, so shipping its art is the owner's question (design Q2). CTL-1 (the art
+tool: Python and docs only) was staged under `out/parity/program/CTL/CTL1/stage/` during the re-take and is NOT committed; CTL-2 onward relinks `MagicPortals.exe` and
+`test_mp.exe` under Smart App Control. The census of the 128 routes against the modern hit rectangles names five levels whose recorded shots fall inside them (1-20 and
+3-27 for the pair, 2-06 for restart, 1-09 and 3-14 for clear-portals), accepted as data (CTL-4). The owner's open questions Q0 to Q16 are in `design.md` section 6 with
+recommendations (Q0 touch device or desktop, Q2 the art's rights, Q3 the default look, Q4 when to flip the default). GAMEPLAY: none (no gameplay number, one pointer
+path). (5) **The ship preparation**: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder, so the record of the scope is
+incomplete: the owner's to fill), the play build (`tools\parity\play_build.bat` exists; no play build has been made), the README and LICENSE, the release zip, and **the
+repository's going public, which still needs the owner's explicit word**. (6) **Loose ends, taken when a step touches the file**: unchanged from item (3) of the wave-4d
+list above (a full `port_build.bat` with zero warnings, R4c2-5 and WALL-7, among them). For the next wave's gates: future route gates compare against
+`R4c2/census_after_round1.md` (128 won; 117 exact, 11 on another tick), a step's scope is derived by a census of `out/levels` and the original's files, never typed, and
+the sweep a step is measured against is `WALL/after/sweep` or this re-take's `port_f420`.
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -3959,6 +4120,10 @@ steps 171-175, each in its own block above). **No level is without a route and n
 `pairs_run.py`. A box is `x1,y1,x2,y2` (or a pair of corners) in the 1280 x 720 frame. The listing is `out/parity/asbc/all_functions.txt` (md5 `48fe65ce`). Every cause
 below was CHECKED by the comparison's triage against the listing or the Ethanon source (its own re-derivation of 11 reader attributions: 10 held); the independent
 verification re-derived only CMP-1's census (78 levels carry `ignore_emissive`, 0 hits in `game/`, the converter, `data/` and `tests/`) and re-read six pair images.
+**Re-taken 2026-10-15 (wave 4d-1):** every row below carries a 'Re-taken' note (status, levels, numbers, what is left); the re-take's evidence is under
+`out/parity/program/R4d/CMP/` with the same file names (`old_vs_new.md` sets the new result against the old level by level); the old pass's pair images and port frames
+named above were purged at that wave's close and `out/parity/BASELINE.txt` now names the R4d folders (`port_f420/`, `pairs/`); CMP-19 and CMP-20 are new rows and R4d1-1
+to R4d1-4 follow CMP-R1.
 Fixability: `decoded` (the mechanism is read from the listing and a fix can be specified), `needs-rig` (a clip of the original is needed), `owner-call`, `unknown`.
 - [x] **CMP-1. Script-driven emissive: the player and the exit arch are drawn lit on the 78 levels that carry `ignore_emissive`** (high; light; `decoded`; moves no
       route). Levels: 2-01 to 2-32, 3-01 to 3-32, 4-01 and 4-20 to 4-32 (the player in all 78; the arch in frame on 45). Evidence: 2-01 player box [965,60,1060,195] and
@@ -3987,6 +4152,12 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       red key's light, CMP-7); (c) 2-02's player is redder than the original's, (46.4, 27.1, 33.0) against (29.6, 24.0, 30.1), inside its stills' range 27.7-41.8: a light on the
       figure, read with CMP-7 and CMP-8; (d) the 52 `differs` levels that differed by this cause alone are read again after the groups that remain. The deviations are rows
       CMP1-1 to CMP1-6 above. Closes G1a-11; section 1's "Script-driven emissive" stays open for its other items.
+      *Re-taken 2026-10-15 (wave 4d-1, `out/parity/program/R4d/CMP/`; the build of step 176, exe `f27dde1a`): FIXED on 78 of 78, by step 166. 77 levels read the
+      original's player (and the arch where in frame) at h6.3 / f420 with port-over-original ratios of 0.93 to 1.01 (2-17 player 75.2/38.6/43.3 against 77.1/38.9/43.5,
+      arch 33.7/13.8/12.6 against 36.6/13.9/12.1; 2-22 player 26.7/24.6/30.4 against 26.2/24.2/30.0; 4-26 player 1.2/0.2/0.3 against 1.2/0.3/0.2; the lowest, 3-07's
+      player, 0.93 to 1.00). 2-32 is not readable at f420 (its player is dead behind the game-over card); its h0.3 pair shows the player dark with the red eye in both. A
+      scan of all 490 residual texts finds no lit player or arch left and no level where the fix overshoots. Of the 58 `differs` levels, the 52 that differed by this
+      cause alone now read 19 `match` and 33 `minor`, none `differs`. Nothing is open here; keep the step's pins.*
 - [x] **CMP-2. Revolute-joint pose: the port drops attach point B, so a plank or arm stands where it was placed, not where the original's joint pulls it** (high;
       structural; `decoded`; MOVES ROUTES). Seen: 2-31 (box [0,480,520,720], `pairs/2-31_h63_pair.png`, identical in all three original stills and every port frame, so
       a static pose), 3-20 (box x720-1090 y395-505; best shift (+6, 0) on the plank, box x845-960 y395-505), 4-31 (box [960,190,1170,285], the bar's edges 9 px off,
@@ -4035,6 +4206,12 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       3-20 re-aimed (tap 254 at (253, 40), not (258, 40): the plank's tip moved 2 units left; wins on 555, the same tick, no cell has a +-1 margin on every axis) and 3-19
       tightened (inputs unchanged, wins on 827 for 832; `win_by` 865 -> 840); the other six census routes (2-28, 2-30, 3-15, 3-22, 4-11, 4-31) win on exactly
       their census ticks (2-29 was re-flown for the wall, step 175, not for the joint). 2-30 still wins on its creep, 1,386 (R3-2).*
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED where in frame, 8 of 10, by step 174 (`cad4a2f`): 2-28 the plank and its red pivot ball agree in outline and brightness;
+      2-29 the pose agrees; 2-30 plank, pivot and pillar within 2 px (R3-2 untouched); 2-31 the seesaw agrees (the old pair hangs the plank about 29 u low, the new equals
+      the original); 3-20 the plank 0 px (error 1.57 at shift 0; the old reading 6 px); 3-22 the plank placed as the original's (error 4.25 at shift 0); 4-11 the seesaw
+      and its red ball at the original's place; 4-31 the red ball at (988.3, 202.5) against (988.4, 202.6) and the bar rows 200-243 against 202-242. 3-15 and 3-19 hold
+      the hinge off frame (predicted +4 u and +8 u): NOT OBSERVABLE, not fixed by reading. Left over, both low: 3-20's knight 6 px (it stayed when the plank moved:
+      CMP-17) and 2-29's hinged plank, which leans 1.3 degrees less than the original's, 3 px at the ends (not traced: R4d1-3).*
 - [x] **CMP-3. Equal-z pictures are drawn in scene-file order; the original orders them by 128-unit bucket** (high on 4-31, medium on the rest; structural; `decoded`;
       moves no route). Levels: 1-07, 1-11, 1-12, 1-20, 2-14, 2-30, 4-11, 4-16, 4-31. Evidence: 4-31 box [810,170,985,285] (`pairs/4-31_h63_pair.png` and `_overlay.png`:
       the arm's left half and pivot are hidden behind the anchor block in the port); 1-07 box (545,270)-(1080,715); 1-20 box 384,452,470,497 (the pillar drawn over the
@@ -4066,6 +4243,11 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       particle system at z 0 (`onda.png`), not a z -4 antiportal or a `shock_area` as the group suspected; (e) the row-major axis is settled on 2-27, 3-05 and 1-05 beside
       the source, the column-major mutation never run (CMP3-6). The deviations are rows CMP3-1 to CMP3-6 above. Settles the draw order of step 72's deviation (ticked there,
       with its limit) and joins Order 11.3's deviation 9 and G1a-2 without closing either.
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED in frame on 8 of 9, by step 167 (`ca93e40`): 1-07 the no-portal disc tints the blocks, 1-11 the left agent's ring is cut by
+      the two-stone platform, 1-12 the cyan ring is drawn over the blocks above it, 1-20 the pillar over the cracked wall (mean_abs 1.63 -> 1.38), 2-14 the tall block
+      stands behind the slab, 4-11 the door in front of the disc (minor -> match), 4-16 the stone pair behind the 2x2 block, 4-31 the arm over the ledge with its whole
+      bar and pivot (box mean abs 0.42). 2-30 has no reader line on it either way (not measured). No level shows a draw-order residual; 1-21's red disc over a plank (R +4
+      to +8, byte-identical to the old frame) is the one unexplained neighbour and stays in CMP-low (g).*
 - [ ] **CMP-4. Piles that stand at rest in the original fall or never settle in the port** (high on 1-30, medium on 2-13 and 2-05, low on 3-12; structural; `needs-rig`;
       MOVES ROUTES). Evidence: 1-30 box 360,180,1000,660 (`pairs/1-30_h63_pair.png`: the crate pile at rest in all six original stills, toppled by f75 in the port;
       pile-region mean abs 3-4 between the original's own stills against 12-17); 2-13 box 1100,195,1280,360 (the barrel pile slides about 105 px, 30 px by f75); 2-05
@@ -4077,6 +4259,12 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       `game/data/resting.json` entries for the piles with the stills as `_measured` (as 3-12's), and re-fly 1-30, 2-13 and 2-05; or the engine's friction step (CMP-11,
       owner's call). Gate: 1-30's pile region from mean abs 12-17 to the original's 3-4, `test_mp_resting` pins, `test_mp_routes` 128 of 128. GAMEPLAY: yes (a pile a
       body meets is asleep until touched).
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED. 1-30 still `differs` (the only high of this row) and the same piles on 2-13 and 2-05 (medium) and 3-12 (low); no step
+      of waves 4c-1 and 4c-2 touched piles or the solver. 1-30: the pile (a big crate on a plank across two stacks of two small crates) is at rest in all six stills and
+      has fallen by f75, toppled by f120-f135, a crate lying at about 45 degrees at f420; its box (360,180)-(1000,660) holds 90 changed pixels against the old frame (a
+      seam strip at x 906-962, y 630-635) and is otherwise byte-identical, so the fall is the old fall. 2-13: the barrel pile at the right edge collapses by f135 and the
+      upright barrel stands 105 px left of its place at f420. 2-05: the top crate has fallen and the left crate crept 4 px. 3-12: the stone is 4 px right and 5 px high,
+      the crate 3 px right and 1 px low. Cause as recorded (G10-14, WT-7), not re-derived. Still needs the rig clip; GAMEPLAY if taken.*
 - [ ] **CMP-5. Knight timing the stills contradict: 3-05's knight A is absent for 8 s in the original; 3-22's knight leaves its plank before its 10 s hold ends** (high
       on 3-05, medium on 3-22; structural; `needs-rig`; MOVES ROUTES). Evidence: 3-05 box x1130-1280 y490-640 (`pairs/3-05_h63_pair.png`, lower right: the port's knight
       A (spawn (760,208), wayA1 (622,208) hold 4000, wayA0 (420,208) hold 2000) walks into view at the lift door by f420; none of the original's six stills, 0.3 to 8 s,
@@ -4087,6 +4275,11 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       either level exists (`out/parity/footage/INDEX.md`). Next: record 3-05 for 10 s without moving and 3-22 for 14 s (`docs/parity.md` sections 1-2), then fix in
       `sim/Minions` or the spawn gate. Gate: knight A's first frame and 3-22's departure tick against the clip; the stealth routes (3-04, 3-05, 3-11, 3-24: achievements
       26-28, 32, 42) and 3-22's re-flown. GAMEPLAY: yes if real. Joins: G3-2, R24/R25, R3c-3, R3c-8.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED. 3-05 still `differs`: the port's knight A stands beside the lift door at f420 (red-cape centroid x 1232) and f450 (x
+      1176) and is in none of the original's six stills, the last of them 8 s after the tap; the box (1130,490)-(1280,640) holds 0 changed pixels against the old frame.
+      3-22 (medium): the knight is on the plank at f240 and has stepped onto the floor ledge by f420 and f450 (x 950-1010 against the stills' 905-985), while the original
+      has it on the plank in all four post-opening stills. No footage of either level exists. The candidate for 3-05 (the marker is static = 1 and a static entity's
+      callback runs only in a visible bucket, G3-2, though the opening pan sweeps that bucket) is still not proven.*
 - [x] **CMP-6. A knight the original never spawns: the markers `minion_spawn6` (4-29) and `minion_spawn_` (3-09) have no `ETHCallback`** (high; structural; `decoded`;
       MOVES ROUTES). Evidence: 4-29 box [860,495,1050,632] (`pairs/4-29_h63_pair.png`, lower right: sky, gem and a black knight in the port, empty in the original; six
       original stills and 12 footage frames, `out/parity/footage/L1_out_4-29_sheet.png`, show none); 3-09's lone guard (`minion_spawn_` id 908 at (410,48), wayA, hold
@@ -4115,6 +4308,9 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       to CMP6-9 above.
       *Step 176 (the route phase), 2026-10-15: 4-29 is re-flown (`level28c.json`: the two taps spent on the deleted knight B, ticks 56 and 335, go; four taps and holds are
       centred; 8 shots -> 6 and 6 -> 4 portals at the door; it still wins on tick 1,023, set by the key knight's patrol); 3-09 still wins on 838 and is not edited.*
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED on 4-29, by step 171 (`9797699`): the near-black pixel count in the sky region (760-1060 x 380-625) is 874 at f75, f135,
+      f240, f420 and f450 against 953 in the three stills, so no figure stands where the black knight stood. 3-09 is NOT OBSERVABLE: its guard was never visible in either
+      still, and the level reads `match`.*
 - [x] **CMP-7. The red key's own light is not built** (high; light; `decoded`; moves no route). Levels: 4-20 (seen), 4-19 (holds the other red key; reads `match`, its
       light not separated from `red_key_state`'s halo). Evidence: 4-20 box 760,255,1040,465 (`pairs/4-20_h63_pair.png`: RGB 57,19,22 in the original against 26,25,35 in
       the port; the strip beside him 86,0,0 against 0,0,0; the key lies at the spawn and is taken on tick 1). Cause (listing): `ETHCallback_key` #119-186 (bytes
@@ -4140,6 +4336,10 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       against the original's 35.1 in its box (855,330)-(945,465), G and B 0.96 of the original's before and after the light (the silhouette's dark pixels and the carried key's
       sliver, not traced); the carried key's resting side of the player (CMP-low g) and the achievement card (a capture condition) stand. The deviations are rows CMP7-1 to
       CMP7-6 above.
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED on 4-20, by step 168 (`7ebe83b`): the red area reads 40.0/13.2/14.8 against the original's 40.8/13.3/15.0 (within 2 percent;
+      the old pass read the port 26/25/35 against 57/19/22) and the door, dome and ground are painted red; 4-19: key, halo and haze equal. 4-20's one remaining residual
+      is the key resting on the other side of the player (its tip at his front edge x 929-936 in the original, a faint rim at his back x 877-881 in the port: CMP-low g).
+      The achievement card the old pass read there is a fresh-save capture condition and is dropped.*
 - [ ] **CMP-8. Lights and halos read weaker than the original on about 50 levels** (medium, mostly low-to-medium per level; light; `owner-call`; moves no route).
       Levels: 1-01, 1-02, 1-04 to 1-07, 1-09 to 1-12, 1-14 to 1-18, 1-22, 1-28, 1-29, 1-31, 2-10, 2-11, 2-16, 2-17, 2-19, 2-24, 3-01, 3-02, 3-04 to 3-08, 3-10 to 3-12,
       3-14, 3-17 to 3-29, 3-31. Evidence: 1-01 box (700,30)-(900,380) (`pairs/1-01_h63_overlay.png`; torch box R 190 against 221); 1-12 box 560,0,900,330 (R 189-205
@@ -4152,6 +4352,14 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (a) one global scale fitted on the 128 x 6 stills this comparison holds, (b) per-entity scales (torch, `blue_light`, `diamond_light_*`, fire agent), or (c) leave.
       Gate if taken: the box ratios to 1.0 +-0.05 on a held-out half of the levels, G5's `LM_E<1_halo` rows still pass at hd art, the flicker amplitude re-read.
       GAMEPLAY: none.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED, and the cause stands: `game/data/lighting.json` `halo_brightness_scale` 0.6 is still a `_guess` (steps 166-175 touched
+      the file only for `script_emissive`). The level set grew from 50 to 57 and lost none (seven added by a sharper reading: corner slivers on 1-03, 1-30, 1-32 and 3-16,
+      fire-agent halos on 2-18 and 2-30, 1-08's lamp wash; 1-10 and 3-25 raised from low to medium), which is what a cause no step touched should do. 37 of the 57 carry
+      it at medium; it is the only cause of 30 of the 65 `minor` levels. It is present on every level that carries the entity, graded medium or low by magnitude, so a fix
+      is not scoped to the medium levels. New data for the owner's call: the shortfall differs by entity (torch wall luminance 0.81-0.97 of the original's, orange-crystal
+      wash R 0.77-0.89, blue lamp 0.62-0.87, fire-agent halos 9-20 percent weaker at 32-64 px and equal beyond 80 px), which favours option (b), per-entity scales; the
+      original's concentric light bands around the flame are absent in the port's torch halos on 1-01, 1-02, 1-04, 1-06, 1-07 and 1-18. Still the owner's call; CMP-12
+      follows it, and CMP-19 joins it only if the scale is the knob.*
 - [x] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
       levels in scope: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-04, 2-05, 2-08, 2-12 to 2-19, 2-21 to 2-25, 2-28, 2-29, 2-32, 3-14, 3-15, 3-19, 4-10, 4-16, 4-25, 4-32 (the
       readers filed it on 17; wave 4c-1's fix1 adds the fire agent's 10 outside them, which the cause text below names (the pulse): 2-10, 2-11, 2-20, 2-26, 2-27, 2-30, 2-31, 3-23, 4-12 and 4-28, 42 levels in all). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
@@ -4187,6 +4395,15 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (CMP9-6); (d) 4-19's two flagged crates, the 200 ms branch, are not built (CMP9-5); (e) the dead initialisers and the older executable (CMP9-7). The deviations are rows
       CMP9-1 to CMP9-7 above; the older rows that name the barrel's blink, the crate's emissive and the pulse as unbuilt ("Found by step 120", "The restock's pictures") carry a
       note.
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED in kind, left `[x]`; the re-take reads the group as PARTLY, because low residuals stay (R4d1-2). Every case a reader
+      measured lies inside the original's range: barrels on 2-12 (original R 15-23, port 10-21), 2-14, 2-15, 2-21 (steady 20.4 against 20.7), 2-23, 2-29, 3-19, 4-10,
+      4-16, 4-32; breakable walls on 1-09 (pillar luma 75.5-86.7 against 76.0-86.2), 1-19, 1-22, 2-14 (74-89 against 71-87), 3-14 (75.1-86.0 against 74.4-84.3); crates on
+      2-01, 2-05, 2-06, 2-08, 2-25, 2-28, 4-12, 4-25. Left, all low and all known: (a) CMP9-6: at f420 the chapter-1 walls sit at the dim end of the blink (1-13 68.0
+      against the stills' 71.5-84.5, 1-22 0.92 of the original, 1-24 8-9 percent, 1-25 113/101/84/126 against 114-124/100-109/84-92/127-138); (b) the static crates'
+      bucket clock (2-11's crate is static = 1 and reads the saturated red wash at four of five port ticks, R 77/58/57/75 against the stills' 31-45; 2-10's two crates
+      pulse 55-91 against a steady 75-87); (c) 1-31's non-teleportable crate, deep red in all six stills (G 22-32) and cycling in the port; (d) amplitudes the stills
+      cannot settle (2-17's and 2-24's barrels dip at f420, 4-16's barrels 4 percent darker, 4-28's orange mine 9 percent brighter in the original). Two clips settle (a)
+      and (b): 1-09 or 2-14 for the wall's period and depth, and G3-2's bucket clock for the static crates. Drawing only.*
 - [x] **CMP-10. The help block ("?") is drawn plain and opaque; the original draws it at alpha 0.76 breathing 1.05-1.13x** (medium; structural; `decoded`; moves no
       route). 13 levels in scope: 1-02, 1-03, 1-10, 1-11, 1-13, 1-19, 1-25, 1-32, 2-03, 2-06, 3-09, 4-01, 4-02; in frame and filed on 1-02, 1-10, 1-11, 1-13, 1-25; in
       frame and unfiled on 2-03 and 2-06 (their pair images show the same greyer face, about 16 percent dimmer over the dark sky: the readers missed a decoded
@@ -4211,6 +4428,10 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       to `verify3.json`: the third read gates 1 and 3 to 9 ok and gate 2 not met on the face). **What it leaves**: (a) the face gap, cause open and on the original's side
       where fitted, one calibration experiment (CMP10-1); (b) the block's phase and the popup's hold (CMP10-4); (c) four blocks on no comparison frame (CMP10-5). The
       deviations are rows CMP10-1 to CMP10-7 above.
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED on the 8 levels where a reader measured or read the block, by step 170 (`5c1949b`): 1-02 73 x 76 px at grey 181.6 against 75
+      x 78 at 182.2 (old 68 x 70, 213); 1-10 face 166.6 against 164.5-167.6; 1-11 71-73 px; 1-13; 1-25 172-175 against 172-205 and 70-72 px against 72-76; 2-03
+      155/157/161 against 154/157/159; 2-06 168/172/174 against 169/173/175. The only residual is the known CMP10-1 (the face 1.1 to 7 grey under the stills; low). 1-03,
+      1-32, 3-09, 4-01 and 4-02 are NOT OBSERVABLE (no reader line on the block); 1-19's reader reads it as matching.*
 - [ ] **CMP-11. Crates and barrels that creep or rest elsewhere than the original's** (medium; structural; `owner-call`; MOVES ROUTES if taken). Levels: 2-20 (box
       880,195,1000,295: the small crate on the big one slides and tilts, (-5,+5) px at f75, (-14,+6) at f450), 2-24 (box 625,45,725,175: the top barrel 6 px low and
       creeping), 2-22 (box 945,100,1250,290: a crate rotated 2 degrees), 3-03 (box x1072-1280 y448-640, `pairs/3-03_h63_overlay.png`: the crate rests 11 px (4 u) off
@@ -4219,12 +4440,21 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       comparison adds 2-24 and 2-22 and the original's stills as the reference. Next, the owner's call: queue the engine's friction and restitution steps with the
       Penumbra port's engine work, or not. Until then nothing here changes: R3b-3's 0.08 and 2-30's creep (R3-2) stand. GAMEPLAY: yes, every route that pushes a crate
       (3-03's does).
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED, the same five levels with the same numbers: 2-20 the small crate on the big one slid (-12,+5) px at f420 and tilted
+      (old pass: (-5,+5) at f75, (-10,+6) at f240, (-14,+6) at f450); 2-24 the top barrel (6,+5) px and tilted 1.5 degrees; 2-22 the crate on the tilted block rotated
+      about 2 degrees and (-3,+2) px; 3-03 the crate rests 11 px (4 u) further right and 2 px low, the same at h2.8 / f240, h6.3 / f420 and f450 (a rest, not a phase);
+      3-05's crate 3 px right and 2 low. 3-03 and 3-05 are the `crate_low_emissive` crates (R3b-3, friction 0.08, a guess). Still the owner's call.*
 - [ ] **CMP-12. The blue lamp's orb is smaller and bluer than the original's, its bracket dark** (medium; particles; `unknown`; moves no route). Levels: 1-05 (box
       (770,70)-(860,190), window mean R 204.0 against 216.1), 1-08 (box (120,40)-(400,240), 199.3 against 212.6), 1-19 (box 420,0,700,200), 1-22 (box 590,40,730,140,
       core R 233 in the original against 211). Known and open (steps 91-92: not the depth; size and brightness left). The original's orb is a white core with concentric
       rings reaching the bowl's lip; the port's is smaller and bluer with the rim showing through its top arc; the wall it lights is 15-50 percent darker (shared with
       CMP-8). Next: settle CMP-8 first (the same pixels), then the orb's draw (added colour, `hard_halo.png` tier) against the five `blue_light` levels' stills. Gate:
       orb window R within 3 of the stills. GAMEPLAY: none.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED, the same four levels (their boxes hold 0 changed pixels except 1-19's 1,612 of 60,000, the wall blink). Original
+      against port: 1-05 white core 1,826 px (59 x 54) against 1,185 (46 x 44), bracket 123/201/251 against 67/105/152; 1-08 1,918 (61 x 54) against 1,139 (40 x 43),
+      bracket 147/217/254 against 97/140/185; 1-19 the original's white orb with ring structure at the top edge is absent in the port at every tick, with a 20-40 percent
+      darker wash; 1-22 core R 223 against 204. Known and open (step 91 found the orb behind the bowl's rim, step 92 measured it is not the depth). Shares pixels with
+      CMP-8: settle that first.*
 - [ ] **CMP-13. Static portals read differently: the port's rings cover the original's grey spoked iris** (medium on 1-01 and 1-02, low on 1-15 and 3-03; particles;
       `needs-rig`; moves no route). Evidence: 1-01 portals (350,140)-(500,280), (140,385)-(290,550), (880,470)-(1010,610) (`pairs/1-01_h63_pair.png`); 1-02 box
       (360,380)-(510,510); 1-15 box 820,40,1100,620; 3-03 box x0-112 y336-448. Cause (known: step 59's two recorded particle deviations, R22): the ring particles are
@@ -4233,6 +4463,13 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       stills and the port never shows the grey iris phase in five frames; the lower-left portal reads larger and bluer (150 px against 105). Next: the rings'
       life-versus-brightness curve against the 58 footage frames (`out/parity/visuals/particles/verify3/measure_v3.txt`), then the particles in `effects.json`; R22 is
       the gate's re-baseline choice. Gate: ring excess r 25-45 px on 1-01's 582 inside 65.6 +-25 percent. GAMEPLAY: none.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED (no step touched the rings), and 1-15 is RAISED from low to medium on six stills against six frames with no overlap: the
+      original's iris is a neutral grey-white disc (RGB 143-159 / 130-160 / 165-181, luma 138-162), the port's a pink-magenta one (182-206 / 151-182 / 214-239, luma
+      167-194). Its portal box (880,500)-(1000,620) holds 0 changed pixels against the old frame and the pair image shows the colour difference plainly, so the old
+      `match` of 1-15 was an under-grade (R4d1-1). 1-01: the ring reads saturation 0.03-0.48 in the original (under 0.2 in 12 of 18 readings, channels capped at 165) and
+      0.25-0.47 in the port (never under 0.24, channels to 253, about 1.5x brighter); 1-02's lower-left portal bluer in the port (127/105/179 against 131/108/160); 3-03 a
+      thicker cyan ring and a dark spoked iris against a thinner, brighter ring (low). Cause as recorded: the ring particles are brighter over their life (1.62x on 1-01's
+      582); tint, 0.8 scale, inline systems and the AM_ADD blend are ruled out.*
 - [ ] **CMP-14. Lit stone reads softer than the original on lightmapped levels** (medium; light; `unknown`; moves no route). Levels judged: 2-17 (box 100,630,1180,715),
       2-18 (box 180,630,1080,715), 2-19 (box 910,95,985,260); 67 levels carry `eth_lightmap`, 2-16 has one and was not tested. Evidence: the original shows crisp
       relief, cracks and bright grit on floors and cracked pillars, the port smoothed stones; the Laplacian s.d. of the cracked `breakable_wall` is 17.2-17.8 against
@@ -4240,6 +4477,16 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       the hd art per axis) stretched and filtered where the original keeps detail, or a weaker normal-mapped relief. Not in the backlog. Next: render 2-17 with the
       lightmap off and at full resolution and read the Laplacian against `h6.3`; if it explains the gap, widen to the other 64 lightmapped levels. Gate: the wall's
       Laplacian s.d. 12.4 -> 17.2 on 2-17, no change on the unlightmapped levels. GAMEPLAY: none.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED in the build, WIDER in the evidence. The old pass judged 3 levels (2-17 to 2-19); this one reads it on all 10
+      lightmapped levels of chapter 2 (2-10, 2-11, 2-16, 2-17, 2-18, 2-19, 2-26, 2-27, 2-30, 2-31; the first reading of chunk 8 had missed it on four of them) and as a
+      softer lit rim on 3-17 and 3-19. The chapter's unlit levels read equal in the same measure (2-24, lit by a fire agent and carrying no lightmap: cracked pillar 8.30
+      against 8.24; 2-25 floor 1.80 against 1.78; 2-29 pillar 6.55 against 6.49), and the high-pass spread of lit stone is 0.5-0.64 of the original's with the mean
+      luminance equal (2-10 ledge 4.24 against 7.66, 2-11 floor 4.89 against 9.72, 2-30 floor 2.06 against 3.33 at luminance 23.0 against 22.9): it is the grain, not a
+      dimmer light. A screening census (the median over 32 x 32 blocks of a contrast ratio, h6.3 against f420; it is consistent with the lightmap path and does not
+      establish it): the 67 lightmapped levels read 0.977 against 0.995 on the 60 unlit; chapter 1 separates cleanly (24 lightmapped, 0.974, against 8 unlit, 0.998),
+      chapter 3 has no unlit control and chapter 4 one. The cause is NOT isolated, no step touched the lightmap path, and the experiment stands as written (2-17 with the
+      lightmap off and at full resolution); the other 57 lightmapped levels need their own boxes read before any gate is set on them. Present on every lightmapped level,
+      medium or low by magnitude.*
 - [x] **CMP-15. A rider drifts off a bobbing slab: the astronaut on 4-02's bounce slab floats away at the slab's peak speed** (medium; structural; `decoded` but NOT
       RUN; MOVES A ROUTE). Evidence: 4-02 box 350,330,450,520 (`pairs/4-02_h63_pair.png` and `_overlay.png`: the astronaut doubled, the port's about 17 px higher): the
       original's eye stays at y 380 +-0.5 in all six stills while the slab bobs 475-481 under him; the port's drifts up 3.2 px/s (383.1 at f75, 364.3 at f420) = the
@@ -4273,6 +4520,9 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       rows CMP15-1 to CMP15-6 above the wave 4c-1 rows.
       *Step 176 (the route phase), 2026-10-15: 4-07 is re-flown (`level6c.json`: second lift tap 282 -> 279, the left-edge shot (5, 60) -> (5, 80), the last tap (155, 125) ->
       (148, 98): the slab no longer carries him, so he stands 1 px lower; it wins on tick 446 again, the census tick); 4-02 (87) and 4-17 (163) were never moved.*
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED at f420, by step 173 (`12ac5d5`): the astronaut's eye is at y 380.3 (380.8 at f240 and f450) against the original's
+      379.7-380.5 over all six stills (old: 17 px above the slab at f420, drifting 3.2 px/s). Left: f75 reads 383.1 (CMP15-1, known: the spawn rest, one stride low until
+      the slab's first rise) and the slab sits 2 px low at f420 (bob phase).*
 - [x] **CMP-16. 2-01's crate is drawn 33 percent too big and, in the original, is smaller and lighter** (medium; structural; `decoded`; MOVES A ROUTE). Evidence: 2-01
       original crate [443,57,577,187] against the port's [420,15,598,190] (`pairs/2-01_h63_pair.png` and `_overlay.png`: a crate inside a larger crate; the same at
       `h0.3` and `h2.8`): the original's is 134 x 130 px, the port's 178 x 175. Cause: `level0a.esc` id 796 (`crate_no_emissive`) carries the custom data `scale` 0.75,
@@ -4306,11 +4556,22 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       4c-1 rows, and CMP16-7 is the routes.
       *Step 176 (the route phase), 2026-10-15: 2-01 is re-flown (`level0a.json`: wins on tick 307, was 444; it stops pushing the lighter crate at tick 182 and the fireball burns
       the crate on 197) and 4-29 with it; the row's "MOVES A ROUTE" is done.*
+      *Re-taken 2026-10-15 (wave 4d-1): FIXED, by step 172 (`9d643c9`): the crate is 135 px wide at x 442-576 as the original's (old 178 x 175 against 134 x 130); its top
+      edge is 2 px low (CAP-2); the player and the arch read the original's. 2-01's f420 mean_abs 7.04 -> 3.31 against the old pass is the largest fall of the re-take,
+      and most of it is wave 4c-1's lit player and arch; the crate's own share is 4.20 -> 3.31 (step 172's record).*
 - [ ] **CMP-17. 3-08's lone guard rests 30 px right of and 7 px below the original's, astride the ledge seam** (medium; structural; `owner-call`; MOVES A ROUTE if R24
       changes). Evidence: 3-08 box x144-256 y48-192 (`pairs/3-08_h63_pair.png`, top left). The guard (spawn (410,48), wayA0 (372,48), hold 9999999) stops about 11 u
       earlier than the original's (`minions.json` `arrive_px` 8, `settle_px` 16) and ends over the seam of two ledge blocks; the same row was closed for 3-01 by step
       152 and 3-01 matches here at dx 0; why 3-08 stops at the seam is not isolated. Next: nothing until R24 (the patrol's arrival point, the owner's) is ruled. Joins:
       R24, step 76's lone guards' coast. GAMEPLAY: yes if R24 changes.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED for 3-08 (the guard 30 px right and 7 px low in every still; its box holds 0 changed pixels), WIDENED to four more
+      knights found at rest off the original's, constant across ticks and so not phase: 4-30's wayB knight 12 px left of the original's (the old reading called it phase),
+      4-28 9 px (original x 89-117, port 98-126 at f135-f450 and h2.8-h6.3), 3-02 8 px (red cape x 546 against 554), 3-20's knight on the spinning plank 6 px right and 1
+      px low. 3-20's knight stayed 6 px when step 174 moved the plank to 0 px, so it was not carried with the plank. Scale (arithmetic from `game/data/minions.json`): the
+      patrol speed is 62.4 u/s = 175.5 px/s, so one frame of the original's 30 Hz script is 5.85 px and `arrive_px` 8 u is 22.5 px: offsets of 6-12 px are one to two
+      script frames inside the decoded arrival radius, which fits a brake / settle / hold ordering difference (`minions.json` brake 0.3, `settle_px` 16) but is not shown;
+      3-08's 30 px is more. The signs differ (the port is right of the original on 3-02, 3-08, 3-20, 4-28 and left on 4-30), as a stop short of a waypoint approached from
+      either side would. R24 (the patrol's arrival point) is still the owner's open ruling; the five knights are the check if it is ruled.*
 - [ ] **CMP-18. 2-29's rolling stone is 125-135 px behind the original's in every still (WT-10)** (medium; structural; `unknown`; MOVES A ROUTE). Evidence: 2-29 box
       35,455,520,632 (`pairs/2-29_h63_pair.png`; the same lag at `h2.8` and at f450): in the original's h6.3 the stone is against the barrel at x 37-122, the port's at
       f420 at x 342-515 with the barrel unmoved; a constant 125-135 px (0.75 s at its 61 u/s). So the release from the hinged plank is late: the port tips at about tick
@@ -4320,6 +4581,48 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       *CMP-2 landed (step 174, wave 4c-2) and is NOT the cause: the plank's first turn past 0.05 rad is tick 254 before and after, and the stone is 1.04 u (about 3 px) farther
       along at tick 420, of the 125-135 px. The trace of the stone against the plank and the hinge (WT-10's own) is therefore still the next step on this row; 2-29 was
       re-flown by step 176 for the wall's gate (564, was 569), on the port's stone clock, so R4a-6 is unchanged.*
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED. The stone is 222 px behind the original's at f420 (right edge x 512 against 289; the barrel at x 103-190 against
+      37-123, because the original's stone has already pushed it), 136 px at f450 and 124 px at h2.8 (the old 125-135 is the f450 / h2.8 gap). CMP-2 is ruled out as the
+      cause (step 174's hinge moves the stone 1.04 u, about 3 px, and the plank's first turn past 0.05 rad is tick 254 before and after); the late release from the plank
+      is unexplained and WT-10's trace of the stone against the plank and the hinge is the next step on this row.*
+- [ ] **CMP-19. The carranca fireball's glow reads weaker than the original's beyond its core** (medium; light; `unknown`; moves no route). NEW TO THE LIST by the
+      2026-10-15 re-take (wave 4d-1), not new in the build: the fireball boxes hold 0 changed pixels against the old frame (2-28's 3,319 are the platform at the box's
+      foot), and the old readers filed the fireballs only as phase (where the ball is), never its light. Levels: 2-01 to 2-08, 2-28 and 2-32's dragon (10 read; 21 levels
+      carry a carranca). 2-01 to 2-08 are one reader's entries with shared wording and pooled numbers (original core 1,450-2,180 px and R-B glow 15-21, port 800-1,450 px
+      and 8-13): count them as eight levels where a fireball was in frame, not eight readings; 2-28 (the second reading of chunk 8, and the audit's only miss) and 2-32
+      (the dragon lit by two fireballs, a second reader) are independent. Evidence, the triage's own radial profile (luminance and R-B excess over each image's 130-200 px
+      baseline, annuli round the core's centroid, checked on the pair images; `R4d/CMP/work_triage/fireball_profile.py`): on 2-02, where the positions match (original
+      h0.3 against port f105), the core (0-12 px) is equal, +161.3 against +161.9 luminance, then +88.2 against +35.8 at 24-36 px (8.5-12.8 u), +38.6 against +11.4 at
+      36-48 px (12.8-17.1 u), +8.2 against -3.8 at 48-60 px; R-B +119.2 against +71.9, +71.0 against +39.0, +36.2 against +20.6; 2-04 (h2.8 against f240) and 2-07 read
+      the same direction (at 36-48 px luminance +72.4 against +63.4 and +77.8 against +46.8, R-B +60.5 against +33.5 and +70.1 against +42.6). So on the three
+      near-matched cases the port's halo is weaker from about 8 u outward and loses its warm tint from about 13 u. A CONFLICT NOT RESOLVED: the Order 7.2 rows (steps 85
+      and 94) record the opposite sign on 2-01's pair, the port's tail LONGER than the original's (R excess to 10 at 40.0 u against 27.6 +-6 u; at 16.9 u the port reads R
+      112 against the original's 81 and 83), and the readers cite step 85's core mean of 6.28 u against the original's 7.7-8.3: different baselines, one pair against
+      three, and both cannot hold on the same effect. It is NOT shown to be `halo_brightness_scale` (CMP-8): the fireball's light is read from `fireball.ent` (range 50,
+      colour (1, 0.5, 0.2), Scale 1.2; `lighting.json` `fireball`) and its falloff is Order 7.2's separate question; which knob moves the profile was not tested. Present
+      on every level that carries a carranca, medium or low by magnitude (the re-take read 10 of the 21), so a fix is not scoped to the ten. Next: FIRST a read-only
+      reconciliation on ONE pair (re-measure step 85's tail rows on 2-01 with this profile on the same frames); then, if the weakness holds, the fireball's light falloff
+      and halo size in `lighting.json` `fireball` and `effects.json` against the 8 matched stills on 2 sides (and the dragon's two mouth fireballs on 2-32). Gate: the
+      profile at 12-26 u within 15 percent on 2-02, 2-04, 2-07 and 2-28, the core unchanged (6-10 u), step 85's gates (8.94 u core, R 226 +-20) still met. Joins CMP-8's
+      owner decision only if the scale is the knob. GAMEPLAY: none.
+- [ ] **CMP-20. A crate the fireball burns draws no flame and no fade: the original puts `fire32` on it and fades it over 1000 ms** (medium; particles; `decoded`; moves
+      no route). NEW TO THE LIST by the re-take, not new in the build: the old readers filed it as low phase ('the crate is intact in the port, the shot still in
+      flight'); it is the recorded, decoded and unbuilt part of 'Found by step 120' and step 146's `fire32` ('a burnable crate's not drawn'). Levels: 2-05 (h2.8 an orange
+      flame over the right crate, t8.0 a flame column), 2-08 (h6.3 the last crate burning and translucent), 2-22 (h6.3 the left crate in a flame cloud with ember blobs,
+      h2.8 the right one); the port frame shows an intact crate with the fireball still in flight (a phase) or an explosion and no flame, and the changed pixels in those
+      boxes are the crates' blink (step 169), not a flame. Scope by census of `out/levels`: 29 levels carry a crate with `burnable` = 1, 12 of them also a carranca (2-01,
+      2-04, 2-05, 2-06, 2-08, 2-09, 2-14, 2-18, 2-22, 2-23, 2-25, 2-28), where a fireball can burn it. Cause (the listing, md5 `48fe65ce`): `crateCallback` (bytes
+      421145..421695) calls `manageBurnable` (420664..421145) at #14; for a burned crate `burnTime` starts at 0 and `addFlames` (420120..420459) puts `fire32.ent` at the
+      crate's position, sized by its width, with `targetID`; until `burnTime` reaches 1000 ms the colour and alpha bias is 1 - burnTime/1000, then the crate is deleted.
+      The port has `fire32` for characters and burned minions (step 146, `effects.json` `fire32`) and takes a burnt crate away whole at 1000 ms, with no flame and no
+      fade. The group is DRAWING ONLY, checked in the listing: `ETHCallback_fire32` (bytes 420459..420664) only follows its target (`SeekEntity(targetID)`,
+      `SetPositionXY` while it finds it: no damage, no spread, no light, no delete), the original's `fire32.ent` holds a particle system only (`applyLight` 0, `sensor` 0,
+      `density` 0, no Light element; `fire.png`, 32 particles, life 450 +- 300 ms), and the only other things `manageBurnable` does are the colour and alpha fade and the
+      delete at 1000 ms, which the port already does. Next: `addFlames` as decoded (`fire32` at the crate, sized by its width, following it) and the bias fade 1 -> 0 over
+      1000 ms on the crate's colour and alpha, in the code that today deletes the crate at 1000 ms; numbers in `effects.json` with the listing citation. The crate still
+      leaves at 1000 ms and no damage rule is added. Gate: the f420-f504 frames of 2-22 and 2-08 show the flame and the fade at the ticks the carranca's decoded schedule
+      burns the crate; the sweep changes only levels where a crate burns by f420; a pin in `test_mp_effects`; 3-30's 63-tick stand on a burning crate must not change.
+      GAMEPLAY: none.
 - [ ] **CMP-low. Residuals no play would notice** (low; 120 levels, 227 residuals; `unknown`, no step proposed). (a) PHASE (about 100 levels): animation, particle,
       flame, blink, mover and knight phases. Not defects of the port: the stills were timed by wall seconds on an emulator at 15-29 fps and the original runs two clocks
       the port runs as one (the HUD 0.49-0.94 s ahead of its world: `ui.json` `level_start._start_after`); a level-by-level fit puts `h6.3` at f440-f492, and chapter
@@ -4338,6 +4641,14 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       only if the owner wants the HUD / world clock offset modelled; (b) is an engine step (CAP-2: a contact margin, `PhysicsSettings` has none) that would move every
       route's rest heights; (c) is decided; (d) and (e) cost a footage read when a step next touches motions or sky. Joins: CAP-2, G3-2, G3-5, "Camera at 1-13", P5,
       step 77, G1a-8, Order 8.4, R3c-6.
+      *Re-taken 2026-10-15 (wave 4d-1): UNCHANGED in kind, re-read with this pass's numbers (every one of the 128 levels carries a low item). (d) BOB CENTRE is now the
+      most consistent low item: chapter 4's crystals read 3.1 px higher in the port on 23 of 24 (4-04 4.8), at f420 the original's diamonds are 5-8 px lower on 4-09 to
+      4-16 (4-10 8 and 7, 4-12 8, 1, 6, 4-13 7, 8, 7), 1-18 and 1-20 the same sign, 3-17 the original 3.6 px lower, 3-18 and 3-20 the port's gems 3-6 px higher, 3-01 and
+      3-02 the other way: about 60-70 levels at 3-8 px, part of it phase (the ranges overlap), and the cheapest to close with one bob-centre fit. (e) TONE: chapter 4
+      reads 1-2 percent darker (4-01 to 4-08 whole-frame 0.95-0.99 per channel, 4-09 to 4-16 0.9866 on static stone; not measured by the chapter 1-3 readers). (b) CAP-2
+      rest skin: the player 1.6-2.0 px low on 7 of chapter 4's last 8 levels and on chapters 1-3, crates and barrels 2 px, a stack adding up (2-10 crates 3-6 px, 2-16
+      barrels 4-6, 2-24 the player on his barrel 5). 4-22's sparkle depth (Order 8.4) is not reproduced on this build. Dropped as not defects: 4-20's achievement card,
+      3-07's 2 px shake of the original's still, 1-02 and 1-03's pad pulse and popup moment. Next: still no step.*
 - [ ] **CMP-R1. The comparison's own limits** (the verification's six low findings, `R4b/verify1.json`, and the triage's). (1) **The pairing is the record's convention,
       measured in part**: `h6.3` against f420 is not a measurement (f420 is 0.3-1.2 s early on the script clock; f450 is the extra set, +-0.4 s level to level); the
       script clock was fitted on four chapter 1-3 platform levels and 2-32's dragon; `h0.3` and `h2.8` use f75, f135, the level's own HUD tick (`CMP/hud_ticks.json`,
@@ -4358,6 +4669,50 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       newer than every compiled source) and on PX's build logs (0 `warning` lines), not on a rebuild at the close or a ninja up-to-date check. (8) One python launch,
       `python.exe` loading scipy's `_flapack` at 17:14:08, was refused by Smart App Control in the comparison phase (not a wave executable; the triage tools should
       avoid scipy). Next: the next measuring pass, after wave 4c's fixes, on the fixed build, with (1), (2) and (6) in hand.
+      *Re-taken 2026-10-15 (wave 4d-1): the limits stand, and the re-take adds its own in R4d1-3 and R4d1-4. (1) The pairing was NOT re-derived (the ticks, the sets and
+      the save rule are wave 4b's; `hud_ticks.json` is carried unchanged, md5 equal) and the script-clock fit on four platform levels and 2-32's dragon was NOT re-run.
+      (3) The seed is the same all-gold save; the 128 gold-seed f420 frames equal `WALL/after/sweep` (the owner's seed) byte for byte, 1-02 and 1-03 in their popup-up
+      form. (4) The audit this time found 15 of 16 levels agree and one miss (2-28's fireball halo, medium; the first audit found 16 of 16); the second reading of chunk 8
+      found a medium the first missed on 5 of 8 levels; the audit's sample holds no lightmapped level of chapter 2. (6) Edge rows, any pan or tremble and a window other
+      than 1280 x 720 are still not compared. (7) Build currency: `MagicPortals.exe` `f27dde1a` was checked by md5 at the start and the end of the sweep and nothing was
+      rebuilt. (8) No python launch was refused (0 CodeIntegrity events from 11:00). The row stays open.*
+- [ ] **R4d1-1. 1-15: `match` -> `minor` is a re-grade of a cause no step touched, not a regression of the build** (the one level whose verdict got worse; CMP-13; low).
+      The lower static portal over the pale sky: the original's iris is a neutral grey-white disc (mean RGB 143-159 / 130-160 / 165-181, luma 138-162 over six stills),
+      the port's a pink-magenta disc (182-206 / 151-182 / 214-239, luma 167-194 over six frames), no overlap; the old reading filed it on this level as low phase. The
+      portal's box (880,500)-(1000,620) holds 0 changed pixels against the old frame (step 167 changed only a strip at y 633-684, 2,334 px, the largest channel change 9)
+      and mean_abs is 3.07 both times; the verifier read the old and the new pair image and the same pink disc stands against the same grey-white iris in both, so the old
+      `match` was an under-grade and the old count of 26 held at least one level that was not. Likely step: none. Closes with CMP-13 (the rings' life-versus-brightness
+      curve against the 58 footage frames).
+- [ ] **R4d1-2. Numbers that rose, and mediums the old reading did not list** (the re-take's regression check; low; no build-caused regression found). (a) 1-22's f420
+      mean_abs 4.73 -> 4.77 (+0.04) is the only level whose f420 mean_abs rose: the cracked breakable column now blinks (step 169, CMP-9) and the port reads 0.92 of the
+      original at f420 and 1.01-1.03 at f75 and f240, so f420 sits at the dim end of the blink (8,908 of the 122,100 px of the lamp-wall box changed); the same dim end on
+      1-13 (68.0 against the stills' 71.5-84.5), 1-24 (8-9 percent) and 1-25. It is CMP9-6, now measured on three more levels. At the other sets the rises are small: 3-14
+      f75 +0.15 and own HUD tick +0.15 (the four cracked stones' pulse), 2-15 f75 +0.11, 1-09 f240 +0.06, 4-10 f450 +0.05, 4-02 f135 +0.04; none changes a verdict. (b) 22
+      levels show a medium the old reading did not list at medium (23 residuals: CMP-19 on 2-01, 2-02, 2-03, 2-04, 2-06, 2-07, 2-08, 2-28 and 2-32; CMP-14 on 2-10, 2-11,
+      2-16, 2-26, 2-27, 2-30 and 2-31; CMP-8 on 1-08, 1-10 and 3-25; CMP-20 on 2-05, 2-08 and 2-22; CMP-13 on 1-15). The test, for every residual with a box (490): the
+      pixels of the port's f420 frame inside the box that differ between the old pass and this one (`R4d/CMP/work_triage/box_changed.json`). Every one of those boxes
+      holds the same pixels as the old frame, or only the player, arch and blink pixels that steps 166 and 169 changed (the CMP-14 boxes are wide: 2-16 45,896 changed px
+      of 228,330, 2-30 102,184 of 371,100, which are the player, arch, blinks and hinge pose): they were there before and are named now that the lit player and arch no
+      longer fill the readers' attention. Next: nothing of its own; the rows it names carry the fixes.
+- [ ] **R4d1-3. What the re-take left untraced** (low). (a) 2-29's hinged plank leans 1.3 degrees in the original and stands vertical in the port (3 px at the ends): the
+      left edge x of the plank at y 240 / 270 / 480 / 500 is 813 / 815 / 818 / 819 on the original's h6.3, 815 / 815 / 815 / 815 on the old port f420 and 817 / 817 / 817
+      / 816 on the new (and f450), vertical in both ports, so the lean was never built and step 174 only moved the plank 2 px; no build-caused regression, and the lean is
+      not tied to the stone's clock (CMP-18). (b) Three stills' HUD reads moved with a cause not traced: 2-09's h0.3 caption 0.377 -> 0.461 and its h2.8 and h6.3 caption
+      -0.156 / -0.151 -> 0.0; 2-29's h2.8 and h6.3 plaque -0.185 / -0.188 -> 0.0; 4-30's -0.149 / -0.147 -> 0.0 (in each the old reading was negative, a box darker than
+      the estimator's background, and is now 0.0 = gone, as in every other still; the old pass's non-f420 frames were purged, so there is no before / after). (c) Two
+      levels' own HUD tick would change on the new reading (2-09 f120 -> f105, 2-25 f90 -> f105); `hud_ticks.json` was kept as the old pass wrote it so that old and new
+      numbers sit against the same ticks, and the other tick moves compare.py's h0.3 mean_abs by at most 0.4 grey levels. (d) 1-12's first launch of the sweep exited 0
+      after `Window close requested` at about tick 50 with no input the script scheduled (no `DEV tap`, `portal_launch` or `Escape` in its log); the one retry gave f420
+      `ab373cd0`, equal to the baseline. (e) The mover fit (the script clock) and the pairing were not re-run (CMP-R1). Next: nothing until a step touches those boxes.
+- [ ] **R4d1-4. The re-take's counts are the readers' verdicts under the old pass's one rule, and a lower bound on medium residuals** (the verifier's first two lows;
+      low). Quote 61 / 65 / 2 with: the readers' own labels are 58 / 68 / 2 (3-17, 3-19 and 3-23 are re-graded to `match` by the rule, every residual of them low); the
+      audit found 1 miss in 16 levels (6 percent) and the second reading of chunk 8 found a medium the first missed on 5 of its 8 levels (an upper bound: the chunk was
+      chosen because of the audit's miss); the other 15 chunks were not re-read, so medium misses of two classes (lit-stone softness on lightmapped levels, a light effect
+      on a moving object) are likely under-reported there, and the audit's sample holds no lightmapped chapter-2 level. The grading of one light cause is not uniform
+      across readers: CMP-8 is medium on 37 of its 57 levels and low on 20, and 3-19's fire-agent halo (very faint in the port) and lit stones (7-11 percent brighter) are
+      low where the same kinds of cause are medium on chapter 2 (CMP-19, CMP-14); so CMP-8, CMP-14 and CMP-19 are present on every level that carries the entity and a fix
+      is not scoped to the medium levels. Next, if the count is to be quoted outside this file: re-read one more chunk of lit levels of chapter 1 or 3 (read-only; the
+      verifier's advice), or say the sentence above. Open until then.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
