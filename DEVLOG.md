@@ -3653,3 +3653,119 @@ the arch, the key's light and the help block now read like the stills), so the d
 - **For wave 4c-2's gates** (what wave 4c-1's two failed gates teach): derive each gate's scope by a census of `out/levels` for the feature (revolute joints with a nonzero attach point B, `minion_spawn_` and `minion_spawn6`, 0.75-scale crates, breakable walls), never a hand-typed list (CMP-9's "the 32" missed 10 levels and CMP-3's "only the nine" missed 40); the re-flown routes get new ticks, so that wave's route gate reads "every route not named is on its old tick exactly, and each named route has a new census entry"; the only kept baseline sweep is `CMP10/after/sweep`; `R4c1-3(b)`'s three code mutations (step 168's two, step 167's column-major axis) run at the wave's first relink, so the owner is notified once.
 
 **Where it stands / next:** wave 4c-1 pushed; wave 4c-2 next (CMP-2, CMP-6, CMP-15, CMP-16, the breakable-wall rows, one route re-fly), then the comparison re-taken on the fixed build, then ship prep, which stops at `docs/permission.md` (still the placeholder) and at the repository's going public (the owner's word).
+
+
+### 2026-10-12 13:11 - Session 31: program wave 4c-2 - the gameplay groups built, the wall's gate, all 128 routes re-flown, pushed
+
+*Written 2026-10-15 at the close by this run's close role, from the records - planning steps 171-176 of `docs/planning/2026-09-11-magic-portals-remaster.md`, each step's reports
+under the gitignored `out/parity/program/<id>/` (`CMP6`, `CMP16`, `CMP15`, `CMP2`, `WALL`: `impl.md`, `census.md`, `commit.md`, `deviations.md`, `fix*.md`, `verify*.json`) and the wave's own
+`out/parity/program/R4c2/` (`mutations.md`, the two route censuses, the round notes, `verify1.json`, `finalize.md`) - and git, not from a transcript. 13:11 is the first Code Integrity
+query of the mutation role (`mutations.md`), not a measured start; the last role's report (the finalize) is stamped 02:46 on 15 October. The run was on the owner's standing order of 2026-10-10
+("just continue doing each step until you are finished or until i tell you to stop"), **paused on 2026-10-12 at about 20:50 on his order (usage limit) and resumed on 2026-10-14 on his "continue where you
+left off"**. Every number below is one a record states, or one this role measured and says so. This role built nothing and launched no executable; it checked the baseline, deleted scratch, ran the
+image purge, edited the two tracked files and `out/parity/BASELINE.txt`, and committed. **The wave was pushed before this close, by its finalize role: `origin/main` was `45f6c05`
+(`7e708e3..45f6c05`, six commits, 54 files, +3,856 / -504).***
+
+**Built:**
+- **Step 171 (CMP-6, `9797699`)**: the two spawn markers the script has no callback for (`minion_spawn_` on 3-09, `minion_spawn6` on 4-29) spawn no knight; the change is two names out of a row of
+  `data/entity_roles.json`, no code. 60 markers make 60 knights (62 before). GAMEPLAY: 3-09 has two knights, not three (the guard fell onto the killer floor on tick 58 of every run, with a 19.7 px
+  shake; achievement 31 now counts 2 from tick 1) and 4-29 has one. 4-29's box against the stills 18.0 / 18.5 / 18.4 -> 1.1 / 1.7 / 1.5. 2 levels change at f420. One verification, 11 gates, 1 medium (the route).
+- **Step 172 (CMP-16, `9d643c9`)**: a node's `scale` datum scales its picture, its body's box and its mass, as `scaleEntity` does: 72 nodes in 53 levels carry it, one has a body, 2-01's crate (0.75): body 58 ->
+  43.5 units, mass 5.17 -> 2.91 players, 180 -> 135 px wide (the original's 135). GAMEPLAY on 2-01. 1 level changes at f420 (the 52 antiportal levels, which carry the datum too, are byte-identical).
+  Mean abs to the stills 4.20 -> 3.31 (the step's own before; the first record said 7.04, see Broke). One verification, 10 gates; the implementer's three links of the game were refused, so the verifier took gates 2 and 3.
+- **Step 173 (CMP-15, `12ac5d5`)**: a bounce slab is placed (`PlaceKinematic`), not moved with a velocity (60 px/s on tick 1 before, 0 on every tick now). GAMEPLAY: 4-02's astronaut is shoved by his slab and no longer
+  carried off it: his eye 364.5 (15.5 px high) -> 380.4 at f420 against the original's 380.06. 1 level changes at f420. **Gate 3 NOT met literally**: the eye is in the +-1 px band from f150 (21 of 21 frames) but not
+  at f75-f135 (383.10 at f75, the same before and after: the start offset, which the decode says the original's astronaut has too). Three verifications, none a pass, committed with recorded deviations.
+- **Step 174 (CMP-2, `cad4a2f`)**: a revolute joint has two ends. The converter carries attach point B (`joint_other`, `joint_anchor_b_x/y`: 10 of the 128 `out/levels` files, three added lines each, re-converted into a staging directory
+  and compared first) and the hinged body stands where its joint holds it: 10 joints in 10 levels, 8 move, 2-31's seesaw 31.8 px (89 px on screen) from where the level places it. GAMEPLAY on ten levels. The plank against the stills
+  (-14.22, +28.44) -> (0, 0) on 2-31. 7 levels change at f420 (2-30 by ONE pixel, cause inferred). Converter `pytest` 121 passed (9 new), `ruff` clean. One verification, 11 gates, 1 medium (the route clause).
+- **Step 175 (WALL, `ab18b1b`)**: `ETHBeginContactCallback_breakable_wall` as the original has it. A stone breaks a wall only if it BEGINS to touch it faster than 75 u/s (1.5 m/s, the whole velocity, strictly above), and a
+  `destroyable` stone dies with the first wall it breaks (12 placed stones on 10 levels, and every stone a launcher throws). GAMEPLAY on 15 levels, 8 routes moved. **0 levels change at f420: no stone touches a wall in the
+  420 ticks of an unplayed level, so the sweep cannot show the rule** (WALL-11). Three verifications, none a pass; the second found 3-13's wall holding at 1.333 m/s where the layer's own watch reads 2.000, fixed by a second look
+  with the larger reading judging (an inference of the port's, WALL-5). Committed with 11 recorded deviations.
+- **Step 176 (the route phase, `45f6c05`)**: 14 route authors, side by side, one round: 13 routes re-flown and a 14th tightened (3-19, inputs unchanged, `win_by` 865 -> 840). **128 of 128 levels win again**: 117 on exactly their
+  census tick (114 untouched files, 3 rewritten on the same tick), 11 on another (8 earlier, 3 later), none unwon. 14 files in `tests/routes/`, no source file. The independent verifier passed 9 gates (2 medium, 5 low) with its own
+  launch of the whole runner (57 of 57, 33,730 checks), all 128 routes replayed twice identically, 128 launches byte-identical to WALL's sweep and exactly 11 levels changed against the old baseline.
+- **The mutation check** (`R4c2/mutations.md`, 2026-10-12, no commit): wave 4c-1's three unrun code mutations on one runner build (`81127657`), each suite launched once, 0 Smart App Control refusals. The key's light a tick
+  behind (A) and its particle share (B) are each caught by `test_mp_layer`, by a pin of its own; the column-major bucket order (C) is caught by `test_mp_sprites` (3 failures of 2,061) and **survives in `test_mp_layer`**, whose nine
+  observed pairs cannot tell the axes apart (CMP6-9 now carries the three pairs that can). `test_mp_keys` 182 / 0 as the control. No mutation survived the suite that owns its rule. CMP7-3, CMP3-6 and R4c1-3 (b) are settled on it.
+- **The close (this role)**: `docs/parity-backlog.md` updated - the date, three definition-of-done annotations (routes; reachability; "the largest fixed" met for nine groups, not as a whole), the four hashes in the CMP closing notes
+  (they said "the wave's close names its hash; NOT PUSHED"), CMP-16's numbers corrected to 4.20 -> 3.31, CMP-18 annotated (CMP-2 is not its cause), R4a-1, R4a-3 and R3b-2 ticked on the re-flown routes with their limits,
+  Order 11.1 annotated and left open, CMP7-3 and CMP3-6 ticked on the mutations, the follow-up rows the route phase closed ticked (CMP15-2, CMP16-7, CMP2-5, WALL-1, WALL-2, WALL-4, WALL-8) and the rest annotated (WALL-3, -5, -6, -7), the
+  three discriminating pairs in CMP6-9, the "Wave 4c-2" paragraph with "What the next wave should take (wave 4d)" (the old wave 4c-2 list bracketed), 13 rows R4c2-1 to R4c2-13 (9 open), and the owner's calls extended; and this
+  entry. The wave opened 53 rows (the five steps' 40 and 13 of its own); 24 are closed or settled, 29 open. Older rows closed: CMP-2, CMP-6, CMP-15, CMP-16 (9 of the comparison's 18 causes with wave 4c-1's five), R4a-1, R4a-3,
+  R3b-2, CMP7-3, CMP3-6.
+- **The wave's image purge** (the owner's standing order, 2026-10-03: delete images once finished with them). Before it, by `df`: free disk 100.55 GiB. The new standing baseline is the final build's f420 sweep,
+  `program/WALL/after/sweep` (128 PNGs, 1280 x 720; taken on `MagicPortals.exe` `357fae09`, step 175's fix 2; the committed build is `f27dde1a` and the route phase's verifier's 128 launches on it equal this folder md5 for md5, by
+  `R4c2/verify1/sweep_md5.txt`). I checked all 128 (PNG signature, IEND tail with no NUL padding, 1280 x 720, md5 equal to that list) before and after the purge and wrote `out/parity/BASELINE.txt` first: the comment line and exactly
+  `program/WALL/after/sweep`, `program/R4b/CMP/port_f420`, `program/R4b/CMP/pairs` (it replaced `program/CMP10/after/sweep`). I deleted the wave's 87 scratch `--saves` folders (2,735 `scores.json` / `achievements.json` copies, 0.6 MB; a
+  script checked that each held nothing else and parsed, and refused anything under `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/`; the 299 saves folders of earlier waves were listed and left) and step 174's `levels_before` (128
+  `.tscn`, 2.4 MB), dry-ran `purge_images.py all` (835 files, 0.60 GB, 0 refused; my own per-folder tally agreed: CMP10 128, CMP15 270, CMP16 130, CMP2 134, CMP6 147, R4c2 8, WALL 18) and ran it with `--delete` (835 deleted).
+  **Freed 835 images, 0.60 GB; free disk 100.55 -> 101.12 GiB by `df`.** The baseline, `port_f420` and `pairs` still hold 128, 130 and 256 images by a recursive count, all opening, and `merge_w1/sweep_saves/scores.json` is still `40bfef3a`.
+  `git status` was unchanged by the purge (it printed nothing before the edits). A consequence the backlog records: the pre-wave baseline and each step's own after-sweep are gone, so a veto of the fire agent's pulse would compare its
+  new sweep with `WALL/after/sweep`, which already carries this wave.
+
+**Broke / dead ends:**
+- **The wave stopped in the middle of a step.** The usage limit paused it with CMP2 half built and uncommitted and WALL not started; the resumed run finished CMP2 (its port-side mutations from the interrupted role were never
+  re-run by anyone) and then built WALL, so 174 and 175 are two days after 171.
+- **Step 172's first record was wrong in three places.** The implementer's three `MagicPortals.exe` links were each refused on their first launch, so it never took the sweep or the crate measurement, and its "135 x 131 computed" was 3 rows
+  off (it used the spec's 175, which reads 6 rows into the platform); the verifier took both. The record then said 7.04 -> 3.31 for the crate, but 7.04 is R4b's frame from before wave 4c-1's five drawing steps, which had already
+  gained about 2.8 of those 3.7 points; the crate's own gain is 4.20 -> 3.31. And its gate 6 said "met" while 4-29 was red. Step 176 corrected the two cells; **the pushed commit message of `9d643c9` still says 7.04**, because history is not rewritten.
+- **Step 173 never passed a verification.** The eye of 4-02's astronaut sits 3.1 px low at f75 before and after the fix and the decode, as the implementer reads it (an inference), says the original's does too; the gate may ask for a state the original is not in, and each of the three
+  verifiers raised it as a medium. Nothing was tuned; the gate's text was not changed; it is a recorded deviation (CMP15-1).
+- **Step 175 built the wrong verdict for 3-13 first.** The history reads 1.333 m/s there (89 percent of the gate), the free-flight replay 2.000 one tick later; the first version read only the first and the wall held. The round-2 verifier
+  found it; fix 2 reads both and the larger judges, which is a port inference, not the original's callback (it runs once). The verifier's own suggestion - judge only at the replay's begin - was built, measured and dropped because it flipped 1-22's first stone
+  from 3.162 m/s (breaks) to 0.015 m/s (holds). Fix 2's first mutation attempt applied two mutations at once and masked the others; it was redone one rule at a time through an environment variable.
+- **The route clause was graded inconsistently across steps** (172 "met", 173-175 "NOT MET literally") for the same inherited failures; 172 was corrected. For steps 173-175 it stays NOT MET at their commits and is met on the final tree by step 176.
+- **The route phase cost something.** **1-20 no longer unlocks achievement 48** (8 portals or fewer): the old route had one stone break both walls, which is what WALL took away; the new route needs 10 portals and nobody found an 8-portal way (R4c2-1).
+  **1-22's natural two-portal solution works only in a narrow chaotic cell** because the engine brakes a closing stone early and the wall's first look needs it within 1 unit; the shipped route feeds the second stone through a pair and depends on
+  stones coasting at about 0.21 u/tick (R4c2-2). **4-21 is a 2-unit aim band** on the owner's 60 Hz (R4c2-3). Five routes' sounds changed with no single step traced (R4c2-7).
+- **The 14 route authors shared `%TEMP%`**: two found their scratch overwritten, and one launch of `test_mp_routes` printed `3 checks, 1 failures` without playing the route, probably another author's runner on the same files; it never recurred with a
+  private `TEMP`, and the verifier replayed all 128 twice identically (R4c2-11).
+- **Smart App Control refused 10 launches of this repository's executables** (counted at this close from a CodeIntegrity 3033/3077 query from 2026-10-12 13:00): step 172's implementer 5 (`test_mp.exe` 16:01:53 and the mutated one 16:10:02,
+  `MagicPortals.exe` 16:02:42, 16:02:54 and 16:03:21; the last one ran at 16:29 with no relink, so the refusal was transient), step 173's 1 (`MagicPortals.exe` 17:21:55), step 174's first role 2 (`MagicPortals.exe` 20:31:43 and 20:31:55) and step 175's 2
+  (`test_mp.exe` 21:44:07 and 00:22:53); each relinked once and the relinked one ran. None in the mutation check, step 171, step 174's resumed role, the verifiers, the route phase, the finalize or this close. The same query lists events that are not this
+  repository's: MiKTeX's `pdftoppm.exe` (19) and `pdftotext.exe` (8) on 13 October, 12 events of `python.exe` (10) and `powershell.exe` (2) from another project's scratchpad (`Urban Heat Study`, 13 October 10:21 to 10:36) and one Office `aimgr.exe` (14 October 10:24).
+  Earlier waves: 83, 19, 2, 4, 9, 3, 13, 5.
+- **My own slips**: my first scan for the wave's scratch saves folders found 0 candidates, which I did not believe: the protection predicate treated every ancestor of a protected folder, `out/parity` itself, as protected, so the walk
+  stopped at the root (found by the zero, before anything was deleted; I split it into "inside a protected folder" and "contains one"). A one-shot patch of that script through two nested heredocs hung until the tool's timeout and
+  was stopped; I rewrote the script as a file instead. The dry run printed all 299 earlier-wave saves folders as "elsewhere", which was noise, and nothing under them was touched. `docs/parity-backlog.md` was CRLF in the working tree (`git ls-files --eol`
+  `w/crlf`, index LF); I converted it with `sed` before editing so the multi-line edits matched, and `git diff` showed no content change before my edits. My first draft of the Wave 4c-2 paragraph said the verifier re-took "nine" gold-seed levels where its
+  gate 7 reads six census levels and one control, and gave 4-29 "6 portals at the door" where the route phase's table has 6 -> 4; both are corrected in the file. My first attempt to append this entry failed in the shell on its quoting and appended nothing; it was written to a file and appended from there.
+
+**Decision:**
+- **The wave was pushed by the finalize role, not by me**: it was already `origin/main` when this close started (`git status -sb` read `## main...origin/main`); the close is one more fast-forward commit of the two files.
+- The new baseline is `WALL/after/sweep`, not a fresh capture: the verifier's 128 launches on the committed pair matched it byte for byte and this close launched nothing, so it could not cause a refusal. Its exe line says `357fae09`, not `f27dde1a`; the backlog says so.
+- **R4a-1, R4a-3 and R3b-2 are ticked, with their limits written in the row** (1-20 loses achievement 48; 1-22 rests on a portal-fed stone and a coast; 3-12 on a 39-unit fall): the rows asked for a re-flight and it was done. WALL-3, WALL-5, WALL-6 and WALL-7 are NOT
+  ticked: the speeds are the port's and none is measured on the original, the larger-of-two-readings rule is an inference, the hand-over has no unit pin, and no full `port_build.bat` ran in the whole wave. **Order 11.1 stays open** for its other clauses.
+- CMP2-5, WALL-1, WALL-2, CMP15-2 and CMP16-7 are ticked as the follow-ups they were, and each says the step's own gate text stays NOT MET at its commit; I rewrote no gate.
+- I did not run `port_build.bat` and did not launch the runner for CMP6's second witness (CMP6-8): both would relink or launch under Smart App Control and notify the owner, and neither is what a close is for; both stay open rows.
+- The planning document was not edited (the commit is the two files): steps 171-175 still say "not pushed" in their own paragraphs, which was true when they were written; the backlog and this entry say pushed.
+
+**Where it stands / next:** nothing of wave 4c-2 is open on the push side. Next is wave 4d: **the final comparison re-taken on the fixed build** (the read-only measuring pass of wave 4b over again, from `tools/parity` and `out/parity/program/wave_scripts/gen4b.py`, against
+the kept `R4b/CMP/port_f420` and `R4b/CMP/pairs`: which of the 58 levels that differed still differ, and with which CMP groups). What stays: the rig clips (CMP-4, CMP-5, CMP-13, R3c-11, R4a-2, and now one clip of a stone rolling and falling into a breakable
+wall for WALL-3, WALL-5 and R4c2-2, and footage of 1-20 for R4c2-1), CMP-14's port-only experiment, CMP-18 (WT-10: CMP-2 was not its cause), the owner's calls (the halo scale CMP-8 with CMP-12 after it, the engine's friction and restitution steps CMP-11, R24 CMP-17, the HUD / world clock offset,
+CAP-2, 2-30's creep R3-2, STK-8, G10-2, R25, `crate_low_emissive`'s 0.08), and the ship preparation: `docs/permission.md` is still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder (the owner's to fill), the play build (`tools\parity\play_build.bat`, none built), the README and LICENSE, the
+release zip and the repository's going public, which needs his explicit word.
+
+**Assets check:** yes - `git status --short`, run after appending this entry and the backlog edits, lists exactly:
+
+```
+ M DEVLOG.md
+ M docs/parity-backlog.md
+```
+
+nothing under `reference/` or `out/` (`git ls-files out reference | wc -l` prints 0). The forbidden-extension grep over the changed names printed nothing
+(`png|bmp|jpg|jpeg|mp3|ogg|wav|esc|ent|tscn|enml|par|fnt|apk`, `^out/`, `^reference/`); the wave's own range `git diff --name-only 7e708e3..45f6c05` holds 54 files, none under `out/`, `reference/` or `engine/`
+(14 under `tests/routes/`, 15 under `game/sim/`, 7 under `game/data/`, 3 under `tools/converter/`). The owner's save folder holds `scores.json` alone (164 bytes, md5 `40bfef3ac396b4e94bdd97990401435a`).
+
+**[CLIP] -** None.
+**[BROLL]** - None.
+
+**Numbers:** `7e708e3..45f6c05`: 6 commits (5 steps and the route phase), 54 files, +3,856 / -504; this close's commit is two files. 57 suites, 33,730 checks (33,132 at the start: +598 = demolish +246, minions +154, hinge +74, timebase +50, layer +30,
+levels +21, bounce +14, launchers +10, routes -1). Routes won 128 of 128, `test_mp_routes` 2,365 checks (2,366 before); 117 on exactly the census tick, 11 on another, 0 unwon; 14 route files changed. Reachability 108 / 20 / 0. Levels changed at f420
+against the old baseline: 11 of 128 (3-09, 4-29; 2-01; 4-02; 2-28, 2-29, 2-30 by one pixel, 2-31, 3-20, 4-11, 4-31); per step 2, 1, 1, 7, 0, 0. GAMEPLAY changed: steps 171-175 (3-09, 4-29, 2-01, 4-02, ten hinge levels, 15 wall levels). Rows opened 53 (CMP6 9, CMP16 7,
+CMP15 6, CMP2 7, WALL 11, R4c2 13), 24 settled. Smart App Control refusals 10 (4 `test_mp.exe`, 6 `MagicPortals.exe`). Images: 835 deleted, 0.60 GB, plus 87 scratch `--saves` folders (2,735 JSON copies, 0.6 MB) and 2.4 MB of `levels_before`; free disk 100.55 -> 101.12 GiB.
+
+**Inferred mood:** a guess from the facts - the wave ended better than it ran: two days of steps that each broke routes and each came out of verification with a "not met literally" attached, a pause in the middle, and then one round in which fourteen
+authors turned 13 red routes green. The losses are small and specific (one achievement, two fragile routes) and every one is written down with what would settle it, so the day probably ended feeling like a reckoning rather than a setback.

@@ -1,6 +1,6 @@
 # Magic Portals parity — backlog
 
-State at 2026-10-12 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
+State at 2026-10-15 (first written 2026-09-15). What remains to make the **Supersonic port** (`game/` here since 2026-09-19; before, `Desktop/Supersonic-Engine/games/magicportals`)
 match the original, in the order it should be done. Every spec named here lives under
 `Magic-Portals-Enhanced/out/parity/specs/` (gitignored, local only — re-creatable from the reference library).
 
@@ -1591,6 +1591,9 @@ work no step of §7 owns, and the owner's calls:
       (1-19, 1-20, 1-22, 2-29, 3-10, 3-12, 3-14, 4-21: no longer won) which the route phase (step 176) re-flies. The row stays open: its other clauses are not this step's
       (the notes on steps 133, 115 and 118 above say which are built), and 1-19's and 1-20's re-flight is step 176's. Step 175's recorded deviations WALL-1 to WALL-11 are
       below, after step 174's.*
+      *Step 176 (the route phase, `45f6c05`), 2026-10-15: the first clause is built AND its eight moved routes are re-flown and win (1-19, 1-20, 1-22, 2-29, 3-10, 3-12, 3-14,
+      4-21; 1-24 and 1-25 and the other five clause levels win on their census ticks). The row stays open for its other clauses (3-20's placed stone and its destroyier,
+      and the beholder breaking any demolisher stone: the row's own list); the first clause is done.*
 - [ ] **Order 11.1, recorded, and tidy** (step 109): the wall's angle is the converter's 1.5708 rad (-90.00021 deg, 0.0002
       u over the half line); static callbacks add their dust only while their bucket is drawn in the original
       (deviation 6, with steps 78-80's rows); 2-32's claw's `wall_destroy` at angle 90 has no owner in 00_order section 7;
@@ -1810,6 +1813,14 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       route and no finding file was needed: this bullet is MET**, with the caveat that several routes stand on a port behaviour the
       original is not shown to have (R4a-1 to R4a-8), each stated in its own `_about`.*
       *Wave 4c-1: 128 of 128 routes win on exactly the census's ticks (83 to 3,343) after each of steps 166-170 and in all three verifications; no route file was touched.*
+      *Wave 4c-2 (steps 171-176, pushed `7e708e3..45f6c05`, 2026-10-15): the five gameplay steps broke 13 routes and moved a 14th (`test_mp_routes` was red from step 171 to step
+      175), and step 176 re-flew them: **128 of 128 levels are won again by a route `test_mp_routes` replays** (128 files, 2,365 checks, 0 failures; chapter 1: 32, chapter 2: 32,
+      chapter 3: 32, chapter 4: 32; the independent verifier passed 9 gates, replayed all 128 twice with identical win lines). 117 win on exactly the census tick of
+      `R4/census_after_round1.md` (114 untouched files and 3 rewritten on the same tick), 11 on another tick (8 earlier, 3 later), none late, **none unwon**. The 14 files:
+      13 re-flown and 3-19 tightened (`win_by` only). **Not as before**: no route now unlocks achievement 48 (1-20: the new route needs 10 portals; R4c2-1), so the
+      "achievements as before" clause of the route gate is NOT MET literally; the four stealth achievements (26, 28, 32, 42) are unchanged. Two of the re-flown routes (1-22 and 4-21) and the
+      untouched 3-13 stand on something not measured on the original (R4c2-2 to R4c2-4). The census file future route gates compare against is
+      `R4c2/census_after_round1.md`.*
 - A static reachability check over the converted levels runs as a test and shows no door sealed by the port.
   *(Step 113: `tools/parity/reachability.py`, pinned in `reachability.json`, runs as ctest `parity_reachability`;
   it shows 108 reachable, 11 opened, 9 sealed - B1's nine. Step 115's `barrel` breaker turns the nine to opened:
@@ -1849,6 +1860,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
       trigger (R4a-4, STK-8), so 108 / 20 / 0 does not speak to that box. The routes are the evidence.*
       *Wave 4c-1: 108 / 20 / 0 with 0 differ at each of steps 166-170 and in the three verifications. The five steps change colours, a draw order, a light, a blink and
       a picture's alpha and scale: nothing the flood reads, so none can move a verdict. It still has no `destroyier.ent` term.*
+      *Wave 4c-2: 108 / 20 / 0 with 0 differ at each of steps 171-175 and in the route phase's verifier. The flood reads no knight marker, no body's scale, no slab's
+      velocity, no joint and no stone's speed, so none of the five steps can move a verdict; **it has no speed term and no one-wall-per-destroyable-stone term, so it is no
+      evidence for step 175's rule (WALL-4): the 128 routes are**, and no level is sealed by it. It still has no `destroyier.ent` term.*
 - Every blocker and major below is built as the original does it, or its ruling is recorded.
 - The final 128-level comparison against the original's library (section 5) has run and its residuals are recorded,
   the largest fixed.
@@ -1859,6 +1873,11 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   78 levels, 52 of the 58 `differs` levels), CMP-3, CMP-7, CMP-9 and CMP-10 (steps 166-170) - so the largest cause is fixed; "the largest fixed" is still NOT met as a
   whole: the four groups that change gameplay (CMP-2, CMP-6, CMP-15, CMP-16) are decoded and unbuilt and wave 4c-2 takes them, and the five fixes have not yet been
   re-compared against the stills (the next measuring pass does, against `CMP/port_f420` and `CMP/pairs`).*
+  *Wave 4c-2, 2026-10-15 (pushed): the four groups that change gameplay are built and committed - CMP-6 (step 171), CMP-16 (172), CMP-15 (173) and CMP-2 (174) - with the
+  breakable wall's contact (175) and the route phase (176); the f420 sweep changes 11 levels (3-09, 4-29, 2-01, 4-02, 2-28, 2-29, 2-30 by one pixel, 2-31, 3-20, 4-11,
+  4-31), each toward the stills where measured. "The largest fixed" is met for the nine decoded groups (CMP-1, -2, -3, -6, -7, -9, -10, -15, -16); it is NOT met as a whole:
+  the comparison has not been re-taken on the fixed build, and CMP-4, -5, -8, -11, -12, -13, -14, -17, -18 and CMP-low stay open (the rig clips, the owner's calls and the
+  untraced). This bullet stays open until the re-take.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2452,7 +2471,7 @@ opened, 10 of them closed or settled (CMP1-1, CMP3-5, CMP7-2, CMP7-6 by this clo
 CMP-3, CMP-7, CMP-9 and CMP-10 (5 of the comparison's 20), G1a-11, and step 72's 1-07 ring deviation (with its limit); "Script-driven emissive" (section 1), Order 11.3's
 deviation 9 and G1a-2 are annotated and stay open.
 
-**What the next wave should take (wave 4c-2)**, in this order. **R4c1-1 is ruled** (option (a), its row: the pulse stays, CMP-9's scope is 42 levels, the wave is pushed); the wave's `CMP10/after/sweep` is the
+**What the next wave should take (wave 4c-2)** *[wave 4c-2 took (1)'s gameplay steps and (3)'s code mutations: its record is the "Wave 4c-2" paragraph that follows, and what is left is re-listed there as wave 4d's]*, in this order. **R4c1-1 is ruled** (option (a), its row: the pulse stays, CMP-9's scope is 42 levels, the wave is pushed); the wave's `CMP10/after/sweep` is the
 baseline every step below measures against. Then: (1) **the groups that change gameplay,
 each its own step with its gates** (the f420 sweep changes only the levels the group names, each change explained against `CMP10/after/sweep`; the group's boxes read the
 original's; the group's pair images re-taken): **CMP-2** (high: the revolute joint's attach point B: the converter carries it and the hinge uses it, a change on both sides of the
@@ -2479,6 +2498,84 @@ camera R3-3, STK-8, PIC-1's smoothing above 80 Hz, the halo scale CMP-8, CMP-9's
 public, which still needs the owner's explicit word**. **With the wave**: R3b-6 and R3c-9 (`win_by` of the 85 older routes tightened when those files are next touched), 3-20's
 knife-edge (R3-4), the comment-only fixes that wait for their file's next real edit (the two comments of `game/sim/Resting.hpp` among them: a widely included header) and
 WAKE-7's tests, with R4a-10's one check.
+
+
+**Wave 4c-2 (the comparison's four gameplay groups, the breakable wall's contact and one route phase: CMP6, CMP16, CMP15, CMP2, WALL, then the re-fly; 2026-10-12 13:11 to 2026-10-15
+02:46; closed and PUSHED 2026-10-15).** A mutation check (no commit), five gameplay steps (planning steps 171-175), one route phase (176), an independent verification of the whole wave
+and a finalize that pushed, on the owner's standing order of 2026-10-10. The run was **paused on 2026-10-12 at about 20:50 on the owner's order (usage limit) and resumed on 2026-10-14
+on his "continue where you left off"** (CMP2's work was half built and uncommitted; WALL had not started). 13:11 is the mutation role's first Code Integrity query
+(`R4c2/mutations.md`), not a measured start; 02:46 is the route-phase commit. **`origin/main` is `45f6c05`: six commits, `7e708e3..45f6c05`, a fast-forward pushed by the finalize role
+(54 files; every author and committer IvanCvetanovic, no trailer, each message ending `Record: ... step N`); the engine pin stayed `710bffc`.** Every step's scope was a CENSUS of the
+converted scenes and the original's raw files, written first (wave 4c-1's lesson): the hint was exact for CMP-6, CMP-16, CMP-15 and CMP-2, and WALL's census named eight levels the route hint
+did not (1-09, 1-13, 2-04, 2-29, 3-10, 3-13, 3-18, 4-21).
+
+| Step | Row | Commit | Outcome | f420 sweep changes | GAMEPLAY | Routes |
+|---|---|---|---|---|---|---|
+| 171 | CMP-6 | `9797699` | the two markers the script never runs (`minion_spawn_`, `minion_spawn6`) spawn no knight: `enemy_spawn.names` is `["minion_spawn"]`, 60 knights from 60 markers (62 before); 4-29's box mean abs to the stills 18.0 / 18.5 / 18.4 -> 1.1 / 1.7 / 1.5 (h0.3 / h2.8 / h6.3), dark pixels 7,383 -> 380 (the original's 380); verified once (11 gates, 1 medium, the route, 6 low) | 2 (3-09: 80 px, the shared effects stream; 4-29: 7,779 px) | **YES**: 3-09 two knights, not three (the guard's death on tick 58 gone, achievement 31 now counts 2 from tick 1); 4-29 one, not two | 4-29 unwon until 176 |
+| 172 | CMP-16 | `9d643c9` | a node's `scale` datum scales its picture, body and mass: 2-01's crate 58 -> 43.5 units, mass 0.5382 -> 0.3028 (5.17 -> 2.91 players), 180 -> 135 px wide (the original's 135); mean abs h6.3 **4.20 -> 3.31** (corrected, see CMP-16); verified once (10 gates; gates 2 and 3 were taken by the verifier after three refused links) | 1 (2-01: 27,328 px; the 52 antiportal levels byte-identical) | **YES**: 2-01's crate | 2-01 unwon until 176 |
+| 173 | CMP-15 | `12ac5d5` | a bounce slab is placed (`PlaceKinematic`), not moved with a velocity: the slab's velocity 60 px/s on tick 1 -> 0 on every tick; 4-02's astronaut eye 364.5 (15.5 px high) -> 380.4 at f420 against the original's 380.06; committed with recorded deviations: **the gate's f75-f135 frames NOT met** (the start offset, 383.10 at f75 before and after: CMP15-1); three verifications, none a pass (2 medium each) | 1 (4-02: 10,321 px) | **YES**: 4-02's astronaut is shoved, no longer carried | 4-07 unwon until 176 |
+| 174 | CMP-2 | `cad4a2f` | a revolute joint has two ends: the converter carries attach point B (`joint_other`, `joint_anchor_b_x/y`; 10 of 128 `out/levels` files, 3 lines each) and the hinged body stands where its joint holds it: 10 joints in 10 levels, 8 move, 2-31's seesaw 31.8 px; the plank against the stills (-14.22, +28.44) -> (0, 0), 2-31 mean abs 5.51 -> 2.56; converter `pytest` 121 passed (9 new), `ruff` clean; verified once (11 gates, 1 medium: the route clause) | 7 (2-28, 2-29, **2-30: one pixel, cause inferred**, 2-31, 3-20, 4-11, 4-31) | **YES**: ten levels' hinged bodies | 2-31, 3-20 unwon; 3-19 on 827 |
+| 175 | WALL | `ab18b1b` | the breakable wall's contact as the original has it: a stone breaks a wall only if it BEGINS to touch it above 75 u/s (1.5 m/s, the whole velocity, strictly), judged at up to two instants with the larger reading (fix 2), and a `destroyable` stone dies at the first wall it breaks; 15 census levels; three verifications, none a pass (the second found 3-13's wall holding at 1.333 m/s, fixed by a second look), committed with 11 recorded deviations | **0** (no stone touches a wall in 420 ticks: the sweep cannot show the rule, WALL-11) | **YES**: 15 levels | 8 unwon until 176 |
+| 176 | the route phase | `45f6c05` | 13 routes re-flown and a 14th tightened by 14 authors side by side, one round; 128 of 128 won; verifier pass (9 gates, 2 medium, 5 low); **achievement 48 no longer demonstrated** (R4c2-1) | 0 (128 of 128 byte-identical to WALL's) | none | **128 of 128** |
+
+**Verification.** Steps 171, 172 and 174 passed their one verification; 173 and 175 took three each and none passed (CMP15: gate 3's f75-f135 frames and gate 6's route clause; WALL: the
+route clause, the unmeasured speeds and 3-13's inference, after the second round's finding was fixed), both committed with recorded deviations by the standing order's delegation, no gate's
+text rewritten to read as met. **The route clause ("every route outside the census wins on EXACTLY its tick") was NOT MET literally at the commit of steps 173, 174 and 175** (and step 172's
+cell that said "met" is corrected to the same words); the route phase met it on the final tree (planning step 176, deviation 5). The route phase's independent verifier (`R4c2/verify1.json`,
+`pass: true`, 9 gates) re-derived everything it could: its own launch of `test_mp.exe` with no argument, all 128 routes replayed twice with identical win lines, 14 + 1 routes read with
+`--trace 1`, a fresh re-conversion of all four worlds byte-identical to `out/levels`, 128 launches of `MagicPortals.exe` `f27dde1a` byte-identical to `WALL/after/sweep` and exactly 11 levels
+changed against `CMP10/after/sweep`, and gold-seed re-takes of six census levels and one control read against the stills (4-29 1.31 -> 0.85, 2-01 4.20 -> 3.31, 4-02 7.51 -> 7.17, 2-31 5.51 -> 2.56, 3-20 4.26
+-> 3.88; 3-09 and the 3-13 control unchanged; WALL claims no f420 change).
+
+**The mutation check** (`R4c2/mutations.md`, 2026-10-12, no commit): wave 4c-1's three unrun code mutations (R4c1-3 (b)) applied together to ONE runner build (`81127657`) and launched once each,
+0 Smart App Control refusals: A (the key's light not a tick behind) and B (a particle share on it) are each caught by `test_mp_layer` by a pin of their own, C (the bucket order column-major)
+by `test_mp_sprites` and not by `test_mp_layer`, whose order test cannot tell the axes apart (CMP6-9, with the three pairs that can). **No mutation survived the suite that owns its rule.**
+CMP7-3, CMP3-6 and R4c1-3 (b) are settled on it (R4c2-13).
+
+**The route phase (step 176).** At its start 115 of 128 won and 13 did not (4-29; 2-01; 4-07; 2-31 and 3-20; 1-19, 1-20, 1-22, 2-29, 3-10, 3-12, 3-14 and 4-21; 3-19 won 5 ticks early); one round of fourteen
+authors later **128 of 128 win**: **117 on exactly their census tick** (114 untouched files and 3 rewritten on the same tick: 3-20 555, 4-07 446, 4-29 1,023), **11 on another** (8 earlier: 1-19 271 -> 184,
+2-01 444 -> 307, 3-10 1,017 -> 943, 3-14 1,141 -> 1,087, 4-21 370 -> 360, 2-29 569 -> 564, 3-19 832 -> 827, 3-12 639 -> 636; 3 later: 1-20 596 -> 825, 1-22 535 -> 666, 2-31 405 -> 446), 0 late, 0 unwon. 14 files
+changed in `tests/routes/` (+384 / -286), `win_by` 12 to 15 over each; by cause CMP6 1, CMP16 1, CMP15 1, CMP2 3, WALL 8. Shots changed on 1-19 (6 -> 4), 1-20 (8 -> 10), 3-10 (2 -> 4) and 4-29 (8 -> 6); medals at the door
+on 3-12 (2 -> 3), 3-10 (2 -> 3) and 2-31 (2 -> 1). **No level is sealed by the wall's rule**, but 1-20, 1-22, 3-10, 3-12 and 4-21 are won by a different idea than the old route's and three of them (1-22, 4-21, and 3-13 untouched)
+stand on something not measured on the original (R4c2-2 to R4c2-4); **1-20's achievement 48 is not demonstrated by any route** (R4c2-1). The four stealth achievements (26, 28, 32, 42) are unchanged.
+
+**Suites and checks**: 57 suites, 57 passed, **33,730 checks** (the verifier's launch of `test_mp.exe` `2c74ad04` with no argument; 33,132 at the start of the wave: +598 = `test_mp_demolish` 178 -> 424 (+246), `test_mp_minions` 294 -> 448 (+154),
+`test_mp_hinge` 28 -> 102 (+74), `test_mp_timebase` 445 -> 495 (+50), `test_mp_layer` 4,151 -> 4,181 (+30), `test_mp_levels` 129 -> 150 (+21), `test_mp_bounce` 189 -> 203 (+14), `test_mp_launchers` 105 -> 115 (+10), `test_mp_routes`
+2,366 -> 2,365 (-1: the unlock check of achievement 48)). **Reachability** 108 / 20 / 0, 0 differ, at every step and in the verifier's run (no speed term for step 175: WALL-4). **Zero warnings** rests on each step's build logs and the verifiers'
+scratch compiles; **no full `port_build.bat` of this tree ran in the wave** (R4c2-5, WALL-7). The final pair is `MagicPortals.exe` `f27dde1a` (the route phase's verifier's one relink from unchanged sources, ran first time) and `test_mp.exe` `2c74ad04`;
+this close launched neither.
+
+**Smart App Control**: **10 refusals of this repository's executables** (each a pair of CodeIntegrity 3033/3077 events, counted at this close from 2026-10-12 13:00): step 172's implementer 5 (`test_mp.exe` 16:01:53 and the mutated one
+16:10:02, `MagicPortals.exe` 16:02:42, 16:02:54 and 16:03:21 on 12 October: three links of the game each refused on its first launch, the last one ran when launched again at 16:29 with no relink), step 173's 1 (`MagicPortals.exe` 17:21:55),
+step 174's first role 2 (`MagicPortals.exe` 20:31:43 and 20:31:55, the relink at 20:32:03 ran) and step 175's 2 (`test_mp.exe` 21:44:07 on 14 October and 00:22:53 on 15 October, each relinked once). None in the mutation check, step 171, step 174's resumed role,
+the verifiers, the route phase, the finalize and this close. Other events in the window, not this repository's: MiKTeX's `pdftoppm.exe` (19) and `pdftotext.exe` (8) on 13 October, 10:17 to 11:08, 12 events of `python.exe` (10) and `powershell.exe` (2) loading from another
+project's scratchpad (`Urban Heat Study`, 13 October 10:21 to 10:36) and one of an Office process (`aimgr.exe`, 14 October 10:24). Wave 1: 83, wave 2: 19, 3a: 2, 3b-1: 4, 3b-2: 9, 4a: 3, 4b: 13, 4c-1: 5. The owner's folder holds `scores.json` alone (164 bytes,
+md5 `40bfef3a`) before and after every role, and at this close.
+
+**The standing f420 baseline** is now `out/parity/program/WALL/after/sweep` (128 PNGs, 1280 x 720, owner's seed; `out/parity/BASELINE.txt` names it with `program/R4b/CMP/port_f420` and `program/R4b/CMP/pairs`, which the next wave measures its fixes against).
+Its caveat: it was taken on `MagicPortals.exe` `357fae09` (step 175's fix 2), not on the committed `f27dde1a`; the route phase's verifier's 128 launches on the committed build equal it byte for byte (`R4c2/verify1/sweep_md5.txt`). The close checked it by level id (128 compared, PNG
+signature, closing IEND chunk with no NUL padding, 1280 x 720, md5 equal to that list) before and after the purge. **The wave's image purge** (the owner's standing order of 2026-10-03): the 87 scratch `--saves` folders the steps and verifiers left (2,735 `scores.json` /
+`achievements.json` copies, 0.6 MB, each checked to hold nothing else and to parse; nothing under `merge_w1/sweep_saves`, `ui1/saves_gold` or `saves/`; the other 299 saves folders of earlier waves were not touched) and step 174's `levels_before` backup (128 `.tscn`, 2.4 MB),
+then `purge_images.py all`: **835 images, 0.60 GB, 0 refused** (the old baseline `CMP10/after/sweep` 128, and the sweeps, golds, pairs and crops of CMP6 147, CMP16 130, CMP15 270, CMP2 134, WALL 18 and R4c2 8); free disk by `df` 100.55 -> 101.12 GiB. Kept: the baseline
+and the two comparison folders (128, 130 and 256 images by a recursive count, all opening), `original/`, `smoke/`, `markers/`, `saves/`, `asbc/`, the audit, every mp4 and every text, json, script and log file. **A consequence**: the pre-wave baseline (`CMP10/after/sweep`) and each
+step's own after-sweep no longer exist, so a later veto of the fire agent's pulse (R4c1-1) would compare its new sweep with `WALL/after/sweep`, which already carries this wave.
+
+**GAMEPLAY changed in wave 4c-2: YES, in steps 171 to 175, and none in step 176.** 3-09 and 4-29 lose a knight each (171); 2-01's crate is 0.75 of its size and 0.5625 of its mass (172); 4-02's astronaut stands where the slab shoves him (173); ten levels' hinged bodies stand where their
+joints hold them, 2-31's seesaw 31.8 px away (174); a stone breaks a breakable wall only above 75 u/s at its first touch and a `destroyable` stone dies with the first wall it breaks, on 15 levels (175). The routes were re-flown for all of it (176). R24, R25, G10-2's matched 60 Hz, 2-30's creep (R3-2: it still wins on 1,386),
+3-13's 0.08 friction (R3b-3: it still wins on 1,043) and the engine pin were not touched. "Committed with recorded deviations" in steps 173 and 175 means what wave 4c-1's close spelled out: a disposition made by the commit role under the owner's standing order of 2026-10-10, not an owner message on that row.
+
+**The wave's rows**: the five steps' blocks CMP6-1 to CMP6-9, CMP16-1 to CMP16-7, CMP15-1 to CMP15-6, CMP2-1 to CMP2-7 and WALL-1 to WALL-11 (40) and R4c2-1 to R4c2-13 (13): 53 opened, 24 closed or settled by this close (CMP6-1, -2, -6, -7; CMP16-1, -3, -4, -7; CMP15-2, -4, -6; CMP2-1, -4, -5; WALL-1, -2, -4, -8, -9, -11; R4c2-10 to R4c2-13), 29 open. Older rows closed: CMP-2, CMP-6,
+CMP-15 and CMP-16 (4 of the comparison's 20; with wave 4c-1's five, 9), R4a-1, R4a-3 and R3b-2 (by the re-flown routes), CMP7-3 and CMP3-6 (by the mutations); Order 11.1 (first clause built and re-flown, the row stays open for its others), STK9-2 (narrowed), CMP-18 (CMP-2 is not the cause) and R4c1-3 (b) are annotated.
+
+**What the next wave should take (wave 4d)**, in this order. (1) **The final comparison RE-TAKEN on the fixed build** (a read-only measuring pass, wave 4b's over again, from `tools/parity` and `out/parity/program/wave_scripts/gen4b.py`): which of the 58 levels that differed still differ, and with which CMP groups; against the kept
+`R4b/CMP/port_f420` and `R4b/CMP/pairs` (the "before"), at f420 and at the level's own HUD tick or f450 where a mover or the spiral is in frame (CMP-R1), reading a blink, a pulse or a bounce as a RANGE across the six stills and the port's frames around f420-f504 (h6.3 is not exactly f420: step 165); the capture seed is the ALL-GOLD one (`out/parity/ui1/saves_gold/scores.json`,
+md5 `09268640`; 1-02 and 1-03 need `--tap 1178,358@300-305`) and the standing sweep stays on the owner's seed. The section-5 box ticks only when the structural groups are fixed: CMP-4, CMP-5, CMP-11, CMP-17 and CMP-18 are not. (2) **What stays**: the rig clips (`docs/parity.md` sections 1-2): the arrival at 1-30's pile (CMP-4), 3-05 for 10 s without moving and 3-22 for 14 s (CMP-5), the static portals' ring
+brightness against the 58 footage frames (CMP-13), R3c-11's list and R4a-2's zero-g wall-slide, **and now one clip of a stone rolling and falling into a breakable wall (WALL-3, WALL-5, R4c2-2) and footage of 1-20 (R4c2-1)**; the port-only experiment (CMP-14: 2-17 with the lightmap off and at full resolution); **CMP-18 / WT-10** (2-29's stone 125-135 px behind: CMP-2 is not the cause, so the trace of the stone against the plank and the hinge is the next step on it,
+then re-fly 2-29 from tap 320, R4a-6); and the owner's calls: the halo scale (CMP-8: one global scale, per-entity scales, or leave; CMP-12 follows it), the engine's friction and restitution steps (CMP-11: G10-14, WT-1; 1-22's coast re-times with them: R4c2-2), R24 (CMP-17), whether the HUD / world clock offset is modelled (CMP-low a), the engine's contact margin (CAP-2, CMP-low b; CMP16-5's 2 px), 2-30's creep (R3-2), STK-8, G10-2's matched 60 Hz (4-21's aim band moves with it:
+R4c2-3), R25, `crate_low_emissive`'s guessed 0.08 (R3b-3), 2-32 ahead of the dragon's camera (R3-3), PIC-1's smoothing above 80 Hz and CMP-9's pulse scope (R4c1-1). (3) **Loose ends, taken when a step touches the file**: **a full `port_build.bat` with zero warnings** (R4c2-5, WALL-7); the three discriminating pairs for `test_mp_layer`'s order test (CMP6-9); the mutation witnesses nobody ran (CMP6-8, CMP2-2, CMP15-3, CMP16-2, WALL-6);
+`kDestroyableKey` and the `== 1.0` literal into `demolish.json` (WALL-10); `Hinged::placedPx` / `heldPx` (CMP2-3) and the converter's datum-type pin (CMP2-7); G3-4's `PlaceKinematic` for platforms, lifts and doors (CMP15-5); `win_by` of the 114 untouched routes (R4c2-9, R3b-6, R3c-9); 3-20's knife-edge (R3-4); the comment-only fixes that wait for their file's next real edit (the two comments of `game/sim/Resting.hpp` among them: a widely included header), WAKE-7's tests with R4a-10's one check,
+the literal and the clear that two steps left in source (CMP1-4, CMP3-3), and the two clips that settle three rows (1-09 or 2-14 for the wall's period and depth, CMP9-3 and CMP9-6; 1-02 or 1-10 from the load frame for the block's phase, CMP10-4). (4) **The ship preparation**: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder, so the record of the scope is incomplete: the owner's to fill), the play build
+(`tools\parity\play_build.bat` exists; no play build has been made), the README and LICENSE, the release zip, and **the repository's going public, which still needs the owner's explicit word**. For the next wave's gates: future route gates compare against `R4c2/census_after_round1.md` (128 won; 117 exact, 11 on another tick), and a step's scope is derived by a census of `out/levels` and the original's files, never typed.
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -3057,7 +3154,7 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       418.4, 0.069 u a tick, after it fell off the level on tick 333) and 1-15's `crate_ent_654` (306 ticks from tick 1, a crate the
       walking player pushes ahead of him: legitimate). 3-22's route does not use the stone after tick 288, so its win is unaffected.
       Next: re-check 3-22 with 2-30, 3-12, 1-09 and 2-07 when the engine's friction step makes `friction_applied` true (G10-14).
-- [ ] **R3b-2. 3-12's win breaks a slab with a stone that exits a portal at rest touching it** (step 152's amendment, deviation 13;
+- [x] **R3b-2. 3-12's win breaks a slab with a stone that exits a portal at rest touching it** (step 152's amendment, deviation 13;
       step 155, deviation 3; the second and third verifiers' low). The port's `demolish.json` rule is that a stone breaks what it
       touches; the original's `ETHBeginContactCallback_breakable_wall` (#16-33) reads the stone's speed against scale(1.5) and is
       not decoded here, so a stone that appears at rest against a slab might not break it there. The route replays and wins (624);
@@ -3069,6 +3166,10 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
       345591..345993: strictly above `scale(1.5)` = 75 u/s, the whole velocity, at the begin of the touch). GAMEPLAY: YES. 3-12's slab-stone exits the portal at rest
       against the slab and reads 0.117 m/s: the slab HOLDS (tick 269) and the committed route's player dies on tick 449. Left open: the route phase (step 176) re-flies
       3-12 with a stone above 75 u/s at the slab, and the speeds the port reads are unmeasured (WALL-3). Not ticked: the row ends in that re-flight.*
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15: `level11b.json` is re-flown and wins on tick 636 (was 639; `win_by` 651; medal 2 -> 3): the slab breaks by a FALL, not a
+      touch at rest - he goes up to the slab and the pocket stone is dropped through a pair 39 units onto it, reading 3.33 m/s (2.2 times the gate) on tick 408; the knight is
+      dealt with by the clock. It rests on a fall of that size breaking the slab in the original too, and on a floor player being unable to place a portal above the slab (the
+      route's `_about`): WALL-3 and WALL-5 stay open for the unit.*
 - [ ] **R3b-3. `crate_low_emissive`'s held friction of 0.08 is a guess** (the amendment, deviation 10; marked `"_guess": true` since
       R3B FIX 2). Four levels' crates (3-13, 3-03, 3-05, 4-09) are held at 0.08 where every other body is held at 1: a knife-edge in
       the friction (the wedge in 3-13's slot lets go for every release from tick 180 only at 0.079 to 0.082, a combined 0.281-0.286,
@@ -3215,7 +3316,7 @@ named. R3-1 to R3-8 above carry the route phase's own (2-30, 2-32's camera, the 
 **Step 164's recorded deviations** (the route phase of wave 4a; planning step 164 has the evidence, `RECORDED DEVIATIONS` 1-11; `out/parity/program/R4/` the
 census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2.json` and `finalize.md`; none blocks, and each route states its own in its `_about`).
 **No level is without a route and no `finding_*.md` exists, so there is no row for an unwon level.**
-- [ ] **R4a-1. 1-19 and 1-20 win because the destroyable stone survives the wall it breaks** (`level18` won 271, `level19` 596). The original's `rolling_stone_728`
+- [x] **R4a-1. 1-19 and 1-20 win because the destroyable stone survives the wall it breaks** (`level18` won 271, `level19` 596). The original's `rolling_stone_728`
       carries `destroyable` 1 and dies at the first breakable wall it breaks (`ETHBeginContactCallback_breakable_wall` #42-60: Order 11.1's first clause, an owner row, not
       built); the port keeps it, so 1-19's third pair and 1-20's single stone for both walls exist only because of that (`R4/note_1-20_embedded_exit_trace.txt` traces 1-20's
       exit). Next, when that clause is built: 1-19 drops its last two taps (173, 208) and its second walk half; 1-20 is re-flown from tap 232 on with the level's second stone
@@ -3223,16 +3324,25 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       *Step 175 (WALL, wave 4c-2), 2026-10-15: THE CLAUSE IS BUILT. `rolling_stone_728` dies at the first wall it breaks (1-19: wall 731 on tick 109 at 4.000 m/s, the
       stone destroyed at (450, 236.1); 1-20: wall 1061 on tick 159 at 2.667 m/s, destroyed at (539.9, 130.2), and wall 1056 stands) and both routes no longer win (1-19
       not won by 285, 1-20 by 610). The re-flight is the route phase's (step 176); the row closes when the re-flown routes win.*
+      *CLOSED by step 176 (the route phase, `45f6c05`), 2026-10-15, with one cost: both routes are re-flown and win. **1-19** (`level18.json`) drops the third pair and the second
+      walk half (6 shots -> 4): the stone breaks wall 731 at 4.0 m/s on tick 109 and dies, and the route wins on tick 184 (was 271). **1-20** (`level19.json`) uses both
+      stones, one per wall (10 shots, was 8): the first breaks its wall at 4.67 m/s on tick 277 and dies, the second is fed through a pair to the other wall (3.10 m/s, tick
+      584), and the second stone is reachable only from the block's top; it wins on tick 825 (was 596). **No route now unlocks achievement 48** (1-20, "8 portals or fewer": the
+      old route had one stone break both walls, which this row's rule took away): R4c2-1.*
 - [ ] **R4a-2. 4-10 and 4-12 rest on a wall-slide the port's friction-0 player makes** (`level9c` 329, `level11c` 311). `Player.hpp` `kFriction` is 0 where `dark_mage.ent`
       has 0.9. 4-10 climbs a block face at 42 and 36 u/s (taps 4 to 6) and says plainly that it is a KNIFE-EDGE (taps 1 and 2 move together -4 to +2 only, taps 5 and 6 are not
       re-aimed); 4-12's tap 4 rises along a plat's face at 110 u/s for 28 ticks. Not measured on the original (`zerog.json` is silent). Next: measure a body kicked along a wall
       in a zero-g room on the original (R3c-11's rig), then re-fly both if the rise decays.
-- [ ] **R4a-3. 1-22 breaks wall 2 with a stone creeping at hit 0.088, below the decoded gate** (`level21` 535). `ETHBeginContactCallback_breakable_wall` #16-33 needs a
+- [x] **R4a-3. 1-22 breaks wall 2 with a stone creeping at hit 0.088, below the decoded gate** (`level21` 535). `ETHBeginContactCallback_breakable_wall` #16-33 needs a
       stone faster than scale(1.5); the port breaks a wall on touch (R3b-2), and the tick-434 arrival moves 400 to 446 under a 1-tick change of any earlier input (the held-friction
       creep, R3-2). Next: when R3b-2's gate is built, re-fly 1-22 with a fast second stone (`rolling_stone_727`).
       *Step 175 (WALL, wave 4c-2), 2026-10-15: THE GATE IS BUILT. 1-22's first stone (753) breaks wall 719 at 3.162 m/s on tick 308 and is destroyed; the second (727)
       reads 0.119 m/s against wall 755 on tick 356 and HOLDS, so the route no longer wins (not won by 548). The re-flight with a fast second stone is the route phase's
       (step 176); the row closes when it wins.*
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15, WITH A LIMIT: `level21.json` is re-flown and wins on tick 666 (was 535; `win_by` 678): the stones coast off the platform, the first
+      breaks wall 719 at 3.17 m/s on tick 318, and the second is put through a pair on the ramp, its velocity inverted, and breaks wall 755 at 3.28 m/s on tick 581. The route
+      rests on two things the original is not shown to have: **a stone put at a portal against a breakable wall breaks it, and stones coast at about 0.21 u/tick once the player
+      stops pushing** (observed, cause not established; G10-14's friction step would re-time it): R4c2-2.*
 - [ ] **R4a-4. 1-24's door is reached only by a drop onto it over a kill box, and the reachability result does not cover the box** (`level23` 343). `destroyier_ent_1051`'s
       16 px box lies across the door's trigger and kills a walking player on tick 366 (STK-8: no listing callback makes a destroyier kill a player, the owner's testimony says it
       does); the route lands from above with his feet 5 units over the box (`R4/portgap_1-24_destroyier.md`). **`reachability.py` has no destroyier term, so 108 / 20 / 0 does
@@ -3366,11 +3476,15 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       pictures; the original resolves a move after the draw, `ETHScene.cpp:513`); the three Smart App Control refusals (the runner rebuilt for the column-major mutation, launched
       twice in one loop, and the first `MagicPortals.exe`); the literal "only the nine" sweep clause is not met and the 40 are explained, the owner told the count; `test_mp_pictures`
       is not where the order lives. Nothing is left to do.
-- [ ] **CMP3-6. What the verification did not run** (deviation 8; the verification's `notRun`). The mutation re-runs (`bucket_units` 1e9: 5 failures in `test_mp_sprites` and 36 in
+- [x] **CMP3-6. What the verification did not run** (deviation 8; the verification's `notRun`). The mutation re-runs (`bucket_units` 1e9: 5 failures in `test_mp_sprites` and 36 in
       `test_mp_layer`; `line_tolerance_units` 0: 4 and 5; read from the implementer's logs), **the column-major mutation (never run by anyone; replaced by 2-27, 3-05 and 1-05 on the
       stills)**, a fresh compile for the zero-warnings gate (read from `build6.log`: 0 warning lines, every source older than the executables `ab08b2e8` and `842da3d8`), a full ctest
       loop (the repository's rule) and the reconciliation of its static predictor (34 levels) with the implementer's (47). Next: run the column-major mutation once when the runner
       is next relinked for a real change; nothing for the others.
+      *SETTLED 2026-10-12 by wave 4c-2's mutation role (`R4c2/mutations.md`): the column-major `Rank` comparator (`BucketOf` and `Bucket` untouched) is **caught by
+      `test_mp_sprites` only**, 3 failures of 2,061 (:4107 "A over C over B", :4112 "(row 1, column 0) is over (row 0, column 4)", the planning step's named pin, and :4162, `Rank`
+      ranked twice); **it SURVIVES in `test_mp_layer`** (4,151 checks, its 6 failures are A's and B's): `PicturesAtOneDepthAreDrawnInTheOriginalsBucketOrder`'s nine observed pairs
+      cannot tell the axes apart. That gap is row CMP6-9's.*
 
 **Step 168's recorded deviations** (the red key's own light, CMP-7, wave 4c-1; planning step 168 has the evidence, `RECORDED DEVIATIONS` 1-6; `out/parity/program/CMP7/` the reports, `deviations.md` (the owner-delegated disposition after the third verification) and `verify1.json` to `verify3.json`; GAMEPLAY: none; the row CMP-7 is closed by it):
 - [ ] **CMP7-1. Gate 2: the raw reading is 1 to 2 percent low in every lit box of 4-20** (deviation 1; the third verification's medium). Required: the group's box R 49.4 (the reader's
@@ -3388,10 +3502,15 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       none contains the word `hidden`, `hide="0"` stands only in `level_select0-3` and `loading_screen`, no key entity has `hide="1"` (39 keys, 133 scenes, recounted at the commit);
       no key is hidden, as before. `keys.json` is `74099cc1` after the text edit (parses, equal to `0d223d73` apart from `red_light._source`; `test_mp_keys` 182 checks, 0 failures
       on the same runner). Nothing is left to do.
-- [ ] **CMP7-3. Gate 3: the two rules of the code were never mutation-tested** (deviation 3; the verification's low 3). The one tick behind and the no-particle-share rules fail by
+- [x] **CMP7-3. Gate 3: the two rules of the code were never mutation-tested** (deviation 3; the verification's low 3). The one tick behind and the no-particle-share rules fail by
       construction (297 of 300 and 24 of 300 moving ticks; 300 colour ticks), as the verifier read them; `keys.json`'s four values were mutated (`colour_name` 2 and 2 failures in
       `test_mp_keys` and `test_mp_layer`, `height_units` 1 and 2, `range_units` 1 and 2, `colour` 1 and 4). A code mutation relinks the runner under Smart App Control and a refused
       launch notifies the owner. Next: run the two mutations once when a relink is allowed anyway (the next step that must relink the runner).
+      *SETTLED 2026-10-12 by wave 4c-2's mutation role (`R4c2/mutations.md`, no commit; one mutated runner `81127657`, 0 Smart App Control refusals): **both caught by
+      `test_mp_layer`, each by a pin of its own**. A (the key's light at this tick's picture instead of one tick behind): `test_mp_layer.cpp:21728` `behind > 0`, "level18c: 0
+      of 300 ticks a tick behind its key" and the same for level19c, and `wrong == 0` (:21726) on the position half. B (the key's light given its emitter's particle share):
+      :21687, the load-time colour (0, 0, 0) where (1, 0, 0) x the level's intensity is required, on both levels, and `wrong == 0` on the colour half (level19c's first wrong
+      tick has the position equal, so that one is B alone). The "297 and 24 of 300" are the step's record's, not re-measured (the committed runner was not launched).*
 - [ ] **CMP7-4. 4-19's light is shown by no frame** (deviation 4; the verification's low 5). The f420 frame is byte-identical by geometry (the breakable wall, the one lit
       neighbour within 48 units, is off the frame); no original frame near the wall exists; `test_mp_layer` pins 4-19's position, height 4, range and colour on 300 ticks; at f640 on
       its route the carried key lights the booster red, like footage frame #371. One capture with `--hold right` did not move the player in 260 frames (cause not looked into).
@@ -3529,16 +3648,23 @@ census files, the round notes `round1_*.md`, `fix1.md`, `verify1.json`, `verify2
       (870-879, 86-94), the red eye of the knight on the block; 12 px at (1063-1118, 446-521), the red flame; at most 16 grey levels) were confirmed, and the baseline log
       carries the guard's death, its 19.69 px shake and the skull and blood particles that the after log lacks; no frame with a differing stream was taken. Next: nothing
       owned; a frame with the old stream (the guard's draws replayed) would prove it.
-- [ ] **CMP6-6. The DEVLOG entry is the wave's close role's** (deviation 6). The backlog row CMP-6 is ticked by this commit; `test_mp_minions`' new test names 4-30 and the
+- [x] **CMP6-6. The DEVLOG entry is the wave's close role's** (deviation 6; written by wave 4c-2's close, 2026-10-15: DEVLOG Session 31). The backlog row CMP-6 is ticked by this commit; `test_mp_minions`' new test names 4-30 and the
       two silent levels by file, as the suite's other census does. Next: the close role's DEVLOG entry.
 - [x] **CMP6-7. Disclosed: the launches beyond "once each"** (deviation 7; the verifier's low). `test_mp_minions` 7, `test_mp_layer` 4, `test_mp_routes` 3, the no-argument
       run 2: the fresh-runner launch, a first full run that found deviations 1 and 2, the relinked runner's confirmation and the gate 4 mutations; zero Smart App Control
       refusals. Nothing to fix; later steps keep one link and one launch per runner.
 - [ ] **CMP6-8. The gate 4 mutation has no second witness** (deviation 8; the verifier's low). The verifier may not edit a tracked data file in place and read the four
       mutation logs (12 + 1, 9, 6 failures) instead. Next, if the wave's close wants one: put `minion_spawn_` and `minion_spawn6` back into `enemy_spawn.names`, run
-      `test_mp.exe test_mp_minions` once (expected: 12 failures), restore the file (md5 `5bc2e4f1`).
+      `test_mp.exe test_mp_minions` once (expected: 12 failures), restore the file (md5 `5bc2e4f1`). *Wave 4c-2's close did not take it (it launched nothing: a tracked-file
+      edit and a runner launch are for a role that needs them); the verifier of the route phase read the four logs again and did not run it either.*
 - [ ] **CMP6-9. `test_mp_layer`'s order test does not tell row-major from column-major** (deviation 9; a low carried from wave 4c-2's mutation role, not this step's). Next:
-      a pin that does, when the layer's order is next touched.
+      a pin that does, when the layer's order is next touched. *PROVEN by the mutation role (`R4c2/mutations.md`): the column-major comparator fails `test_mp_sprites` (3) and
+      no `test_mp_layer` check; `test_mp_layer.cpp:10617`'s nine `observed` pairs each differ on one axis, or on both in the same direction. The three pairs that DO discriminate
+      (each from the stills, planning step 167 gate 3; node names and positions read from `out/levels`; every node at depth 0, none carries `z_index` or `eth_z`), to add to
+      `observed` with their levels to the level loop: `level26a` (2-27) `platform_no_emissive_ent_962` (78, 160: row 1, column 0) over `crate_no_emissive_1000` (172, 115: row 0,
+      column 1); `level4b` (3-05) `single_block_plat_low_emissive_ent_1903` (322, 144: row 1, column 2) over `wall04_low_emissive_ent_1899` (384, 48: row 0, column 3); `level4`
+      (1-05) `platform_ent_658` (64, 142: row 1, column 0) over `double_block_plat_ent_702` (176, 64: row 0, column 1). Row-major puts the first of each over the second; column-major
+      the reverse. A test-only edit.*
 
 **Step 172's recorded deviations** (a node's own `scale` datum scales its picture, its body's box and its mass, CMP-16, wave 4c-2; planning step 172 has the evidence,
 `RECORDED DEVIATIONS` 1-6; `out/parity/program/CMP16/` the reports, `impl.md`, `census.md` and `verify1.json`; GAMEPLAY: YES, 2-01's crate; the row CMP-16 is closed by
@@ -3569,10 +3695,11 @@ it):
       platform, restock barrels, the drawn box) read no node that carries the datum except 2-01's crate, which only the drawn box reads, so nothing a script would read
       differs. The function's comment named a burning crate's flames, a consumer that does not exist (`Fire.cpp` reads lava only); the commit rewords it, text only, and
       the binaries were not relinked for it. Next: nothing owned; a node with the datum and a script-side box consumer would have to read the unscaled box.
-- [ ] **CMP16-7. 2-01's and 4-29's routes fail on this build** (the route text of planning step 172; the verifier's low). 2-01: the lighter crate is pushed at 1.0-1.8 px
+- [x] **CMP16-7. 2-01's and 4-29's routes fail on this build** (the route text of planning step 172; the verifier's low). 2-01: the lighter crate is pushed at 1.0-1.8 px
       a tick of 2.4, the player steps off the top floor on tick ~175 (route: ~308) and is burned by the fireball spat on tick 283. 4-29: step 171's, unchanged (the tap on
       tick 525 is off the view). 126 of 128 routes win on exactly the census's ticks. Next: the route phase (planning step 176) re-flies both; 2-01's header text is
       stale.
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15: 2-01 (307) and 4-29 (1,023) are re-flown and win; the stale header text is rewritten in the new route.*
 
 **Step 173's recorded deviations** (a bounce slab is placed, not moved with a velocity, CMP-15, wave 4c-2; planning step 173 has the evidence, `RECORDED DEVIATIONS` 1-6;
 `out/parity/program/CMP15/` the reports, `impl.md`, `census.md`, `deviations.md`, `fix1.md`, `fix2.md` and `verify3.json`; GAMEPLAY: YES, 4-02's astronaut, and it moves 4-07's
@@ -3584,13 +3711,15 @@ route; the row CMP-15 is closed by it, committed with these deviations by the ow
       original's stills read until the slab's first rise shoves him 0.85 px near tick 79. No original frame exists at world tick 75 (the stills date themselves at f127-f208 on the
       slab's own top-y clock), and the decode (`level1c.esc`: `main_char` (138, 152), slab (140, 202), collision 64 x 64; the slab's top below his feet to call 78) puts the original's
       astronaut at his start on tick 75 too (an INFERENCE, labelled: about 382.8 on screen). Next: G3-5 (the bob's phase and the spawn offset) and CMP-low (a); nothing tuned.
-- [ ] **CMP15-2. Gate 6's route clause: three routes fail on this build, and the wave enters the route phase with three** (deviation 2; the verifier's medium). 125 of 128 win on
+- [x] **CMP15-2. Gate 6's route clause: three routes fail on this build, and the wave enters the route phase with three** (deviation 2; the verifier's medium). 125 of 128 win on
       exactly their census tick, 0 on another tick, 0 missing. **4-07** (`level6c`, census 446) is not won by 470, by design: its route leaned on the rider the slab no longer
       carries (the player and the crate rest on the top of the slab at (128, 208) from tick 44; 0.4-0.9 px less carry, the tick-313 shot flies 2.1 px lower and grazes the crate
       on tick 344, the door shot's recoil leaves him at (-10, -11) u/s, the tap of tick 443 misses him). **2-01** (`level0a`, census 444: died on tick 283) and **4-29** (`level28c`,
       census 1023: the tap on tick 525 is off the view) are inherited, not this step's: the same signatures in step 172's own run on `9d643c9` (`CMP16/runs/all1.log`), no
       bounce node in either level, f420 frames byte-identical to the before-sweep (CMP16-7). `test_mp_routes` 2,321 checks, 6 failures. Next: the route phase (planning step 176)
       re-flies 4-07, 2-01 and 4-29; read 4-07's exact vy only if a tick-sensitive tap fails again.
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15: 4-07 (446, the census tick), 2-01 (307) and 4-29 (1,023) are re-flown and win; the step's own gate text stays "NOT MET
+      literally" as it was at its commit.*
 - [ ] **CMP15-3. The gate 4 mutation of the kinematic rule was run by nobody** (deviation 3; the verifier's low). The placement rule's removal IS the red run of the new pins on the
       committed `Bounce.cpp` (runner `e830640d`: 9 failures of 203, the velocity pin on the three levels, the rider's travel 7.501 px against 2.25, vy -1.1959..-1.2002 at the
       five samples; green 203 / 0), not a separate removal build. "The body stays kinematic" (`kBouncer` out of `Roles::Moves`) has only the older `EverySlabIsKinematic` pin
@@ -3622,13 +3751,15 @@ of 2-31, 3-19 and 3-20; the row CMP-2 is closed by it):
       removing them rebuilds every translation unit that includes `Hinge.hpp`. Next: remove them with the next change that touches `Hinge.hpp`.
 - [x] **CMP2-4. Disclosed: the census file was overwritten by the implementer's re-run** (deviation 4). `census.md` now shows the three new keys in its section 4; what it
       said before the re-conversion is `census_pre_conversion.md`. Nothing left.
-- [ ] **CMP2-5. Gate 6's route clause is NOT met as worded: five routes do not win and one moves, three of the five outside the census** (deviation 5; the verifier's
+- [x] **CMP2-5. Gate 6's route clause is NOT met as worded: five routes do not win and one moves, three of the five outside the census** (deviation 5; the verifier's
       medium; the gate's text is not rewritten). 122 of 128 routes win on exactly their census tick, 3-19 wins on 827 (census 832) and **2-31 (died on tick 170) and 3-20
       (not won by 585)** do not win: this step's. **2-01 (died on tick 283), 4-07 (not won by 470) and 4-29 (the tap of tick 525 is off the view)** do not win and the census
       does not name them: inherited, the same signatures as in step 173's own run (`CMP15/route_census.md`), no joint in any of the three, their f420 frames byte-identical
       before and after this step. The clause is met only against the route state step 173 recorded for HEAD `12ac5d5`, which was not rebuilt to re-measure it. `test_mp_routes`
       2,291 checks, 10 failures. Next: the route phase (planning step 176) re-flies 2-31, 3-20, 2-01, 4-07 and 4-29 and re-checks 3-19; the push gate "128 of 128 routes win"
       cannot be met before it.
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15: 2-31 (446), 3-20 (555) and 2-01, 4-07, 4-29 are re-flown and win, 3-19 is tightened (827); 128 of 128 win. The step's own
+      gate text stays "NOT MET literally" as it was at its commit.*
 - [ ] **CMP2-6. Evidence not taken or not measurable at f420** (deviation 6; GAMEPLAY: none). 3-15 and 3-19: the hinged body is off the view (about x 17-444 u and 330-757
       u, read from the player's start against where he stands on the frame; the frames are byte-identical before and after and the original's stills show neither body), so
       their pulls (+4, 0) and (0, +8) are pinned by `test_mp_hinge` only. 2-29: not measurable by the edge-shift method (the stone's phase fills the plank's mask); the stone's
@@ -3644,42 +3775,60 @@ of 2-31, 3-19 and 3-20; the row CMP-2 is closed by it):
 levels, and it moves eight routes (1-19, 1-20, 1-22, 2-29, 3-10, 3-12, 3-14, 4-21); there is no CMP-n row for it, and the rows it works on, Order 11.1's first clause,
 R3b-2, R4a-1, R4a-3 and STK9-2, are annotated above and none is ticked, each ending in the route phase's re-flight; `test_mp_routes` fails 13 routes, the other 56 suites
 pass, 33,535 checks; committed with these deviations by the owner's delegation):
-- [ ] **WALL-1. Gate 6's route clause is NOT met as worded: six routes outside the census's levels are off their census tick** (deviation 1; the verifier's medium; the
+- [x] **WALL-1. Gate 6's route clause is NOT met as worded: six routes outside the census's levels are off their census tick** (deviation 1; the verifier's medium; the
       gate's text is not rewritten). 2-01 dies on tick 283, 2-31 on tick 170, 3-20 is not won by 585, 4-07 by 470, 4-29's tap of tick 525 is off the view, and 3-19 wins
       on 827 for 832: the same lines in `CMP2/routes_after.log` and in `WALL/routes_before.log` (the committed tree replayed before this step's first edit), inherited
       from steps 171-174 and moved by none of this step. Required 0 off-tick, measured 6. It extends CMP2-5. The push gate "128 of 128 routes win" stays unmet until the
       route phase. Next: planning step 176.
-- [ ] **WALL-2. The route census is 114 exact / 1 other tick / 13 not won, against the committed tree's 122 / 1 / 5** (deviation 2). The delta is eight routes, all on
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15: all six are re-flown or tightened and win (2-01 307, 2-31 446, 3-20 555, 4-07 446, 4-29 1,023, 3-19 827 with its `win_by`
+      tightened); no route outside the census's levels is off its tick any more (planning step 176, deviation 5). The gate's text stays NOT MET at the step's commit.*
+- [x] **WALL-2. The route census is 114 exact / 1 other tick / 13 not won, against the committed tree's 122 / 1 / 5** (deviation 2). The delta is eight routes, all on
       census levels, each preceded by its `wall contact` line, failing by design (the route leaned on the behaviour the step corrects): 1-19, 1-20, 1-22 (its second
       stone, 727, must be fast), 2-29, 3-10, 3-12 (R3b-2: a stone above 75 u/s at the slab), 3-14 and 4-21. 3-13, first thought broken, wins on its census tick 1043 since
       fix 2 and needs no re-flight. Next: the route phase re-flies the eight and the six inherited ones.
+      *CLOSED by step 176 (`45f6c05`), 2026-10-15: the eight are re-flown (1-19 184, 1-20 825, 1-22 666, 2-29 564, 3-10 943, 3-12 636, 3-14 1,087, 4-21 360) and the census is
+      now 117 exact / 11 other tick / 0 not won.*
 - [ ] **WALL-3. The speeds the port reads at the walls are unmeasured** (deviation 3; the verifier's medium; GAMEPLAY: the routes). The gate (75 u/s) and the death are
       decoded; no clip shows a stone breaking a wall (D11_check C40: decode-only). Several natural stones read far under the gate on the port: 2-29 0.621 m/s, 4-21 0.470,
       3-12 0.117, 1-22's second stone 0.119, 1-09's hand play 0.697. Cause: the port's physics reads, not the rule (planning step 175, note N1). Next: the route phase
       proves a win on each with a stone clearly above 1.5 m/s (not a creep) and reports any level the rule seals; the owner may settle the unit with one rig clip of a
       stone rolling or falling into a breakable wall.
-- [ ] **WALL-4. `reachability.py`'s 108 / 20 / 0 is not evidence for this rule** (deviation 4; GAMEPLAY: none). The script has no speed term and no
+      *STEP 176 (the route phase), 2026-10-15, did what the row asked, and the row STAYS OPEN: every level has a win with a stone clearly above 1.5 m/s - 1-19 4.0 m/s, 1-20
+      4.67 and 3.10, 1-22 3.17 and 3.28 (the second portal-fed), 2-29 2.96 (a portal in the stone's fall under the plank's end), 3-10 3.67, 3-12 3.33 (a 39-unit fall), 3-14
+      3.33, 4-21 1.94 (a stone lifted into the wall's underside by the gravity agent: an aim band of 2 units, R4c2-3) - and **no level is sealed**. The speeds are the port's;
+      none is measured on the original, and one rig clip of a stone rolling and falling into a breakable wall would settle this row, WALL-5 and 1-22's gap together.*
+- [x] **WALL-4. `reachability.py`'s 108 / 20 / 0 is not evidence for this rule** (deviation 4; GAMEPLAY: none). The script has no speed term and no
       one-wall-per-destroyable-stone term (1-20 and 1-22 each have two walls and two destroyable stones), so it cannot show a level the gate newly seals. Next: the route
       phase (a fly proves it); optionally give the script both terms, or record that it cannot.
+      *CLOSED by step 176, 2026-10-15: the fly proved it - 128 of 128 routes win, so no level is sealed by the rule. The script still has neither term (optional, not built).*
 - [ ] **WALL-5. 3-13's wall verdict rests on a port inference and two marked guesses** (deviation 5; the verifier's medium). The history reads 1.333 m/s there (89 percent
       of the gate, holds on tick 689) and the free-flight replay 2.000 (breaks on tick 690); "the larger of two readings judges" is the port's, the original's callback
       runs once. It also rests on `earthquake.json` `impacts.free_flight` slack 1.0 and cone 1.0 (marked guesses, step 162's plateau edge). Cause: the port's engine
       brakes a stone before the contact; no capture. Marked as inference in `demolish.json` `_note`. Next: the owner's rig clip; the route phase flies 3-13 with a throw
       clearly above 1.5 m/s if it is re-flown anyway.
+      *STEP 176, 2026-10-15: 3-13 was NOT re-flown (it wins on its census tick 1,043, so no author touched it) and the throw was not made faster; the row stands unchanged
+      (R4c2-4).*
 - [ ] **WALL-6. Gate 4's pins have one hole, and the verifier ran none of its own mutations** (deviation 6; the verifier's low). The `Game::AfterStep` -> `Demolish::Tick`
       hand-over (the stones' begins, `FreeFlightRules` from `Data::earthquake`) has no unit pin: an empty hand-over would be caught only by route 3-13, one of the red
       routes, and only in a tick-by-tick census compare. Each mutation needs a relinked runner (a Smart App Control exposure), so gate 4 rests on the fixer's per-rule
       mutation logs, audited by the verifier, whose counts equal the planning step's. Next: one non-route check on `Game::Tick` (3-13 or 1-24), or keep the route-census
       compare as an explicit gate of step 176.
+      *STEP 176, 2026-10-15: the route-census compare WAS a gate of the route phase (its gate 4: the verifier's run agrees with `census_after_round1.md` on all 128 rows, and 3-13
+      wins on 1,043), so a broken hand-over would have shown; the non-route check on `Game::Tick` is not written, and the verifier ran none of the mutations again. Open.*
 - [ ] **WALL-7. Gate 7 (zero warnings) was not proven by a full rebuild after the sources were restored** (deviation 7). Fix 2's four builds read 0 warnings (`build_1` 53
       steps, `build_2` 47, `build_3_final_runner`, which recompiled the restored `Demolish.cpp` and `Game.cpp`, and `build_4_relink_runner`) and the verifier compiled the
       7 changed translation units at /W4 with 0 warnings; the commit role did not rebuild (no source changed: 16 of 16 md5s equal `WALL/fix2/final_source_md5.txt`). Next:
       the next role that builds runs `port_build.bat` and reads zero warnings.
-- [ ] **WALL-8. Binary housekeeping: `MagicPortals.exe` `357fae09` predates the restored sources by modification time** (deviation 8; the verifier's low). It was linked
+      *STEP 176, 2026-10-15: still open. The route phase's verifier compiled the 8 changed translation units at /W4 with the build's own commands (0 warnings, 0 errors) and
+      relinked the game once with no recompile (0 warnings); **no full `port_build.bat` of this tree has run in the whole of wave 4c-2** (R4c2-5). Not run by this close either:
+      it would relink and notify the owner.*
+- [x] **WALL-8. Binary housekeeping: `MagicPortals.exe` `357fae09` predates the restored sources by modification time** (deviation 8; the verifier's low). It was linked
       before the mutation runs from the same sources (the string `WALL_MUT` of the harness is absent from it; its `--route` replays print the final code's lines) and is
       older than `Demolish.cpp` and `Game.cpp` only because the restore touched them; `test_mp.exe` `2c74ad04` was linked after it. The first build after the commit
       relinks the game with a new md5 and the same code; no spot frame was taken (nothing was launched). Next: the first role that builds records the md5 and takes one
       spot frame.
+      *CLOSED by step 176's verifier, 2026-10-15: it relinked once from the unchanged sources (`MagicPortals.exe` `f27dde1a`, no recompile, ran first time) and took the whole f420
+      sweep on it: 128 of 128 byte-identical to `WALL/after/sweep`, the sweep taken on `357fae09`. The committed pair is `MagicPortals.exe` `f27dde1a` and `test_mp.exe` `2c74ad04`.*
 - [x] **WALL-9. STK9-2 is narrowed, not closed** (deviation 9; GAMEPLAY: none). A stone whose wall breaks on the first look still has its shake and sound read from the
       history by `latchImpacts`; one that breaks on the second look (3-13) is read by the layer's own watch. The row STK9-2 carries a step-175 note. Nothing left in this
       row.
@@ -3690,6 +3839,73 @@ pass, 33,535 checks; committed with these deviations by the owner's delegation):
 - [x] **WALL-11. Disclosed: no f420 frame changes** (deviation 11; GAMEPLAY: none). 128 of 128 PNGs are byte-identical to `CMP2/after/sweep`: the gate and the death are
       play-time, so the sweep cannot show them, and the pair images of 1-24, 3-13, 4-21 and 1-09 read by eye show the same state as before. Not a failure; recorded so no
       later role takes the byte-identity as proof of the rule. Nothing left.
+
+**Wave 4c-2's own rows** (the route phase, planning step 176, and the wave's close; `out/parity/program/R4c2/` holds the reports: `mutations.md`, the censuses
+`census_after_steps.md` and `census_after_round1.md`, the round notes `round1_<level>.md`, `verify1.json`, `finalize.md` and `close.md`; GAMEPLAY of step 176: none, of the wave:
+steps 171-175, each in its own block above). **No level is without a route and no `finding_*.md` exists, so there is no row for an unwon level.**
+- [ ] **R4c2-1. 1-20 no longer unlocks achievement 48 (Be smarter I, 8 portals or fewer; `game/data/achievements.json` id 48, world 0 level 19), and no route demonstrates it**
+      (medium; the verifier's first problem; step 176's deviation 1). The old route unlocked it on tick 596 with 8 shots because ONE stone broke BOTH walls, which step 175
+      (R4a-1, Order 11.1's first clause) took away: the stone dies at the first wall. The new route needs 10 portals (`achievements: none (door: medal 2, 10 portals, 13200 ms)`):
+      the ledge, wall 1056, the ramp and the mirror each cost a pair, and the second stone costs one more because no ray from the ledge, the floor or the plank reaches it
+      (only the block's top does). The author found no 8-portal way on this build. `test_mp_routes` went from 2,366 to 2,365 checks (the unlock check is gone). Required: the
+      route gate's "achievements as before"; measured: four stealth ones (26, 28, 32, 42) unchanged, 48 gone: **NOT MET literally**. Whether 8 portals is reachable under the
+      75 u/s gate is unproven, and if the original's players do it in 8 then a rule of the original differs from the port's here (the shot's ray reaching the stone over the
+      block, or the stone's reach). No clip of 1-20 exists (`footage/INDEX.md`). Next: an 8-portal route, or footage of 1-20, or the owner's call.
+- [ ] **R4c2-2. 1-22's natural two-portal solution is a port gap, and the shipped route stands on two unmeasured things** (medium; the verifier's second problem; step 176's
+      deviation 2; `round1_1-22.md` "PORT GAP"). Pushing both stones off the left end and stepping after them wins on this build on tick 449 (medal 3, 2 portals, all 5 crystals;
+      kept as `R4c2/round1_1-22_intended_2portals_NOT_A_ROUTE.json`, not in `tests/routes/`) but only in a narrow chaotic cell (3 to 5 of 10 aim points win, scattered): the engine
+      brakes a closing stone early (`PhysicsSystem.cpp:1142-1584`, about 6.2 units, leaving it 2.2 to 3.8 units short of wall 755's face), the wall's first look needs the stone
+      within 1 unit (`demolish.json` `contact.margin_px`, a `_guess`), so the stone sits short, lands, creeps at 0.12 m/s and the wall holds; it breaks only if the stone's last
+      free step ends within [286.0, 287]. INFERRED, not measured (no clip shows a stone breaking a wall, D11_check C40): Box2D does not brake early, so the original's callback
+      would read the roll speed. The shipped route feeds the second stone through a pair (3.28 m/s, velocity inverted: **a stone put at a portal against a breakable wall breaks it
+      is unmeasured on the original**) and **depends on stones coasting at about 0.21 u/tick once the player stops pushing** (observed, cause not established): the engine's
+      friction step (G10-14) would re-time it. Next: read the callback's velocity at the stone's last free step where the brake stops a pair short (the wall's second look), or a
+      wall margin of 4 units (a `_guess`), or the owner's rig clip of a stone rolling and falling into a breakable wall (settles this, WALL-3 and WALL-5 together).
+- [ ] **R4c2-3. 4-21 is a knife-edge in its aim, on the owner's 60 Hz** (medium; the verifier's second problem; step 176's deviation 2; `round1_4-21.md`). A stone can only be fast
+      against that wall from under it: the gravity agent's pull (`gravitywell.json`, 0.5 m/s a reference frame) beats gravity only within about 190 units of the agent, so a stone set
+      above the wall is lifted away. The exit pair's aim wins for y 198.5 to 200.5 at x 395 (x 392 to 401 at y 199.5; speeds 1.5 to 2.2; a stone set a little lower reads 0.36 to 0.54 m/s
+      and the wall holds), and the band moves with the frame-rate factor `fpsFix` (G10-2, the owner's call: INFERRED, at 30 fps the original's per-second pull is twice the port's).
+      Timing edges are 2 to 16 ticks. The route is deterministic; its fragility is in the aim. Next: G10-2's ruling; re-aim if the rate changes.
+- [ ] **R4c2-4. 3-13 was not re-flown and still stands on WALL-5's inference** (low; step 176's findings). It wins on its census tick 1,043, so no author touched it; its wall verdict
+      (history 1.333 m/s holds, the free-flight replay 2.000 m/s breaks, "the larger of two readings judges") is the port's, and step 175 said the route phase would fly it with a
+      clearly faster throw "if it is re-flown anyway". Next: WALL-5's rig clip; re-fly with a faster throw then.
+- [ ] **R4c2-5. No full `port_build.bat` has run on this tree in the whole of wave 4c-2** (low; step 176's deviation 4; WALL-7). The steps' build logs, the verifiers' scratch
+      compiles (the 8 changed units at /W4: 0 warnings) and one relink (`f27dde1a`) are the evidence for zero warnings; the committed pair is `MagicPortals.exe` `f27dde1a` and
+      `test_mp.exe` `2c74ad04`. Not run by this close (a relink notifies the owner). Next: the next role that builds runs `tools\parity\port_build.bat` and reads zero warnings;
+      the default target's stale `MagicPortalsSpike` (step 161's deviation 5) is still there.
+- [ ] **R4c2-6. Routes that rest on port behaviour not measured on the original** (low; step 176; R4a-8's kind; each says so in its `_about`): 3-10 (a stone out of a portal over
+      the knight crushes him before it breaks the wall; a key whose carrier dies stays in the air where he stood; the knight still at `wayB1` at about tick 460 is the port's
+      timing), 3-12 (the slab breaks by a 39-unit fall at 3.33 m/s, 2.2 times the gate; a floor player cannot place a portal above the slab), 2-31 (the plank's crossing rests on
+      CMP-2's pose and the plank's density 1.42 against the player's 0.104; the agent window is chaotic past tick 230), 2-29 (the stone's clock is the port's: WT-10, CMP-18) and
+      3-20 (**no cell had a +-1 margin on every axis**: the ceiling aim x wins from 252.6 to 253.4, the right hold must end on 316 or 317, the knight's throw is chaotic to about 0.5 px
+      of landing x; the two walks 125-168 and 175-238 fail on any +-1, inherited: R3-4). 3-14's tail is a new idea forced by the stone's death (the crate presses both buttons in
+      turn). Two achievements are exercised by no route: 48 on 1-20 (R4c2-1) and 31 on 3-09 (gold with exactly 2 knights alive: its route earns none, `achievements: none`, medal
+      2). Next: the final comparison and the rig list (R3c-11).
+- [ ] **R4c2-7. Five unmoved routes' sounds changed and no single step is traced** (low; step 176's findings). They still win on exactly their ticks and the suite does not pin
+      sounds: 1-13 (`stone_hit` x2 -> x1), 3-13 (`stone_hit` x2 -> none, `player_landed` x5 -> x4), 1-24 (`stone_broken` x3 -> x2, `stone_hit` x2 -> x1), 1-25 (`stone_hit` x2
+      -> x1) and 3-09 (one `minion_fell` and one `minion_landed` gone). The stone lines are most likely step 175's death and speed gate; 3-09's may be step 171's, 172's or 174's.
+      Next: nothing owned; a per-step replay would attribute them.
+- [ ] **R4c2-8. What the route phase's verifier did not run** (low; step 176's deviation 7; `verify1.json` `notRun`). Any step's port-side mutation (each needs a relinked runner: see
+      CMP2-2, CMP15-3, CMP16-2 and WALL-6), CMP6's data-rule second witness (CMP6-8: a tracked-file edit), any measurement on the original (the speeds at the walls, 2-31's plank
+      crossing, 3-15's and 3-19's pulls: decode or inference only), an in-window replay of the other 126 routes (the headless runner replays all 128 twice with identical win lines;
+      only 1-25 and 1-19 were replayed with `--route` in `MagicPortals.exe`), and the gold-seed pair images of 4-07 and 3-13 read by eye (their numbers equal the before's).
+- [ ] **R4c2-9. `win_by` of the 114 untouched routes is still looser than 10 to 15 on some (up to 60; median 21 over the 128)** (low; step 176's left-for-later; R3b-6 and R3c-9's
+      kind). The 14 files of step 176 are 12 to 15 over their tick. Next: tighten when a file is next touched.
+- [x] **R4c2-10. Settled at the commit and this close: step 172's record said 7.04 -> 3.31 where the crate's own gain is 4.20 -> 3.31, and "met" where its gate 6 was not** (the
+      verifier's two lows; step 176's deviation 3). The two cells of planning step 172 are corrected in `45f6c05` (the original numbers stay visible, marked corrected); the
+      backlog's CMP-16 note is corrected by this close; **the pushed commit message of `9d643c9` still says 7.04** and is not amended (history is not rewritten). Nothing left.
+- [x] **R4c2-11. Disclosed: the 14 route authors shared `%TEMP%` and the scratchpad** (step 176's deviation 6). Two authors (2-29, 3-14) found their scratch files overwritten, and
+      4-07's author saw ONE launch print `test_mp_routes: 3 checks, 1 failures` that never played the route, most likely another author's runner using the same
+      `%TEMP%\supersonic-test-mp-routes` files at that moment (inferred; the identical command repeated gave 20 checks, 0 failures and never recurred in several hundred launches
+      with a private `TEMP`). It is no evidence that a route is nondeterministic: the verifier replayed all 128 twice, identical. Next, for any phase that runs authors side by side:
+      give each its own `TEMP` and scratch folder.
+- [x] **R4c2-12. Disclosed: five routes leave the 455 x 256 view for a few ticks** (the verifier's low). The player's centre is outside it for at most 5 consecutive ticks: 3-18
+      (5), 4-18 (5), 2-27 (5), 1-21 (3), 3-09 (3); none of the 14 files of step 176 does. Nothing to fix.
+- [x] **R4c2-13. The three code mutations of R4c1-3 (b) ran, and the wave's close settles CMP7-3, CMP3-6 and R4c1-3 (b) on them** (`R4c2/mutations.md`, 2026-10-12, no commit; one
+      mutated runner `81127657`, 0 Smart App Control refusals; `test_mp_keys` 182 / 0 as the control, `test_mp_sprites` 2,061 / 3, `test_mp_layer` 4,151 / 6). A (the key's light not
+      a tick behind) and B (a particle share on the key's light) are each caught by `test_mp_layer` by a pin of their own (:21728 and :21687); C (a column-major bucket order) is
+      caught by `test_mp_sprites` only (:4107, :4112, :4162) and **survives in `test_mp_layer`**: no mutation survived the suite that owns its rule, and the layer's own order test has
+      a gap, CMP6-9 (the three pairs that close it are in that row). Nothing left here.
 
 **Wave 4c-1's own rows** (the wave's three verifications, two fix rounds and the finalize; `out/parity/program/R4c1/` holds the reports: `verify1.json` to `verify3.json`,
 `fix1.md`, `fix2.md`, `finalize.md` and `close.md`; GAMEPLAY: none):
@@ -3728,7 +3944,8 @@ pass, 33,535 checks; committed with these deviations by the owner's delegation):
       changed pixels**, each recorded by its step: CMP-3's 1-01 (+2.4 over 157 px, at most 16 grey levels), 2-13 (+3.6 over 126 px) and 3-12 (+0.3 over 24 px), CMP-9's 1-13
       (+0.3), 1-22 (+0.7) and 2-19 (+1.1) (the walls' depth and phase) and CMP-10's 1-02 (+0.3 over 8,399 px; its level-start popup is open at f420); rows CMP3-4, CMP9-6 and
       CMP10-4 own the causes, and the final comparison reads the walls and the block as phase pictures. (b) **The code mutations nobody ran**: step 168's two (one tick behind, no
-      particle share: CMP7-3) and step 167's column-major axis (CMP3-6); a code mutation relinks the runner, and wave 4c-2 relinks anyway: run them at its first relink. (c) **No
+      particle share: CMP7-3) and step 167's column-major axis (CMP3-6); a code mutation relinks the runner, and wave 4c-2 relinks anyway: run them at its first relink.
+      **DONE 2026-10-12 (`R4c2/mutations.md`): A and B caught by `test_mp_layer`, C by `test_mp_sprites` and not by `test_mp_layer` (CMP6-9); CMP7-3 and CMP3-6 are ticked on it.** (c) **No
       frame of 4-19 with its breakable wall in view, no clip of a flagged wall, none of 1-02 or 1-10 from the load frame, and 1-03's gold frame was not retaken** (CMP7-4, CMP9-3,
       CMP10-4): the wall's and the block's phase against the original is decoded, not measured. (d) **Capture sweeps stall when the capture window is minimised on a desktop in
       use** (verify1's low, which advises): allow 40 minutes for a 128-level sweep, or add a 10 s watcher that restores `MagicPortals.exe`'s own window (never another process's).
@@ -3785,7 +4002,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (2-28, 2-29, 2-31, 3-15, 3-19, 3-20, 3-22, 4-11, 4-31), once, after the wave's other gameplay fixes. GAMEPLAY: yes (2-31's seesaw moves 29 u down and 14 u left,
       3-19's plank 8 u).
       *Closed by step 174 (CMP2, wave 4c-2), 2026-10-12, resumed and finished 2026-10-14, WITH RECORDED DEVIATIONS (gate 6's route clause is NOT met as worded: CMP2-5); committed in wave 4c-2 (the commit titled "Magic Portals: a hinged body stands
-      where its joint holds it"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it
+      where its joint holds it", `cad4a2f`; pushed with the wave, `7e708e3..45f6c05`, 2026-10-15). GAMEPLAY: YES, and it
       MOVES ROUTES: eight of the ten hinged bodies start somewhere else, 2-31's seesaw 31.8 px (89 px on screen) from where the level places it; 2-31's route no longer wins
       (the player lands on the moved seesaw on tick 119 and dies on tick 170; census 405), 3-20's no longer wins (the shot of tick 255 ends on the plank; not won by 585;
       census 555) and 3-19's wins on tick 827 (census 832); the other census levels' routes (2-28, 2-29, 2-30, 3-15, 3-22, 4-11, 4-31) win on exactly their ticks. So
@@ -3814,6 +4031,10 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       / CMP-18 stays open (the pose moves the stone 1 u of the 125-135 px; its trace, the stone against the plank and the hinge, is the next step on it); (c) 3-15, 3-19 and 2-29 not measurable at f420 and 2-30's pixel inferred (CMP2-6); (d) the
       port-side mutations nobody re-ran (CMP2-2); (e) the converter's datum-type pin (CMP2-7); (f) `placedPx` / `heldPx` (CMP2-3). The deviations are rows CMP2-1 to CMP2-7
       above the wave 4c-1 rows.
+      *Step 176 (the route phase), 2026-10-15: 2-31 is re-flown (`level30a.json`: portal at (418, 247) and one on himself, the plank's right half, wins on tick 446, was 405),
+      3-20 re-aimed (tap 254 at (253, 40), not (258, 40): the plank's tip moved 2 units left; wins on 555, the same tick, no cell has a +-1 margin on every axis) and 3-19
+      tightened (inputs unchanged, wins on 827 for 832; `win_by` 865 -> 840); the other six census routes (2-28, 2-30, 3-15, 3-22, 4-11, 4-31) win on exactly
+      their census ticks (2-29 was re-flown for the wall, step 175, not for the joint). 2-30 still wins on its creep, 1,386 (R3-2).*
 - [x] **CMP-3. Equal-z pictures are drawn in scene-file order; the original orders them by 128-unit bucket** (high on 4-31, medium on the rest; structural; `decoded`;
       moves no route). Levels: 1-07, 1-11, 1-12, 1-20, 2-14, 2-30, 4-11, 4-16, 4-31. Evidence: 4-31 box [810,170,985,285] (`pairs/4-31_h63_pair.png` and `_overlay.png`:
       the arm's left half and pivot are hidden behind the anchor block in the port); 1-07 box (545,270)-(1080,715); 1-20 box 384,452,470,497 (the pillar drawn over the
@@ -3876,7 +4097,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       spawning markers); re-fly 4-29 (its route was flown for the knights A and B, B being `minion_spawn6_1766`) and re-check 3-09's. Gate: 4-29 f420 shows no knight at
       the gem, reachability 108 / 20 / 0, `test_mp_routes` 128 of 128. GAMEPLAY: yes (one knight fewer on 4-29, the 3-09 guard gone).
       *Closed by step 171 (CMP6, wave 4c-2), 2026-10-12; committed in wave 4c-2 (the commit titled "Magic Portals: two spawn markers the original never runs spawn no
-      knight"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it MOVES A ROUTE: 4-29's
+      knight", `9797699`; pushed with the wave, `7e708e3..45f6c05`, 2026-10-15). GAMEPLAY: YES, and it MOVES A ROUTE: 4-29's
       route no longer wins (its first problem: the tap on tick 525 is off the view), the other 127 routes win on exactly the census's ticks (3-09 still on 838), so
       `test_mp_routes` fails on 4-29 until the route phase (planning step 176) re-flies it.* Built as the Next says, as data and no code: `data/entity_roles.json`
       `enemy_spawn.names` is `["minion_spawn"]`, its `_note` carrying the citations (`ETHASUtil.cpp:63-79`, `ETHScene.cpp:707-708`, `Platform.cpp:90-110`, the listing's
@@ -3892,6 +4113,8 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       phase (planning step 176) for knight A only (`minion_spawn_1902`), dropping knight B's tap on tick 336 and the wait it needed; (b) 4-30's id 76, whose two callback
       markers disagree with the script's count of 1 (CMP6-3); (c) achievement 31 on 3-09 (gold, no knight killed) is exercised by no route. The deviations are rows CMP6-1
       to CMP6-9 above.
+      *Step 176 (the route phase), 2026-10-15: 4-29 is re-flown (`level28c.json`: the two taps spent on the deleted knight B, ticks 56 and 335, go; four taps and holds are
+      centred; 8 shots -> 6 and 6 -> 4 portals at the door; it still wins on tick 1,023, set by the key knight's patrol); 3-09 still wins on 838 and is not edited.*
 - [x] **CMP-7. The red key's own light is not built** (high; light; `decoded`; moves no route). Levels: 4-20 (seen), 4-19 (holds the other red key; reads `match`, its
       light not separated from `red_key_state`'s halo). Evidence: 4-20 box 760,255,1040,465 (`pairs/4-20_h63_pair.png`: RGB 57,19,22 in the original against 26,25,35 in
       the port; the strip beside him 86,0,0 against 0,0,0; the key lies at the spawn and is taken on tick 1). Cause (listing): `ETHCallback_key` #119-186 (bytes
@@ -4027,7 +4250,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       on 4-02; if the engine's push-out does not hold him, record an engine gap with the number (not this step). Gate: the astronaut's eye y within +-1 px of 380
       through f450, a `test_mp_bounce` pin, the 4-02 and 4-17 routes re-run. GAMEPLAY: yes (an idle astronaut stays on his block). Joins: G3-1, G3-4.
       *Closed by step 173 (CMP15, wave 4c-2), 2026-10-12, WITH RECORDED DEVIATIONS (owner-delegated); committed in wave 4c-2 (the commit titled "Magic Portals: a bounce slab is
-      placed, not moved with a velocity"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it
+      placed, not moved with a velocity", `12ac5d5`; pushed with the wave, `7e708e3..45f6c05`, 2026-10-15). GAMEPLAY: YES, and it
       MOVES A ROUTE: 4-07's route no longer wins (not won by tick 470; census 446), so `test_mp_routes` fails on THREE routes, 4-07 (this step), 2-01 (step 172) and 4-29 (step 171),
       until the route phase (planning step 176) re-flies them; the other 125 win on exactly the census's ticks, 4-02 on 87 and 4-17 on 163 among them. The gate is MET FROM f150:
       the eye is within +-1 px of 380 at four of the five sampled frames and every frame f150-f450 reads 380.31-381.08 (two 0.02-0.08 px over the band's edge: reader noise on a pulsing glow); f75-f135 stay open under G3-5 and CMP-low (a) (CMP15-1).* Built as the
@@ -4048,6 +4271,8 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       f75-f135, 1.1-3.1 px out of the band, the same start offset before and after (CMP15-1; G3-5); (b) the three routes (CMP15-2), 4-07's header text's positions being the CAP
       era's; (c) the kinematic rule's mutation, run by nobody (CMP15-3); (d) the same velocity-writing call for platforms, lifts and lift doors (CMP15-5; G3-4). The deviations are
       rows CMP15-1 to CMP15-6 above the wave 4c-1 rows.
+      *Step 176 (the route phase), 2026-10-15: 4-07 is re-flown (`level6c.json`: second lift tap 282 -> 279, the left-edge shot (5, 60) -> (5, 80), the last tap (155, 125) ->
+      (148, 98): the slab no longer carries him, so he stands 1 px lower; it wins on tick 446 again, the census tick); 4-02 (87) and 4-17 (163) were never moved.*
 - [x] **CMP-16. 2-01's crate is drawn 33 percent too big and, in the original, is smaller and lighter** (medium; structural; `decoded`; MOVES A ROUTE). Evidence: 2-01
       original crate [443,57,577,187] against the port's [420,15,598,190] (`pairs/2-01_h63_pair.png` and `_overlay.png`: a crate inside a larger crate; the same at
       `h0.3` and `h2.8`): the original's is 134 x 130 px, the port's 178 x 175. Cause: `level0a.esc` id 796 (`crate_no_emissive`) carries the custom data `scale` 0.75,
@@ -4057,7 +4282,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       weight"). Next: read `metadata/scale` on a crate into picture, collision box and mass; re-fly 2-01. Gate: the crate 134 x 130 px at f420, a `test_mp_levels` pin,
       `test_mp_routes` 128 of 128. GAMEPLAY: yes (a smaller, lighter crate on 2-01).
       *Closed by step 172 (CMP16, wave 4c-2), 2026-10-12; committed in wave 4c-2 (the commit titled "Magic Portals: a node's own scale scales its picture, its body and
-      its mass"; the wave's close names its hash; NOT PUSHED: the wave's finalize role pushes after the whole-wave verification). GAMEPLAY: YES, and it MOVES A ROUTE:
+      its mass", `9d643c9`; pushed with the wave, `7e708e3..45f6c05`, 2026-10-15). GAMEPLAY: YES, and it MOVES A ROUTE:
       2-01's route no longer wins (the crate it pushes now weighs 2.91 players and not 5.17, so the player reaches the top floor's end on tick ~175 where the route has
       ~308 and is burned by the fireball spat on tick 283), and 4-29's fails as it did after step 171; the other 126 routes win on exactly the census's ticks, so
       `test_mp_routes` fails on 2-01 and 4-29 until the route phase (planning step 176) re-flies them.* Built as the Next says, port-side and no data:
@@ -4069,14 +4294,18 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       64 -> 48 units (180 -> 135 px). Measured by the verifier on `MagicPortals.exe` `7dd3a7de` (the implementer's three links were refused by Smart App Control; the same
       exe ran when launched again): the f420 sweep (owner's seed, 128 launches, validation silent) changed ONE level and left 127 byte-identical, the 52 other levels that
       carry the datum (the antiportals) among them: 2-01, 27,328 px, the crate 180 -> 135 px wide; the crate visible 135 x 128 px against the original's 135 x 130 (the
-      spec's 134 x 130, +-2: met at the edge); `compare.py` ALL-GOLD against the original's stills, h6.3 mean_abs 7.04 -> 3.31 and edge_iou 0.4187 -> 0.6308, h2.8 7.14 ->
-      3.34 and 0.4212 -> 0.6686. Pins: `test_mp_levels` 129 -> 150, `test_mp_timebase` 445 -> 495, `test_mp_layer` 4,157 -> 4,171; the rules put back fail 27 + 6 + 2
+      spec's 134 x 130, +-2: met at the edge); `compare.py` ALL-GOLD against the original's stills, h6.3 mean_abs **4.20 -> 3.31** and edge_iou **0.6167 -> 0.6308**, h2.8 **4.26 -> 3.34** and **0.6556 -> 0.6686**
+      (**corrected 2026-10-15 by step 176 and this close**: this note, planning step 172's gate 3 and the commit message of `9d643c9` first said 7.04 -> 3.31, 0.4187 -> 0.6308,
+      7.14 -> 3.34 and 0.4212 -> 0.6686, which are R4b's frame from before wave 4c-1's five drawing steps: they had already gained about 2.8 of those 3.7 points, so the crate's
+      own gain is 0.9 on h6.3; the step's real before is `CMP10/after/sweep`, measured by the wave's verifier; the pushed commit message still says 7.04 and is not amended). Pins: `test_mp_levels` 129 -> 150, `test_mp_timebase` 445 -> 495, `test_mp_layer` 4,157 -> 4,171; the rules put back fail 27 + 6 + 2
       checks (the box and the geometry-derived mass fell together: CMP16-2). 57 suites, 56 pass, 33,347 checks (`test_mp_routes` 2,336, failing on 2-01 and 4-29),
       reachability 108 / 20 / 0, 0 warnings. Independently verified once (`CMP16/verify1.json`: pass; its medium, the record's stale rows, is corrected in this commit,
       and its lows are the rows below). **What it leaves**: (a) 2-01's route and 4-29's, re-flown by the route phase (planning step 176; CMP16-7), the 2-01 route's header
       text ("five times the player's weight", "a fifth of his pace") being stale; (b) the crate's 2 rows of height, a pre-existing resting offset (CMP16-5); (c) the
       unsplit mutation (CMP16-2); (d) `ShapeBoundsPx`'s scaled box against the script's unscaled one (CMP16-6). The deviations are rows CMP16-1 to CMP16-6 above the wave
       4c-1 rows, and CMP16-7 is the routes.
+      *Step 176 (the route phase), 2026-10-15: 2-01 is re-flown (`level0a.json`: wins on tick 307, was 444; it stops pushing the lighter crate at tick 182 and the fireball burns
+      the crate on 197) and 4-29 with it; the row's "MOVES A ROUTE" is done.*
 - [ ] **CMP-17. 3-08's lone guard rests 30 px right of and 7 px below the original's, astride the ledge seam** (medium; structural; `owner-call`; MOVES A ROUTE if R24
       changes). Evidence: 3-08 box x144-256 y48-192 (`pairs/3-08_h63_pair.png`, top left). The guard (spawn (410,48), wayA0 (372,48), hold 9999999) stops about 11 u
       earlier than the original's (`minions.json` `arrive_px` 8, `settle_px` 16) and ends over the seam of two ledge blocks; the same row was closed for 3-01 by step
@@ -4088,6 +4317,9 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       340 and is still rolling at 61 u/s at tick 420 at x 209. Unexplained by the recorded row; the hinge pose (CMP-2) is predicted to move only 0.6 u here. Next, as
       WT-10 says: trace the plank's tipping time (the stone 1.131 against the plank and the hinge) after CMP-2 lands, then re-fly 2-29 from tap 320 (R4a-6). GAMEPLAY:
       yes.
+      *CMP-2 landed (step 174, wave 4c-2) and is NOT the cause: the plank's first turn past 0.05 rad is tick 254 before and after, and the stone is 1.04 u (about 3 px) farther
+      along at tick 420, of the 125-135 px. The trace of the stone against the plank and the hinge (WT-10's own) is therefore still the next step on this row; 2-29 was
+      re-flown by step 176 for the wall's gate (564, was 569), on the port's stone clock, so R4a-6 is unchanged.*
 - [ ] **CMP-low. Residuals no play would notice** (low; 120 levels, 227 residuals; `unknown`, no step proposed). (a) PHASE (about 100 levels): animation, particle,
       flame, blink, mover and knight phases. Not defects of the port: the stills were timed by wall seconds on an emulator at 15-29 fps and the original runs two clocks
       the port runs as one (the HUD 0.49-0.94 s ahead of its world: `ui.json` `level_start._start_after`); a level-by-level fit puts `h6.3` at f440-f492, and chapter
@@ -5303,3 +5535,12 @@ grey of 255 under the original's (CMP10-1: one calibration experiment on a secon
 drawn as the original draws them: the player and the exit arch dark on chapters 2-4 and 4-01 (CMP-1), pictures at one depth stacked as the original stacks them (CMP-3), 4-20's
 red wash from the key's own light (CMP-7), barrels, cracked walls and crates breathing in brightness and the fire agents' small pulse (CMP-9), and the help block translucent
 and breathing (CMP-10); the grant in `docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
+*Added by wave 4c-2's close*: wave 4c-2 is pushed (`origin/main` `45f6c05`; GAMEPLAY changed in steps 171-175, all 128 routes re-flown and won, every suite green): 1-20's achievement 48
+("Be smarter I", 8 portals or fewer) is no longer unlocked by any route, because a stone now dies at the first wall it breaks and the second wall costs a second stone - whether 8 portals is
+possible under the 75 u/s gate, or the original's players reach the second stone more cheaply, is yours or a clip's to say (R4c2-1); one clip of a stone rolling and falling into a breakable
+wall would settle the gate's unit, the "larger of two readings" rule for 3-13's wall and 1-22's two-portal solution together (WALL-3, WALL-5, R4c2-2); 4-21's route stands on a 2-unit aim band that
+moves with G10-2's 60 Hz (R4c2-3); what to look for in play now that these are built as the original builds them: **3-09 with two knights and 4-29 with one** (CMP-6), **2-01's smaller, lighter
+crate** (CMP-16), **4-02's astronaut standing on his slab** (CMP-15), **2-31's seesaw 31.8 px down and left of where the level places it, and the planks and bars of 2-28, 3-15, 3-19, 3-20, 4-11
+and 4-31 a few units off** (CMP-2), and **stones that must be fast to break a wall and die with the first one**: 1-19, 1-20, 1-22, 2-29, 3-10, 3-12 (drop the stone on the slab from above), 3-14
+(the crate on both buttons), 4-21 (the stone lifted into the wall from under it) and the thrown stones of 1-24 and 1-25; the grant in `docs/permission.md`, still its placeholder; and the
+repository's going public, which needs his explicit word.
