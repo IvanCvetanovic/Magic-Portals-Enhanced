@@ -28,7 +28,15 @@
 #include "LevelVisit.hpp"
 #include "MagicPortalsLayer.hpp"
 #include "Route.hpp"
+#include "RunKind.hpp"
 #include "sim/Controls.hpp"
+#include "sim/Files.hpp"
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 // Where Magic Rampage's modern-control pictures are looked for (game/CMakeLists.txt, SUPERSONIC_MAGICPORTALS_PADART): a
 // definition of THIS file alone, so the suites, which never open the folder, are not rebuilt for it. Empty where the
@@ -37,12 +45,20 @@
 #define MAGICPORTALS_PADART_DIR ""
 #endif
 
+// The engine commit this build was configured against (game/CMakeLists.txt), for the log's first line. A definition of THIS file alone,
+// for the same reason. "unknown" where git was not there to ask.
+#ifndef MAGICPORTALS_ENGINE_COMMIT
+#define MAGICPORTALS_ENGINE_COMMIT "unknown"
+#endif
+
 namespace {
 
 // The diagnostics file, and the previous run's beside it, both in the temp
 // directory.
 constexpr const char* kLogFile = "magicportals.log";
 constexpr const char* kPreviousLogFile = "magicportals.prev.log";
+// The game's name: the manifest's title, the user data directory's and the message box's.
+constexpr const char* kTitle = "Magic Portals";
 // The modern controls' table, in the port's data directory (the layer reads the same file): main reads it only to refuse a flag whose size or
 // opacity is off its grid.
 constexpr const char* kControlsDataFile = "/controls.json";
@@ -63,14 +79,87 @@ void KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::pa
     }
 }
 
+// What main's catch needs, filled in as the start learns it. Declared outside the try, so the catch can read what the try found.
+struct FatalContext {
+    std::string logPath;   // where the log is, or would have been; empty before the start knew
+    bool attended = false; // a player's run: the only kind that may open a message box (RunKind.hpp)
+};
+
+#if defined(_WIN32)
+// The text on the screen. MessageBoxW, from UTF-8: the log's path can hold any character a profile name can.
+void ShowFatalDialog(const std::string& utf8) {
+    const int wide = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+    if (wide <= 0) return;
+    std::wstring text(static_cast<std::size_t>(wide), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, text.data(), wide);
+    MessageBoxW(nullptr, text.c_str(), L"Magic Portals", MB_OK | MB_ICONERROR);
+}
+#else
+void ShowFatalDialog(const std::string&) {}
+#endif
+
+// A run that stopped on an error: the reason into the log BEFORE the file sink closes (it used to go to stderr alone, and the
+// previous run's lines were all a tester had; the log's own console sink says it on stderr too), then - for a player's run and no other - a
+// message box naming the log.
+// Never throws: it runs inside a catch.
+int ReportFatal(const std::string& what, const FatalContext& context) noexcept {
+    try {
+        // The log writes an error to stderr as well as to the file sink, so there is no line of our own for stderr.
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "fatal: " << what << std::endl;
+        Supersonic::Log::CloseFileSink();
+        if (context.attended) {
+            std::string text = std::string("Magic Portals stopped because of an error:\n\n") + what;
+            if (!context.logPath.empty()) text += "\n\nThe details are in the log:\n" + context.logPath;
+            ShowFatalDialog(text);
+        }
+    } catch (...) {
+        // Nothing more can be said; the exit code still is.
+    }
+    return EXIT_FAILURE;
+}
+
+// The code page narrow strings mean in this process: 65001 where the application manifest (game/MagicPortals.manifest) took effect.
+// Said in the log's first line, because a path with a character this page lacks cannot be narrowed at all.
+std::string CodePageText() {
+#if defined(_WIN32)
+    const unsigned page = GetACP();
+    return std::to_string(page) + (page == CP_UTF8 ? " (UTF-8)" : "");
+#else
+    return "UTF-8";
+#endif
+}
+
+#ifdef NDEBUG
+constexpr const char* kBuildType = "Release";
+#else
+constexpr const char* kBuildType = "Debug";
+#endif
+
 } // namespace
 
-int main(int argc, char** argv) {
+// The game. main below wraps it in the one try that every uncaught exception ends at.
+static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // --level, --levels, --art, --data and --saves are the game's own flags. LaunchOptions
     // refuses anything it does not know, which is right for the engine, so the
     // game takes its flags out first and hands on the rest untouched.
     MagicPortals::MagicPortalsLayer::Paths paths;
-    paths.prisms = std::filesystem::temp_directory_path() / "supersonic-magicportals";
+    // WHERE THE LOG AND THE PRISMS GO. The system's temporary directory by the error_code overload, which says "no" instead of
+    // throwing when %TEMP% names nothing (the throwing one ended the process with no word and no log); a profile with a folder that
+    // exists, then the executable's own, then the working directory, when it does. Empty when none will do: the game then runs
+    // with no log file and writes no prisms, and says so.
+    std::filesystem::path temp;
+    {
+        std::error_code tempError;
+        temp = std::filesystem::temp_directory_path(tempError);
+        if (tempError) temp.clear();
+        if (temp.empty()) {
+            std::error_code workingError;
+            // UserDataDirectory makes its directory, so it is asked only now that it is needed.
+            temp = MagicPortals::Files::UsableDirectory({Supersonic::UserDataDirectory(kTitle), Supersonic::ExecutableDirectory(),
+                                                         std::filesystem::current_path(workingError)});
+        }
+    }
+    if (!temp.empty()) paths.prisms = temp / "supersonic-magicportals";
     // No --level opens the menu, which is the game's own front door. A named
     // level is entered directly, and that is how the suites and every headless
     // render run: neither ever sees the menu.
@@ -560,6 +649,17 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    // WHICH KIND OF RUN THIS IS, before anything can fail: only a player's may put a message box up (RunKind.hpp).
+    {
+        MagicPortals::DevFlags dev;
+        dev.saves = !savesOverride.empty();
+        dev.route = !routeFile.empty();
+        dev.visit = !visit.levels.empty();
+        dev.scripted = !presses.empty() || !holds.empty() || !taps.empty() || !drags.empty() || !burns.empty() || !places.empty();
+        dev.lightMasksOff = lightMasksOff;
+        fatal.attended = MagicPortals::AttendedRun(options, dev);
+    }
+
     // WHICH CONTROLS THIS RUN PLAYS (planning step 181), resolved once and handed down: the flag and the kind
     // of run (the rig's three flags make it a developer's, whose controls are the classic ones whatever the
     // data says). After --help, which needs no valid flag, and before anything is opened, so a refused
@@ -597,21 +697,40 @@ int main(int argc, char** argv) {
     // matters: a shipped game gets WIN32_EXECUTABLE and has no console at all,
     // so without this its diagnostics go nowhere. That is no use at all when
     // the thing being chased only happens while somebody else is playing.
-    const std::filesystem::path logPath = std::filesystem::temp_directory_path() / kLogFile;
-    // THE LAST RUN'S LOG, KEPT. SetFileSink opens its file truncated
-    // (engine/src/core/Log.cpp:90), so a crash's log was gone the moment the
-    // game was started again to see whether it happens twice. One run back is
-    // kept beside it; a failure here costs that copy, never the start.
-    KeepPreviousLog(logPath, std::filesystem::temp_directory_path() / kPreviousLogFile);
-    if (Supersonic::Log::SetFileSink(logPath.string())) {
-        std::cout << "[Magic Portals] logging to " << logPath.string() << std::endl;
+    if (temp.empty()) {
+        std::cerr << "[Magic Portals] no folder to keep a log in; continuing without one.\n";
+    } else {
+        const std::filesystem::path logPath = temp / kLogFile;
+        fatal.logPath = logPath.string();
+        // THE LAST RUN'S LOG, KEPT. SetFileSink opens its file truncated
+        // (engine/src/core/Log.cpp:90), so a crash's log was gone the moment the
+        // game was started again to see whether it happens twice. One run back is
+        // kept beside it; a failure here costs that copy, never the start.
+        KeepPreviousLog(logPath, temp / kPreviousLogFile);
+        if (Supersonic::Log::SetFileSink(fatal.logPath)) {
+            std::cout << "[Magic Portals] logging to " << fatal.logPath << std::endl;
+            // The FILE's lines carry the seconds since the first (the console's do not): a log a player sends can then say a slow
+            // start from a stuck one. A capture compares pictures and never this file.
+            Supersonic::Log::SetElapsedTimestamps(true);
+            // What the next reader of this file needs first, and nothing that changes from one run of the same build to the next:
+            // no clock, no process id.
+            SUPERSONIC_LOG_INFO("Magic Portals") << "build: " << kBuildType << ", engine " << MAGICPORTALS_ENGINE_COMMIT
+                                                 << ", Windows code page " << CodePageText() << std::endl;
+        } else {
+            std::cerr << "[Magic Portals] could not open " << fatal.logPath << " for writing; continuing without a log file.\n";
+        }
     }
 
     // Declared, not discovered, for the reason Wolf Brigade's main gives: a
     // game binary is a game whether or not a manifest sits beside it.
     Supersonic::GameManifest manifest;
     manifest.isGame = true;
-    manifest.title = "Magic Portals";
+    manifest.title = kTitle;
+    // The window is shown the moment it exists, and nothing reads its messages until the first frame: a start that takes five seconds
+    // or more (a cold disk, an antivirus scanning a freshly copied exe, a slow GPU driver compiling its pipelines) makes Windows call
+    // it "Not responding" and offer to close it, which looks like a crash. This reads the window's events between the startup stages,
+    // so the longest it goes unread is the longest single stage. Desktop only, and it changes no picture.
+    manifest.pumpEventsDuringStartup = true;
     // No startup scene: the layer builds the level. Left at the manifest's
     // default, a run from the repository root opens the editor's demo scene
     // beside it, which the first headless render showed above level30.
@@ -635,10 +754,17 @@ int main(int argc, char** argv) {
                      "medals earned this session will not be kept.\n";
     }
     paths.saveDir = saveDir.string();
+    SUPERSONIC_LOG_INFO("Magic Portals") << "folders: levels " << paths.levels << ", data " << paths.data << ", port data "
+                                         << paths.portData << ", saves " << (paths.saveDir.empty() ? "(none)" : paths.saveDir)
+                                         << std::endl;
 
     // Outside the app, because the layer stack is torn down with it.
     MagicPortals::LevelVisitLayer::Result visitResult;
-    try {
+    // What the layer and the app say about the run, read before the app goes: the layer's attach has long since run, and the app
+    // owns the count of captures it wrote.
+    bool startFailed = false;
+    std::string missingCaptures;
+    {
         Supersonic::SupersonicApp app(options, &manifest);
 
         // SAID OUT LOUD, because the two cases are indistinguishable otherwise.
@@ -674,30 +800,56 @@ int main(int argc, char** argv) {
             app.PushLayer(std::make_unique<MagicPortals::LevelVisitLayer>(gameLayer, paths, visit, visitResult));
         }
         app.Run();
-    } catch (const std::exception& e) {
-        std::cerr << "[Magic Portals] fatal: " << e.what() << std::endl;
-        Supersonic::Log::CloseFileSink();
-        return EXIT_FAILURE;
+        startFailed = gameLayer.StartFailed();
+        // Like the engine's own main (engine/src/main.cpp): every way a capture fails only logs, and a script that finds last week's
+        // PNG at the path it named would take it for this run's.
+        missingCaptures = options.MissingCaptures(app.CapturesWritten());
     }
 
+    // Every reason the run failed is said, and any one of them fails it.
+    bool failed = false;
+    if (startFailed) {
+        // The window stayed open on a black frame with the reason as a label (the layer's updateHud); a launcher could not tell that
+        // from a run that played.
+        std::cerr << "[Magic Portals] the game could not start; the reason is above and in the log." << std::endl;
+        failed = true;
+    }
     if (!visit.levels.empty() && (!visitResult.finished || !visitResult.failures.empty())) {
         std::cerr << "[Magic Portals] level visit "
                   << (visitResult.finished ? "failed" : "did not finish") << ": "
                   << visitResult.failures.size() << " failure(s)";
         if (!visitResult.failures.empty()) std::cerr << ", the first: " << visitResult.failures.front();
         std::cerr << std::endl;
-        Supersonic::Log::CloseFileSink();
-        return EXIT_FAILURE;
+        failed = true;
     }
-
+    if (!missingCaptures.empty()) {
+        std::cerr << "[Magic Portals] " << missingCaptures << std::endl;
+        failed = true;
+    }
     const unsigned validationErrors = Supersonic::VulkanContext::ValidationErrorCount();
     if (validationErrors > 0) {
         std::cerr << "[Magic Portals] " << validationErrors << " Vulkan validation error(s); failing the run."
                   << std::endl;
-        Supersonic::Log::CloseFileSink();
-        return EXIT_FAILURE;
+        failed = true;
     }
 
+    // The last line main writes itself, after the app is gone: its absence from a log is how a run that ended by a crash is told from
+    // one that ended on purpose (the engine's own "Workers joined" is no proof, for it is logged while an exception unwinds too).
+    SUPERSONIC_LOG_INFO("Magic Portals") << "finished: " << (failed ? "failed" : "clean") << std::endl;
     Supersonic::Log::CloseFileSink();
-    return EXIT_SUCCESS;
+    return failed ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+// The whole of the game under ONE try. A throw from anywhere in it - an argument, a path that cannot be narrowed, the engine's start,
+// the layer - ends here with the reason in the log, and an exit code that says it failed; not as a process the system kills with no
+// word (the exit 0xC0000409 of a profile folder whose name the ANSI code page lacks, planning step 189).
+int main(int argc, char** argv) {
+    FatalContext fatal;
+    try {
+        return RunGame(argc, argv, fatal);
+    } catch (const std::exception& e) {
+        return ReportFatal(e.what(), fatal);
+    } catch (...) {
+        return ReportFatal("an exception that is not a std::exception was thrown", fatal);
+    }
 }

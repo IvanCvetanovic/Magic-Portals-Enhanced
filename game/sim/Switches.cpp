@@ -1,6 +1,7 @@
 #include "sim/Switches.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Files.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -70,6 +71,7 @@ bool Store::Open(const std::string& directory, const Defaults& defaults, std::st
     m_musicEnabled = defaults.musicEnabled;
     m_path.clear();
     m_fromFile = false;
+    m_liveIsGood = false;
     error.clear();
 
     if (directory.empty()) return true;
@@ -95,6 +97,7 @@ bool Store::Open(const std::string& directory, const Defaults& defaults, std::st
     if (volume.IsNumber() && volume.AsNumber() >= 0.0) m_globalVolume = volume.AsNumber();
     if (audio[kMusicEnabled].IsBool()) m_musicEnabled = audio[kMusicEnabled].AsBool();
     m_fromFile = true;
+    m_liveIsGood = true;
     return true;
 }
 
@@ -106,43 +109,24 @@ bool Store::Save(std::string& error) const {
     error.clear();
     if (m_path.empty()) return true;
 
-    const std::filesystem::path path(m_path);
-    std::error_code ec;
-    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
+    std::string text;
+    text += "{\n";
+    text += "  \"version\": " + std::to_string(kVersion) + ",\n";
+    text += std::string("  \"") + kEntity + "\": {\n";
+    // Streamed, as before: the volume is a double and its text is whatever the stream prints for it (0 and 1 are what the switch sets).
+    std::ostringstream volume;
+    volume << m_globalVolume;
+    text += std::string("    \"") + kGlobalVolume + "\": " + volume.str() + ",\n";
+    text += std::string("    \"") + kMusicEnabled + "\": " + (m_musicEnabled ? "true" : "false") + "\n";
+    text += "  }\n";
+    text += "}\n";
 
-    const std::filesystem::path temp = path.string() + ".tmp";
-    {
-        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-        if (!file) {
-            error = temp.string() + ": cannot open for writing";
-            return false;
-        }
-        file << "{\n";
-        file << "  \"version\": " << kVersion << ",\n";
-        file << "  \"" << kEntity << "\": {\n";
-        file << "    \"" << kGlobalVolume << "\": " << m_globalVolume << ",\n";
-        file << "    \"" << kMusicEnabled << "\": " << (m_musicEnabled ? "true" : "false") << "\n";
-        file << "  }\n";
-        file << "}\n";
-        if (!file.good()) {
-            error = temp.string() + ": write failed";
-            return false;
-        }
-    }
-
-    ec.clear();
-    std::filesystem::rename(temp, path, ec);
-    if (ec) {
-        // Some filesystems refuse a rename onto an existing file.
-        ec.clear();
-        std::filesystem::remove(path, ec);
-        ec.clear();
-        std::filesystem::rename(temp, path, ec);
-    }
-    if (ec) {
-        error = m_path + ": " + ec.message();
-        return false;
-    }
+    // The last good file is kept beside the live one, but only when the live one IS good: one that failed to read (Open) is written
+    // over, as it always was, and must not replace the copy of the file before it.
+    Files::WriteOptions options;
+    options.keepBackup = m_liveIsGood;
+    if (!Files::WriteAtomic(m_path, text, options, error)) return false;
+    m_liveIsGood = true;
     return true;
 }
 

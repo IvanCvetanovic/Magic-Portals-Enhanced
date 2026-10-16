@@ -63,8 +63,11 @@ public:
     void SetSound(bool on);
     void SetMusic(bool on);
 
-    // Writes audio.json, via a temporary and a rename, as Scores::Store::Save
-    // does and for its reason. A memory-only store writes nothing and succeeds.
+    // Writes audio.json in one step (Files::WriteAtomic), as Scores::Store::Save
+    // does and for its reason, and keeps the last good file beside it as
+    // audio.json.bak - unless the file Open found would not read, which is
+    // written over (above) and is not a good copy to keep. A memory-only store
+    // writes nothing and succeeds.
     bool Save(std::string& error) const;
 
     // Whether this store has somewhere to write, and whether Open read a file.
@@ -77,6 +80,9 @@ private:
     bool m_musicEnabled = true;
     std::string m_path;
     bool m_fromFile = false;
+    // Whether the file on disk is one that read (Open) or one this store wrote (Save): what a backup may be made of. A cache that
+    // Save, which does not change what the store holds, updates.
+    mutable bool m_liveIsGood = false;
 };
 
 } // namespace MagicPortals::Switches

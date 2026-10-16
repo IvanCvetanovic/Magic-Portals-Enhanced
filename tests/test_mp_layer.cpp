@@ -29777,6 +29777,221 @@ void runModernTests() {
     AnUnforcedClassicRunPlaysTheClassicClaimsAndHud();
 }
 
+// ---- a level the port cannot load, a start it cannot make, and a save it cannot read (planning step 189) ----------------------------------
+//
+// The refused level has had no test since every level started: NSkipsToTheNextLevel says "the refusal half of it cannot be written at all",
+// because it named a REAL level the port turned away and there is none left. A level file that cannot be read can be made, though, and
+// this is Penumbra's scenario 31 for this port: a scratch copy of the levels with one file emptied, one cut inside a header, one that is
+// not a scene at all. The pins are the ones the layer already keeps and nothing pinned: the level says it is not playable, it is not
+// "could not start" (it has a level and a way out), R does not crash, the back key goes to the level grid, a tile press on it refuses the
+// same way, and N goes on to a level that loads.
+
+// The text the HUD's labels hold, joined: what a player reads when the game has something to say instead of a picture.
+std::string HudSays(entt::registry& registry) {
+    std::string said;
+    for (auto [entity, text] : registry.view<UITextComponent>().each()) {
+        (void)entity;
+        if (text.text.empty()) continue;
+        said += (said.empty() ? "" : " | ") + text.text;
+    }
+    return said;
+}
+
+std::string ReadLevelFile(const std::string& name) {
+    std::ifstream in(kLevels + "/" + name, std::ios::binary);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    return buffer.str();
+}
+
+// A scratch levels directory: level0 as `level0` says, and level1 as the converter wrote it (the good level to go on to).
+std::string RefusedLevelsDir(const char* tag, const std::string& level0) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / (std::string("supersonic-test-mp-layer-refused-") + tag);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream out(dir / "level0.tscn", std::ios::binary | std::ios::trunc);
+        out << level0;
+    }
+    {
+        std::ofstream out(dir / "level1.tscn", std::ios::binary | std::ios::trunc);
+        out << ReadLevelFile("level1.tscn");
+    }
+    return dir.string();
+}
+
+void ARefusedLevelSaysSoAndTheBackKeyReturnsToTheGrid() {
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string good = ReadLevelFile("level0.tscn");
+    const std::size_t header = good.rfind("\n[node ", good.size() / 2);
+    CHECK_MSG(header != std::string::npos, "level0 has a node header in its first half");
+    if (header == std::string::npos) return;
+    struct Variant {
+        const char* what;
+        const char* tag;
+        std::string bytes;
+    };
+    const std::vector<Variant> variants = {{"emptied", "empty", ""},
+                                           {"cut inside a node's header", "cut", good.substr(0, header + 12)},
+                                           {"text that is not a scene", "text", "this is not a scene\n"}};
+    for (const Variant& variant : variants) {
+        const std::string what = variant.what;
+        MagicPortalsLayer::Paths paths = TestPaths();
+        paths.levels = RefusedLevelsDir(variant.tag, variant.bytes);
+        {
+            entt::registry registry;
+            publishViewport(registry);
+            MagicPortalsLayer layer(paths, "level0");
+            layer.OnAttach(registry);
+            CHECK_MSG(layer.SimLevel() == nullptr && !layer.LoadError().empty(), what + ": the level does not load, and says why: " + layer.LoadError());
+            CHECK_MSG(!layer.StartFailed(), what + ": a refused level is not 'could not start': it has a level to be refused and a way out");
+            CHECK_MSG(IsAt(layer, "level0") && layer.MenuScreen() == Screen::None, what + ": the layer is at the level, with no menu");
+            CHECK_MSG(HudSays(registry).find("is not playable yet") != std::string::npos, what + ": the player is told: " + HudSays(registry));
+
+            // R on a level that is not loaded does not crash, and leaves it refused, in the same words.
+            press(layer, registry, MagicPortalsLayer::kRetry);
+            CHECK_MSG(layer.SimLevel() == nullptr && !layer.LoadError().empty() && IsAt(layer, "level0") && layer.MenuScreen() == Screen::None,
+                      what + ": R leaves it refused: " + layer.LoadError());
+
+            // The back key is the way out: the level grid of its chapter.
+            press(layer, registry, MagicPortalsLayer::kBack);
+            CHECK_MSG(layer.MenuScreen() == Screen::Levels, what + ": the back key returns to the level grid");
+            CHECK_MSG(HudSays(registry).find("is not playable yet") == std::string::npos, what + ": and the grid carries no line of text");
+
+            // The refused level's own tile: a press on it refuses again - without throwing, with the grid left and the same way back.
+            const MagicPortalsLayer::MenuButton* tile = MenuButtonOf(layer, Kind::Level, 0);
+            CHECK_MSG(tile != nullptr, what + ": the grid has the level's tile");
+            if (tile != nullptr) {
+                layer.PressMenu(registry, *tile);
+                CHECK_MSG(layer.SimLevel() == nullptr && !layer.LoadError().empty() && IsAt(layer, "level0") && layer.MenuScreen() == Screen::None,
+                          what + ": a press on the tile is refused the same way: " + layer.LoadError());
+                CHECK_MSG(!layer.StartFailed(), what + ": and is still not 'could not start'");
+                press(layer, registry, MagicPortalsLayer::kBack);
+                CHECK_MSG(layer.MenuScreen() == Screen::Levels, what + ": the back key reaches the grid from there too");
+            }
+            layer.OnDetach(registry);
+        }
+        // N goes on to a level that loads: the refusal did not poison the layer or the process.
+        {
+            entt::registry registry;
+            publishViewport(registry);
+            MagicPortalsLayer layer(paths, "level0");
+            layer.OnAttach(registry);
+            CHECK_MSG(layer.SimLevel() == nullptr, what + ": refused again in a fresh layer");
+            press(layer, registry, MagicPortalsLayer::kSkip);
+            CHECK_MSG(IsAt(layer, "level1") && layer.SimLevel() != nullptr && layer.LoadError().empty(),
+                      what + ": N goes on to the good level, which loads: " + layer.LoadError());
+            layer.OnDetach(registry);
+        }
+    }
+}
+
+// "Could not start" is the layer with neither a level nor a menu, and it is the one main exits non-zero for. Pinned against its neighbours,
+// so that a refused level cannot become one: that run has a level and a way out, and a launcher cannot tell it from a run that played.
+void OnlyALayerWithNothingToPlayCouldNotStart() {
+    {
+        // The data folder is not there: nothing can be played, and the window can only say so.
+        MagicPortalsLayer::Paths paths = TestPaths();
+        paths.data = (std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-no-such-data").string();
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level0");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.StartFailed() && !layer.LoadError().empty(), "a missing data folder is 'could not start': " + layer.LoadError());
+        CHECK_MSG(layer.LoadError().find("portals.json") != std::string::npos, "and it names what it could not read: " + layer.LoadError());
+        CHECK_MSG(HudSays(registry).find("could not start") != std::string::npos, "and the window says so: " + HudSays(registry));
+        layer.OnDetach(registry);
+    }
+    {
+        // A level the game does not have.
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "no_such_level");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.StartFailed(), "an unknown --level is 'could not start': " + layer.LoadError());
+        layer.OnDetach(registry);
+    }
+    {
+        // The neighbours: a menu start and a named start both started.
+        entt::registry menuRegistry;
+        publishViewport(menuRegistry);
+        MagicPortalsLayer menu(TestPaths(), "");
+        menu.OnAttach(menuRegistry);
+        CHECK_MSG(!menu.StartFailed() && menu.LoadError().empty(), "the menu start started");
+        menu.OnDetach(menuRegistry);
+        entt::registry levelRegistry;
+        publishViewport(levelRegistry);
+        MagicPortalsLayer level(TestPaths(), "level0");
+        level.OnAttach(levelRegistry);
+        CHECK_MSG(!level.StartFailed() && level.SimLevel() != nullptr, "the named start started: " + level.LoadError());
+        level.OnDetach(levelRegistry);
+    }
+}
+
+std::string SavesDir(const char* tag) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / (std::string("supersonic-test-mp-layer-saves-") + tag);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    return dir.string();
+}
+
+// The medals of a layer started over a scores.json that does not read: the file is kept under a new name, what it held is kept, the
+// layer goes on, and nothing is lost at the next start. And over one that cannot be opened: the layer waits, and the end of the run
+// writes the merge.
+void ALayerOverAnUnreadableScoresFileKeepsItAndGoesOn() {
+    using Opened = MagicPortals::Scores::Store::Opened;
+    const std::string torn = "{\n  \"version\": 1,\n  \"scores\": [\n    {\"world\": 0, \"level\": 0, \"medal\": 3},\n"
+                             "    {\"world\": 0, \"level\": 1, \"medal\": 2},\n    {\"world\": 0, \"lev";
+    {
+        const std::string saves = SavesDir("torn");
+        {
+            std::ofstream out(std::filesystem::path(saves) / "scores.json", std::ios::binary | std::ios::trunc);
+            out << torn;
+        }
+        MagicPortalsLayer::Paths paths = TestPaths();
+        paths.saveDir = saves;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.LoadError().empty() && !layer.StartFailed(), "the layer started over an unreadable scores.json: " + layer.LoadError());
+        CHECK_MSG(layer.Medals().WhatOpened() == Opened::Quarantined && layer.Medals().Persists() && layer.Medals().Count() == 2,
+                  "it was moved aside, two medals recovered, and the layer saves from now on");
+        CHECK_MSG(ReadWholeFile(std::filesystem::path(saves) / "scores.json.bad-1") == torn, "the file as it was is kept under its new name");
+        CHECK_MSG(layer.Medals().Get(0, 0) == MagicPortals::Scores::kGold && layer.Medals().Get(0, 1) == MagicPortals::Scores::kSilver,
+                  "the medals it held are the layer's");
+        layer.OnDetach(registry);
+        entt::registry next;
+        publishViewport(next);
+        MagicPortalsLayer again(paths, "");
+        again.OnAttach(next);
+        CHECK_MSG(again.Medals().WhatOpened() == Opened::Read && again.Medals().Count() == 2, "and the next start reads a whole file with them");
+        again.OnDetach(next);
+    }
+    {
+        // Out of reach (a directory stands at the name for a lock): the layer starts, waits, and the end of the run writes the file.
+        const std::string saves = SavesDir("outofreach");
+        const std::filesystem::path file = std::filesystem::path(saves) / "scores.json";
+        std::filesystem::create_directories(file);
+        MagicPortalsLayer::Paths paths = TestPaths();
+        paths.saveDir = saves;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.LoadError().empty() && layer.Medals().Waiting() && !layer.Medals().Persists(),
+                  "a scores.json that cannot be opened: the layer starts and waits for it");
+        std::error_code ec;
+        std::filesystem::remove_all(file, ec);
+        layer.OnDetach(registry);
+        CHECK_MSG(std::filesystem::is_regular_file(file) && layer.Medals().Persists() && layer.Medals().WhatOpened() == Opened::Merged,
+                  "and as the run ends, with the name free, the save is made");
+    }
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -30050,6 +30265,10 @@ void runTests() {
     ControlsStyleReportsTheResolvedStyle();
     AForcedModernResolvesModernAndThePolicyIsRecorded();
     ABrokenControlsDataLeavesClassicAlone();
+    // A level the port cannot load, a start it cannot make, and a save it cannot read (planning step 189).
+    ARefusedLevelSaysSoAndTheBackKeyReturnsToTheGrid();
+    OnlyALayerWithNothingToPlayCouldNotStart();
+    ALayerOverAnUnreadableScoresFileKeepsItAndGoesOn();
     // The modern controls, played (planning step 182).
     runModernTests();
 }

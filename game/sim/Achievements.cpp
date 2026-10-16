@@ -1,6 +1,7 @@
 #include "sim/Achievements.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Files.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -600,6 +601,7 @@ bool Store::Open(const std::string& directory, const Rules::Save& rules, std::st
     m_path.clear();
     m_fromFile = false;
     m_hashRefused = false;
+    m_liveIsGood = false;
     error.clear();
     if (directory.empty()) return true;
     m_path = (std::filesystem::path(directory) / rules.file).string();
@@ -637,6 +639,7 @@ bool Store::Open(const std::string& directory, const Rules::Save& rules, std::st
         return false;
     }
     m_ids = std::move(ids);
+    m_liveIsGood = true;
     return true;
 }
 
@@ -657,43 +660,23 @@ std::vector<int> Store::Sorted() const {
 bool Store::Save(std::string& error) const {
     error.clear();
     if (m_path.empty()) return true;
-    const std::filesystem::path path(m_path);
-    std::error_code ec;
-    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
 
     const std::string list = ListOf(m_ids);
-    const std::filesystem::path temp = path.string() + ".tmp";
-    {
-        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-        if (!file) {
-            error = temp.string() + ": cannot open for writing";
-            return false;
-        }
-        file << "{\n";
-        file << "  \"version\": " << kSaveVersion << ",\n";
-        file << "  \"" << m_rules.entity << "\": {\n";
-        file << "    \"" << m_rules.listKey << "\": \"" << list << "\",\n";
-        file << "    \"" << m_rules.hashKey << "\": \"" << HashOf(m_rules, list) << "\"\n";
-        file << "  }\n";
-        file << "}\n";
-        if (!file.good()) {
-            error = temp.string() + ": write failed";
-            return false;
-        }
-    }
-    ec.clear();
-    std::filesystem::rename(temp, path, ec);
-    if (ec) {
-        // Some filesystems refuse a rename onto an existing file.
-        ec.clear();
-        std::filesystem::remove(path, ec);
-        ec.clear();
-        std::filesystem::rename(temp, path, ec);
-    }
-    if (ec) {
-        error = m_path + ": " + ec.message();
-        return false;
-    }
+    std::string text;
+    text += "{\n";
+    text += "  \"version\": " + std::to_string(kSaveVersion) + ",\n";
+    text += "  \"" + m_rules.entity + "\": {\n";
+    text += "    \"" + m_rules.listKey + "\": \"" + list + "\",\n";
+    text += "    \"" + m_rules.hashKey + "\": \"" + HashOf(m_rules, list) + "\"\n";
+    text += "  }\n";
+    text += "}\n";
+
+    // The last good file is kept beside the live one - and only when the live one IS good. A file that failed to read, or whose hash
+    // was not its list's, is written over (as the original's saveList writes its file fresh) and is no copy to keep.
+    Files::WriteOptions options;
+    options.keepBackup = m_liveIsGood;
+    if (!Files::WriteAtomic(m_path, text, options, error)) return false;
+    m_liveIsGood = true;
     return true;
 }
 

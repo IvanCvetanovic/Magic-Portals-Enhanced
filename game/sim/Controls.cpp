@@ -1,14 +1,14 @@
 #include "sim/Controls.hpp"
 
+#include "sim/Files.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <cmath>
-#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <random>
 #include <sstream>
 #include <vector>
 
@@ -1072,57 +1072,18 @@ std::string Store::Text() const {
     return text + "}}";
 }
 
-namespace {
-
-// A name no other writer - another window, an earlier run - and no earlier Save has used for its half-written copy.
-std::string TempSuffix() {
-    static std::atomic<unsigned> counter{0};
-    std::random_device device;
-    return std::to_string(device()) + "-" + std::to_string(counter.fetch_add(1));
-}
-
-} // namespace
-
 bool Store::Save(std::string& error) {
     error.clear();
     if (m_path.empty()) return true;
     const std::string text = Text();
     if (text == m_written) return true;
 
-    const std::filesystem::path path(m_path);
-    std::error_code ec;
-    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
-
-    // The temporary is this Save's own: a name every writer shares (the file's name and ".tmp") let one window truncate what another was
-    // about to rename, and a copy held open by a scanner or a second window made the rename fail with the live file already gone.
-    const std::filesystem::path temp = path.string() + "." + TempSuffix() + ".tmp";
-    {
-        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-        if (!file) {
-            error = temp.string() + ": cannot open for writing";
-            return false;
-        }
-        file << text;
-        file.flush();
-        if (!file.good()) {
-            file.close();
-            std::filesystem::remove(temp, ec);
-            error = temp.string() + ": write failed";
-            return false;
-        }
-    }
-
-    // The replace is the rename, one step: the live file is whole, old or new, at every instant. Where the rename is refused the live file is
-    // left exactly as it was - it is NOT removed to make room, which on a failing second rename was the only copy of the choice - and the
-    // caller is told, so the next Save tries again with the bytes it still holds.
-    ec.clear();
-    std::filesystem::rename(temp, path, ec);
-    if (ec) {
-        error = m_path + ": " + ec.message();
-        std::error_code ignored;
-        std::filesystem::remove(temp, ignored);
-        return false;
-    }
+    // The write every store shares (sim/Files, planning step 189), which is this Save's own shape from planning step 187: a temporary
+    // of this call's own name, flushed and checked after the close, renamed over the file in one step, never removing the live file,
+    // the temporary gone on every failure. No backup is kept: this file is a choice and not progress, and a directory of saves that
+    // holds controls.json and nothing beside it is what the Options cases assert. A failure is not remembered as a write, so the
+    // next Save tries again with the bytes it still holds.
+    if (!Files::WriteAtomic(m_path, text, Files::WriteOptions{}, error)) return false;
     m_written = text;
     return true;
 }

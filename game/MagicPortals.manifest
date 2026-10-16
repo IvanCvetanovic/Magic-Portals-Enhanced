@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  MagicPortals.exe's application manifest (planning step 189). It asks Windows for ONE thing: that this process's "ANSI" code page
+  be UTF-8 (Windows 10 version 1903 and later; an earlier Windows ignores the element and the process keeps its own code page).
+
+  Why: every path the game hands the C++ library as a std::string - the log file, the save folder, the files the stores read and
+  write - passes through the ANSI code page, and std::filesystem::path::string() THROWS for a path with a character that page lacks.
+  %TEMP% and %APPDATA% both carry the user's name, so a player named with a character outside Windows-1252 (a c-acute, a CJK or a
+  Cyrillic name on an English Windows) could not start the game at all: it ended with exit code 0xC0000409 before it wrote a word.
+  With this element a narrow string means UTF-8, and a path such as that narrows and opens.
+
+  It changes nothing else: no DPI setting, no compatibility entry, no execution level (the linker's own manifest, with
+  requestedExecutionLevel asInvoker, is merged with this one). It is on MagicPortals.exe alone; the suites do not carry it.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>

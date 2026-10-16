@@ -23,6 +23,7 @@ add_library(MagicPortalsSim STATIC
     EdgeCover.cpp
     Ease.cpp
     Effects.cpp
+    Files.cpp
     Fields.cpp
     Fire.cpp
     Follower.cpp

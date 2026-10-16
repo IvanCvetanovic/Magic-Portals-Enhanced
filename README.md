@@ -368,11 +368,40 @@ With no `--level` the game opens as the original does: loading screen, then main
 `--level level0` starts straight in 1-01. Diagnostics also go to `%TEMP%\magicportals.log`,
 and each launch first moves the last run's to `%TEMP%\magicportals.prev.log`: after a crash,
 the crashed run's log is still there once the game has been started again (one run back).
+The file's lines carry the seconds since the first (`INFO +1.234s [Window] ...`), so a log can say a
+slow start from a stuck one; its first line names the build (Release or Debug, the engine commit, and
+the process's code page: 65001 where the application manifest `game/MagicPortals.manifest` took effect,
+which is what lets a profile name with a character outside the machine's ANSI page start the game at all),
+its second the folders the run reads and writes, and a run that ends on purpose ends with `finished: clean`
+(or `failed`), which a run killed by a crash does not write. Where `%TEMP%` names nothing the log goes to
+the user data directory, then the executable's folder, then the working directory.
+
+Exit codes (planning step 189): 0 for a run that played and ended; 1 for a run that stopped on an error
+(the reason is the log's `fatal:` line and stderr, and a **player's** run, one with none of the developer's
+flags, also puts it in a message box naming the log; a capture or a route never opens a box), that could
+not start (the data it plays from would not read, or `--level` names no level; a level that merely will
+not load is *not playable yet* and has a way out on the back key), whose `--frames` run did not write
+every PNG it was asked for, or that reported a Vulkan validation error or a failed level walk. One
+exception, measured: when the engine's own start throws (no Vulkan loader or device, the likeliest real
+fatal) the `fatal:` line and the box happen as above and the process then ends with Windows' fast-fail
+code 0xC0000409 instead of 1, an engine gap and not the port's (planning step 189, deviation 6).
 
 The medals and the sound and music switches are kept between runs, as the original keeps
 them, in `%APPDATA%\Magic Portals\` (`scores.json`, and `audio.json` from the first press of
 a switch). So is the choice of controls (`controls.json`, from the first tile pressed in
 Options). `--saves <dir>` moves all of them, for a run that must not touch the player's.
+
+Each of them is written in one step: a temporary of its own name beside the file, flushed and checked
+after it is closed, renamed over the file, and the live file is never removed to make room; `scores.json`,
+`audio.json` and `achievements.json` also keep the last good copy beside them as `<file>.bak` (never a file
+that failed to read). **A `scores.json` that does not read is never deleted or written over**: it is
+renamed `scores.json.bad-<n>` (the first free `n`), the medals it still holds are kept and saved at once
+(a write cut short keeps every whole row before the cut), the log says so (`medals: ... kept as ...`), and
+the game goes on. One that cannot be *opened* (another program holds it for a moment) is waited for
+(three tries, 100 ms apart), then left alone: the run keeps its medals in memory, tries again at every
+save and as the game ends, and merges them in (the better medal of each level). `audio.json`,
+`achievements.json` and `controls.json` that do not read are still written over at the next save, as
+before; the stores disagree on purpose until the owner says otherwise.
 
 **To play, build `build-play\`:** `tools\parity\play_build.bat`, then
 `build-play\game\MagicPortals.exe`. It is the same game on the same data (the first run

@@ -289,8 +289,11 @@ public:
     // unlock's append: false, and nothing changed, for an id it has.
     bool Add(int id);
 
-    // saveList: the list and its hash, via a temporary and a rename. A
-    // memory-only store writes nothing and succeeds.
+    // saveList: the list and its hash, in one step (Files::WriteAtomic), with the
+    // last good file kept beside it as <file>.bak - unless the file Open found
+    // would not read or had a hash that was not its list's, which is written
+    // over and is no copy to keep. A memory-only store writes nothing and
+    // succeeds.
     bool Save(std::string& error) const;
 
     const std::vector<int>& Ids() const { return m_ids; } // in the order of unlocking
@@ -306,6 +309,8 @@ private:
     std::string m_path;
     bool m_fromFile = false;
     bool m_hashRefused = false;
+    // Whether the file on disk is one that read whole (Open) or one this store wrote (Save): what a backup may be made of.
+    mutable bool m_liveIsGood = false;
 };
 
 } // namespace MagicPortals::Achievements

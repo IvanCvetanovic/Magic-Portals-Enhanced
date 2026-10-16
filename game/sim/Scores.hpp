@@ -37,6 +37,13 @@ inline constexpr int kBronze = 1;
 inline constexpr int kSilver = 2;
 inline constexpr int kGold = 3;
 
+// How a scores.json that cannot be OPENED is tried: three attempts, 100 ms apart, which is two waits and about a fifth of a second
+// at the worst. Another program holding the file for a moment (a scanner, a sync client, a second window) is the likely cause and a
+// lock is not a corrupt file; a longer wait would be felt as a hang at the start, and a locked file is tried again at every save and
+// as the game ends in any case. Robustness constants, not gameplay numbers: nothing in the original corresponds to them.
+inline constexpr int kOpenAttempts = 3;
+inline constexpr int kOpenWaitMs = 100;
+
 // The medals, by world and level.
 //
 // Addressed by (world, level) rather than by a flat level index because that is
@@ -54,11 +61,51 @@ public:
     // the same filename into the ctest working directory.
     //
     // A directory with no scores.json in it is not an error either - that is
-    // simply a player who has not finished a level yet. False is returned only
-    // for a file that exists and cannot be read or does not parse, because
-    // silently starting from zero would erase a player's progress on the next
-    // Save.
+    // simply a player who has not finished a level yet.
+    //
+    // THE POLICY (planning step 189), for a file that is there and is not what
+    // this store wrote - cut short by a power failure, emptied, or hand-edited:
+    //
+    //   - the file is NEVER deleted and never written over. It is renamed to
+    //     scores.json.bad-<n> (the first free n), every medal it still holds is
+    //     taken from it row by row, and the store starts from those and saves
+    //     them at once, so the next start reads a whole file. Starting from
+    //     nothing and leaving the bad file where it was would have been the end
+    //     of saving for good, silently: this store used to go memory-only for the
+    //     session and the player's medals vanished at exit;
+    //   - a file that cannot be OPENED (another program holds it for a moment: a
+    //     scanner, a sync client) is tried a few times, a short bounded wait
+    //     apart, and is then left alone: the store is memory-only for the session
+    //     and tries again when a medal is saved and at Retry, which the layer
+    //     calls as it ends. What the session earned is merged into the file by
+    //     then, the better of each level, and nothing is lost.
+    //
+    // False, with `error` saying what happened, whenever there is something to
+    // tell the player or the log: the file was moved aside (Persists() is then
+    // true), or it was out of reach (Persists() is false). True for a fresh
+    // folder and for a file that read whole.
     bool Open(const std::string& directory, std::string& error);
+
+    // What the last Open (or Retry) found, for a caller that wants to say it.
+    enum class Opened {
+        MemoryOnly,  // no directory was given
+        Fresh,       // no scores.json yet
+        Read,        // a whole file, read
+        Quarantined, // an unreadable file, moved aside; its medals recovered
+        OutOfReach,  // a file that could not be opened (or moved aside): memory-only for now
+        Merged,      // a Retry reached a file that was out of reach, and wrote the merge
+    };
+    Opened WhatOpened() const { return m_opened; }
+    // Where the unreadable file was moved to, and how many medals it still held (Quarantined).
+    const std::string& QuarantinedTo() const { return m_quarantinedTo; }
+    int Recovered() const { return m_recovered; }
+
+    // Whether the file was out of reach and the store is waiting to try again.
+    bool Waiting() const { return m_path.empty() && !m_file.empty(); }
+    // Tries the file again (the same bounded wait) and, if it opens, merges what this session earned with what it holds and
+    // writes the result. True when there was nothing to wait for or the merge was written; false, with `error`, when the
+    // file is still out of reach.
+    bool Retry(std::string& error);
 
     // The medal this level was cleared with, or kUnplayed.
     int Get(int world, int level) const;
@@ -71,13 +118,13 @@ public:
     // rewrite the file with what it already says.
     bool Record(int world, int level, int medal);
 
-    // Writes scores.json, via a temporary and a rename.
-    //
-    // The rename is PipelineCache's idiom and is here for its reason: a file
-    // truncated by a process killed mid-write is worse than no file, and this
-    // one is the player's progress. A memory-only store saves nothing and
-    // reports success - it has nowhere to write, which is not a failure.
-    bool Save(std::string& error) const;
+    // Writes scores.json in one step (Files::WriteAtomic) and keeps the last
+    // good one beside it as scores.json.bak. A file truncated by a process
+    // killed mid-write is worse than no file, and this one is the player's
+    // progress. A memory-only store saves nothing and reports success - it has
+    // nowhere to write, which is not a failure. A store that is Waiting tries
+    // the file again first; false, with `error`, if it is still out of reach.
+    bool Save(std::string& error);
 
     // Whether this store has somewhere to write.
     bool Persists() const { return !m_path.empty(); }
@@ -92,10 +139,21 @@ private:
         int medal = kUnplayed;
     };
 
+    // One read of the file into the entries, the quarantine included. Open clears first; Retry does not.
+    bool Load(std::string& error);
+    // The file written, with no look at whether the store is waiting.
+    bool Write(std::string& error);
+
     std::vector<Entry> m_entries;
 
-    // The file, or empty for a memory-only store.
+    // The file this store keeps, or empty for a memory-only store.
+    std::string m_file;
+    // The file, once it is safe to write: empty while the store is memory-only or waiting for a file that is out of reach.
     std::string m_path;
+
+    Opened m_opened = Opened::MemoryOnly;
+    std::string m_quarantinedTo;
+    int m_recovered = 0;
 };
 
 } // namespace MagicPortals::Scores

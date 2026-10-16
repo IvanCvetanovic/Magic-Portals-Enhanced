@@ -79,6 +79,11 @@ add_mp_test(test_mp_turrets SKIPS_WITH_77)
 # TheSwitchesAreKeptBetweenRuns, planning step 124).
 add_mp_test(test_mp_scores)
 
+# What keeps a player's saves whole and a start from ending in silence (planning step 189): sim/Files' one atomic write as the four stores
+# use it, the .bak of the last good file, a directory for the log found without throwing, and the rule of which runs may open a message box.
+# Pure sim and a scratch directory; no converted level, so no skip.
+add_mp_test(test_mp_robust)
+
 # The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
 # what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
 add_mp_test(test_mp_clock)

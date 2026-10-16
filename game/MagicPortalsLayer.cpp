@@ -304,10 +304,21 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
 
     // The medals earned before this run, if this build was told where they are
     // kept. An empty saveDir is the ordinary case for a test and means this
-    // never opens a file; a file that exists and will not parse is reported and
-    // then left alone rather than overwritten.
+    // never opens a file. A file that exists and will not parse is NEVER deleted or
+    // written over: the store moves it aside as scores.json.bad-<n>, keeps the medals
+    // it still held and says so; one that cannot be opened is waited for and tried
+    // again (sim/Scores.hpp, planning step 189).
+    //
+    // Said in the log and on stderr only. The layer has no surface for a message of
+    // its own outside the failure states: the one label it has (updateHud) is the
+    // "could not start" and "not playable yet" line, and a banner over the main menu
+    // would be a screen the original never had, which is the owner's to design.
     if (std::string why; !m_scores.Open(m_paths.saveDir, why)) {
-        SUPERSONIC_LOG_WARN("Magic Portals") << "medals not loaded: " << why << std::endl;
+        if (m_scores.WhatOpened() == Scores::Store::Opened::Quarantined) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "medals: " << why << std::endl;
+        } else {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "medals not loaded: " << why << std::endl;
+        }
     }
 
     // And the two switches, as main sets the saved volume before anything plays
@@ -510,6 +521,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
         loadUiFont(m_achievementRules.popup.font);
     }
     if (m_current < 0 && m_screen == Screen::None) {
+        m_startFailed = true;
         SUPERSONIC_LOG_ERROR("Magic Portals") << "Could not start: " << m_loadError << std::endl;
     }
     buildHud(registry);
@@ -928,6 +940,16 @@ void MagicPortalsLayer::resolveOptionsEntry() {
 }
 
 void MagicPortalsLayer::OnDetach(entt::registry& registry) {
+    // A scores.json that was out of reach at the start (held by another program for a moment) is tried once more as the game ends,
+    // and what this session earned is merged into it: the last chance, and the reason a medal earned meanwhile is not lost. A file that
+    // is still out of reach is said, and the medals of the session are the only thing that is.
+    if (m_scores.Waiting()) {
+        if (std::string why; m_scores.Retry(why)) {
+            SUPERSONIC_LOG_INFO("Magic Portals") << "medals saved as the game ended: scores.json is open again" << std::endl;
+        } else {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "medals not saved as the game ended: " << why << std::endl;
+        }
+    }
     // Before the entities go: a looping voice is never "finished", so nothing
     // else will ever free it.
     stopMusic(registry);

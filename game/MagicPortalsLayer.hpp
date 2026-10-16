@@ -266,6 +266,16 @@ public:
     // throwing out of OnAttach.
     const std::string& LoadError() const { return m_loadError; }
 
+    // Whether the game could not start AT ALL (planning step 189): the data it plays from would not read, or the level main asked
+    // for is not one of the game's, so there is neither a level nor a menu and the window can only say why. Set once, at attach.
+    // NOT a refused level: that has a level, says "not playable yet" and takes the back key to the grid. main exits non-zero for
+    // this one, and a launcher can tell it from a run that played.
+    bool StartFailed() const { return m_startFailed; }
+
+    // The medals, as this run keeps them (what the last open of scores.json found, the quarantine, the waiting for a file out of
+    // reach): for the suites, which assert them without a window.
+    const Scores::Store& Medals() const { return m_scores; }
+
     // Why the level's art could not be drawn, when it could not - the level is
     // then drawn as boxes - or empty.
     const std::string& ArtError() const { return m_artError; }
@@ -2199,6 +2209,8 @@ private:
     Game::Level m_level;
     bool m_loaded{false};
     std::string m_loadError;
+    // Set where "Could not start" is logged, and never cleared (StartFailed).
+    bool m_startFailed{false};
     glm::dvec2 m_boundsPx{0.0}; // the level_bounds marker: the level runs from (0, 0) to here
 
     entt::entity m_camera{entt::null};
