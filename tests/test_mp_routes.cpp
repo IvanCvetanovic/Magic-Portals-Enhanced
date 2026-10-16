@@ -52,6 +52,7 @@
 #include "sim/Chapters.hpp"
 #include "sim/Game.hpp"
 #include "sim/LevelEnd.hpp"
+#include "sim/ScriptClock.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
@@ -342,7 +343,7 @@ std::string RecordOf(const MagicPortalsLayer& layer, entt::registry& registry) {
 // asked, not only those before the first that a modern claim changes.
 std::optional<MagicPortalsLayer::Control> ModernClaim(const MagicPortalsLayer& layer, const glm::dvec2& at, double ageMs) {
     const glm::dvec2 view = layer.ViewPx();
-    const Controls::Insets& insets = layer.ControlsPolicy().testInsets;
+    const Controls::Insets insets = layer.ControlsInsets();
     const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), view, insets, ageMs);
     for (const Controls::Id id : Controls::kClaimOrder) {
         MagicPortals::Hud::Rect shown;
@@ -420,14 +421,15 @@ void Classify(const MagicPortalsLayer& layer, const Route::Plan& plan, const std
             path.push_back(fraction * view);
         }
         for (std::size_t k = 0; k < path.size(); ++k) {
-            // The layout of the tick the touch is read on: the level is a script tick older for each tick from the one the state is of.
-            const double age = layer.LevelAgeMs() + 16.0 * static_cast<double>(1 + static_cast<int>(k));
+            // The layout of the tick the touch is read on: the level is a script tick older for each tick from the one the state is of. The script's
+            // tick (the floor of 16.667 ms, sim/ScriptClock) the layer itself advances the level's age by, asked of the layer and not written here.
+            const double age = layer.LevelAgeMs() + MagicPortals::ScriptClock::Ms(layer.TickStep()) * static_cast<double>(1 + static_cast<int>(k));
             const std::optional<MagicPortalsLayer::Control> claim = ModernClaim(layer, path[k], age);
             // No control takes it, but the walk controls' gate - the camera's `onPad`, the lift's and the hand's - is asked of the rectangles under the
             // modern controls and of the discs under the classic ones, whether or not the pair is shown (design D12): a touch where the two differ
             // moves the camera, a lift or a hand differently on a weightless level, where no pair claims anything.
             const Controls::Layout modernLayout =
-                Controls::LayOut(Controls::Style::Modern, layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), view, layer.ControlsPolicy().testInsets, age);
+                Controls::LayOut(Controls::Style::Modern, layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), view, layer.ControlsInsets(), age);
             const bool modernGate = modernLayout.At(Controls::Id::Left).hit.Contains(path[k]) || modernLayout.At(Controls::Id::Right).hit.Contains(path[k]);
             const bool classicGate = Controls::ClassicOnWalkControl(layer.HudRules(), view, age, path[k]);
             if (!claim && modernGate == classicGate) continue;

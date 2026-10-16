@@ -28,6 +28,7 @@
 #include "core/ViewportInfo.hpp"
 // For handing a level's lightmaps back when it goes. Only through the pointer the
 // app publishes in the registry's context, which a suite's bare registry has not.
+#include "platform/SafeArea.hpp"
 #include "renderer/TextureRegistry.hpp"
 
 #include "sim/PadArt.hpp"
@@ -240,6 +241,29 @@ const Chapters::Level* MagicPortalsLayer::Current() const {
 
 glm::dvec2 MagicPortalsLayer::ViewPx() const {
     return glm::dvec2(m_viewHeightPx * static_cast<double>(m_aspect), m_viewHeightPx);
+}
+
+Controls::Insets MagicPortalsLayer::ControlsInsets() const {
+    // Classic never asks: its controls are flush in the corners, as the original's, and a classic run reads neither the seam nor the window's
+    // safe area (the layer reads nothing a classic run's pictures could depend on).
+    if (!playsModern()) return Controls::Insets{};
+    // The test seam BEATS the window's own: a case that injects insets means exactly them, and the desktop answers zero for the other.
+    const Controls::Insets& test = m_paths.controls.testInsets;
+    if (test.left != 0.0 || test.top != 0.0 || test.right != 0.0 || test.bottom != 0.0) return test;
+    return m_safeInsets;
+}
+
+void MagicPortalsLayer::refreshSafeInsets(const entt::registry& registry) {
+    m_safeInsets = Controls::Insets{};
+    if (!playsModern()) return;
+    // In WINDOW pixels, which the view is stretched to: converted by the factor the pointer is (view height over window height). With no
+    // viewport there is no window to speak of and the layout has no inset. Read once per tick by the caller, so that every consumer of
+    // the tick - the layout, the claim, the camera's gate, the hint - asks the same rectangles.
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    if (viewport == nullptr || !(viewport->Size().y > 0.0f)) return;
+    const Supersonic::SafeAreaInsets safe = Supersonic::SafeArea::Get();
+    m_safeInsets = Controls::InsetsFromWindowPx(static_cast<double>(safe.left), static_cast<double>(safe.top), static_cast<double>(safe.right),
+                                                static_cast<double>(safe.bottom), static_cast<double>(viewport->Size().y), m_viewHeightPx);
 }
 
 // ---- attach and detach ------------------------------------------------------
@@ -786,6 +810,8 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     m_playerZ = m_artRules.LevelDepth(m_artRules.character.z);
     buildDrawables(registry);
     m_aspect = viewportAspect(registry);
+    // The window's safe area, for the modern layout this level is about to be laid out with (zero in a classic run and on a desktop).
+    refreshSafeInsets(registry);
     // THE LEVEL OPENS ON THE PLAYER, by the owner's choice.
     //
     // The original puts its camera on camera_start - which sits near a level's
@@ -914,6 +940,10 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_shotTouch = Portals::TouchTrack{};
     m_handTouch = Portals::TouchTrack{};
     m_pressedControl.reset();
+    // And the modern controls' reading of it: the level did not see a finger still down from before the load go down, so it is swallowed.
+    m_pressedLook.reset();
+    m_levelSawPress = false;
+    m_swallowUntilUp = false;
     // And the camera's record of it: a touch still held into the next level is
     // taken up there where it is, and moves nothing until it moves.
     m_cameraTouch = Camera::TouchRecord{};
@@ -8227,7 +8257,7 @@ void MagicPortalsLayer::layOutControls() {
         const Controls::Rules& rules = m_controlsRules;
         // Only the look of the tuning is applied until CTL-10 (resolveControls).
         const Controls::Tuning& tuning = m_controlsApplied;
-        const Controls::Insets& insets = m_paths.controls.testInsets;
+        const Controls::Insets insets = ControlsInsets();
         const Controls::Layout layout =
             Controls::LayOut(Controls::Style::Modern, rules, m_hudRules, tuning, view, insets, m_levelAgeMs);
         // The pads' byte: the pulse's while playing, and what a level's end left them at as they decay. The decay's start
@@ -8287,6 +8317,9 @@ void MagicPortalsLayer::layOutControls() {
             }
             button.rect = frame.rect;
             button.hit = frame.hit;
+            // LIT while a touch is down on it (planning step 183): only while the level is being played and game time runs - the corner buttons
+            // stay drawn "frozen and unpressed" under a pause or a popup, and nothing is pressed once the level has ended.
+            button.pressed = playing && !GameTimeStopped() && button.shown && m_pressedLook == button.kind;
             // A picture is drawn so that its body fills the box's face; a flat quad IS the face.
             button.picture = Controls::DrawRect(frame.rect, rules.faceInset, button.image.empty() ? 0.0 : button.bodyInset);
             if (claimsClassic()) {
@@ -8362,7 +8395,7 @@ void MagicPortalsLayer::logModernControls(const entt::registry& registry) {
     const glm::dvec2 view = ViewPx();
     const glm::dvec2 windowPx(viewport->Size());
     const double toPx = windowPx.y / view.y;
-    const Controls::Insets& insets = m_paths.controls.testInsets;
+    const Controls::Insets insets = ControlsInsets();
     const std::array<Hud::Rect, 5> boxes = Controls::Boxes(m_controlsRules, m_controlsApplied, view, insets);
     const std::array<Hud::Rect, 5> hits = Controls::HitRects(m_controlsRules, boxes, view, insets);
     std::ostringstream line;
@@ -8382,6 +8415,12 @@ void MagicPortalsLayer::logModernControls(const entt::registry& registry) {
     }
     line << ", in a " << std::setprecision(0) << windowPx.x << "x" << windowPx.y << " px window (view " << std::setprecision(2)
          << view.x << "x" << view.y << " units)";
+    // A window whose edges something covers says by how much, so that a log shows why the rectangles are not the table's; a desktop's says
+    // nothing more than it ever did.
+    if (insets.left != 0.0 || insets.top != 0.0 || insets.right != 0.0 || insets.bottom != 0.0) {
+        line << std::setprecision(1) << ", inside a safe area of left " << insets.left * toPx << ", top " << insets.top * toPx << ", right "
+             << insets.right * toPx << ", bottom " << insets.bottom * toPx << " px";
+    }
     m_controlsRectsLine = line.str();
     SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsRectsLine << std::endl;
 }
@@ -8656,14 +8695,19 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
             add(button.rect, button.image, white(button.alpha));
             return;
         }
+        // LIT while a touch is down on it (planning step 183): the control's own alpha plus `pressed.boost_byte` of 255 - a fixed step on the
+        // byte the player sees, after the idle scale and the opacity, so a faded control lights by as much as a whole one - and never past
+        // 255. Here, at the draw: the end-of-level decay starts from the unlit byte (m_padEndByte) in both styles.
+        const double alpha = button.pressed ? std::min(1.0, button.alpha + static_cast<double>(m_controlsRules.pressedBoostByte) / 255.0)
+                                            : button.alpha;
         if (button.image.empty()) {
             const PadArt::Rgb rim = PadArt::kPlateRim;
             add(button.picture, button.image,
                 glm::vec4(static_cast<float>(rim.r) / 255.0f, static_cast<float>(rim.g) / 255.0f,
-                          static_cast<float>(rim.b) / 255.0f, static_cast<float>(button.alpha)));
+                          static_cast<float>(rim.b) / 255.0f, static_cast<float>(alpha)));
             return;
         }
-        add(button.picture, button.image, white(button.alpha));
+        add(button.picture, button.image, white(alpha));
     };
     // Text on the view, centred on `at` or from it as its top-left, a quad a
     // letter over the font's own pages.
@@ -8872,14 +8916,47 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         const double hint = Hint::TextAlpha(m_hintRules, LevelFrameMs());
         if (hint > 0.0) {
             const auto& pages = font->Pages();
-            for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, m_hintRules.text, Hint::TextTopLeft(m_hintRules, view),
-                                                               m_hintRules.unitsPerFontPx)) {
+            // The modern controls' pair stands over the classic text's row (planning step 183): the text starts clear of it, and inside the view.
+            // Classic is the literal call it always was.
+            glm::dvec2 hintTopLeft = Hint::TextTopLeft(m_hintRules, view);
+            if (modern) hintTopLeft.x = modernHintLeft(*font, hintTopLeft, view);
+            for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, m_hintRules.text, hintTopLeft, m_hintRules.unitsPerFontPx)) {
                 if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], white(hint), glyph.uvOffset,
                     glyph.uvOffset + glyph.uvScale);
             }
         }
     }
+}
+
+double MagicPortalsLayer::modernHintLeft(const Supersonic::BitmapFont& font, const glm::dvec2& classicTopLeft, const glm::dvec2& view) const {
+    // The text's own width and rows, from the glyphs it is laid out in: the extent to the last glyph's EDGE (not its advance), so that the
+    // edge and not the pen stays inside the view; a font change cannot break it. The line is laid out at the classic place and the width
+    // and rows do not depend on where that is.
+    const std::vector<Hud::Glyph> glyphs = Hud::LayOutTextFrom(font, m_hintRules.text, classicTopLeft, m_hintRules.unitsPerFontPx);
+    if (glyphs.empty()) return classicTopLeft.x;
+    double right = classicTopLeft.x;
+    double top = glyphs.front().rect.min.y;
+    double bottom = glyphs.front().rect.Max().y;
+    for (const Hud::Glyph& glyph : glyphs) {
+        right = std::max(right, glyph.rect.Max().x);
+        top = std::min(top, glyph.rect.min.y);
+        bottom = std::max(bottom, glyph.rect.Max().y);
+    }
+    Controls::HintRow row;
+    row.classicLeft = classicTopLeft.x;
+    row.extent = right - classicTopLeft.x;
+    row.top = top;
+    row.height = bottom - top;
+    // The pair as it SETTLES, not as it slides in, so that the text does not move for the first 700 ms; and "shown" as "this level has
+    // arrows" (a weightless level has none), not as drawn this tick, so that a pause or a popup hiding them does not throw the text back
+    // across the screen.
+    const Controls::Layout settled = Controls::LayOut(Controls::Style::Modern, m_controlsRules, m_hudRules, m_controlsApplied, view,
+                                                      ControlsInsets(), m_hudRules.pads.slideMs);
+    std::array<bool, 5> shown{};
+    shown[static_cast<std::size_t>(Control::Left)] = !m_level.portals.noGravity;
+    shown[static_cast<std::size_t>(Control::Right)] = !m_level.portals.noGravity;
+    return Controls::HintLeft(Controls::Style::Modern, m_controlsRules, settled, row, view, shown);
 }
 
 const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(const Touch& touch) const {
@@ -8905,7 +8982,7 @@ bool MagicPortalsLayer::onWalkControl(const glm::dvec2& viewPoint) const {
         // not any control was built. From the data and the view alone, so the camera, the lift gate and the hand gate
         // ask the very rectangles the claim does.
         const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, m_controlsRules, m_hudRules, m_controlsApplied,
-                                                         ViewPx(), m_paths.controls.testInsets, m_levelAgeMs);
+                                                         ViewPx(), ControlsInsets(), m_levelAgeMs);
         return layout.At(Control::Left).hit.Contains(viewPoint) || layout.At(Control::Right).hit.Contains(viewPoint);
     }
     return Controls::ClassicOnWalkControl(m_hudRules, ViewPx(), m_levelAgeMs, viewPoint);
@@ -8927,6 +9004,9 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     using Supersonic::Input;
     float direction = keyDirection();
 
+    // The pressed look is this tick's claim to set, and nothing else's (modern only; classic never sets it).
+    m_pressedLook.reset();
+
     // The on-screen controls, laid out and asked about before anything else
     // reads the pointer.
     layOutControls();
@@ -8946,6 +9026,24 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // as a real press at the same point does. Reading it twice would press and
     // release a scheduled tap inside one tick.
     Touch touch = touchThisTick(registry);
+    // THE SWALLOW (planning step 183; modern claims only: the classic discs are small and flush in the corners, and the test variant with the
+    // classic claims must stay the classic simulation to the last tick). Read straight after the touch, before anything below can return.
+    // A touch the level saw go down is the level's; one that is held and whose press the level never saw - the pause's Resume, a popup's
+    // close, an end screen's button, a finger still down across a load: every one of them clears `m_levelSawPress` - is swallowed until it
+    // is up or off the game, so that a press that did something else cannot walk him from under whatever it was on.
+    const bool modernClaims = playsModern() && !claimsClassic();
+    if (modernClaims) {
+        if (!touch.over || !touch.held) {
+            m_levelSawPress = false;
+            m_swallowUntilUp = false;
+        } else if (touch.pressed) {
+            m_levelSawPress = true;
+            m_swallowUntilUp = false;
+        } else if (!m_levelSawPress) {
+            m_swallowUntilUp = true;
+        }
+    }
+    const bool swallowed = modernClaims && m_swallowUntilUp;
     // THE CAMERA'S READING OF IT, first and whatever takes it below: the original's
     // CameraController reads the engine's input raw (camera.json `drag`), at the
     // place the touch is this tick, and asks the walk pads of that place. And
@@ -9057,13 +9155,14 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // HELD, not tapped: a walk button is leaned on, and IsDown is what a
         // replayed tick feeds (Input.hpp lists it among the queries a replay
         // diverts), so the suites can drive these exactly as they drive a key.
+        // A swallowed touch (above) claims the arrow and does not lean on it.
         case Control::Left:
-            if (held) direction -= 1.0f;
-            if (held && !m_level.noGravity) m_cameraPadMoving = true;
+            if (held && !swallowed) direction -= 1.0f;
+            if (held && !swallowed && !m_level.noGravity) m_cameraPadMoving = true;
             break;
         case Control::Right:
-            if (held) direction += 1.0f;
-            if (held && !m_level.noGravity) m_cameraPadMoving = true;
+            if (held && !swallowed) direction += 1.0f;
+            if (held && !swallowed && !m_level.noGravity) m_cameraPadMoving = true;
             break;
         // And these are EDGES: held down, a reset would restart the level every
         // tick for as long as the button was pressed.
@@ -9087,6 +9186,13 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         case Control::Clear:
             if (act && m_level.portals.KillAll(true) > 0) latch("portal_spent");
             break;
+        }
+        // THE PRESSED LOOK (planning step 183, modern only): an arrow while a touch leans on it, a corner button while the press that began on
+        // it is held over it (a press that slid off, or one already let go, shows nothing: it will not act). Set from the values read before
+        // the switch, which a restart may have unloaded the controls under.
+        if (modernClaims && held) {
+            const bool arrow = kind == Control::Left || kind == Control::Right;
+            if (arrow ? !swallowed : (actsOnRelease && (pressed || began == kind))) m_pressedLook = kind;
         }
         // A TAP THAT WORKED A CONTROL IS SPENT. Without this, leaning on the
         // walk arrow also fires a portal into the floor beneath it every time
@@ -11979,6 +12085,8 @@ void MagicPortalsLayer::drawPicturesAtTick(entt::registry& registry) {
 void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::Step& step) {
     using Supersonic::Input;
     ++m_ticks;
+    // The window's safe area, once for the tick: a rotation or a bar shown moves it between ticks, never inside one (modern only).
+    refreshSafeInsets(registry);
     // The layer's own clock: what the original's absolute GetTimeF reads give.
     // WALL milliseconds, which sys:GetTime and sys:GetTimeF read: the engine's own tick, not
     // the floor. Every script reader of the floor takes m_tickMs (planning step 147).
@@ -12432,6 +12540,10 @@ void MagicPortalsLayer::openPause(entt::registry& registry) {
     m_shotTouch = Portals::TouchTrack{};
     m_handTouch = Portals::TouchTrack{};
     m_pressedControl.reset();
+    // The level stops reading input: a finger that is down when it takes the tick again was not seen to go down by it (the swallow).
+    m_pressedLook.reset();
+    m_levelSawPress = false;
+    m_swallowUntilUp = false;
     // And so is the camera's record of it, which the pause does not follow: a touch
     // still held when the level resumes is taken up there.
     m_cameraTouch = Camera::TouchRecord{};
@@ -12702,6 +12814,10 @@ void MagicPortalsLayer::openPopup(entt::registry& registry, const Popup::Class& 
     m_popup.state = Popup::Start(cls);
     m_popup.stepOnResume = stepOnResume;
     m_helpTouch = HelpTouch{};
+    // As the pause: a finger down when the level takes the tick again was not seen to go down by it (the swallow).
+    m_pressedLook.reset();
+    m_levelSawPress = false;
+    m_swallowUntilUp = false;
     // Popup::Popup pauses g_timeManager (instructions 147..166).
     freezeWorld(registry);
     layOutControls();

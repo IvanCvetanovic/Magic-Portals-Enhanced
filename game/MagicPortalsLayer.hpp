@@ -200,7 +200,8 @@ public:
         // line says - the classic-claims variant, a test's safe-area insets, the art directory, a
         // saved tuning a test injects - is in the same struct (Controls::Policy, sim/Controls.hpp),
         // each field "classic, nothing" by default; this layer reads classicClaims and testInsets
-        // (planning step 182).
+        // (planning step 182; testInsets is the test seam over the window's own safe area from planning
+        // step 183, ControlsInsets()).
         Controls::Policy controls;
     };
 
@@ -1212,7 +1213,12 @@ public:
     double LevelAgeMs() const { return m_levelAgeMs; }
 
     // A control's rectangle on the view as the last tick laid it out, (0, 0)
-    // the view's top-left, in design units; false when it is not shown.
+    // the view's top-left, in design units; false when it is not shown. Under the
+    // modern controls it is the control's BOX - the rectangle the layout and the
+    // clamp are measured on - and not the picture, which is drawn into a rectangle
+    // derived from it (Controls::DrawRect), nor the area a touch counts in, which is
+    // the hit rectangle (Controls::HitRects); under the classic controls it is the
+    // drawn rectangle, which is all of those at once.
     bool ControlRect(Control control, Hud::Rect& out) const;
 
     // TEST SEAMS (planning step 178). The shown control a view point is on as the claim reads it (Left,
@@ -1238,6 +1244,12 @@ public:
     Controls::Style ControlsStyle() const { return m_controlsStyle; }
     // What main resolved, as the layer was given it.
     const Controls::Policy& ControlsPolicy() const { return m_paths.controls; }
+    // The safe-area insets the modern layout is laid out with, in design units, and the ONE answer every reader of them takes - the
+    // layout, the claim, the camera's / lift's / hand's `onPad`, the hint, the INFO line (planning step 183): a test's
+    // `Paths::controls.testInsets` when it is not all zero, else the window's own safe area (Supersonic::SafeArea::Get, in window
+    // pixels, read once per tick and converted the way the pointer is). All zero in a classic run, which never asks, and on a desktop,
+    // whose window nothing covers.
+    Controls::Insets ControlsInsets() const;
     // controls.json (game data) and the flag's tuning were read and the run may play modern. False
     // whenever the policy says the feature does not exist, and when either would not read.
     bool ModernReady() const { return m_modernReady; }
@@ -1258,6 +1270,9 @@ public:
     // numbers of the design's table 1.2 at 1280 x 720. Empty in a classic run, and before a level
     // has started.
     const std::string& ControlsRectsLine() const { return m_controlsRectsLine; }
+    // Whether the touch now held is being swallowed (see m_swallowUntilUp): a test's precondition for "it did not walk because it was
+    // swallowed", not because nothing claimed it.
+    bool TouchSwallowed() const { return m_swallowUntilUp; }
     // The picture a modern control is drawn with (the generated tier, written into Paths::prisms once at
     // attach), or empty where there is none - no prisms, or it could not be written - and the control is
     // a flat quad. Empty for a classic run.
@@ -3255,6 +3270,9 @@ private:
         Controls::HitShape hit;
         bool shown{false};
         double alpha{0.0}; // display-space, as last laid out
+        // MODERN ONLY (planning step 183): a touch is down on this control - an arrow held, a corner button held by the press that began on
+        // it - so it is drawn lit (`pressed.boost_byte` over its alpha, at the draw only: the decay and the end byte never see it).
+        bool pressed{false};
         // MODERN ONLY (planning step 182): `rect` is the control's BOX, which the layout and the claim are
         // measured on; the picture is drawn into `picture`, derived from it so that the picture's solid body
         // sits on the box's solid face (Controls::DrawRect), or onto the face itself for a flat quad.
@@ -3304,6 +3322,23 @@ private:
     // The control a press began on, while that touch is down: what a modern corner button acts on at the
     // release (the original's Button rule), cleared when the touch is up.
     std::optional<Control> m_pressedControl;
+    // THE PRESSED LOOK (planning step 183, modern only): the control a touch is on and working this tick - an arrow held, a corner button
+    // held by the press that began on it - which layOutControls turns into ControlButton::pressed. Set by readInput's claim, and gone with
+    // anything that stops the level reading input (a pause, a popup, a load).
+    std::optional<Control> m_pressedLook;
+    // THE SWALLOW (planning step 183, modern only). The modern arrows are big, and a press that did something else - the pause's Resume, a
+    // popup's close, an end screen's button, a finger resting across a level load - can still be held when the level takes the tick again,
+    // with the pointer over an arrow: it must not walk him. `m_levelSawPress` is whether the level's own input saw THIS touch go down;
+    // a touch that is held and was not seen to go down is swallowed until it is up (or off the game). A swallowed touch still CLAIMS
+    // the control under it - no shot leaves from under an arrow, the camera does not follow it - and does not WORK it.
+    bool m_levelSawPress{false};
+    bool m_swallowUntilUp{false};
+    // The window's safe area as last read, in the layout's units (Controls::InsetsFromWindowPx); zero unless the run plays modern.
+    Controls::Insets m_safeInsets;
+    void refreshSafeInsets(const entt::registry& registry);
+    // Where 1-21's hint text starts under the modern controls (the classic start is Hint::TextTopLeft's, untouched): clear of the pair
+    // and inside the view, by the text's own measured width.
+    double modernHintLeft(const Supersonic::BitmapFont& font, const glm::dvec2& classicTopLeft, const glm::dvec2& view) const;
 
     double m_levelAgeMs{0.0};
     // The frame time the level's age last gained (the script's, ScriptClock::Ms): what a wall's colour

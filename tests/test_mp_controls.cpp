@@ -2602,6 +2602,64 @@ void ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor() {
     }
 }
 
+// The window's safe area is in WINDOW PIXELS (Supersonic::SafeArea::Get) and the layout's insets are in design units (planning step 183): one
+// pixel is the view's height over the window's, on both axes, as the pointer is converted. Literals written out: 256 units over 720 px is
+// 0.35555...
+void TheSafeAreaInPixelsBecomesInsetsInUnitsByThePointersFactor() {
+    constexpr double kUnitsPerPx = 256.0 / 720.0;
+    const Controls::Insets notch = Controls::InsetsFromWindowPx(80.0, 36.0, 40.0, 72.0, 720.0, 256.0);
+    CHECK_MSG(std::fabs(notch.left - 80.0 * kUnitsPerPx) < 1e-12 && std::fabs(notch.left - 28.44444444444444) < 1e-9, "80 px of a 720 px window are 28.444 units: " + std::to_string(notch.left));
+    CHECK_MSG(std::fabs(notch.top - 12.8) < 1e-12, "36 px are 12.8 units, the same factor along the other axis: " + std::to_string(notch.top));
+    CHECK_MSG(std::fabs(notch.right - 40.0 * kUnitsPerPx) < 1e-12, "40 px at the right: " + std::to_string(notch.right));
+    CHECK_MSG(std::fabs(notch.bottom - 25.6) < 1e-12, "72 px at the bottom are 25.6 units: " + std::to_string(notch.bottom));
+
+    // The same fraction of any window is the same units: a window twice as tall covers twice the pixels for the same notch.
+    const Controls::Insets twice = Controls::InsetsFromWindowPx(160.0, 72.0, 80.0, 144.0, 1440.0, 256.0);
+    CHECK_MSG(std::fabs(twice.left - notch.left) < 1e-9 && std::fabs(twice.top - notch.top) < 1e-9 && std::fabs(twice.right - notch.right) < 1e-9 &&
+                  std::fabs(twice.bottom - notch.bottom) < 1e-9,
+              "a notch twice the pixels in a window twice as tall is the same in units");
+    // And it does not depend on the window's width, which the view is stretched to: the factor is the HEIGHTS'.
+    const Controls::Insets wide = Controls::InsetsFromWindowPx(80.0, 36.0, 40.0, 72.0, 720.0, 256.0);
+    CHECK(wide.left == notch.left && wide.bottom == notch.bottom);
+
+    // Nothing is a notch of nothing: all zero in, all zero out (a desktop), whatever the window.
+    for (const double height : {720.0, 1080.0, 1440.0, 100.0}) {
+        const Controls::Insets none = Controls::InsetsFromWindowPx(0.0, 0.0, 0.0, 0.0, height, 256.0);
+        CHECK_MSG(NoInsets(none), "no notch in a " + std::to_string(height) + " px window is no inset");
+    }
+    // A window with no height has no safe area to speak of; a side that is negative or not a number is zero, the others stand.
+    CHECK(NoInsets(Controls::InsetsFromWindowPx(80.0, 36.0, 40.0, 72.0, 0.0, 256.0)));
+    CHECK(NoInsets(Controls::InsetsFromWindowPx(80.0, 36.0, 40.0, 72.0, -720.0, 256.0)));
+    CHECK(NoInsets(Controls::InsetsFromWindowPx(80.0, 36.0, 40.0, 72.0, std::numeric_limits<double>::quiet_NaN(), 256.0)));
+    CHECK(NoInsets(Controls::InsetsFromWindowPx(80.0, 36.0, 40.0, 72.0, 720.0, 0.0)));
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    const Controls::Insets mixed = Controls::InsetsFromWindowPx(-5.0, nan, inf, 72.0, 720.0, 256.0);
+    CHECK_MSG(mixed.left == 0.0 && mixed.top == 0.0 && mixed.right == 0.0 && std::fabs(mixed.bottom - 25.6) < 1e-12,
+              "a negative, a NaN and an infinite side are zero; the valid one stands: " + std::to_string(mixed.bottom));
+
+    // And the layout moves by them, which is the whole of the wiring: the arrows' box is measured from the safe rectangle's edges. A notch at
+    // the left and a home bar at the bottom of a 1280 x 720 window put the left arrow where table 1.2 puts it plus the inset.
+    Controls::Rules rules;
+    std::string error;
+    const std::string file = PortDataDir() + "/controls.json";
+    if (!Controls::LoadRules(file, rules, error)) {
+        CHECK_MSG(false, "controls.json reads: " + error);
+        return;
+    }
+    const glm::dvec2 view(256.0 * 1280.0 / 720.0, 256.0);
+    const Controls::Tuning base;
+    const Controls::Insets device = Controls::InsetsFromWindowPx(80.0, 0.0, 0.0, 34.0, 720.0, 256.0);
+    const std::array<Hud::Rect, 5> flat = Controls::Boxes(rules, base, view, Controls::Insets{});
+    const std::array<Hud::Rect, 5> moved = Controls::Boxes(rules, base, view, device);
+    const std::size_t left = static_cast<std::size_t>(Controls::Id::Left);
+    CHECK_MSG(std::fabs(moved[left].min.x - (flat[left].min.x + 80.0 * kUnitsPerPx)) < 1e-9, "the left arrow's box is 80 px (28.44 units) further in: " + std::to_string(moved[left].min.x));
+    CHECK_MSG(std::fabs(moved[left].min.y - (flat[left].min.y - 34.0 * kUnitsPerPx)) < 1e-9, "and 34 px higher: " + std::to_string(moved[left].min.y));
+    // The top-right corner buttons are not under the notch at the left: restart does not move sideways.
+    const std::size_t reset = static_cast<std::size_t>(Controls::Id::Reset);
+    CHECK_MSG(std::fabs(moved[reset].min.x - flat[reset].min.x) < 1e-9, "restart, at the right, stays where it was");
+}
+
 void runTests() {
     ClassicHitEqualsTheHudFunctionsEverywhere();
     ClassicFramesAreTheHudsRectsExactly();
@@ -2652,6 +2710,9 @@ void runTests() {
     ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor();
     APresetKeyIsParsedAndAnUnknownOneIsRefused();
     TheClassicStyleIsTheClassicFunctions();
+
+    // The safe area (planning step 183).
+    TheSafeAreaInPixelsBecomesInsetsInUnitsByThePointersFactor();
 }
 
 } // namespace

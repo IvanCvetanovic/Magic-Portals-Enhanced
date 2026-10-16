@@ -48,6 +48,8 @@
 #include "core/SpriteAnimationSystem.hpp"
 #include "core/ViewportInfo.hpp"
 
+#include "platform/SafeArea.hpp"
+
 #include "sim/Art.hpp"
 #include "sim/DarkDragon.hpp"
 #include "sim/Dragon.hpp"
@@ -23799,7 +23801,7 @@ struct MdGeom {
 MdGeom MdGeometry(const MagicPortalsLayer& layer) {
     MdGeom g;
     g.view = layer.ViewPx();
-    const Controls::Insets& insets = layer.ControlsPolicy().testInsets;
+    const Controls::Insets insets = layer.ControlsInsets();
     g.box = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), g.view, insets);
     g.hit = Controls::HitRects(layer.ControlsRules(), g.box, g.view, insets);
     return g;
@@ -25161,7 +25163,7 @@ void TheModernCornerButtonsComeInAsTheOriginalsDo() {
                   std::string(kMdTable[MdAt(control)].key) + ": and so is the strip above it");
     }
     const MagicPortals::LevelEnd::Dismissed asCorner = MagicPortals::LevelEnd::HudEntered(
-        layer.LevelEndRules(), Controls::PlacementFor(layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), PtrControl::Clear, g.view, layer.ControlsPolicy().testInsets),
+        layer.LevelEndRules(), Controls::PlacementFor(layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), PtrControl::Clear, g.view, layer.ControlsInsets()),
         layer.HudRules().alphaByte, g.view, age);
     CHECK_MSG(glm::length(asCorner.rect.min - clear.min) > 1.0 && asCorner.alpha < flat - 0.05,
               "(clear-portals as a corner would be " + Point(asCorner.rect.min) + " at " + PtrNum(asCorner.alpha) + ")");
@@ -25867,6 +25869,592 @@ int MdRecordGolden(const std::string& dir) {
     return wrote ? result : 1;
 }
 
+// ---- the modern controls' own input behaviour (planning step 183, CTL-7) -------------------------------------------------------------------
+//
+// The pressed look, the swallow, the hint clear of the pair, the safe area and the slide by half - what the modern controls do that the classic
+// ones never did. Every case builds its layer through MdRun, which reads ControlsStyle() first and fails unless the layer plays what it is asked
+// to (the design's N1), and each of them has a classic twin or a control that is asked the same thing so that it can fail. The numbers are the
+// design's, written out here as literals (section 1.5: +38 bytes; 1.6: the hint's 90.74 and the 8-unit margin; 1.1: the margin 15.6444, the gap
+// 11.3778 and the box 45.5111 at size 1), never read back from the data they hold.
+
+// The classic pulse's byte at the layer's current age, over 255: what an unlit pad is drawn at (idle_scale and opacity 1.0 leave it alone).
+double MiPadByte(const MagicPortalsLayer& layer) {
+    return static_cast<double>(Controls::ClassicWalkAlphaByte(layer.HudRules(), layer.LevelAgeMs(), false)) / 255.0;
+}
+
+// ---- the pressed look -----------------------------------------------------------------------------------------------------------------------
+
+void APressedModernControlDrawsTheBoost() {
+    if (!OriginalArtIsThere("APressedModernControlDrawsTheBoost")) return;
+    constexpr double kBoost = 38.0 / 255.0; // design 1.5: +38 bytes
+    MdRun run(MdPaths(), "level30", "APressedModernControlDrawsTheBoost");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsRules().pressedBoostByte == 38, "the data's boost is the design's 38 bytes: " + std::to_string(layer.ControlsRules().pressedBoostByte));
+    for (const PtrControl control : Controls::kClaimOrder) CHECK_MSG(!layer.ModernImage(control).empty(), std::string(kMdTable[MdAt(control)].key) + " has the picture the quads are found by");
+    const MdGeom g = MdGeometry(layer);
+    const double corner = 120.0 / 255.0; // restart and pause, flat once they are in
+
+    const auto alphaOf = [&](PtrControl control) { return MdPadAlpha(HudFrame(registry, layer), layer, control); };
+    const auto cornerAlpha = [&](PtrControl control) { return alphaOf(control); };
+
+    // Nothing touched: nothing lit.
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(NearD(alphaOf(PtrControl::Left), MiPadByte(layer), 1e-6) && NearD(alphaOf(PtrControl::Right), MiPadByte(layer), 1e-6), "no touch: both arrows are the pulse's byte");
+    CHECK_MSG(NearD(cornerAlpha(PtrControl::Reset), corner, 1e-6) && NearD(cornerAlpha(PtrControl::Menu), corner, 1e-6), "no touch: restart and pause are the flat 120");
+
+    // An arrow held is lit, and only that arrow; let go, it is not.
+    for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+        const PtrControl other = arrow == PtrControl::Left ? PtrControl::Right : PtrControl::Left;
+        const std::string name = PtrName(arrow);
+        const glm::dvec2 at = g.hit[MdAt(arrow)].Centre();
+        CHECK_MSG(layer.ControlAt(at) == PtrClaim(arrow), name + ": its centre is its claim");
+        const glm::vec2 pixel = PtrPixel(layer, at);
+        for (int tick = 0; tick < 4; ++tick) {
+            PtrHold(layer, registry, pixel, tick == 0);
+            const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+            const double want = std::min(1.0, MiPadByte(layer) + kBoost);
+            CHECK_MSG(NearD(MdPadAlpha(frame, layer, arrow), want, 1e-6), name + ": held (tick " + std::to_string(tick) + ") it is drawn 38 bytes brighter: " + PtrNum(MdPadAlpha(frame, layer, arrow) * 255.0) + " of " + PtrNum(want * 255.0));
+            CHECK_MSG(NearD(MdPadAlpha(frame, layer, other), MiPadByte(layer), 1e-6), name + ": the other arrow is not lit");
+            CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Reset), corner, 1e-6) && NearD(MdPadAlpha(frame, layer, PtrControl::Menu), corner, 1e-6), name + ": nor are the corner buttons");
+        }
+        lift(layer, registry, pixel);
+        CHECK_MSG(NearD(alphaOf(arrow), MiPadByte(layer), 1e-6), name + ": let go, it is the pulse's byte again: " + PtrNum(alphaOf(arrow) * 255.0));
+        PtrRest(layer, registry, 30);
+    }
+
+    // A corner button is lit while the press that began on it is held over it: not before, not after, not once it has slid off.
+    for (const PtrControl button : {PtrControl::Reset, PtrControl::Menu}) {
+        const PtrControl other = button == PtrControl::Reset ? PtrControl::Menu : PtrControl::Reset;
+        const std::string name = PtrName(button);
+        const glm::dvec2 at = g.box[MdAt(button)].Centre();
+        CHECK_MSG(layer.ControlAt(at) == PtrClaim(button), name + ": its centre is its claim");
+        const glm::vec2 pixel = PtrPixel(layer, at);
+        PtrHold(layer, registry, pixel, true);
+        CHECK_MSG(NearD(alphaOf(button), corner + kBoost, 1e-6), name + ": pressed it is lit: " + PtrNum(alphaOf(button) * 255.0));
+        CHECK_MSG(NearD(alphaOf(other), corner, 1e-6), name + ": its neighbour is not");
+        PtrHold(layer, registry, pixel, false);
+        CHECK_MSG(NearD(alphaOf(button), corner + kBoost, 1e-6) && !MdActed(button, layer), name + ": held it stays lit and has not acted");
+        // Slid off onto the world (a point of the view that no control has): the look goes with the action it would have done.
+        const glm::dvec2 away(250.0, 150.0);
+        CHECK_MSG(!layer.ControlAt(away), "(the world point is nobody's)");
+        PtrHold(layer, registry, PtrPixel(layer, away), false);
+        CHECK_MSG(NearD(alphaOf(button), corner, 1e-6), name + ": slid off it is not lit: " + PtrNum(alphaOf(button) * 255.0));
+        lift(layer, registry, PtrPixel(layer, away));
+        CHECK_MSG(!MdActed(button, layer), name + ": and let go off it nothing acts");
+        PtrRest(layer, registry, 30);
+    }
+    // And the one that does act - pressed and let go inside - is dim again at the release: a pause that opens is "frozen and unpressed".
+    {
+        const glm::vec2 pixel = PtrPixel(layer, g.box[MdAt(PtrControl::Menu)].Centre());
+        PtrHold(layer, registry, pixel, true);
+        PtrHold(layer, registry, pixel, false);
+        lift(layer, registry, pixel);
+        CHECK_MSG(layer.Paused(), "pause: the release inside opens it");
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Menu), corner, 1e-6) && NearD(MdPadAlpha(frame, layer, PtrControl::Reset), corner, 1e-6),
+                  "under the pause restart and pause are drawn frozen at the flat 120, unpressed: " + PtrNum(MdPadAlpha(frame, layer, PtrControl::Menu) * 255.0));
+    }
+}
+
+// Classic never lights anything: a held classic pad is drawn at the pulse's byte and no brighter, and the touch does work it. The same
+// held touch as above, on the classic layer of a bare run and on one that was forced classic by the flag. (A classic corner button acts on
+// the press and so is never held; the digest of the classic HUD pins what it is drawn at.)
+void AClassicControlIsNeverLit() {
+    if (!OriginalArtIsThere("AClassicControlIsNeverLit")) return;
+    for (const bool flagged : {false, true}) {
+        const std::string what = std::string("AClassicControlIsNeverLit: ") + (flagged ? "--controls classic" : "a bare layer");
+        MdRun run(flagged ? MdPaths("classic") : TestPaths(), "level30", what, glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const Hud::Rules& rules = layer.HudRules();
+        const glm::dvec2 view = layer.ViewPx();
+        const glm::dvec2 point(30.0, view.y - 30.0); // inside the left pad's disc, 42.4 units from its corner
+        const glm::vec2 pixel = PtrPixel(layer, point);
+        CHECK_MSG(layer.ControlAt(point) == PtrClaim(PtrControl::Left), what + ": the point is the left pad's");
+        const glm::dvec2 before = playerPx(registry, layer);
+        for (int tick = 0; tick < 6; ++tick) {
+            PtrHold(layer, registry, pixel, tick == 0);
+            const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+            const int at = IndexOfImage(frame, rules.pads.leftSprite);
+            const double alpha = at < 0 ? -1.0 : static_cast<double>(frame[static_cast<std::size_t>(at)].color.a);
+            const double now = Controls::ClassicWalkOpacity(rules, layer.LevelAgeMs(), false);
+            CHECK_MSG(at >= 0 && NearD(alpha, now, 1e-6), what + ": held, the pad is drawn at the pulse's byte and no brighter: " + PtrNum(alpha * 255.0) + " of " + PtrNum(now * 255.0));
+        }
+        CHECK_MSG(before.x - playerPx(registry, layer).x > 8.0, what + ": and the touch did work it (he walked left)");
+    }
+}
+
+// ---- the swallow ---------------------------------------------------------------------------------------------------------------------------
+
+// The point on the view the pause's Resume button is on, from the layer's own pause (Pause::ButtonAt scanned over the view: the centre of
+// the cells that answer Resume). A pause must be open and past its entrance.
+glm::dvec2 MiResumePoint(const MagicPortalsLayer& layer) {
+    const glm::dvec2 view = layer.ViewPx();
+    glm::dvec2 sum(0.0);
+    int cells = 0;
+    for (double y = 0.5; y < view.y; y += 1.0) {
+        for (double x = 0.5; x < view.x; x += 1.0) {
+            const std::optional<MagicPortals::Pause::Button> button = MagicPortals::Pause::ButtonAt(
+                layer.PauseRules(), layer.PausedLevel(), layer.PauseSwitches(), view, layer.PauseClockMs(), glm::dvec2(x, y));
+            if (button && *button == MagicPortals::Pause::Button::Resume) {
+                sum += glm::dvec2(x, y);
+                ++cells;
+            }
+        }
+    }
+    CHECK_MSG(cells > 500, "the pause's Resume button covers " + std::to_string(cells) + " unit cells");
+    return cells > 0 ? sum / static_cast<double>(cells) : glm::dvec2(0.0);
+}
+
+// A press that did something else - the pause's Resume - is still held when the level takes the tick again, with the pointer over an arrow
+// (the pair moved there by a safe-area inset, which the layer reads from the same place a device's notch would come from): it claims the arrow
+// and works nothing, until it is up; and a press that goes down afterwards walks.
+void TheSwallowHoldsAClaimUntilTheTouchIsUp() {
+    if (!OriginalArtIsThere("TheSwallowHoldsAClaimUntilTheTouchIsUp")) return;
+    MagicPortalsLayer::Paths paths = MdPaths();
+    // A left inset of 230 units puts the pair right of the view's middle, under the pause's Resume button (0.58 across and 0.44 down the view):
+    // the left arrow's hit rectangle then reaches from the view's left edge to 283 across, and from 98.5 down to the bottom with the bottom inset.
+    paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 110.0};
+    MdRun run(paths, "level30", "TheSwallowHoldsAClaimUntilTheTouchIsUp");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsInsets().left == 230.0 && layer.ControlsInsets().bottom == 110.0, "the layer lays out with the injected insets");
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), "Escape pauses");
+    PtrRest(layer, registry, 120);
+    const glm::dvec2 resume = MiResumePoint(layer);
+    const MdGeom g = MdGeometry(layer);
+    const Hud::Rect& hit = g.hit[MdAt(PtrControl::Left)];
+    const glm::dvec2 hitMax = hit.Max();
+    CHECK_MSG(resume.x >= hit.min.x && resume.x < hitMax.x && resume.y >= hit.min.y && resume.y < hitMax.y,
+              "the Resume button's centre " + Point(resume) + " is inside the left arrow's hit rectangle " + MdShow(hit));
+    const glm::vec2 pixel = PtrPixel(layer, resume);
+    // The press that resumes: the pause takes it, and closes.
+    PtrHold(layer, registry, pixel, true);
+    CHECK_MSG(!layer.Paused(), "the press on Resume resumes the level");
+    const double x0 = playerPx(registry, layer).x;
+    const MdShots shots = MdShotsOf(layer);
+    // Held on, for a good while: the arrow claims it, and it works nothing.
+    for (int tick = 0; tick < 40; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.ControlAt(resume) == PtrClaim(PtrControl::Left), "the held pointer is over the left arrow: " + PtrName(layer.ControlAt(resume)));
+    CHECK_MSG(layer.TouchSwallowed(), "the touch is swallowed");
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0) < 0.5, "and he does not walk: moved " + PtrNum(playerPx(registry, layer).x - x0));
+    {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Left), MiPadByte(layer), 1e-6), "a swallowed arrow is not lit: " + PtrNum(MdPadAlpha(frame, layer, PtrControl::Left) * 255.0));
+    }
+    // Still swallowed after the pointer slides off the arrow and back on: it is the TOUCH that is swallowed until it is up.
+    PtrHold(layer, registry, PtrPixel(layer, glm::dvec2(400.0, 120.0)), false);
+    CHECK_MSG(layer.TouchSwallowed(), "slid off the arrow it is still swallowed");
+    for (int tick = 0; tick < 10; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.TouchSwallowed() && std::fabs(playerPx(registry, layer).x - x0) < 0.5, "and back on it still works nothing");
+    // The release over the arrow fires nothing (a claim, not the world), and clears the swallow.
+    lift(layer, registry, pixel);
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(!layer.TouchSwallowed(), "up, the swallow is over");
+    CHECK_MSG(MdFiredNothingSince(layer, shots), "and the held touch fired nothing: " + Point(PtrLastTap(layer)));
+    // A fresh press on the same point walks him, and lights the arrow.
+    const double x1 = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+    CHECK_MSG(!layer.TouchSwallowed(), "a press the level saw go down is not swallowed");
+    CHECK_MSG(x1 - playerPx(registry, layer).x > 8.0, "and walks him left: " + PtrNum(x1 - playerPx(registry, layer).x));
+    {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Left), std::min(1.0, MiPadByte(layer) + 38.0 / 255.0), 1e-6), "and the arrow it leans on is lit");
+    }
+}
+
+// A popup's close is the same: 1-02 raises its help as it loads and any touch down closes it, wherever it is - on an arrow that will be there
+// when the popup is gone. The twins: the classic layer's held touch walks (the swallow is the modern controls' alone), and so does the
+// test variant that claims with the classic rules under the modern draw.
+void MiPopupCloseOnTheRightArrow(const MagicPortalsLayer::Paths& paths, Controls::Style want, bool classicPoint, bool expectSwallowed, const std::string& what) {
+    MdRun run(paths, "level1", what, glm::vec2(1280.0f, 720.0f), false, want);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(layer.PopupOpen(), what + ": 1-02 raises its popup as it loads");
+    const glm::dvec2 view = layer.ViewPx();
+    // The right arrow's own centre in the modern layout, a point 30 units in from the corner in the classic one: each is its layout's claim.
+    const glm::dvec2 point = classicPoint ? glm::dvec2(view.x - 30.0, view.y - 30.0) : MdGeometry(layer).hit[MdAt(PtrControl::Right)].Centre();
+    const glm::vec2 pixel = PtrPixel(layer, point);
+    const glm::dvec2 x0 = playerPx(registry, layer);
+    PtrHold(layer, registry, pixel, true);
+    int ticks = 1;
+    while (layer.PopupOpen() && ticks < 240) {
+        PtrHold(layer, registry, pixel, false);
+        ++ticks;
+    }
+    CHECK_MSG(!layer.PopupOpen(), what + ": the touch closes the popup");
+    // Until the pair has slid in under the finger and claims it.
+    for (int guard = 0; guard < 240 && layer.ControlAt(point) != PtrClaim(PtrControl::Right); ++guard) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.ControlAt(point) == PtrClaim(PtrControl::Right), what + ": the held pointer ends up on the right arrow: " + PtrName(layer.ControlAt(point)));
+    const double settled = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, false);
+    const double moved = playerPx(registry, layer).x - settled;
+    CHECK_MSG(layer.TouchSwallowed() == expectSwallowed, what + ": the touch " + (expectSwallowed ? "is" : "is not") + " swallowed");
+    if (expectSwallowed) {
+        CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0.x) < 0.5, what + ": since the press that closed the popup he has not moved: " + PtrNum(playerPx(registry, layer).x - x0.x));
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Right), MiPadByte(layer), 1e-6), what + ": and the arrow is not lit");
+    } else {
+        CHECK_MSG(moved > 8.0, what + ": the held touch walks him right, as a held touch on a classic pad always did: " + PtrNum(moved));
+    }
+    // Let go (a claim: nothing fires), and a fresh press on it walks, in every case.
+    const MdShots shots = MdShotsOf(layer);
+    lift(layer, registry, pixel);
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(MdFiredNothingSince(layer, shots), what + ": the release over the arrow fires nothing");
+    CHECK_MSG(!layer.TouchSwallowed(), what + ": up, nothing is swallowed");
+    const double x1 = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+    CHECK_MSG(playerPx(registry, layer).x - x1 > 8.0, what + ": a fresh press walks him right: " + PtrNum(playerPx(registry, layer).x - x1));
+}
+
+void ThePopupCloseSwallowsToo() {
+    if (!OriginalArtIsThere("ThePopupCloseSwallowsToo")) return;
+    MiPopupCloseOnTheRightArrow(MdPaths(), Controls::Style::Modern, false, true, "ThePopupCloseSwallowsToo: modern");
+}
+
+// The swallow belongs to the modern claims alone: a classic layer (bare, or forced by the flag) and the variant that claims with the classic
+// rules under the modern layout and draw never set it, so the parity rig and the census variant stay the classic simulation to the last tick.
+void TheSwallowIsNotSetInClassic() {
+    if (!OriginalArtIsThere("TheSwallowIsNotSetInClassic")) return;
+    MiPopupCloseOnTheRightArrow(TestPaths(), Controls::Style::Classic, true, false, "TheSwallowIsNotSetInClassic: a bare layer");
+    MiPopupCloseOnTheRightArrow(MdPaths("classic"), Controls::Style::Classic, true, false, "TheSwallowIsNotSetInClassic: --controls classic");
+    MiPopupCloseOnTheRightArrow(MdPaths("modern", true), Controls::Style::Modern, true, false, "TheSwallowIsNotSetInClassic: the classic claims under the modern draw");
+}
+
+// ---- 1-21's hint, clear of the pair ----------------------------------------------------------------------------------------------------------
+
+// What 1-21's line is drawn at, 3.5 s into the level (the caption is gone by 3 s, so every quad in its font is the lesson's line): the left
+// of its first glyph, the right of its last, and its rows - in view units.
+struct MiHint {
+    bool ok = false;
+    double left = 0.0;
+    double right = 0.0;
+    double top = 0.0;
+    double bottom = 0.0;
+    int glyphs = 0;
+    double view = 0.0;
+    float alpha = 0.0f;
+};
+
+MiHint MiHintOf(const MagicPortalsLayer::Paths& paths, const glm::vec2& window, Controls::Style want, const std::string& what) {
+    MiHint out;
+    MdRun run(paths, "level20", what, window, false, want);
+    if (!run.ok) return out;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    for (int tick = 0; tick < TicksOf(3500.0); ++tick) tickWith(layer, registry, kRest, {}, {});
+    out.view = layer.ViewPx().x;
+    out.left = 1e9;
+    out.top = 1e9;
+    out.right = -1e9;
+    out.bottom = -1e9;
+    for (const ScreenOverlay::Quad& quad : HudFrame(registry, layer)) {
+        if (quad.texture.find("Matura84_shadow") == std::string::npos) continue;
+        const Hud::Rect rect = OnView(layer, quad);
+        out.left = std::min(out.left, rect.min.x);
+        out.right = std::max(out.right, rect.Max().x);
+        out.top = std::min(out.top, rect.min.y);
+        out.bottom = std::max(out.bottom, rect.Max().y);
+        out.alpha = quad.color.a;
+        ++out.glyphs;
+    }
+    CHECK_MSG(out.glyphs > 10, what + ": the lesson's line is drawn, a quad a letter: " + std::to_string(out.glyphs));
+    out.ok = out.glyphs > 10;
+    return out;
+}
+
+// The design's table at 16:9: the text starts at the pair's hit right edge (90.74) where classic starts at 50; the rows do not move; and the
+// pair's right edge is the box's, which an inset moves, so the text follows the SAME insets the pair is laid out with.
+void TheHintClearsTheModernPair() {
+    if (!OriginalArtIsThere("TheHintClearsTheModernPair")) return;
+    const glm::vec2 window(1280.0f, 720.0f);
+    const MiHint classic = MiHintOf(TestPaths(), window, Controls::Style::Classic, "TheHintClearsTheModernPair: classic");
+    const MiHint modern = MiHintOf(MdPaths(), window, Controls::Style::Modern, "TheHintClearsTheModernPair: modern");
+    if (!classic.ok || !modern.ok) return;
+    // The classic text, where it always was: from 50 across (its first glyph a few units in by its own offset).
+    CHECK_MSG(classic.left >= 49.0 && classic.left < 55.0, "classic: the text starts at 50: " + PtrNum(classic.left));
+    // Its width to the last glyph's EDGE is the design's 258.4 (639 font px x 0.4 plus the last glyph's edge).
+    CHECK_MSG(std::fabs((classic.right - 50.0) - 258.4) < 0.5, "the text is 258.4 units wide to its last glyph's edge: " + PtrNum(classic.right - 50.0));
+    // Modern: 90.7378 against classic's 50, the same glyphs and the same rows.
+    CHECK_MSG(NearD(modern.left - classic.left, 90.7378 - 50.0, 1e-3), "modern: the first glyph is 40.7378 units right of classic's, at 90.74 where the text starts: " + PtrNum(modern.left - classic.left));
+    CHECK_MSG(modern.glyphs == classic.glyphs && NearD(modern.top, classic.top, 1e-9) && NearD(modern.bottom, classic.bottom, 1e-9), "the same letters on the same rows: the text row is unmoved");
+    CHECK_MSG(modern.alpha == classic.alpha, "at the same fade");
+    CHECK_MSG(modern.right <= modern.view - 8.0, "and the whole line is on the screen, 8 units in: " + PtrNum(modern.right));
+    CHECK_MSG(modern.left >= 90.7378 - 1e-3, "clear of the pair's hit rectangle (it ends at 90.7378): " + PtrNum(modern.left));
+
+    // One answer to "what insets": a safe area of 20 units on the left moves the pair 20 units right, and the text with it.
+    MagicPortalsLayer::Paths inset = MdPaths();
+    inset.controls.testInsets = Controls::Insets{20.0, 0.0, 0.0, 0.0};
+    const MiHint moved = MiHintOf(inset, window, Controls::Style::Modern, "TheHintClearsTheModernPair: a safe area of 20 on the left");
+    if (moved.ok) CHECK_MSG(NearD(moved.left - classic.left, 90.7378 + 20.0 - 50.0, 1e-3), "a left inset of 20 moves the pair and the text 20 units: " + PtrNum(moved.left - classic.left));
+}
+
+// Every supported window shape and every size the layer can play (the three looks: 0.7, 0.8 and 1.0; 0.4 and 1.4 are the module's own pin,
+// HintLeftClearsThePairAndLeavesClassicAlone, until CTL-10 lets the layer apply a size): the line is wholly on the screen, 8 units in at least,
+// and clear of the pair wherever it fits - the design's 90.74, 74.93 and 53.60 among them.
+void TheHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
+    if (!OriginalArtIsThere("TheHintStaysOnTheScreenAtEverySupportedAspectAndSize")) return;
+    const MiHint classic = MiHintOf(TestPaths(), glm::vec2(1280.0f, 720.0f), Controls::Style::Classic, "TheHintStaysOnTheScreen: classic");
+    if (!classic.ok) return;
+    constexpr double kExtent = 258.4;
+    const struct {
+        const char* name;
+        float width;
+    } windows[] = {{"5:4", 900.0f}, {"4:3", 960.0f}, {"3:2", 1080.0f}, {"16:10", 1152.0f}, {"16:9", 1280.0f}, {"21:9", 1680.0f}, {"32:9", 2560.0f}};
+    const struct {
+        const char* flag;
+        double size;
+    } looks[] = {{"modern", 0.7}, {"modern,preset=balanced", 0.8}, {"modern,preset=mr", 1.0}};
+    int clamped = 0;
+    int clear = 0;
+    for (const auto& window : windows) {
+        for (const auto& look : looks) {
+            const std::string what = std::string("TheHintStaysOnTheScreen: ") + window.name + " " + look.flag;
+            const MiHint modern = MiHintOf(MdPaths(look.flag), glm::vec2(window.width, 720.0f), Controls::Style::Modern, what);
+            if (!modern.ok) continue;
+            const double width = 256.0 * static_cast<double>(window.width) / 720.0;
+            CHECK_MSG(NearD(modern.view, width, 1e-3), what + ": the view is " + PtrNum(width) + " wide: " + PtrNum(modern.view));
+            // The pair's right edge from the design's own constants: margin + gap + two boxes (45.5111 at size 1).
+            const double pairRight = 15.6444 + 11.3778 + 2.0 * 45.5111 * look.size;
+            const double wanted = std::min(std::max(50.0, pairRight), width - kExtent - 8.0);
+            const bool fits = pairRight <= width - kExtent - 8.0;
+            CHECK_MSG(modern.right <= width - 8.0 + 1e-3, what + ": the line ends inside the view by 8 units: " + PtrNum(modern.right) + " of " + PtrNum(width - 8.0));
+            CHECK_MSG(NearD(modern.left - classic.left, wanted - 50.0, fits ? 1e-3 : 0.25),
+                      what + ": the text starts at " + PtrNum(wanted) + " (" + (fits ? "clear of the pair" : "clamped to the screen") + "): " + PtrNum(modern.left - classic.left + 50.0));
+            // The design's table at the default size: 90.74 from 16:10 and wider (3:2 included), 74.93 at 4:3 and 53.60 at 5:4.
+            if (look.size == 0.7) {
+                const double table = window.width == 900.0f ? 53.60 : (window.width == 960.0f ? 74.93 : 90.7378);
+                CHECK_MSG(NearD(modern.left - classic.left + 50.0, table, 0.15), what + ": the design's table says " + PtrNum(table) + ": " + PtrNum(modern.left - classic.left + 50.0));
+            }
+            if (fits) {
+                ++clear;
+                CHECK_MSG(modern.left >= pairRight - 1e-3, what + ": clear of the pair's right edge " + PtrNum(pairRight) + ": " + PtrNum(modern.left));
+            } else {
+                ++clamped;
+                CHECK_MSG(NearD(modern.right, width - 8.0, 0.25), what + ": clamped, the glyphs' edge is 8 units from the view's: " + PtrNum(width - modern.right));
+            }
+        }
+    }
+    CHECK_MSG(clamped > 0 && clear > 0, "both branches were met: " + std::to_string(clamped) + " clamped, " + std::to_string(clear) + " clear");
+}
+
+// ---- the corner buttons over the plaque ----------------------------------------------------------------------------------------------------
+
+// A level with a medal opens with its plaque in the top left (x 8 to 72, y 4 to 132, whole from 1 s to 2 s, gone by 3 s), under where the
+// modern clear-portals button stands (15.64 to 56.60). Clear shows only while a portal is alive and is drawn after the plaque, so it is OVER
+// it, for the plaque's three seconds at most: the design's accepted overlap (1.6). A medal comes from a scratch saves directory with a
+// hand-made scores.json, never from playing a level.
+void TheModernCornerButtonsDrawOverThePlaqueForItsLifeOnly() {
+    if (!OriginalArtIsThere("TheModernCornerButtonsDrawOverThePlaqueForItsLifeOnly")) return;
+    const ControlsScratchGuard scratch;
+    const std::string saves = ControlsScratchSaves("plaque");
+    {
+        std::ofstream out(std::filesystem::path(saves) / "scores.json", std::ios::binary);
+        out << "{\"version\":1,\"scores\":[{\"world\":0,\"level\":30,\"medal\":3}]}";
+    }
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.saveDir = saves;
+    MdRun run(paths, "level30", "TheModernCornerButtonsDrawOverThePlaqueForItsLifeOnly");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Hud::Rules& rules = layer.HudRules();
+    CHECK_MSG(ControlsFileExistsIn(saves) == false, "no controls.json is written for a modern run (the store is CTL-9's)");
+    // A portal, so that clear-portals shows.
+    shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+    landShot(layer, registry);
+    Hud::Rect clearRect;
+    CHECK_MSG(layer.ControlRect(PtrControl::Clear, clearRect), "a portal is up, so clear-portals is shown");
+    const auto quadsNow = [&]() { return HudFrame(registry, layer); };
+    {
+        const std::vector<ScreenOverlay::Quad> frame = quadsNow();
+        const int plaque = IndexOfImage(frame, rules.plaque.sprite);
+        const int clear = MdQuadOf(frame, layer.ModernImage(PtrControl::Clear));
+        CHECK_MSG(plaque >= 0 && clear >= 0, "the plaque and the clear button are both drawn (age " + PtrNum(layer.LevelAgeMs()) + "): " + std::to_string(plaque) + ", " + std::to_string(clear));
+        if (plaque >= 0 && clear >= 0) {
+            const double plaqueAlpha = static_cast<double>(frame[static_cast<std::size_t>(plaque)].color.a);
+            CHECK_MSG(plaqueAlpha > 0.0, "the plaque is up: " + PtrNum(plaqueAlpha));
+            CHECK_MSG(clear > plaque, "clear is drawn over the plaque: " + std::to_string(clear) + " after " + std::to_string(plaque));
+            const Hud::Rect over = OnView(layer, frame[static_cast<std::size_t>(clear)]);
+            const Hud::Rect under = OnView(layer, frame[static_cast<std::size_t>(plaque)]);
+            const glm::dvec2 a = glm::max(over.min, under.min);
+            const glm::dvec2 b = glm::min(over.Max(), under.Max());
+            CHECK_MSG(b.x > a.x && b.y > a.y, "and they overlap on the screen: clear " + MdShow(over) + ", plaque " + MdShow(under));
+        }
+    }
+    // Three seconds in: the plaque is gone, clear stays for as long as its portal does.
+    for (int guard = 0; guard < 400 && layer.LevelAgeMs() < 3200.0; ++guard) tickWith(layer, registry, kRest, {}, {});
+    {
+        const std::vector<ScreenOverlay::Quad> frame = quadsNow();
+        const int plaque = IndexOfImage(frame, rules.plaque.sprite);
+        const double plaqueAlpha = plaque < 0 ? 0.0 : static_cast<double>(frame[static_cast<std::size_t>(plaque)].color.a);
+        CHECK_MSG(plaqueAlpha == 0.0, "past 3 s the plaque is gone: " + PtrNum(plaqueAlpha));
+        CHECK_MSG(layer.ControlRect(PtrControl::Clear, clearRect) && MdQuadOf(frame, layer.ModernImage(PtrControl::Clear)) >= 0, "and clear-portals is still there for its portal");
+    }
+}
+
+// ---- the safe area ---------------------------------------------------------------------------------------------------------------------------
+
+// The insets a run is laid out with are ONE answer: the injected seam when there is one (modern only), else the window's own safe area
+// converted by the pointer's factor - zero on this machine's desktop, which cannot be driven otherwise (recorded: the real Get() path is not
+// verifiable here; the conversion is pinned in test_mp_controls, and the seam stands in for the window).
+void SafeInsetsReachTheLayoutOnlyInModern() {
+    const Controls::Insets injected{20.0, 10.0, 30.0, 12.0};
+    {
+        MagicPortalsLayer::Paths paths = MdPaths();
+        paths.controls.testInsets = injected;
+        MdRun run(paths, "level30", "SafeInsetsReachTheLayoutOnlyInModern: modern");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        const Controls::Insets seen = layer.ControlsInsets();
+        CHECK_MSG(seen.left == 20.0 && seen.top == 10.0 && seen.right == 30.0 && seen.bottom == 12.0, "the layer asks for the injected insets");
+        const glm::dvec2 view = layer.ViewPx();
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), view, injected);
+        const std::array<Hud::Rect, 5> flat = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), view, Controls::Insets{});
+        // The pair: 20 units in from the left and 12 up from the bottom, which table 1.2's literals plus the inset say; restart and pause: 30 in from the right, 10 down.
+        CHECK_MSG(NearD(boxes[MdAt(PtrControl::Left)].min.x, 15.6444 + 20.0, 6e-5) && NearD(boxes[MdAt(PtrControl::Left)].min.y, 208.4978 - 12.0, 6e-5), "the left arrow's box is table 1.2's plus the inset: " + MdShow(boxes[MdAt(PtrControl::Left)]));
+        CHECK_MSG(NearD(boxes[MdAt(PtrControl::Menu)].min.x, 398.5067 - 30.0 + (view.x - 455.1111), 6e-4) && NearD(boxes[MdAt(PtrControl::Menu)].min.y, 15.6444 + 10.0, 6e-5), "pause's box is 30 in from the right and 10 down: " + MdShow(boxes[MdAt(PtrControl::Menu)]));
+        for (const PtrControl control : Controls::kClaimOrder) {
+            if (control == PtrControl::Clear) continue; // not shown without a portal
+            Hud::Rect rect;
+            CHECK_MSG(layer.ControlRect(control, rect) && SameRect(rect, boxes[MdAt(control)], 1e-6), std::string(kMdTable[MdAt(control)].key) + ": drawn in the box laid out with the insets: " + MdShow(rect));
+            CHECK_MSG(!SameRect(boxes[MdAt(control)], flat[MdAt(control)], 1e-6), std::string(kMdTable[MdAt(control)].key) + ": and that is not where the zero insets put it");
+            CHECK_MSG(layer.ControlAt(boxes[MdAt(control)].Centre()) == PtrClaim(control), std::string(kMdTable[MdAt(control)].key) + ": claimed there");
+        }
+        CHECK_MSG(layer.ControlsRectsLine().find("safe area") != std::string::npos, "the INFO line says there is a safe area: " + layer.ControlsRectsLine());
+    }
+    // (The classic twins need the original's art: without it a classic run has no pads and no buttons to look at.)
+    if (OriginalArtIsThere("SafeInsetsReachTheLayoutOnlyInModern: the classic twins")) {
+        // The same insets on a classic layer, bare and forced: nothing moves, and the layer asks for none.
+        for (const bool flagged : {false, true}) {
+            const std::string what = std::string("SafeInsetsReachTheLayoutOnlyInModern: ") + (flagged ? "--controls classic" : "a bare layer");
+            MagicPortalsLayer::Paths paths = flagged ? MdPaths("classic") : TestPaths();
+            paths.controls.testInsets = injected;
+            MdRun run(paths, "level30", what, glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+            if (!run.ok) return;
+            MagicPortalsLayer& layer = run.layer;
+            const Controls::Insets seen = layer.ControlsInsets();
+            CHECK_MSG(seen.left == 0.0 && seen.top == 0.0 && seen.right == 0.0 && seen.bottom == 0.0, what + ": a classic run asks for no insets");
+            Hud::Rect left;
+            Hud::Rect menu;
+            CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && layer.ControlRect(PtrControl::Menu, menu), what + ": both are shown");
+            const glm::dvec2 view = layer.ViewPx();
+            CHECK_MSG(SameRect(left, Controls::ClassicWalkFrame(layer.HudRules(), Controls::Id::Left, view, layer.LevelAgeMs()).rect, 1e-9) &&
+                          SameRect(menu, Controls::ClassicPlace(layer.HudRules(), Controls::Id::Menu, view), 1e-9),
+                      what + ": the pads and the buttons are flush in the corners, as they were: " + MdShow(left));
+        }
+    }
+    {
+        // No seam: the window's own safe area, converted by the pointer's factor - whatever this machine's window answers (zero on a desktop).
+        MdRun run(MdPaths(), "level30", "SafeInsetsReachTheLayoutOnlyInModern: no seam");
+        if (!run.ok) return;
+        const Supersonic::SafeAreaInsets window = Supersonic::SafeArea::Get();
+        const Controls::Insets want = Controls::InsetsFromWindowPx(window.left, window.top, window.right, window.bottom, 720.0, 256.0);
+        const Controls::Insets seen = run.layer.ControlsInsets();
+        CHECK_MSG(seen.left == want.left && seen.top == want.top && seen.right == want.right && seen.bottom == want.bottom,
+                  "without the seam the layer asks for the window's safe area, converted: " + PtrNum(seen.left) + " of " + PtrNum(want.left));
+        CHECK_MSG(window.IsZero() == (want.left == 0.0 && want.top == 0.0 && want.right == 0.0 && want.bottom == 0.0), "(a window that covers nothing gives no inset)");
+        std::printf("  safe area of this machine's window: left %.1f top %.1f right %.1f bottom %.1f px (a desktop's is all zero; a device's cannot be driven here)\n",
+                    window.left, window.top, window.right, window.bottom);
+    }
+}
+
+// ---- the slide by half ---------------------------------------------------------------------------------------------------------------------
+
+// An arrow comes in from the nearer of the view's side edges, by the half its centre is in (Controls::LayOut, CTL-4): the pair on the left
+// slides in from the left, as the classic pads do; a pair moved to the right half - here by a left safe-area inset of 230 units - slides in from
+// the RIGHT, and its hit rectangle goes with the picture. Asked of the layer, which draws and claims what the module lays out.
+void AControlOnTheRightHalfSlidesInFromTheRight() {
+    for (const bool right : {false, true}) {
+        const std::string what = std::string("AControlOnTheRightHalfSlidesInFromTheRight: ") + (right ? "the pair on the right half" : "the pair on the left half (the control)");
+        MagicPortalsLayer::Paths paths = MdPaths();
+        if (right) paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 0.0};
+        MdRun run(paths, "level30", what, glm::vec2(1280.0f, 720.0f), false);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const glm::dvec2 view = layer.ViewPx();
+        const std::array<Hud::Rect, 5> settled = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), view, layer.ControlsInsets());
+        for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+            CHECK_MSG((settled[MdAt(arrow)].Centre().x > view.x * 0.5) == right, what + ": " + PtrName(arrow) + " is on the " + (right ? "right" : "left") + " half");
+        }
+        int checked = 0;
+        for (int tick = 1; tick <= 60; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (tick != 6 && tick != 12 && tick != 30 && tick != 60) continue;
+            const double age = layer.LevelAgeMs();
+            const double slide = Controls::ClassicSlideUnits(layer.HudRules(), age);
+            for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+                Hud::Rect rect;
+                CHECK_MSG(layer.ControlRect(arrow, rect), what + ": " + PtrName(arrow) + " is shown at age " + PtrNum(age));
+                const double want = settled[MdAt(arrow)].min.x + (right ? slide : -slide);
+                CHECK_MSG(NearD(rect.min.x, want, 1e-9), what + ": " + PtrName(arrow) + " at age " + PtrNum(age) + " is " + PtrNum(slide) + " units " + (right ? "right" : "left") + " of its place: " + PtrNum(rect.min.x - settled[MdAt(arrow)].min.x));
+                CHECK_MSG(NearD(rect.min.y, settled[MdAt(arrow)].min.y, 1e-9), what + ": and not moved vertically");
+                // The claim goes with the picture: its centre is the arrow's while it is out, and where it will stand is not, until it gets there.
+                CHECK_MSG(layer.ControlAt(rect.Centre()) == PtrClaim(arrow), what + ": " + PtrName(arrow) + " claims where it is drawn: " + PtrName(layer.ControlAt(rect.Centre())));
+                // (The right arrow only: the left one's hit rectangle runs out to the view's edge, so slid right it still holds where it will stand.)
+                if (slide > 60.0 && arrow == PtrControl::Right) CHECK_MSG(layer.ControlAt(settled[MdAt(arrow)].Centre()) != PtrClaim(arrow), what + ": and not where it will stand");
+                ++checked;
+            }
+            // Away from the screen's edge it is coming FROM: sliding in is moving toward the middle of the view.
+            if (tick == 6) CHECK_MSG(slide > 90.0, what + ": the slide is most of its 128 units 96 ms in: " + PtrNum(slide));
+        }
+        CHECK_MSG(checked == 8, what + ": four ages, two arrows: " + std::to_string(checked));
+        // Home by 700 ms.
+        for (int guard = 0; guard < 120 && layer.LevelAgeMs() < 720.0; ++guard) tickWith(layer, registry, kRest, {}, {});
+        for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+            Hud::Rect rect;
+            CHECK_MSG(layer.ControlRect(arrow, rect) && SameRect(rect, settled[MdAt(arrow)], 1e-6), what + ": " + PtrName(arrow) + " is home at 720 ms: " + MdShow(rect));
+        }
+    }
+}
+
+// ---- the data's other value for the corner buttons ----------------------------------------------------------------------------------------------
+
+// controls.json's `corner.act_on` says what a corner button acts on: the release (the default, the original's own Button rule) or the press
+// (what classic does). A copy of the data that says press, read through the layer's own data path, makes restart reload and pause open on the
+// press itself, and lights nothing: the layer reads the key and not a constant.
+void AModernCornerActsOnThePressWhenTheDataSaysPress() {
+    if (!OriginalArtIsThere("AModernCornerActsOnThePressWhenTheDataSaysPress")) return;
+    const ControlsScratchGuard scratch;
+    const std::string data = ControlsScratchData("act-on-press", [](const std::string& text) {
+        std::string edited = text;
+        const std::string from = "\"act_on\": \"release\"";
+        const std::size_t at = edited.find(from);
+        CHECK_MSG(at != std::string::npos, "controls.json has the key this case rewrites");
+        if (at != std::string::npos) edited.replace(at, from.size(), "\"act_on\": \"press\"");
+        return std::optional<std::string>(edited);
+    });
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.portData = data;
+    MdRun run(paths, "level30", "AModernCornerActsOnThePressWhenTheDataSaysPress");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsRules().cornerActOn == Controls::ActOn::Press, "the layer read act_on = press from its copy of the data");
+    const MdGeom g = MdGeometry(layer);
+    {
+        const glm::vec2 pixel = PtrPixel(layer, g.box[MdAt(PtrControl::Reset)].Centre());
+        PtrHold(layer, registry, pixel, true);
+        CHECK_MSG(layer.LevelAgeMs() == 0.0 && PtrLatched(layer, "level_button"), "restart: the PRESS reloads the level");
+        lift(layer, registry, pixel);
+    }
+    PtrRest(layer, registry, 60);
+    {
+        const glm::vec2 pixel = PtrPixel(layer, g.box[MdAt(PtrControl::Menu)].Centre());
+        PtrHold(layer, registry, pixel, true);
+        CHECK_MSG(layer.Paused(), "pause: the PRESS opens it");
+    }
+}
+
 // The modern controls' cases, in one list so that a developer can run them alone (`test_mp test_mp_layer --modern-only`) and the whole suite runs
 // them last. AClassicLayerIgnoresEverythingModern is the longest (it runs CTL-2's pins again) and goes at the end.
 void runModernTests() {
@@ -25903,6 +26491,18 @@ void runModernTests() {
     TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw();
     AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey();
     TheModernClaimMapIsPinned();
+    // The modern controls' own input behaviour (planning step 183).
+    APressedModernControlDrawsTheBoost();
+    AClassicControlIsNeverLit();
+    TheSwallowHoldsAClaimUntilTheTouchIsUp();
+    ThePopupCloseSwallowsToo();
+    TheSwallowIsNotSetInClassic();
+    TheHintClearsTheModernPair();
+    TheHintStaysOnTheScreenAtEverySupportedAspectAndSize();
+    TheModernCornerButtonsDrawOverThePlaqueForItsLifeOnly();
+    SafeInsetsReachTheLayoutOnlyInModern();
+    AControlOnTheRightHalfSlidesInFromTheRight();
+    AModernCornerActsOnThePressWhenTheDataSaysPress();
     AClassicLayerIgnoresEverythingModern();
 }
 

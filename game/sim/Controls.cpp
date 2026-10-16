@@ -264,6 +264,22 @@ double UnitsOf(const Rules& rules, const glm::dvec2& viewUnits, double px) {
     return px * viewUnits.y / rules.referenceHeightPx;
 }
 
+} // namespace
+
+Insets InsetsFromWindowPx(double left, double top, double right, double bottom, double windowHeightPx, double viewHeightUnits) {
+    Insets insets;
+    if (!(windowHeightPx > 0.0) || !(viewHeightUnits > 0.0) || !std::isfinite(windowHeightPx) || !std::isfinite(viewHeightUnits)) return insets;
+    const double unitsPerPx = viewHeightUnits / windowHeightPx;
+    const auto side = [unitsPerPx](double px) { return std::isfinite(px) && px > 0.0 ? px * unitsPerPx : 0.0; };
+    insets.left = side(left);
+    insets.top = side(top);
+    insets.right = side(right);
+    insets.bottom = side(bottom);
+    return insets;
+}
+
+namespace {
+
 // A move is whole tenths of a unit: one division, so 0.3 is the double 0.3 and not the product 3 x 0.1.
 double SnapMoveAxis(double v) {
     if (!Finite(v)) return 0.0;

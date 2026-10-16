@@ -172,6 +172,12 @@ struct Insets {
     double bottom = 0.0;
 };
 
+// A safe area given in WINDOW PIXELS (what Supersonic::SafeArea::Get answers), as the insets the layout takes, in design units. The view is
+// the window stretched to it, so one pixel is `viewHeightUnits / windowHeightPx` units along both axes - the factor the pointer is converted
+// by (MagicPortalsLayer::touchThisTick) - and a control held clear of the notch in pixels is held clear of it in units. A window with no
+// height has no safe area to speak of, and a side that is negative or not a number is zero: a notch cannot cover less than nothing.
+Insets InsetsFromWindowPx(double left, double top, double right, double bottom, double windowHeightPx, double viewHeightUnits);
+
 // A grid the tuning moves on: whole steps, so a chain of them ends exactly on its limits and a step at
 // a limit returns the same value. The value of step n is n / divisor, by ONE division.
 struct Grid {
