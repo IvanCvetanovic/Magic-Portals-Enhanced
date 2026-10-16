@@ -13,12 +13,14 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
 
 #include "core/GameRuntime.hpp"
+#include "core/JobSystem.hpp"
 #include "core/LaunchOptions.hpp"
 #include "platform/ExecutablePath.hpp"
 #include "core/Log.hpp"
@@ -30,6 +32,7 @@
 #include "Route.hpp"
 #include "RunKind.hpp"
 #include "sim/Controls.hpp"
+#include "sim/EngineTuning.hpp"
 #include "sim/Files.hpp"
 
 #if defined(_WIN32)
@@ -81,7 +84,7 @@ void KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::pa
 
 // What main's catch needs, filled in as the start learns it. Declared outside the try, so the catch can read what the try found.
 struct FatalContext {
-    std::string logPath;   // where the log is, or would have been; empty before the start knew
+    std::string logPath;   // where the log is, WRITTEN: empty until the file sink really opened (a box must never name a log that was not written)
     bool attended = false; // a player's run: the only kind that may open a message box (RunKind.hpp)
 };
 
@@ -114,6 +117,18 @@ int ReportFatal(const std::string& what, const FatalContext& context) noexcept {
         }
     } catch (...) {
         // Nothing more can be said; the exit code still is.
+    }
+    // LAST, so that a hang in it can hide neither the line nor the box (planning step 190). A throw out of the engine's SupersonicApp
+    // constructor leaves the job system's workers running: its only Shutdown is in the destructor, which a constructor that threw never
+    // runs, and the static pool's joinable threads then end the process at exit with 0xC0000409 instead of the 1 returned below (18 of
+    // 18 runs of the constructor-throw probe, Step 189). Shutdown returns at once when the pool is not running, which is every other way
+    // here: the throw came before the app existed, or from inside Run, whose app's destructor has already shut the pool down; and what
+    // it drains first (Wait) is nothing, for every Dispatch in the constructor's path is followed by its Wait with no throw between
+    // them (engine/src/core/TerrainGenerator.cpp:35-83, ParticleSystem.cpp:75-93) and nothing calls Execute. A throw out of it is
+    // caught: the exit code still is.
+    try {
+        Supersonic::JobSystem::Shutdown();
+    } catch (...) {
     }
     return EXIT_FAILURE;
 }
@@ -245,10 +260,52 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // sprites, then the drawn glyphs).
     std::string padArtDir = MAGICPORTALS_PADART_DIR;
     bool padArtGiven = false;
+    // DEV ONLY (planning step 190): the engine's optional performance features and the layer's sprite report, over game/data/engine.json for ONE
+    // run, so an A/B is one exe with one setting changed. Taken out here, before the engine's parser, which refuses what it does not know.
+    MagicPortals::EngineTuning::Overrides tuningFlags;
+    std::set<std::string> tuningGiven;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--light-masks-off") {
             lightMasksOff = true;
+            continue;
+        }
+        if (arg == "--shadow-maps" || arg == "--sprites-only" || arg == "--asset-watching" || arg == "--sprite-report" ||
+            arg == "--perf-log") {
+            if (i + 1 >= argc) {
+                std::cerr << arg << " needs a value\n";
+                return EXIT_FAILURE;
+            }
+            const std::string value = argv[++i];
+            // Twice is a mistake, not an override, as it is for --controls: a measurement that meant one setting and ran the other says
+            // nothing about either.
+            if (!tuningGiven.insert(arg).second) {
+                std::cerr << arg << " is given twice; it takes one value\n";
+                return EXIT_FAILURE;
+            }
+            bool ok = false;
+            const char* takes = "on or off";
+            bool onOff = false;
+            std::uint32_t pixels = 0;
+            float seconds = 0.0f;
+            if (arg == "--shadow-maps") {
+                takes = "0 (the engine's own sizes) or a whole number of pixels from 16 to 4096";
+                ok = MagicPortals::EngineTuning::ParseShadowMaps(value, pixels);
+                if (ok) tuningFlags.shadowMapResolution = pixels;
+            } else if (arg == "--perf-log") {
+                takes = "a number of seconds above 0 and at most 3600";
+                ok = MagicPortals::EngineTuning::ParsePerfLog(value, seconds);
+                if (ok) tuningFlags.perfLogSeconds = seconds;
+            } else {
+                ok = MagicPortals::EngineTuning::ParseSwitch(value, onOff);
+                if (ok && arg == "--sprites-only") tuningFlags.spritesOnlyScenePipelines = onOff;
+                if (ok && arg == "--asset-watching") tuningFlags.assetWatching = onOff;
+                if (ok && arg == "--sprite-report") tuningFlags.spriteReport = onOff;
+            }
+            if (!ok) {
+                std::cerr << arg << " takes " << takes << ", got '" << value << "'\n";
+                return EXIT_FAILURE;
+            }
             continue;
         }
         if (arg == "--padart") {
@@ -641,7 +698,22 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    run fails unless the engine's descriptor sets return to its pool\n"
                   << "  --visit-passes <n> DEV: how many times to walk that list (default 1)\n"
                   << "  --light-masks-off DEV: draw the lights and halos but let no light reach a sprite,\n"
-                  << "                    for a capture to be compared with the same capture lit\n";
+                  << "                    for a capture to be compared with the same capture lit\n"
+                  << "  --shadow-maps <0|16..4096>\n"
+                  << "                    DEV: the shadow maps' size in pixels for this run (0: the engine's\n"
+                  << "                    own 2048 and 1024); over game/data/engine.json, for an A/B\n"
+                  << "  --sprites-only <on|off>\n"
+                  << "                    DEV: build the scene pipelines for unlit draws only (the sprites,\n"
+                  << "                    particles and halos); the lit boxes of the B key then draw flat\n"
+                  << "  --asset-watching <on|off>\n"
+                  << "                    DEV: the engine's stat of every watched file on every frame (hot\n"
+                  << "                    reload of a texture a developer saved); off in a player's run\n"
+                  << "  --sprite-report <on|off>\n"
+                  << "                    DEV: the layer's per-frame walk over its sprites that logs one\n"
+                  << "                    crossing the view's edge; off in a player's run, G dumps all\n"
+                  << "  --perf-log <seconds>\n"
+                  << "                    DEV: the engine's frame statistics (fps, median, 95th percentile,\n"
+                  << "                    worst, the split of the frame) in the log every <seconds>\n";
         return EXIT_SUCCESS;
     }
     if (!options.ok) {
@@ -701,13 +773,16 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         std::cerr << "[Magic Portals] no folder to keep a log in; continuing without one.\n";
     } else {
         const std::filesystem::path logPath = temp / kLogFile;
-        fatal.logPath = logPath.string();
+        const std::string logFile = logPath.string();
         // THE LAST RUN'S LOG, KEPT. SetFileSink opens its file truncated
         // (engine/src/core/Log.cpp:90), so a crash's log was gone the moment the
         // game was started again to see whether it happens twice. One run back is
         // kept beside it; a failure here costs that copy, never the start.
         KeepPreviousLog(logPath, temp / kPreviousLogFile);
-        if (Supersonic::Log::SetFileSink(fatal.logPath)) {
+        if (Supersonic::Log::SetFileSink(logFile)) {
+            // Only now: the box names the log it was told was written, and a sink that failed to open (a read-only file, a full disk)
+            // wrote none (planning step 190).
+            fatal.logPath = logFile;
             std::cout << "[Magic Portals] logging to " << fatal.logPath << std::endl;
             // The FILE's lines carry the seconds since the first (the console's do not): a log a player sends can then say a slow
             // start from a stuck one. A capture compares pictures and never this file.
@@ -717,15 +792,28 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             SUPERSONIC_LOG_INFO("Magic Portals") << "build: " << kBuildType << ", engine " << MAGICPORTALS_ENGINE_COMMIT
                                                  << ", Windows code page " << CodePageText() << std::endl;
         } else {
-            std::cerr << "[Magic Portals] could not open " << fatal.logPath << " for writing; continuing without a log file.\n";
+            std::cerr << "[Magic Portals] could not open " << logFile << " for writing; continuing without a log file.\n";
         }
     }
+
+    // WHAT THE RUN ASKS OF THE ENGINE'S OPTIONAL FEATURES (planning step 190): game/data/engine.json for this kind of run, then the flags over
+    // it. A table that will not read leaves the engine as it was (Table{} is that), and the log says so below.
+    MagicPortals::EngineTuning::Table tuningTable;
+    std::string tuningWhy;
+    const bool tuningRead = MagicPortals::EngineTuning::Load(paths.portData + "/engine.json", tuningTable, tuningWhy);
+    const MagicPortals::EngineTuning::Resolved tuning = MagicPortals::EngineTuning::Resolve(tuningTable, fatal.attended, tuningFlags);
+    paths.spriteReport = tuning.spriteReport;
 
     // Declared, not discovered, for the reason Wolf Brigade's main gives: a
     // game binary is a game whether or not a manifest sits beside it.
     Supersonic::GameManifest manifest;
     manifest.isGame = true;
     manifest.title = kTitle;
+    // The engine's opt-ins, each off by default there (engine/src/core/GameRuntime.hpp). Every one is set from the table above and nowhere else.
+    manifest.shadowMapResolution = tuning.shadowMapResolution;
+    manifest.spritesOnlyScenePipelines = tuning.spritesOnlyScenePipelines;
+    manifest.assetWatching = tuning.assetWatching;
+    manifest.perfLogSeconds = tuning.perfLogSeconds;
     // The window is shown the moment it exists, and nothing reads its messages until the first frame: a start that takes five seconds
     // or more (a cold disk, an antivirus scanning a freshly copied exe, a slow GPU driver compiling its pipelines) makes Windows call
     // it "Not responding" and offer to close it, which looks like a crash. This reads the window's events between the startup stages,
@@ -757,6 +845,11 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     SUPERSONIC_LOG_INFO("Magic Portals") << "folders: levels " << paths.levels << ", data " << paths.data << ", port data "
                                          << paths.portData << ", saves " << (paths.saveDir.empty() ? "(none)" : paths.saveDir)
                                          << std::endl;
+    if (!tuningRead) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "engine options not read, the engine's own defaults are used: " << tuningWhy << std::endl;
+    }
+    SUPERSONIC_LOG_INFO("Magic Portals") << "engine options (" << (fatal.attended ? "a player's run" : "not a player's run")
+                                         << "): " << MagicPortals::EngineTuning::Describe(tuning) << std::endl;
 
     // Outside the app, because the layer stack is torn down with it.
     MagicPortals::LevelVisitLayer::Result visitResult;

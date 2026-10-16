@@ -27,6 +27,11 @@ struct DevFlags {
 // Whether a person is at this run: a window the game opened for someone to play. False for every run a script makes, and the
 // rule is deliberately the narrow one: anything that is not plainly a player's run is unattended, so the only way to block an
 // unattended run is for a developer flag to be missing from this list.
+//
+// It is also the port's ONE definition of "a player-style run" for everything else that must differ for a person (planning step 190):
+// the engine's per-frame watch of every file for a developer's hot reload, and the layer's per-frame sprite log, are off for an attended
+// run and stay on for every other (sim/EngineTuning, game/data/engine.json). The measurement flags of that step (--shadow-maps,
+// --sprites-only, --asset-watching, --sprite-report, --perf-log) are NOT in DevFlags: they change what a run costs, not who is at it.
 inline bool AttendedRun(const Supersonic::LaunchOptions& engine, const DevFlags& dev) {
     const bool engineUnattended = engine.maxFrames > 0 || engine.fixedDelta > 0.0f || engine.hidden ||
                                   !engine.screenshotPath.empty() || !engine.screenshotUiPath.empty() ||

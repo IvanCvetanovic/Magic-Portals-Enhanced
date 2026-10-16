@@ -161,6 +161,7 @@ void AnUnreadableFileIsKeptAsABadCopyAndNeverDeleted() {
     CHECK_MSG(error.find("scores.json.bad-1") != std::string::npos, "and the report says where the file went: " + error);
     CHECK_MSG(store.WhatOpened() == Scores::Store::Opened::Quarantined, "it was quarantined");
     CHECK_MSG(EndsWith(store.QuarantinedTo(), "scores.json.bad-1"), "to the first free name: " + store.QuarantinedTo());
+    CHECK_MSG(!store.Dirty(), "and the whole file written at once leaves the store level with it (planning step 190)");
 
     // NOT memory-only any more: the session's medals reach a file. (Before this step one bad byte ended saving for good, silently.)
     CHECK_MSG(store.Persists() && !store.Waiting(), "the store has somewhere to write");
@@ -261,9 +262,12 @@ void AFileOutOfReachIsWaitedForNotQuarantined() {
     CHECK_MSG(std::filesystem::is_directory(file) && ReadAll(file / "keep.txt") == "kept", "what stood at the name is untouched");
     CHECK_MSG(Entries(dir) == std::vector<std::string>{"scores.json"}, "and nothing was quarantined or written beside it");
 
+    CHECK_MSG(!store.Dirty(), "nothing earned yet: nothing is ahead of the file");
     CHECK(store.Record(1, 2, Scores::kGold));
+    CHECK_MSG(store.Dirty(), "a medal earned while the file is out of reach: the store is ahead of it");
     std::string saved;
     CHECK_MSG(!store.Save(saved) && !saved.empty(), "a save while it is still out of reach says so and loses nothing: " + saved);
+    CHECK_MSG(store.Dirty(), "and is still ahead of it");
     CHECK_MSG(store.Get(1, 2) == Scores::kGold, "the medal is still in memory");
 
     // The way clears: the next save (or Retry, as the game ends) merges and writes.
@@ -271,8 +275,60 @@ void AFileOutOfReachIsWaitedForNotQuarantined() {
     std::filesystem::remove_all(file, ec);
     CHECK_MSG(store.Save(saved), "the name is free, and the save writes: " + saved);
     CHECK_MSG(store.Persists() && !store.Waiting() && store.WhatOpened() == Scores::Store::Opened::Merged, "the store persists now");
+    CHECK_MSG(!store.Dirty(), "and is level with its file");
     Scores::Store reopened;
     CHECK_MSG(reopened.Open(dir.string(), error) && reopened.Get(1, 2) == Scores::kGold, "and the medal is on disk: " + error);
+}
+
+// A SAVE THAT FAILED AFTER A GOOD OPEN (planning step 190). The store was level with a file that read whole; a medal is earned; the save
+// fails (a directory holding something stands at the name, which the atomic write cannot replace on any platform); the medal is in memory
+// only. Dirty() is the store's word for that, and what the game asks as it ends: Waiting() knows only a file that never opened, so
+// before this a medal whose save failed was lost at exit with no second try. A save that works clears it; a Record that changes nothing
+// does not set it.
+void ASaveThatFailedLeavesTheStoreAheadOfItsFileUntilOneWorks() {
+    {
+        Scores::Store memory;
+        std::string error;
+        CHECK(memory.Open("", error));
+        CHECK(memory.Record(0, 0, Scores::kGold));
+        CHECK_MSG(!memory.Dirty(), "a memory-only store has no file to be ahead of");
+    }
+    const std::filesystem::path dir = Scratch("dirty");
+    const std::filesystem::path file = dir / "scores.json";
+    std::string error;
+    {
+        Scores::Store first;
+        CHECK_MSG(first.Open(dir.string(), error) && first.WhatOpened() == Scores::Store::Opened::Fresh, error);
+        CHECK_MSG(!first.Dirty(), "a fresh folder: nothing is ahead of a file that is not there yet");
+        CHECK(first.Record(0, 0, Scores::kGold));
+        CHECK_MSG(first.Dirty(), "a medal not yet written");
+        CHECK_MSG(!first.Record(0, 0, Scores::kBronze) && first.Dirty(), "a worse replay changes nothing and clears nothing");
+        CHECK_MSG(first.Save(error), error);
+        CHECK_MSG(!first.Dirty(), "a save that worked: level with the file");
+    }
+    Scores::Store store;
+    CHECK_MSG(store.Open(dir.string(), error) && store.WhatOpened() == Scores::Store::Opened::Read, error);
+    CHECK_MSG(!store.Dirty(), "a whole file read: what the file says is not news to it");
+
+    // The name now stands a directory that holds something: the replace is refused, and the file that was there is gone from the name
+    // (this is the stand-in; nothing is lost that the first store had not written).
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+    std::filesystem::create_directories(file);
+    Put(file / "keep.txt", "kept");
+    CHECK(store.Record(0, 1, Scores::kSilver));
+    CHECK_MSG(store.Dirty(), "a medal earned");
+    CHECK_MSG(!store.Save(error) && !error.empty(), "the save is refused and says so: " + error);
+    CHECK_MSG(store.Dirty(), "and the store is still ahead of its file: the game's end must try again");
+    CHECK_MSG(!store.Record(0, 1, Scores::kBronze) && store.Dirty(), "a Record that changes nothing does not clear it");
+
+    std::filesystem::remove_all(file, ec);
+    CHECK_MSG(store.Save(error), "the name is free, and the next save writes: " + error);
+    CHECK_MSG(!store.Dirty(), "level with the file");
+    Scores::Store reopened;
+    CHECK_MSG(reopened.Open(dir.string(), error) && reopened.Get(0, 0) == Scores::kGold && reopened.Get(0, 1) == Scores::kSilver &&
+                  reopened.Count() == 2,
+              "and both medals are on disk: " + error);
 }
 
 #if defined(_WIN32)
@@ -442,6 +498,7 @@ void runTests() {
     ABadRowCostsThatRowAndNotTheFile();
     AnEmptyFileOrAnotherDocumentIsQuarantinedToo();
     AFileOutOfReachIsWaitedForNotQuarantined();
+    ASaveThatFailedLeavesTheStoreAheadOfItsFileUntilOneWorks();
 #if defined(_WIN32)
     AFileLockedByAnotherProgramIsMergedWhenItOpens();
 #endif

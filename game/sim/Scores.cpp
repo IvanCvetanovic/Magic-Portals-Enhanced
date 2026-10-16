@@ -126,6 +126,7 @@ bool Store::Open(const std::string& directory, std::string& error) {
     m_opened = Opened::MemoryOnly;
     m_quarantinedTo.clear();
     m_recovered = 0;
+    m_dirty = false;
     error.clear();
 
     // Memory only, and deliberately silent about it: this is how every suite
@@ -162,7 +163,11 @@ bool Store::Load(std::string& error) {
     if (set.whole) {
         // Through Record, so a file naming the same level twice keeps the
         // better of the two rather than whichever line happened to be last.
+        // What the file itself says is not news to it: only a medal this session earned before the file opened (a Retry) leaves
+        // the store ahead of the file, and that is what the flag held on the way in.
+        const bool aheadBefore = m_dirty;
         for (const Row& row : set.rows) Record(row.world, row.level, row.medal);
+        m_dirty = aheadBefore;
         m_path = m_file;
         m_opened = Opened::Read;
         return true;
@@ -187,7 +192,8 @@ bool Store::Load(std::string& error) {
     m_recovered = static_cast<int>(set.rows.size());
     error = m_file + " is not a scores file (" + set.why + "); kept as " + movedTo + ", " + std::to_string(m_recovered) +
             " medal(s) recovered from it";
-    // At once: the medals recovered live only in memory and in the bad copy until a whole file holds them.
+    // At once: the medals recovered live only in memory and in the bad copy until a whole file holds them. A write that fails here
+    // leaves Dirty() true (Record set it for every recovered row), so the game's end tries again.
     if (std::string saveError; !Write(saveError)) {
         error += "; they could not be saved yet: " + saveError;
     }
@@ -228,6 +234,7 @@ bool Store::Record(int world, int level, int medal) {
         if (entry.world != world || entry.level != level) continue;
         if (medal <= entry.medal) return false; // a worse replay takes nothing away
         entry.medal = medal;
+        m_dirty = true;
         return true;
     }
 
@@ -236,6 +243,7 @@ bool Store::Record(int world, int level, int medal) {
     added.level = level;
     added.medal = medal;
     m_entries.push_back(added);
+    m_dirty = true;
     return true;
 }
 
@@ -277,7 +285,9 @@ bool Store::Write(std::string& error) {
     // copy kept beside it is always a good one.
     Files::WriteOptions options;
     options.keepBackup = true;
-    return Files::WriteAtomic(m_path, text, options, error);
+    if (!Files::WriteAtomic(m_path, text, options, error)) return false;
+    m_dirty = false;
+    return true;
 }
 
 } // namespace MagicPortals::Scores

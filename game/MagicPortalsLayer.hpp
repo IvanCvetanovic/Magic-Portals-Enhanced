@@ -193,6 +193,12 @@ public:
         // pictures.json says (planning step 150). Set by main from the engine's flag.
         bool fixedStep = false;
 
+        // Whether the layer walks its sprites every frame to log the ones that cross the view's edge ("on", "off", "GONE" lines: reportSprites).
+        // A developer's instrument, and the walk costs a pass over every sprite on every frame of a player's run for lines nobody reads
+        // (planning step 190, PA-12): main turns it off for a person's run (game/data/engine.json, sprite_report). On by default, so every
+        // suite and every capture keeps what it has always had. The dropped-draw alarm and G's full dump are kept whatever this says.
+        bool spriteReport = true;
+
         // WHICH CONTROLS THE RUN PLAYS (planning step 181, CTL-5; the design's 2.1): what main's
         // Controls::ResolvePolicy made of --controls and of the kind of run. The default is the
         // policy of a run with no such thing - "classic, nothing": the feature does not exist, no

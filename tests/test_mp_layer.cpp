@@ -29992,6 +29992,50 @@ void ALayerOverAnUnreadableScoresFileKeepsItAndGoesOn() {
     }
 }
 
+// A MEDAL WHOSE SAVE FAILED IS WRITTEN AS THE GAME ENDS (planning step 190). The file opened well (a fresh folder), level0 is walked to
+// its door, and the save on the door's tick fails because a directory holding something stands at the name (the atomic write cannot replace
+// it on any platform); the medal is then only in memory. Before this step OnDetach tried again only for a file that had never opened, so
+// the medal was lost at exit. The way clears, the game ends, and the file holds the medal.
+void AMedalWhoseSaveFailedIsWrittenAsTheGameEnds() {
+    namespace Scores = MagicPortals::Scores;
+    const std::string saves = SavesDir("failedsave");
+    const std::filesystem::path file = std::filesystem::path(saves) / "scores.json";
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = saves;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK_MSG(layer.Medals().WhatOpened() == Scores::Store::Opened::Fresh && layer.Medals().Persists() && !layer.Medals().Dirty(),
+              "a fresh folder: the store opened well and is level with nothing");
+    // The way is blocked before the door: a directory that holds something.
+    std::filesystem::create_directories(file);
+    {
+        std::ofstream out(file / "keep.txt", std::ios::binary | std::ios::trunc);
+        out << "kept";
+    }
+    for (int tick = 0; tick < 600 && !layer.Finishing(); ++tick) {
+        std::vector<std::string> pressed;
+        if (tick == 0) pressed.push_back(MagicPortalsLayer::kRight);
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, std::move(pressed));
+    }
+    CHECK_MSG(layer.Finishing(), "level0's door is reached by walking right");
+    if (!layer.Finishing()) return;
+    CHECK_MSG(layer.Medals().Get(0, 0) > Scores::kUnplayed && layer.Medals().Dirty(),
+              "the medal is earned and held in memory, and the store is ahead of its file");
+    CHECK_MSG(std::filesystem::is_directory(file) && !std::filesystem::is_regular_file(file), "no file was written over what stands at the name");
+    std::error_code ec;
+    std::filesystem::remove_all(file, ec);
+    layer.OnDetach(registry);
+    CHECK_MSG(std::filesystem::is_regular_file(file) && !layer.Medals().Dirty(), "the way cleared, the game's end wrote the file");
+    Scores::Store reopened;
+    std::string why;
+    CHECK_MSG(reopened.Open(saves, why) && reopened.Get(0, 0) == layer.Medals().Get(0, 0) && reopened.Get(0, 0) > Scores::kUnplayed,
+              "and the next start reads the medal: " + why);
+}
+
 void runTests() {
     FourLevelsSetNoMusicAndEachWorldsLastIsItsBossFight();
     EachLevelOpensOnTheTrackItsPreLoopAsksFor();
@@ -30269,6 +30313,7 @@ void runTests() {
     ARefusedLevelSaysSoAndTheBackKeyReturnsToTheGrid();
     OnlyALayerWithNothingToPlayCouldNotStart();
     ALayerOverAnUnreadableScoresFileKeepsItAndGoesOn();
+    AMedalWhoseSaveFailedIsWrittenAsTheGameEnds();
     // The modern controls, played (planning step 182).
     runModernTests();
 }

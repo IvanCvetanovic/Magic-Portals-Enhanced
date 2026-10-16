@@ -129,6 +129,13 @@ public:
     // Whether this store has somewhere to write.
     bool Persists() const { return !m_path.empty(); }
 
+    // Whether the medals held in memory are ahead of the file: a medal was recorded and no write has put it there yet. True after a
+    // Save that failed (the file was held, the disk full) and after a quarantine whose immediate write failed, which left the
+    // recovered medals only in the .bad-<n> copy; false once a write succeeds, after a whole file was read, and always for a
+    // memory-only store (it has no file to be ahead of). The layer asks as the game ends (planning step 190): Retry alone looks only
+    // at a store that never opened, so a Save that failed after a good open was not tried again.
+    bool Dirty() const { return m_dirty && !m_file.empty(); }
+
     // How many levels have a medal. For the tests and the log line.
     std::size_t Count() const { return m_entries.size(); }
 
@@ -154,6 +161,8 @@ private:
     Opened m_opened = Opened::MemoryOnly;
     std::string m_quarantinedTo;
     int m_recovered = 0;
+    // The entries hold a medal the file does not (Dirty). Set by Record, cleared by a write that succeeded.
+    bool m_dirty = false;
 };
 
 } // namespace MagicPortals::Scores

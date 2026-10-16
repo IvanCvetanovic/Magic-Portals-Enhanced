@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -381,6 +382,9 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     }
 
     std::string error;
+    // What reading the tables costs at the start, said once in the log with the rest of the start's stages (planning step 190, PA-11): the
+    // number a later wave needs to say whether ui.json, which nine modules each read and parse in full, is worth reading once.
+    const auto tablesFrom = std::chrono::steady_clock::now();
     const bool read = Chapters::Load(m_paths.chapters, m_chapters, error) &&
                       ScriptClock::LoadRules(m_paths.portData + "/clock.json", m_clockRules, error) &&
                       Pictures::LoadRules(m_paths.portData + "/pictures.json", m_pictureRules, error) &&
@@ -407,6 +411,9 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Selector::LoadRules(m_paths.portData + "/ui.json", m_selectorRules, error) &&
                       Dashboard::LoadRules(m_paths.portData + "/ui.json", m_dashboardRules, error) &&
                       Locking::LoadRules(m_paths.portData + "/ui.json", m_lockingRules, error);
+    SUPERSONIC_LOG_INFO("Magic Portals") << "tables: " << (read ? "read" : "NOT read") << " in " << std::fixed << std::setprecision(1)
+                                         << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tablesFrom).count()
+                                         << " ms" << std::defaultfloat << std::endl;
     // ui.json is the port's own and committed, so a HUD that will not read is a
     // fault in this repository and stops the start as loudly as a missing level.
     m_hudReady = read;
@@ -943,9 +950,15 @@ void MagicPortalsLayer::OnDetach(entt::registry& registry) {
     // A scores.json that was out of reach at the start (held by another program for a moment) is tried once more as the game ends,
     // and what this session earned is merged into it: the last chance, and the reason a medal earned meanwhile is not lost. A file that
     // is still out of reach is said, and the medals of the session are the only thing that is.
-    if (m_scores.Waiting()) {
-        if (std::string why; m_scores.Retry(why)) {
-            SUPERSONIC_LOG_INFO("Magic Portals") << "medals saved as the game ended: scores.json is open again" << std::endl;
+    // The same last chance for a file that opened well and whose LATER save failed (held at that moment, a disk that was full), and for
+    // the medals a quarantine recovered when its immediate write failed (planning step 190): Dirty() is the store's own word that
+    // memory is ahead of the file, where Waiting() only knows a file that never opened.
+    if (m_scores.Waiting() || m_scores.Dirty()) {
+        const bool wasWaiting = m_scores.Waiting();
+        if (std::string why; m_scores.Save(why)) {
+            SUPERSONIC_LOG_INFO("Magic Portals") << "medals saved as the game ended: "
+                                                 << (wasWaiting ? "scores.json is open again" : "the earlier save had not gone through")
+                                                 << std::endl;
         } else {
             SUPERSONIC_LOG_WARN("Magic Portals") << "medals not saved as the game ended: " << why << std::endl;
         }
@@ -1052,10 +1065,16 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
         m_dataIndex = -1;
         m_lit = false;
         m_look = Lighting::Scene{};
+        // The tables a level is built from are read again with every level (about 45 files, planning step 190, PA-11): the log says what
+        // that costs each time, beside the level's name.
+        const auto dataFrom = std::chrono::steady_clock::now();
         if (!Game::LoadData(m_paths.levels + "/" + entry.name + ".tscn", m_paths.data, m_paths.prisms, m_data,
                             error, m_paths.portData)) {
             return refuse(error);
         }
+        SUPERSONIC_LOG_INFO("Magic Portals") << entry.name << " data read in " << std::fixed << std::setprecision(1)
+                                             << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - dataFrom).count()
+                                             << " ms" << std::defaultfloat << std::endl;
         m_dataIndex = index;
         // Its lighting, read once with it. A level whose lighting will not read
         // is still played, its sprites in their own colours - as a level whose
@@ -9733,7 +9752,10 @@ void MagicPortalsLayer::reportSprites(entt::registry& registry) {
     const glm::vec2 viewMin(camera.position.x - halfWidth, camera.position.y - halfHeight);
     const glm::vec2 viewMax(camera.position.x + halfWidth, camera.position.y + halfHeight);
 
-    m_onScreenLast.resize(m_sprites.size(), char{0});
+    // THE WALK is the per-frame cost: a pass over every sprite for lines that are only read in a developer's log (planning step 190, PA-12).
+    // A person's run skips it (Paths::spriteReport); G's full dump still asks for it, and the dropped-draw alarm below is kept either way.
+    const bool walk = m_paths.spriteReport || m_dumpRequested;
+    if (walk) m_onScreenLast.resize(m_sprites.size(), char{0});
 
     const Supersonic::RenderSystem::Stats** slot =
         registry.ctx().find<const Supersonic::RenderSystem::Stats*>();
@@ -9747,7 +9769,7 @@ void MagicPortalsLayer::reportSprites(entt::registry& registry) {
     };
 
     int onScreen = 0;
-    for (std::size_t i = 0; i < m_sprites.size(); ++i) {
+    for (std::size_t i = 0; walk && i < m_sprites.size(); ++i) {
         const DrawnSprite& drawn = m_sprites[i];
 
         bool showing = false;
@@ -9808,7 +9830,7 @@ void MagicPortalsLayer::reportSprites(entt::registry& registry) {
             << counters() << std::endl;
     }
     m_dumpRequested = false;
-    m_reportedOnce = true;
+    if (walk) m_reportedOnce = true;
 }
 
 // ---- sound ------------------------------------------------------------------

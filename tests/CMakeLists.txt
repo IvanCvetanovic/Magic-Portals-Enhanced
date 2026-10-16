@@ -84,6 +84,10 @@ add_mp_test(test_mp_scores)
 # Pure sim and a scratch directory; no converted level, so no skip.
 add_mp_test(test_mp_robust)
 
+# What the run asks of the engine's optional performance features (planning step 190): game/data/engine.json as sim/EngineTuning reads
+# it, strictly, for a person's run and for every other, and the flags that override it for one run. Pure sim and a scratch directory.
+add_mp_test(test_mp_tuning)
+
 # The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
 # what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
 add_mp_test(test_mp_clock)

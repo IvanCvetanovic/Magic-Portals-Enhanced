@@ -381,10 +381,31 @@ Exit codes (planning step 189): 0 for a run that played and ended; 1 for a run t
 flags, also puts it in a message box naming the log; a capture or a route never opens a box), that could
 not start (the data it plays from would not read, or `--level` names no level; a level that merely will
 not load is *not playable yet* and has a way out on the back key), whose `--frames` run did not write
-every PNG it was asked for, or that reported a Vulkan validation error or a failed level walk. One
-exception, measured: when the engine's own start throws (no Vulkan loader or device, the likeliest real
-fatal) the `fatal:` line and the box happen as above and the process then ends with Windows' fast-fail
-code 0xC0000409 instead of 1, an engine gap and not the port's (planning step 189, deviation 6).
+every PNG it was asked for, or that reported a Vulkan validation error or a failed level walk. That
+includes the engine's own start throwing (no Vulkan loader or device, the likeliest real fatal): the
+`fatal:` line and the box happen as above and the process ends with 1. (Planning step 189 measured it
+ending with Windows' fast-fail code 0xC0000409 instead, because the engine's job-system workers were
+still running when the process left; step 190 shuts them down after the box, in `ReportFatal`, and the
+same probe exits 1.)
+
+**Performance options** (planning step 190). `game/data/engine.json` says what a run asks of the engine's optional performance
+features, for a **player's** run (a window the game opened for someone to play: none of the developer's flags, the same rule that
+decides the message box) and for every other run (a capture, a route, a level walk, a script), each value with the measurement that
+decided it. Shipped: the shadow maps at 16 px (the engine allocates 120 MiB of them whatever a game draws; the art view casts no shadow,
+so every picture of it stayed byte for byte the same while the process's GPU memory fell by 193 MiB; the developer's lit boxes (the `B`
+key, or a level drawn without its art) are the one draw that does cast one, and at 16 px their shadows are gone: `--shadow-maps 0`
+brings them back), and the engine's stat of every watched file
+on every frame, which exists for a developer's hot reload of a saved texture, off for a player's run (0.6 to 0.9 ms of CPU a frame;
+every other run keeps hot reload, and a developer who wants it in a plain window passes `--asset-watching on`). Measured and left
+as the engine has them: the scene pipelines built for unlit draws only (`--sprites-only on`: every sprite, particle and halo is
+one, and every picture stayed byte for byte the same, but no gain could be measured on this machine and each start pays 2 to 6 ms
+for it; the lit boxes of the `B` key would draw flat), and the layer's per-frame walk over its sprites for the `on`/`off`/`GONE` log
+lines (nothing it costs could be told from noise). Each is one line of the file and a flag for one run (`--shadow-maps`,
+`--sprites-only`, `--asset-watching`, `--sprite-report`), so changing one is an edit of the file, not of the code, and the log's
+third line says what the run was given. A table that will not read leaves the engine as it was. `--perf-log <seconds>` writes the
+engine's frame statistics (fps, median, 95th percentile, worst frame, where the frame went, the queue waits) to the log every that
+many seconds; nothing is measured unless asked. The log also says how long the start spent reading the port's tables (`tables:
+read in 67.8 ms`) and each level's (`level0 data read in 7.7 ms`), to one decimal.
 
 The medals and the sound and music switches are kept between runs, as the original keeps
 them, in `%APPDATA%\Magic Portals\` (`scores.json`, and `audio.json` from the first press of
@@ -420,7 +441,7 @@ configures once - if `build\`'s data paths move, delete `build-play\` and run it
 | `Esc` | in a level: pause, and resume from it; closes a popup; in a menu: back a screen; on the main menu: quit |
 | `R` | retry the level |
 | `N` | skip to the next level (dev) |
-| `B` | draw the physics bodies' boxes over the art (dev) |
+| `B` | draw the physics bodies' boxes over the art (dev). These boxes are the one lit draw the port makes: with `--sprites-only on` (*Performance options*; off as shipped) they, and a level drawn without its art, draw flat; at the shipped 16 px shadow maps they cast no shadow (`--shadow-maps 0` brings it back) |
 | `G` | write what the game believes it is drawing to the log (dev) |
 
 **The Options screen** (planning step 185). A player's run has a gear in the main menu's top-right corner, in the slot of the
@@ -477,6 +498,11 @@ The flags a capture uses (`--help` prints every flag):
 | `--padart <absolute dir>` | the folder a `--controls modern` run looks for Magic Rampage's five control pictures in (`walk_left.png`, `walk_right.png`, `restart.png`, `pause.png`, `clear_portals.png`, and the tool's `manifest.json`), instead of the one the build was told (`SUPERSONIC_MAGICPORTALS_PADART`). Absolute, because the game makes `engine/` its working directory, and given once (twice exits 1, as `--controls` does); an empty folder shows the next tiers. A picture there that cannot be read or decoded, or whose size is not the manifest's (else 128 x 128), is skipped with a WARN. Never part of a release package: the pictures are the owner's, read from where they are (`docs/magic-rampage-controls.md`) |
 | `--controls <classic\|modern>[,key=value...]` | which on-screen controls the run plays: the original's (`classic`) or Magic Rampage's inset ones (`modern`; keys `preset=uniform\|balanced\|mr`, `arrows=split\|grouped`, `size=`, `opacity=` and a move as `<control>=<dx>:<dy>`). A run with none of the rig's flags (`--fixed-step`, `--route`, `--visit-levels`) has the Options screen and plays what it kept (shipped default: classic); with this flag the run STARTS in that style, ignores the kept choice and writes nothing (Options then chooses for the run only), `classic` has no Options entry at all, and a rig run is classic unless the flag says otherwise (a rig run has no entry either). **The layer plays the modern layout (CTL-6 of the modern-controls plan): five inset controls (the two walk arrows one in each bottom corner, restart and pause at the top right, clear-portals at the top left; `arrows=grouped` puts both arrows at the bottom left, as the first layout did), their pictures read at run time from Magic Rampage's own files in the gitignored `reference/magic-rampage/controls/` where they are there (`--padart`, below), else the original's own sprite for restart, pause and clear-portals, else a glyph the game draws and writes to a temporary directory (only for a control that reaches it, and only when the file there differs), else a flat quad - the log says which, once: `modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr` (planning step 184); restart, pause and clear act on the release inside their area after a press inside it. Its log says `controls: modern (--controls modern)` at attach and, at each level start (the game's first level says it on its first tick, when the window is known), `controls: modern, walk_left (x,y)-(x,y) px hit (x,y)-(x,y) px, ...` (the settled boxes and hit areas in the window's pixels). Its keys are all played (planning step 187): `preset=` and `arrows=` choose the look and the arrangement (neither is ever kept), `size=` (0.4 to 1.4 by 0.1; 1.4 is the classic pad's 64 units), `opacity=` (0.2 to 1.8 by 0.2; it multiplies the byte the control is drawn at and stops at 255) and a move as `<control>=<dx>:<dy>` (design units from the control's own corner, never scaled by the size, pulled in by the layout where the view cannot hold it) tune it. A flag that carries a size, an opacity or a move REPLACES the tuning a player kept - it never merges with it - and writes nothing; a value off its grid exits 1 with the usage; the log says `controls: tuning from the flag: size 1.4, opacity 1, ...` or, for the kept one, `from controls.json`. The classic controls read none of it.** Under it 1-21's "move the camera around" starts clear of the left arrow and stays on the screen at every window shape (where the text is wider than the free span between the two arrows it runs over the right one, as the classic text crosses its disc), and a device's safe area (a notch, a home bar) moves the controls in (planning step 183). A flag that is neither style, or a key that is not one, exits 1 with the usage; `docs/planning/2026-10-15-modern-controls.md` |
 | `--light-masks-off` | DEV: draw lights and halos but let no light reach a sprite |
+| `--shadow-maps <0\|16..4096>` | DEV: the shadow maps' size in pixels for this run (`0`: the engine's own 2048 and 1024); over `game/data/engine.json`, for an A/B. See *Performance options* |
+| `--sprites-only <on\|off>` | DEV: build the scene pipelines for unlit draws only (every sprite, particle and halo); the lit boxes of the `B` key then draw flat. Over the table |
+| `--asset-watching <on\|off>` | DEV: the engine's stat of every watched file on every frame (hot reload of a texture a developer saved). Over the table |
+| `--sprite-report <on\|off>` | DEV: the layer's per-frame walk over its sprites that logs one crossing the view's edge (`on`/`off`/`GONE` lines). Over the table; `G` dumps all either way |
+| `--perf-log <seconds>` | DEV: the engine's frame statistics (fps, median, 95th percentile, worst, where the frame went) in the log every `<seconds>`; off unless asked |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
 | `--route <file>` | DEV: replay a win route (`tests/routes/<level>.json`, absolute) in the window, opening its level; says on exit whether it won. Pair it with `--saves <dir>`: a run past the level's end writes its medal |
