@@ -292,8 +292,11 @@ set_property(SOURCE test_mp_layer.cpp APPEND PROPERTY
 # relink the game for nothing (step 129 left it). The routes' directory is this
 # one source file's definition, so moving it recompiles one suite.
 add_mp_test(test_mp_routes SKIPS_WITH_77)
+# The controls census (`test_mp test_mp_routes --controls modern`, planning step 182) reads the accepted list of tests/golden/controls_census.json for
+# its lower bound, at run time and through this one source's definition, as test_mp_census does: a corrected golden is a file, never a relink.
 set_property(SOURCE test_mp_routes.cpp APPEND PROPERTY
-             COMPILE_DEFINITIONS "MAGICPORTALS_ROUTES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/routes\"")
+             COMPILE_DEFINITIONS "MAGICPORTALS_ROUTES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/routes\""
+                                 "MAGICPORTALS_GOLDEN_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/golden\"")
 
 # What the modern controls' default layout costs the levels (planning step 180, design 1.9): of the 128 recorded winning routes, which levels
 # have a shot no camera can bring clear of a control's hit rectangle. Pure geometry over tests/routes/*.json and the converted levels, so it

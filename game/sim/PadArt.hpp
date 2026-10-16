@@ -34,6 +34,9 @@
 
 namespace MagicPortals::PadArt {
 
+// The six: the five controls' and the options entry's. `kGlyphs` is THE SIX and test_mp_padart holds each of them to the plate
+// invariants (one shared alpha channel, six different pictures); the adjustment screen's seven editor glyphs (CTL-11) do not belong in
+// it and go in a list of their own, so that no invariant of the six is asked of them.
 enum class Glyph { WalkLeft, WalkRight, Restart, Pause, ClearPortals, Gear };
 inline constexpr std::size_t kGlyphCount = 6;
 inline constexpr std::array<Glyph, kGlyphCount> kGlyphs = {Glyph::WalkLeft, Glyph::WalkRight, Glyph::Restart,
@@ -66,10 +69,11 @@ inline constexpr Rgb kPlateRim{205, 212, 232};
 inline constexpr Rgb kGlyphColour{244, 247, 255};
 
 // The sizes that are drawn: below the smallest a glyph is a few pixels, above the largest a bitmap is megabytes; and the
-// largest margin that leaves a body (a quarter of the picture on each side keeps half of it).
+// largest margin that leaves a body (a quarter of the picture on each side keeps half of it). The margin is the layout's own
+// number, Controls::kMaxGeneratedBodyInset, so that controls.json cannot load an inset that this refuses to draw.
 inline constexpr int kMinSize = 16;
 inline constexpr int kMaxSize = 1024;
-inline constexpr double kMaxBodyInset = 0.25;
+inline constexpr double kMaxBodyInset = Controls::kMaxGeneratedBodyInset;
 
 // A square bitmap, `size` pixels a side, row 0 at the top, four bytes a pixel in the order r, g, b, a.
 struct Bitmap {

@@ -21,6 +21,20 @@
 // the tick every tap comes up, and stops at the first problem. The planning record's step 113
 // has the route format, and out/parity/program/W.1/ the attempts behind the seeds.
 //
+// THE CONTROLS CENSUS (planning step 182, CTL-6, design 5.0 G3). With `--controls modern` each route is played three times, and what the modern
+// controls cost it is printed and held:
+//   the CLASSIC reference run (the one above), whose every tick is recorded: the player, the camera, the shots, the portals, what else moves;
+//   (b) the modern layout and draw with CLASSIC claims (`Paths::controls.classicClaims`): it must be IDENTICAL to the reference on every tick and win on
+//       the same tick, with no exemption - it separates "the layout, the draw or the policy moved a simulation number" from "a claim took a tap" -
+//       and, because its simulation is the classic one, it is the run in which every touch of the route can be asked what the MODERN claim would say
+//       (the pure layout at that tick's age and the controls the layer shows): a swallowed touch is one that lands on a modern control, and the table
+//       per route and per control is printed;
+//   (a) the modern run proper: identical to the reference up to the tick before its first swallowed touch goes down, and a swallowed shot tap must
+//       change something (the route stops on its problem, or the record differs from there).
+// `--controls modern --classic-claims` runs only (b). `style=` is printed per route and per run and a run that did not play the style it was
+// built for fails (the design's N1); the swallowed set is non-empty overall and holds the census's lower bound (tests/golden/controls_census.json:
+// the levels whose pair or restart no camera can clear at 16:9). `--controls classic` runs the reference alone, with its census line.
+//
 // No window and no Vulkan. Skipped with 77 without the converted levels.
 
 #include "TestHarness.hpp"
@@ -31,19 +45,26 @@
 
 #include "core/Components.hpp"
 #include "core/Input.hpp"
+#include "core/Json.hpp"
 #include "core/PhysicsSystem.hpp"
 #include "core/ViewportInfo.hpp"
 
 #include "sim/Chapters.hpp"
 #include "sim/Game.hpp"
+#include "sim/LevelEnd.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <optional>
+#include <set>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -51,6 +72,7 @@
 using namespace Supersonic;
 using MagicPortals::MagicPortalsLayer;
 namespace Route = MagicPortals::Route;
+namespace Controls = MagicPortals::Controls;
 
 namespace {
 
@@ -58,6 +80,8 @@ const std::string kLevels = MAGICPORTALS_LEVELS_DIR;
 const std::string kData = MAGICPORTALS_DATA_DIR;
 const std::string kChapters = MAGICPORTALS_CHAPTERS_FILE;
 const std::string kRoutes = MAGICPORTALS_ROUTES_DIR;
+// tests/golden/ (a per-source definition, as test_mp_layer's and test_mp_census's): the census's accepted list, read at run time.
+const std::string kGolden = MAGICPORTALS_GOLDEN_DIR;
 // Where the pointer rests between taps, as test_mp_layer rests it: a scheduled tap
 // owns the pointer on its own ticks wherever this is.
 const glm::vec2 kRest(640.0f, 360.0f);
@@ -68,13 +92,24 @@ constexpr std::size_t kMinRoutes = 10;
 const char* const kSeedLevels[] = {"level0", "level8", "level31"};
 
 struct Options {
-    std::vector<std::string> only; // level names or route files; empty: every route
-    int trace = 0;                  // print every n ticks; 0: only the outcome
+    std::vector<std::string> only;       // level names or route files; empty: every route
+    int trace = 0;                        // print every n ticks; 0: only the outcome
+    std::optional<std::string> controls;  // --controls <classic|modern>: the controls census (planning step 182)
+    bool classicClaims = false;           // --classic-claims: with modern, only the variant that claims classic
 };
 
 MagicPortalsLayer::Paths RoutePaths() {
     MagicPortalsLayer::Paths paths;
     paths.prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-routes";
+    return paths;
+}
+
+// The paths a census variant plays under: the policy main builds for `--controls <flag>` on a rig's `--route` run, through the real ResolvePolicy.
+MagicPortalsLayer::Paths ControlsPaths(const std::string& flag, bool classicClaims) {
+    MagicPortalsLayer::Paths paths = RoutePaths();
+    paths.controls = Controls::ResolvePolicy(flag, false, true, false);
+    CHECK_MSG(paths.controls.valid, "--controls " + flag + " resolves: " + paths.controls.error);
+    paths.controls.classicClaims = classicClaims;
     return paths;
 }
 
@@ -246,6 +281,172 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
     Route::Trace(layer, registry, why);
 }
 
+// ---- the controls census (planning step 182) ----
+
+// One tick of what a route's run did, as text: the player, the camera, the shots, the portals, what else moves. Two runs of the same simulation give
+// the same text on every tick (the numbers are the doubles' own, printed to 12 digits); it is the `--trace 1` record, taken in process.
+std::string RecordOf(const MagicPortalsLayer& layer, entt::registry& registry) {
+    std::string text;
+    char piece[256];
+    const MagicPortals::Game::Level* level = layer.SimLevel();
+    std::snprintf(piece, sizeof piece, "t %d age %.6f", layer.LayerTicks(), layer.LevelAgeMs());
+    text += piece;
+    if (level == nullptr) return text + " no level";
+    if (level->player != entt::null && registry.valid(level->player)) {
+        const auto& transform = registry.get<Supersonic::TransformComponent>(level->player);
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(transform.position);
+        std::snprintf(piece, sizeof piece, " player (%.12g, %.12g)", at.x, at.y);
+        text += piece;
+        if (const auto* body = registry.try_get<Supersonic::RigidBodyComponent>(level->player)) {
+            std::snprintf(piece, sizeof piece, " v (%.12g, %.12g)", static_cast<double>(body->velocity.x), static_cast<double>(body->velocity.y));
+            text += piece;
+        }
+    }
+    const glm::dvec2 camera = layer.CameraCentrePx();
+    std::snprintf(piece, sizeof piece, " camera (%.12g, %.12g) shots %d/%d/%d", camera.x, camera.y, level->portals.shotsFired,
+                  level->portals.shotsFailed, level->portals.shotsBurned);
+    text += piece;
+    if (level->portals.flight) text += " FLYING";
+    for (const auto& placed : level->portals.placed) {
+        std::snprintf(piece, sizeof piece, " [%.12g, %.12g]", placed.atPx.x, placed.atPx.y);
+        text += piece;
+    }
+    for (const entt::entity body : level->portals.travellers) {
+        if (body == level->player || !registry.valid(body)) continue;
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(registry.get<Supersonic::TransformComponent>(body).position);
+        std::snprintf(piece, sizeof piece, " body (%.12g, %.12g)", at.x, at.y);
+        text += piece;
+    }
+    for (const auto& door : level->channels.doors) {
+        std::snprintf(piece, sizeof piece, " door %d %.9g", static_cast<int>(door.motion.status), static_cast<double>(door.motion.progress));
+        text += piece;
+    }
+    for (const auto& lift : level->movers.lifts) {
+        if (!registry.valid(lift.entity)) continue;
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(registry.get<Supersonic::TransformComponent>(lift.entity).position);
+        std::snprintf(piece, sizeof piece, " lift (%.12g, %.12g)", at.x, at.y);
+        text += piece;
+    }
+    for (const auto& ball : level->turrets.fireballs) {
+        std::snprintf(piece, sizeof piece, " fire (%.12g, %.12g)", ball.atPx.x, ball.atPx.y);
+        text += piece;
+    }
+    if (level->goals.completed) text += " DOOR";
+    if (layer.Dying()) text += " DYING";
+    return text;
+}
+
+// The control the MODERN claim would give a touch at `at` (view units) on the tick whose level age is `ageMs`: what the layer's own claim is on a
+// modern layer - the five frames the module lays out, the corner buttons following their entrance, the controls the layer SHOWS, the first in claim
+// order that holds the point (half-open). Asked of a layer whose simulation is the classic one (variant b), so that a route's every touch can be
+// asked, not only those before the first that a modern claim changes.
+std::optional<MagicPortalsLayer::Control> ModernClaim(const MagicPortalsLayer& layer, const glm::dvec2& at, double ageMs) {
+    const glm::dvec2 view = layer.ViewPx();
+    const Controls::Insets& insets = layer.ControlsPolicy().testInsets;
+    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), view, insets, ageMs);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        MagicPortals::Hud::Rect shown;
+        if (!layer.ControlRect(id, shown)) continue;
+        Controls::Frame frame = layout.At(id);
+        if (id == Controls::Id::Reset || id == Controls::Id::Menu) {
+            const MagicPortals::Hud::Placement placement =
+                Controls::PlacementFor(layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), id, view, insets);
+            const MagicPortals::LevelEnd::Dismissed in =
+                MagicPortals::LevelEnd::HudEntered(layer.LevelEndRules(), placement, layer.HudRules().alphaByte, view, ageMs);
+            frame = Controls::FollowDrawn(frame, in.rect);
+        }
+        if (frame.hit.Contains(at)) return id;
+    }
+    return std::nullopt;
+}
+
+// A touch of a route that the modern claim would take.
+struct Swallowed {
+    std::string label; // "1-20"
+    std::string level;
+    std::size_t tap = 0;
+    int tick = 0;     // the tick it goes down on
+    const char* kind = "tap";
+    std::string control; // the control that takes it (walk_left ...), or "gate": no control takes it but the walk controls' gate (camera, lift, hand) differs
+    bool claimed = true;
+    glm::dvec2 at{0.0}; // on the view, units
+    std::string camera; // where the camera stands against the level's edges
+};
+
+// Which edges of the level the view touches, as the census speaks of a camera's clamp: "free" or any of L R T B.
+std::string ClampState(const MagicPortalsLayer& layer) {
+    const glm::dvec2 centre = layer.CameraCentrePx();
+    const glm::dvec2 half = layer.ViewPx() * 0.5;
+    const glm::dvec2 bounds = layer.BoundsPx();
+    constexpr double eps = 1e-6;
+    std::string state;
+    if (centre.x - half.x <= eps) state += "L";
+    if (centre.x + half.x >= bounds.x - eps) state += "R";
+    if (centre.y - half.y <= eps) state += "T";
+    if (centre.y + half.y >= bounds.y - eps) state += "B";
+    return state.empty() ? "free" : state;
+}
+
+// What a census run keeps of a route's play.
+struct Capture {
+    std::vector<std::string> records; // after each tick, in order: records[0] is tick 1
+    std::vector<Swallowed> swallowed; // when classifying: every touch the modern claim would take, in the order they go down
+    Controls::Style style = Controls::Style::Classic;
+    bool ready = false;
+};
+
+// The touches of the plan that go down on `tick`, asked what the modern claim says of each (a tap at its place; a drag at every tick it is held),
+// from the state the previous tick left - the state Driver::schedule reads them in. Not while a popup, a pause or an ending holds the controls.
+void Classify(const MagicPortalsLayer& layer, const Route::Plan& plan, const std::string& label, int tick, Capture& capture) {
+    if (layer.PopupOpen() || layer.Paused() || layer.Finishing() || layer.Dying()) return;
+    const glm::dvec2 view = layer.ViewPx();
+    const glm::dvec2 corner = layer.CameraCentrePx() - view * 0.5;
+    for (std::size_t i = 0; i < plan.taps.size(); ++i) {
+        const Route::Tap& tap = plan.taps[i];
+        if (tap.tick != tick) continue;
+        // The fractions as Driver::schedule takes them.
+        const glm::dvec2 fraction = (tap.atPx - corner) / view;
+        if (!(fraction.x > 0.0 && fraction.x < 1.0 && fraction.y > 0.0 && fraction.y < 1.0)) continue;
+        std::vector<glm::dvec2> path;
+        if (tap.toPx) {
+            const glm::dvec2 toFraction = (*tap.toPx - corner) / view;
+            const double held = static_cast<double>(tap.releaseTick - tap.tick);
+            const glm::dvec2 end = fraction + (toFraction - fraction) * (held / (held - 1.0));
+            for (int k = 0; k < tap.releaseTick - tap.tick; ++k) {
+                const double along = static_cast<double>(k) / held;
+                path.push_back((fraction + (end - fraction) * along) * view);
+            }
+        } else {
+            path.push_back(fraction * view);
+        }
+        for (std::size_t k = 0; k < path.size(); ++k) {
+            // The layout of the tick the touch is read on: the level is a script tick older for each tick from the one the state is of.
+            const double age = layer.LevelAgeMs() + 16.0 * static_cast<double>(1 + static_cast<int>(k));
+            const std::optional<MagicPortalsLayer::Control> claim = ModernClaim(layer, path[k], age);
+            // No control takes it, but the walk controls' gate - the camera's `onPad`, the lift's and the hand's - is asked of the rectangles under the
+            // modern controls and of the discs under the classic ones, whether or not the pair is shown (design D12): a touch where the two differ
+            // moves the camera, a lift or a hand differently on a weightless level, where no pair claims anything.
+            const Controls::Layout modernLayout =
+                Controls::LayOut(Controls::Style::Modern, layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), view, layer.ControlsPolicy().testInsets, age);
+            const bool modernGate = modernLayout.At(Controls::Id::Left).hit.Contains(path[k]) || modernLayout.At(Controls::Id::Right).hit.Contains(path[k]);
+            const bool classicGate = Controls::ClassicOnWalkControl(layer.HudRules(), view, age, path[k]);
+            if (!claim && modernGate == classicGate) continue;
+            Swallowed one;
+            one.label = label;
+            one.level = plan.level;
+            one.tap = i;
+            one.tick = tap.tick;
+            one.kind = tap.toPx ? "drag" : (tap.shot ? "shot tap" : "touch");
+            one.claimed = claim.has_value();
+            one.control = claim ? std::string(Controls::KeyOf(*claim)) : std::string("gate");
+            one.at = path[k];
+            one.camera = ClampState(layer);
+            capture.swallowed.push_back(one);
+            break; // one entry per touch: the first tick of it that a control takes
+        }
+    }
+}
+
 struct Outcome {
     int wonTick = 0;
     int shots = 0;
@@ -322,18 +523,28 @@ std::string DescribeUnlocks(const Outcome& outcome) {
     return text;
 }
 
-Outcome Play(const Route::Plan& plan, const Options& options, const std::string& label) {
+Outcome Play(const Route::Plan& plan, const Options& options, const std::string& label,
+             const MagicPortalsLayer::Paths& paths = RoutePaths(), Capture* capture = nullptr, bool classify = false) {
     entt::registry registry;
     PublishViewport(registry);
-    MagicPortalsLayer layer(RoutePaths(), plan.level);
+    MagicPortalsLayer layer(paths, plan.level);
     layer.OnAttach(registry);
     Route::Driver driver(plan);
     driver.Begin(layer);
     int lastFailed = -1;
     Census census;
     Moments moments;
+    if (capture != nullptr) {
+        capture->style = layer.ControlsStyle();
+        capture->ready = layer.ModernReady();
+        if (classify) Classify(layer, plan, label, layer.LayerTicks() + 1, *capture);
+    }
     while (!driver.Finished()) {
         Frame(layer, driver, registry, census, moments);
+        if (capture != nullptr) {
+            capture->records.push_back(RecordOf(layer, registry));
+            if (classify) Classify(layer, plan, label, layer.LayerTicks() + 1, *capture);
+        }
         if (options.trace <= 0) continue;
         const int tick = layer.LayerTicks();
         // The tick a tap comes up on, where its shot has just left.
@@ -389,6 +600,190 @@ std::string Label(const MagicPortals::Chapters::Table& chapters, const std::stri
     return text;
 }
 
+// ---- the census of a route: the two modern variants against the classic reference ----
+
+// The first tick on which two records differ (1-based), or 0 when `a` and `b` agree on `upTo` ticks; the texts of both where they differ.
+int FirstDifference(const std::vector<std::string>& a, const std::vector<std::string>& b, std::size_t upTo, std::string& said) {
+    for (std::size_t tick = 0; tick < upTo; ++tick) {
+        const bool haveA = tick < a.size();
+        const bool haveB = tick < b.size();
+        if (!haveA || !haveB || a[tick] != b[tick]) {
+            said = "tick " + std::to_string(tick + 1) + ": reference [" + (haveA ? a[tick] : std::string("(none)")) + "] against [" +
+                   (haveB ? b[tick] : std::string("(none)")) + "]";
+            return static_cast<int>(tick) + 1;
+        }
+    }
+    return 0;
+}
+
+// What the whole census holds.
+struct CensusTable {
+    std::vector<Swallowed> all;
+    std::map<std::string, std::map<std::string, int>> byRoute; // label -> control -> count
+    int routesRun = 0;
+    int modernRan = 0;
+    int classicClaimsIdentical = 0;
+    int modernIdenticalToTheEnd = 0;
+    int modernDiverged = 0;
+};
+
+void CensusRoute(const Route::Plan& plan, const Options& options, const std::string& label, const Capture& reference, const Outcome& referenceOutcome,
+                 CensusTable& table) {
+    const std::string name = label + " " + plan.level;
+    ++table.routesRun;
+    CHECK_MSG(reference.style == Controls::Style::Classic, name + ": the reference run plays the classic controls: style=" + Controls::NameOf(reference.style));
+    if (!options.controls || *options.controls == "classic") return;
+    const std::size_t ticks = reference.records.size();
+
+    // (b) the modern layout and draw, the classic claims: identical to the reference, whole, with no exemption.
+    Capture claims;
+    const Outcome classicClaims = Play(plan, Options{}, label, ControlsPaths("modern", true), &claims, true);
+    const bool bPlayedModern = claims.style == Controls::Style::Modern && claims.ready;
+    CHECK_MSG(bPlayedModern, name + ": the classic-claims variant plays the MODERN layout (N1): style=" + Controls::NameOf(claims.style));
+    std::string said;
+    const int bDiffers = FirstDifference(reference.records, claims.records, std::max(ticks, claims.records.size()), said);
+    CHECK_MSG(bDiffers == 0 && classicClaims.problems.empty() && classicClaims.wonTick == referenceOutcome.wonTick,
+              name + ": modern layout and draw with classic claims is the reference on every tick and wins on tick " + std::to_string(referenceOutcome.wonTick) +
+                  " (won on " + std::to_string(classicClaims.wonTick) + "), " + said + (classicClaims.problems.empty() ? std::string() : "; problem: " + classicClaims.problems.front()));
+    if (bDiffers == 0 && classicClaims.wonTick == referenceOutcome.wonTick) ++table.classicClaimsIdentical;
+
+    // What the modern claim would take of this route, touch by touch, in the identical simulation.
+    std::string tableText;
+    for (const Swallowed& one : claims.swallowed) {
+        table.all.push_back(one);
+        ++table.byRoute[name][one.control];
+        char piece[192];
+        std::snprintf(piece, sizeof piece, "%s %s down on tick %d at (%.1f, %.1f) units, camera %s -> %s", one.kind, plan.level.c_str(), one.tick, one.at.x, one.at.y,
+                      one.camera.c_str(), one.claimed ? one.control.c_str() : "no control, the walk gate differs");
+        tableText += std::string("    swallowed: ") + piece + "\n";
+    }
+    if (options.classicClaims) {
+        std::printf("  %s: classic claims identical (%zu ticks), style=%s; the modern claim would take %zu touch(es)\n%s", name.c_str(), ticks,
+                    Controls::NameOf(claims.style), claims.swallowed.size(), tableText.c_str());
+        return;
+    }
+
+    // (a) the modern run proper.
+    ++table.modernRan;
+    Capture modern;
+    const Outcome modernOutcome = Play(plan, Options{}, label, ControlsPaths("modern", false), &modern, false);
+    CHECK_MSG(modern.style == Controls::Style::Modern && modern.ready, name + ": the modern run plays the MODERN controls (N1): style=" + Controls::NameOf(modern.style));
+    const Swallowed* first = claims.swallowed.empty() ? nullptr : &claims.swallowed.front();
+    const std::size_t safe = first != nullptr ? static_cast<std::size_t>(std::max(first->tick - 1, 0)) : std::max(ticks, modern.records.size());
+    std::string saidModern;
+    const int firstDifference = FirstDifference(reference.records, modern.records, safe, saidModern);
+    CHECK_MSG(firstDifference == 0, name + ": the modern run is the reference on every tick before its first swallowed touch goes down (" +
+                                        (first != nullptr ? "tick " + std::to_string(first->tick) : std::string("it has none")) + "): " + saidModern);
+    std::string wholeSaid;
+    const int wholeDifference = FirstDifference(reference.records, modern.records, std::max(ticks, modern.records.size()), wholeSaid);
+    const bool identicalToTheEnd = wholeDifference == 0 && modernOutcome.problems.empty() && modernOutcome.wonTick == referenceOutcome.wonTick;
+    if (first == nullptr) {
+        CHECK_MSG(identicalToTheEnd, name + ": it has no swallowed touch, so the modern run wins on tick " + std::to_string(referenceOutcome.wonTick) + " with the reference's every tick: " +
+                                         wholeSaid + (modernOutcome.problems.empty() ? std::string() : "; problem: " + modernOutcome.problems.front()));
+        if (identicalToTheEnd) ++table.modernIdenticalToTheEnd;
+    } else {
+        ++table.modernDiverged;
+        // A swallowed SHOT tap changes the route: it stops on its problem, or the record differs from the tick it goes down on.
+        if (first->claimed && std::string(first->kind) == "shot tap") {
+            CHECK_MSG(!identicalToTheEnd, name + ": a swallowed shot tap (tick " + std::to_string(first->tick) + ", " + first->control +
+                                              ") changed nothing in the modern run: the claim and the model disagree");
+        }
+    }
+    char line[512];
+    std::snprintf(line, sizeof line, "  %s %s: classic won on tick %d; classic claims identical; modern: %s", label.c_str(), plan.level.c_str(), referenceOutcome.wonTick,
+                  first == nullptr ? "no touch taken, identical to the end"
+                                   : (std::string("first touch taken on tick ") + std::to_string(first->tick) + " by " + first->control + "; " +
+                                      (modernOutcome.wonTick > 0 ? "still won on tick " + std::to_string(modernOutcome.wonTick)
+                                                                 : "stopped" + (modernOutcome.problems.empty() ? std::string() : ": " + modernOutcome.problems.front())))
+                                         .c_str());
+    std::printf("%s; style=%s\n%s", line, Controls::NameOf(modern.style), tableText.c_str());
+}
+
+// The accepted list's lower bound: the levels whose pair or restart no camera can clear at 16:9 (tests/golden/controls_census.json, `shapes`).
+struct ForcedList {
+    bool read = false;
+    std::vector<std::string> pair;
+    std::vector<std::string> restart;
+    std::vector<std::string> clearPortals; // an upper bound: clear-portals exists only while a portal does
+};
+
+ForcedList ReadForced() {
+    ForcedList forced;
+    std::ifstream file(kGolden + "/controls_census.json", std::ios::binary);
+    if (!file) return forced;
+    std::ostringstream text;
+    text << file.rdbuf();
+    const std::string content = text.str();
+    Supersonic::Json::Value root;
+    Supersonic::Json::Parser parser(content);
+    if (!parser.Parse(root) || !root.IsObject() || !root["shapes"].IsArray()) return forced;
+    for (const Supersonic::Json::Value& shape : root["shapes"].AsArray()) {
+        if (!shape.IsObject() || !shape["name"].IsString() || shape["name"].AsString() != "16:9" || !shape["blocked"].IsObject()) continue;
+        const auto labels = [&shape](const char* key) {
+            std::vector<std::string> out;
+            if (shape["blocked"][key].IsArray()) {
+                for (const Supersonic::Json::Value& value : shape["blocked"][key].AsArray()) {
+                    if (value.IsString()) out.push_back(value.AsString());
+                }
+            }
+            return out;
+        };
+        forced.pair = labels("pair");
+        forced.restart = labels("restart");
+        forced.clearPortals = labels("clear_portals");
+        forced.read = true;
+    }
+    return forced;
+}
+
+// The table, per route and per control, and the checks that hold the whole census.
+void ReportCensus(const Options& options, const CensusTable& table) {
+    std::map<std::string, int> perControl;
+    for (const Swallowed& one : table.all) ++perControl[one.control];
+    std::printf("  controls census, --controls %s%s: %d route(s); the classic claims were identical on %d; ", options.controls ? options.controls->c_str() : "?",
+                options.classicClaims ? " --classic-claims" : "", table.routesRun, table.classicClaimsIdentical);
+    if (!options.classicClaims) {
+        std::printf("the modern run: %d with no touch taken (identical to the end: %d), %d with one taken; ", table.modernRan - table.modernDiverged,
+                    table.modernIdenticalToTheEnd, table.modernDiverged);
+    }
+    std::printf("%zu touch(es) the modern claim takes in %zu route(s):", table.all.size(), table.byRoute.size());
+    for (const auto& [control, count] : perControl) std::printf(" %s %d", control.c_str(), count);
+    std::printf("\n");
+    for (const auto& [route, controls] : table.byRoute) {
+        std::printf("    %s:", route.c_str());
+        for (const auto& [control, count] : controls) std::printf(" %s x%d", control.c_str(), count);
+        std::printf("\n");
+    }
+    CHECK_MSG(table.classicClaimsIdentical == table.routesRun, "the classic-claims variant is identical to the reference on every route, with no exemption: " +
+                                                                  std::to_string(table.classicClaimsIdentical) + " of " + std::to_string(table.routesRun));
+    // N1: the swallowed set is not empty (a census that finds nothing may be a census that ran classic).
+    CHECK_MSG(!table.all.empty(), "the swallowed set is non-empty over all the routes");
+    if (!options.only.empty()) return;
+    // The lower bound: what the census proves unavoidable at 16:9 must appear (the pair's levels by an arrow, restart's by restart).
+    const ForcedList forced = ReadForced();
+    CHECK_MSG(forced.read && !forced.pair.empty() && !forced.restart.empty(), "tests/golden/controls_census.json holds the 16:9 lists");
+    const auto takenBy = [&table](const std::string& label, std::initializer_list<const char*> controls) {
+        for (const Swallowed& one : table.all) {
+            if (one.label != label || !one.claimed) continue;
+            for (const char* control : controls) {
+                if (one.control == control) return true;
+            }
+        }
+        return false;
+    };
+    for (const std::string& label : forced.pair) {
+        CHECK_MSG(takenBy(label, {"walk_left", "walk_right"}), label + ": the census's forced list, the pair, appears in the swallowed set");
+    }
+    for (const std::string& label : forced.restart) {
+        CHECK_MSG(takenBy(label, {"restart"}), label + ": the census's forced list, restart, appears in the swallowed set");
+    }
+    // clear-portals' levels are an upper bound (it exists only while a portal is alive): reported, not required.
+    for (const std::string& label : forced.clearPortals) {
+        std::printf("  %s: on the census's clear-portals list (an upper bound): %s in the swallowed set\n", label.c_str(),
+                    takenBy(label, {"clear_portals"}) ? "IS" : "is not");
+    }
+}
+
 void RunRoutes(const Options& options) {
     MagicPortals::Chapters::Table chapters;
     std::string error;
@@ -417,6 +812,7 @@ void RunRoutes(const Options& options) {
         }
     }
 
+    CensusTable table;
     for (const std::filesystem::path& file : files) {
         Route::Plan plan;
         if (!Route::Load(file.string(), plan, error)) {
@@ -426,7 +822,8 @@ void RunRoutes(const Options& options) {
         CHECK_MSG(file.stem().string() == plan.level,
                   file.filename().string() + " is named for its level, " + plan.level);
         const std::string label = Label(chapters, plan.level);
-        const Outcome outcome = Play(plan, options, label);
+        Capture reference;
+        const Outcome outcome = Play(plan, options, label, RoutePaths(), options.controls ? &reference : nullptr, false);
         // With the entries the platform gate held on the way, where it held any (step 136).
         const std::string held = outcome.held > 0 ? ", held " + std::to_string(outcome.held) : std::string();
         if (outcome.wonTick > 0) {
@@ -446,7 +843,9 @@ void RunRoutes(const Options& options) {
         CHECK_MSG(outcome.problems.empty(), label + " " + plan.level + ": " + problems);
         CHECK_MSG(outcome.wonTick > 0 && outcome.wonTick <= plan.winBy,
                   label + " " + plan.level + " is won by tick " + std::to_string(plan.winBy));
+        if (options.controls) CensusRoute(plan, options, label, reference, outcome, table);
     }
+    if (options.controls && *options.controls == "modern") ReportCensus(options, table);
 }
 
 } // namespace
@@ -459,8 +858,16 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
             options.only.push_back(argv[++i]);
         } else if (arg == "--trace" && i + 1 < argc) {
             options.trace = std::max(1, std::atoi(argv[++i]));
+        } else if (arg == "--controls" && i + 1 < argc) {
+            options.controls = argv[++i];
+            if (*options.controls != "classic" && *options.controls != "modern") {
+                std::printf("test_mp_routes: --controls wants classic or modern, not '%s'\n", options.controls->c_str());
+                return 2;
+            }
+        } else if (arg == "--classic-claims") {
+            options.classicClaims = true;
         } else {
-            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>]\n");
+            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--controls <classic|modern> [--classic-claims]]\n");
             return 2;
         }
     }
@@ -471,6 +878,10 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
                     "  chapters.json at %s and Enhanced's data at %s.\n",
                     kLevels.c_str(), kChapters.c_str(), kData.c_str());
         return 77;
+    }
+    if (options.classicClaims && (!options.controls || *options.controls != "modern")) {
+        std::printf("test_mp_routes: --classic-claims is the variant of --controls modern\n");
+        return 2;
     }
     RunRoutes(options);
     return ::test::summary("test_mp_routes", options.only.empty() ? static_cast<int>(kMinRoutes) * 3 : 1);

@@ -11,14 +11,17 @@
 // have had to be threaded through all six, and one left behind is a pad that draws in one
 // place and presses in another. Here they all ask once.
 //
-// WHAT IS HERE. The classic functions only (planning step 179): each CALLS the Hud function
-// it stands for and returns what that returned, so the original's arithmetic is not written
-// a second time and cannot drift by an ulp from the one the 128 sweeps and the claim-map
-// digest pin. `Hud.*` and ui.json are untouched. There is no style yet and no second layout;
-// a later step adds `Style` and its functions beside these, and the names say which they are.
+// WHAT IS HERE. Two layouts, one module. The classic functions (planning step 179, `Classic*`):
+// each CALLS the Hud function it stands for and returns what that returned, so the original's
+// arithmetic is not written a second time and cannot drift by an ulp from the one the 128
+// sweeps and the claim-map digest pin; `Hud.*` and ui.json are untouched. And, beside them
+// (planning steps 180 and 181, the section "the modern controls" below), the modern layout of
+// docs/planning/2026-10-15-modern-controls.md: its data (`Rules`, game/data/controls.json), what
+// a player changed (`Tuning`), `LayOut` for a `Style`, and the policy that says which style a
+// run plays (`Policy`, `ResolvePolicy`, `ResolveStyle`). The names say which a function is.
 //
-// Pure: no registry, no window, no file. Units are the HUD's design units, in VIEW space,
-// (0, 0) the view's top-left, +y down.
+// Pure: no registry, no window, no file but the one `LoadRules` is given. Units are the HUD's
+// design units, in VIEW space, (0, 0) the view's top-left, +y down.
 
 #include <array>
 #include <cstddef>
@@ -117,8 +120,9 @@ Hud::Rect ClassicPlace(const Hud::Rules& rules, Id corner, const glm::dvec2& vie
 // ---- the modern controls ----------------------------------------------------------------------
 //
 // Planning step 180 (docs/planning/2026-10-15-modern-controls.md): the layout of Magic Rampage's
-// inset controls as data and arithmetic. Nothing here is read by the layer yet; the classic
-// functions above are not touched by it. Everything below is pure and takes the data it needs as an
+// inset controls as data and arithmetic. The classic functions above are not touched by it. The layer
+// reads the policy and the data (planning step 181) and, from planning step 182 on, plays the layout.
+// Everything below is pure and takes the data it needs as an
 // argument: the modern Rules (game/data/controls.json), the classic Hud::Rules (the slide, the
 // pulse and the ring are the classic's own numbers, read from ui.json so they cannot drift apart),
 // a Tuning (what a player changed) and the view's size and safe-area insets.
@@ -181,6 +185,12 @@ struct Grid {
     double ValueOf(int steps) const { return static_cast<double>(steps) / static_cast<double>(divisor); }
 };
 
+// The largest transparent margin, as a fraction of the picture on each side, that a picture the port DRAWS ITSELF (the generated
+// tier, sim/PadArt) can be asked for: a quarter on each side keeps half the picture. LoadRules refuses a generated entry above it,
+// so a value that loads is a value that draws; PadArt::kMaxBodyInset is this number. A picture read from a file (Magic Rampage's, the
+// original's) carries whatever margin it carries, up to the loader's own bound.
+inline constexpr double kMaxGeneratedBodyInset = 0.25;
+
 struct ArtEntry {
     std::string file;
     double bodyInset = 0.0; // the fraction of the picture that is transparent on each side
@@ -193,7 +203,7 @@ struct Rules {
     int layoutVersion = 0;
     double marginSidePx = 0.0;
     double marginTopPx = 0.0;
-    double marginBottomPx = 0.0; // a preset that names no bottom margin of its own keeps this one
+    double marginBottomPx = 0.0; // layout.margin_px.bottom: the shared margin M. Each look names its own (required), which the layout uses
     double gapPx = 0.0;
     double boxPx = 0.0;
     double cornerBoxFactor = 0.0;
@@ -235,17 +245,31 @@ struct Rules {
     } census;
 
     Style defaultMode = Style::Classic;
-
-    // Units to a reference px on a view of this height.
-    double UnitsPerPx(const glm::dvec2& viewUnits) const { return viewUnits.y / referenceHeightPx; }
 };
 
 // controls.json, strictly: a number that is missing, not a number, or out of its range is refused with
 // `error` naming it, because a control a unit off its corner looks almost right. Keys that begin with an
-// underscore and keys this reader does not know are ignored.
+// underscore and keys this reader does not know are ignored; every key it DOES read is required, a
+// preset's `margin_bottom_px` included (a misspelt one is a missing one, and is refused naming it).
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 // ---- the tuning ---------------------------------------------------------------------------------
+
+// The keys a tuning is spelt with, in the flag (`--controls modern,size=1.2`) and in the saved file's `controls` object
+// (`{"size":1.2,...}`): one place, so the parser, the reader and the writer cannot spell one two ways. `kMode`, `kVersion` and
+// `kControls` are the saved file's own members around the tuning (the options step writes `{"version":1,"controls":{"mode":...,
+// "layout":1,...}}`), and `kLayout` is the number of the arrangement the moves were made against. Not the keys of controls.json,
+// which has its own objects of the same names.
+namespace TuningKey {
+inline constexpr const char* kPreset = "preset";
+inline constexpr const char* kSize = "size";
+inline constexpr const char* kOpacity = "opacity";
+inline constexpr const char* kMove = "move";
+inline constexpr const char* kLayout = "layout";
+inline constexpr const char* kMode = "mode";
+inline constexpr const char* kVersion = "version";
+inline constexpr const char* kControls = "controls";
+} // namespace TuningKey
 
 // What `--controls modern,key=value,...` carried, as it was written: syntax and names are checked when
 // it is parsed (before the data is read, so a typo exits at once), the grids when it is applied.
@@ -301,6 +325,11 @@ struct Tuning {
     // Written from the clamped tuning, so a number that is not finite is never written. `move` holds the
     // non-zero entries only.
     std::string ToJson(const Rules& rules) const;
+
+    // The members of that object, without its braces: `"size":1.2,"move":{...}`, empty for a default
+    // tuning. For a writer that has members of its own to put in the same object (the saved file's `mode`
+    // and `layout`), which splices these and does not strip a closed object. ToJson is `{` + this + `}`.
+    std::string ToJsonMembers(const Rules& rules) const;
 
     // `key=value,key=value` (the part of the flag after the style): preset, size, opacity, and a move
     // as dx:dy under a control's key. Replaces what was saved rather than merging with it (the caller
@@ -414,6 +443,17 @@ struct Policy {
     std::optional<Style> forced;      // the flag's style: the run's starting one
     bool saveAllowed = false;
     FlagItems flag;                   // the tuning keys that came with `--controls modern`
+
+    // WHAT NO COMMAND LINE SAYS. The layer's `Paths::controls` IS this struct, so what a test or a later step hands the
+    // layer beside the resolved policy lives here, in one place, each field defaulting to "classic, nothing" (a bare layer,
+    // which is every suite's, meets none of them). ResolvePolicy never sets one of these four: the command line has no word
+    // for them. They are the plan's `Paths::controls` fields, added together by planning step 182 (the step that links the
+    // layer to the module, and the layer, the routes and the later suites read them from here) rather than one at a time by
+    // the step that first reads each, as step 181 had it.
+    bool classicClaims = false;       // CTL-6: the modern layout and draw with the CLASSIC claims, a test's variant
+    Insets testInsets;                // CTL-6 and CTL-7: a test's safe-area insets, in units; none on a desktop
+    std::string artDir;               // CTL-8: where Magic Rampage's pictures are looked for; empty: nowhere
+    std::optional<Tuning> tuning;     // CTL-10: a saved tuning a test injects in place of the store's, which the flag's keys then replace
 };
 
 // The policy of a run from `--controls <classic|modern>[,key=value...]` (absent: nullopt) and the three rig

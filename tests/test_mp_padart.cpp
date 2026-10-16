@@ -538,6 +538,14 @@ void TheGeneratedTierOfControlsJsonIsWhatThePadArtDraws() {
     // The number itself, written out: 14 of 128. (The data may say it another way, but not mean another thing.)
     const auto& left = rules.art[generated][static_cast<std::size_t>(Controls::Id::Left)];
     CHECK(left.has_value() && left->bodyInset == 0.109375);
+    // What the loader lets a generated entry carry is what this draws: one number (the layout's, 0.25), so that a value in controls.json that
+    // loads is a value that draws, and the largest of them draws a body (the picture is never asked for nothing and given nothing).
+    CHECK(PadArt::kMaxBodyInset == Controls::kMaxGeneratedBodyInset && Controls::kMaxGeneratedBodyInset == 0.25);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const Bitmap largest = PadArt::Draw(PadArt::GlyphOf(id), 128, Controls::kMaxGeneratedBodyInset);
+        CHECK_MSG(!largest.Empty() && BoxOf(largest, [](const Pixel& p) { return p.a >= 250; }) == BodyBox(128, 32), std::string(Controls::KeyOf(id)) + ": the largest margin the loader allows draws, 32 px of 128 on each side");
+        CHECK_MSG(PadArt::Draw(PadArt::GlyphOf(id), 128, Controls::kMaxGeneratedBodyInset + 0.001).Empty(), std::string(Controls::KeyOf(id)) + ": a margin the loader refuses is not drawn");
+    }
 }
 
 void runTests() {

@@ -60,6 +60,7 @@
 #include "sim/Motion.hpp"
 #include "sim/Particles.hpp"
 #include "sim/MenuState.hpp"
+#include "sim/PadArt.hpp"
 #include "sim/Pause.hpp"
 #include "sim/Switches.hpp"
 #include "sim/Popup.hpp"
@@ -99,6 +100,7 @@ namespace Selector = MagicPortals::Selector;
 namespace EdgeCover = MagicPortals::EdgeCover;
 namespace Hud = MagicPortals::Hud;
 namespace Controls = MagicPortals::Controls;
+namespace PadArt = MagicPortals::PadArt;
 namespace ScriptClock = MagicPortals::ScriptClock;
 
 namespace {
@@ -132,9 +134,17 @@ std::string EnvText(const char* name) {
 #endif
 }
 
+// What `Paths::controls` TestPaths() gives a case: a bare layer's "classic, nothing" - the policy of every suite - unless a case that re-runs the
+// classic pointer path under another policy (AClassicLayerIgnoresEverythingModern, planning step 182) has set it for the length of its run.
+Controls::Policy& TestControlsPolicy() {
+    static Controls::Policy policy;
+    return policy;
+}
+
 MagicPortalsLayer::Paths TestPaths() {
     MagicPortalsLayer::Paths paths;
     paths.prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer";
+    paths.controls = TestControlsPolicy();
     // TEST ONLY (planning step 178, CTL-2): the port's own data from a COPY, so that a mutation test changes one number in the
     // copy and runs this same binary, without touching game/data (which another session may be reading) and without a relink.
     if (const std::string portData = EnvText("MP_TEST_PORTDATA"); !portData.empty()) {
@@ -23276,14 +23286,17 @@ void TheClassicHudQuadsOfEveryLevelArePinned() {
 
 // ---- which controls a run plays (planning step 181, CTL-5) ----------------------------------------------------------------
 //
-// The policy and the flag, plumbing only: Paths::controls is what main's Controls::ResolvePolicy made of `--controls` and of
-// the kind of run, the layer resolves a style from it and from game/data/controls.json, and UNTIL CTL-6 it draws and claims the
-// classic controls whatever that says. These cases hold the plumbing: who reads the table (only a run in which the feature
+// The policy and the flag: Paths::controls is what main's Controls::ResolvePolicy made of `--controls` and of the kind of run,
+// the layer resolves a style from it and from game/data/controls.json (CTL-5), and since planning step 182 (CTL-6) it plays the
+// style it resolves - the modern controls' own pins are CTL-6's cases. These cases hold the plumbing: who reads the table (only a run in which the feature
 // exists), what a table that will not read costs (the modern controls, never a run), what each kind of run resolves to, and that
 // nothing is written. The policy is built by the REAL ResolvePolicy, as main builds it, so a row of the design's truth table
 // (2.1) is a row here. Every case reads ControlsStyle() before it claims a modern behaviour (the design's N1).
 
-const std::string kControlsLineModern = "controls: modern requested, drawn classic until the layer plays it";
+// The attach line says which style and why: the flag when there was one, else the shipped default. Both modern lines begin with the
+// words the design's N1 greps a capture's log for.
+const std::string kControlsLineModernFlag = "controls: modern (--controls modern)";
+const std::string kControlsLineModernDefault = "controls: modern (the shipped default)";
 const std::string kControlsLineDefault = "controls: classic (the shipped default)";
 const std::string kControlsLineFlag = "controls: classic (--controls classic)";
 const std::string kControlsLineUnavailable = "controls: classic (modern is unavailable: see the error above)";
@@ -23299,6 +23312,24 @@ std::string ReadWholeFile(const std::filesystem::path& file) {
 
 // A copy of the port's data directory with controls.json rewritten (or removed, when `rewrite` answers nothing): how a case
 // makes the table unreadable without touching game/data, which another session may be reading. Returns the copy's path.
+// Every scratch directory a case of this group makes is remembered here and removed when the case ends (ControlsScratchGuard,
+// the first line of each), so that a run leaves none in %TEMP%: there were 11 of about 0.95 MB each, left by every run of this suite.
+std::vector<std::filesystem::path>& ControlsScratchDirs() {
+    static std::vector<std::filesystem::path> dirs;
+    return dirs;
+}
+
+struct ControlsScratchGuard {
+    ControlsScratchGuard() = default;
+    ControlsScratchGuard(const ControlsScratchGuard&) = delete;
+    ControlsScratchGuard& operator=(const ControlsScratchGuard&) = delete;
+    ~ControlsScratchGuard() {
+        std::error_code ec;
+        for (const std::filesystem::path& dir : ControlsScratchDirs()) std::filesystem::remove_all(dir, ec);
+        ControlsScratchDirs().clear();
+    }
+};
+
 std::string ControlsScratchData(const std::string& name, const ControlsRewrite& rewrite) {
     namespace fs = std::filesystem;
     const fs::path from = TestPaths().portData;
@@ -23306,6 +23337,7 @@ std::string ControlsScratchData(const std::string& name, const ControlsRewrite& 
     std::string slug = name;
     std::replace(slug.begin(), slug.end(), ' ', '-');
     const fs::path to = fs::temp_directory_path() / ("supersonic-test-mp-layer-controls-" + slug);
+    ControlsScratchDirs().push_back(to);
     std::error_code ec;
     fs::remove_all(to, ec);
     fs::create_directories(to, ec);
@@ -23328,6 +23360,7 @@ std::string ControlsScratchData(const std::string& name, const ControlsRewrite& 
 
 std::string ControlsScratchSaves(const std::string& name) {
     const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("supersonic-test-mp-layer-controls-saves-" + name);
+    ControlsScratchDirs().push_back(dir);
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
     std::filesystem::create_directories(dir, ec);
@@ -23423,6 +23456,7 @@ void CheckLoaded(const ControlsRun& run, const std::string& what) {
 // ---- the cases ----------------------------------------------------------------------------------------------------------
 
 void ABareLayerIsClassicAndHasNoStore() {
+    const ControlsScratchGuard scratch;
     // The defaults of Paths::controls are "classic, nothing": the policy of a run with no such thing.
     const MagicPortalsLayer::Paths bare;
     CHECK_MSG(bare.controls.valid && !bare.controls.available && !bare.controls.forced && !bare.controls.saveAllowed &&
@@ -23465,9 +23499,28 @@ void ABareLayerIsClassicAndHasNoStore() {
     const ControlsRun forced = RunControls("--controls modern", PolicyOf("modern"), "", saves);
     CheckLoaded(forced, "--controls modern");
     CHECK_MSG(!ControlsFileExistsIn(saves), "--controls modern writes nothing");
+
+    // And the player's run, which is the one a player has, DRAWS AND CLAIMS what a bare layer does while the shipped default is
+    // classic: the HUD of the same level at the same age and the claim of every 16th unit of the view, hash for hash and point for
+    // point. (Before CTL-6 only the forced-modern run was held to the bare layer's HUD; the run every player has was not.)
+    if (OriginalArtIsThere("ABareLayerIsClassicAndHasNoStore: the player's run drawn")) {
+        const ControlsRun playerDrawn = RunControls("a player's run, drawn", PolicyOf(std::nullopt), "", saves, true);
+        const ControlsRun bareDrawn = RunControls("a bare layer", Controls::Policy{}, "", saves, true);
+        CheckLoaded(playerDrawn, "a player's run, drawn");
+        long claimed = 0;
+        for (const int claim : bareDrawn.claims) claimed += claim >= 0 ? 1 : 0;
+        CHECK_MSG(playerDrawn.style == Controls::Style::Classic && playerDrawn.policy.available && playerDrawn.policy.saveAllowed,
+                  "a player's run on the shipped data plays classic: " + Describe(playerDrawn));
+        CHECK_MSG(bareDrawn.hud != 0 && playerDrawn.hud == bareDrawn.hud && bareDrawn.leftPads == 1 && playerDrawn.leftPads == 1,
+                  "its HUD is the bare layer's, bit for bit: " + PtrHex(playerDrawn.hud) + " against " + PtrHex(bareDrawn.hud));
+        CHECK_MSG(!bareDrawn.claims.empty() && playerDrawn.claims == bareDrawn.claims && claimed > 0,
+                  "and so is its claim over the view (" + std::to_string(claimed) + " of " + std::to_string(bareDrawn.claims.size()) + " points)");
+        CHECK_MSG(!ControlsFileExistsIn(saves), "and it writes no controls.json");
+    }
 }
 
 void ControlsStyleReportsTheResolvedStyle() {
+    const ControlsScratchGuard scratch;
     const std::string saves = ControlsScratchSaves("style");
     // The shipped data says classic; a scratch copy says modern, which is the one way to see the default decide.
     const std::string modernDefault = ControlsScratchData("default-modern", [](const std::string& text) {
@@ -23492,10 +23545,10 @@ void ControlsStyleReportsTheResolvedStyle() {
         {"a player's run", std::nullopt, false, false, Controls::Style::Classic, true, kControlsLineDefault},
         {"a developer's run", std::nullopt, true, false, Controls::Style::Classic, false, ""},
         {"--controls classic", "classic", false, false, Controls::Style::Classic, false, kControlsLineFlag},
-        {"--controls modern", "modern", false, false, Controls::Style::Modern, true, kControlsLineModern},
-        {"--controls modern on a developer's run", "modern", true, false, Controls::Style::Modern, true, kControlsLineModern},
+        {"--controls modern", "modern", false, false, Controls::Style::Modern, true, kControlsLineModernFlag},
+        {"--controls modern on a developer's run", "modern", true, false, Controls::Style::Modern, true, kControlsLineModernFlag},
         // and the data saying modern: the default decides a player's run and nothing else
-        {"a player's run on data that says modern", std::nullopt, false, true, Controls::Style::Modern, true, kControlsLineModern},
+        {"a player's run on data that says modern", std::nullopt, false, true, Controls::Style::Modern, true, kControlsLineModernDefault},
         {"a developer's run on data that says modern", std::nullopt, true, true, Controls::Style::Classic, false, ""},
         {"--controls classic on data that says modern", "classic", false, true, Controls::Style::Classic, false, kControlsLineFlag},
     };
@@ -23529,6 +23582,7 @@ void ControlsStyleReportsTheResolvedStyle() {
 }
 
 void AForcedModernResolvesModernAndThePolicyIsRecorded() {
+    const ControlsScratchGuard scratch;
     const std::string saves = ControlsScratchSaves("forced");
     const Controls::Policy policy = PolicyOf("modern,preset=mr,size=0.9");
     const ControlsRun forced = RunControls("--controls modern", policy, "", saves, true);
@@ -23539,26 +23593,33 @@ void AForcedModernResolvesModernAndThePolicyIsRecorded() {
     CHECK_MSG(forced.policy.flag.preset == Controls::Preset::Mr && forced.policy.flag.size == 0.9, "with the flag's keys");
     // N1: modern engaged, so a gate that claims a modern behaviour may read it.
     CHECK_MSG(forced.style == Controls::Style::Modern && forced.ready, "it resolves modern and is ready: " + Describe(forced));
-    CHECK_MSG(forced.line == kControlsLineModern, "and says what the plan names: '" + forced.line + "'");
+    CHECK_MSG(forced.line == kControlsLineModernFlag, "and says which style and why: '" + forced.line + "'");
     CHECK_MSG(forced.layoutVersion == Controls::kLayoutVersion && forced.tuning.PresetIn(forced.rules) == Controls::Preset::Mr &&
                   forced.tuning.Size(forced.rules) == 0.9,
               "the table is read and the tuning is the flag's");
 
-    // ... AND IT DRAWS AND CLAIMS CLASSIC, which is what "plumbing only" means: the HUD of the same level at the same age, and
-    // the claim of every 16th unit of the view, are the bare layer's to the bit.
+    // ... AND SINCE PLANNING STEP 182 IT PLAYS MODERN. CTL-5's pin here was "plumbing only": the HUD of this run and the claim of
+    // every 16th unit of the view were the bare layer's to the bit. That half changes on purpose, and holds the opposite as the
+    // minimum (the modern controls' own pins are CTL-6's cases): the run's style is Modern (read above), its HUD is not the
+    // classic one, it draws no picture of the original's pad, and the points that work a control are not the classic points.
     if (!OriginalArtIsThere("AForcedModernResolvesModernAndThePolicyIsRecorded: the drawn half")) return;
     const ControlsRun bare = RunControls("a bare layer", Controls::Policy{}, "", saves, true);
-    CHECK_MSG(bare.hud != 0 && forced.hud != 0 && bare.leftPads == 1 && forced.leftPads == 1,
-              "both draw the left pad (" + std::to_string(bare.leftPads) + ", " + std::to_string(forced.leftPads) + ")");
-    CHECK_MSG(forced.hud == bare.hud, "the HUD of --controls modern is the classic HUD, bit for bit: " + PtrHex(forced.hud) + " against " + PtrHex(bare.hud));
+    CHECK_MSG(bare.hud != 0 && forced.hud != 0 && bare.leftPads == 1 && forced.leftPads == 0,
+              "the bare layer draws the original's left pad and --controls modern does not (" + std::to_string(bare.leftPads) + ", " +
+                  std::to_string(forced.leftPads) + ")");
+    CHECK_MSG(forced.hud != bare.hud, "the HUD of --controls modern is not the classic HUD: " + PtrHex(forced.hud) + " against " + PtrHex(bare.hud));
     long claimed = 0;
+    long claimedModern = 0;
     for (const int claim : bare.claims) claimed += claim >= 0 ? 1 : 0;
-    CHECK_MSG(!bare.claims.empty() && forced.claims == bare.claims && claimed > 0,
-              "and so is its claim over the view (" + std::to_string(claimed) + " of " + std::to_string(bare.claims.size()) + " points are on a control)");
+    for (const int claim : forced.claims) claimedModern += claim >= 0 ? 1 : 0;
+    CHECK_MSG(!bare.claims.empty() && forced.claims.size() == bare.claims.size() && forced.claims != bare.claims && claimed > 0 && claimedModern > 0,
+              "and its claim over the view is not the classic one (" + std::to_string(claimedModern) + " against " + std::to_string(claimed) + " of " +
+                  std::to_string(bare.claims.size()) + " points are on a control)");
     CHECK_MSG(!ControlsFileExistsIn(saves), "it writes nothing");
 }
 
 void ABrokenControlsDataLeavesClassicAlone() {
+    const ControlsScratchGuard scratch;
     const std::string saves = ControlsScratchSaves("broken");
     struct Row {
         const char* what;
@@ -23652,6 +23713,2197 @@ int PtrRecordGoldens(const std::string& dir) {
                                     hud);
     const int result = ::test::summary("test_mp_layer --record-golden", 0);
     return wrote ? result : 1;
+}
+
+
+// ---- the modern controls, played (planning step 182, CTL-6) --------------------------------------------------------------------
+//
+// From planning step 182 the layer PLAYS the layout of sim/Controls when the run resolves Modern (`--controls modern`): five inset
+// controls laid out, drawn, claimed and acted on from the module, beside the classic code, which a Classic run still runs
+// untouched. These are the pins of what it plays: the modern twins of CTL-2's classic cases above (the same bodies, aimed at the
+// modern hit rectangles) and the cases with no classic twin - the corner buttons acting on the release inside their area, the claim
+// map, the pictures and where they are drawn, the slide, the arrows' hit rectangles, the weightless level, the flag's keys.
+// EVERY ONE of them reads ControlsStyle() first and FAILS unless the layer is playing Modern (the design's N1, MdStyleIs): a typo in
+// controls.json makes the run Classic with one error line, and a pin that did not look would pass on the wrong controls.
+// The numbers they are held to are the design's table 1.2 (docs/planning/2026-10-15-modern-controls.md), written out below with
+// their own literals and never read from the data: a layout the data moved would fail them, as it should.
+
+// A policy as main builds it for `--controls <flag>` on a developer's run (the rig's --fixed-step: a modern flag still wins, design
+// 2.1), through the real ResolvePolicy. `classicClaims` is the test variant: the modern layout and draw with the CLASSIC claims.
+Controls::Policy MdPolicy(const std::string& flag, bool classicClaims = false) {
+    Controls::Policy policy = Controls::ResolvePolicy(flag, true, false, false);
+    CHECK_MSG(policy.valid, "the flag " + flag + " resolves: " + policy.error);
+    policy.classicClaims = classicClaims;
+    return policy;
+}
+
+MagicPortalsLayer::Paths MdPaths(const std::string& flag = "modern", bool classicClaims = false) {
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.controls = MdPolicy(flag, classicClaims);
+    return paths;
+}
+
+std::string MdDescribe(const MagicPortalsLayer& layer) {
+    return std::string("style ") + Controls::NameOf(layer.ControlsStyle()) + (layer.ModernReady() ? ", ready" : ", not ready") +
+           ", line '" + layer.ControlsLine() + "', error '" + layer.ControlsError() + "'";
+}
+
+// N1: the layer plays `want`, and for Modern the table read and the attach line says so, in the words a capture's log is grepped for.
+bool MdStyleIs(const MagicPortalsLayer& layer, Controls::Style want, const std::string& what) {
+    bool is = layer.ControlsStyle() == want;
+    if (want == Controls::Style::Modern) {
+        is = is && layer.ModernReady() && layer.ControlsLine().rfind("controls: modern", 0) == 0;
+    }
+    CHECK_MSG(is, what + ": the layer plays the " + Controls::NameOf(want) + " controls (N1): " + MdDescribe(layer));
+    return is;
+}
+
+// A layer attached, its level-start popup closed and 800 ms old (PtrReady), playing `want`. `settle` false: attached only, so that a
+// case can look at the first ticks. The registry and the layer are the case's for as long as the run lives.
+struct MdRun {
+    entt::registry registry;
+    MagicPortalsLayer layer;
+    bool ok = false;
+
+    MdRun(const MagicPortalsLayer::Paths& paths, const std::string& level, const std::string& what,
+          const glm::vec2& window = glm::vec2(1280.0f, 720.0f), bool settle = true,
+          Controls::Style want = Controls::Style::Modern)
+        : layer(paths, level) {
+        publishViewport(registry, window);
+        if (settle) {
+            ok = PtrReady(registry, layer, what);
+        } else {
+            layer.OnAttach(registry);
+            ok = layer.LoadError().empty() && layer.SimLevel() != nullptr;
+            CHECK_MSG(ok, what + " loads: " + layer.LoadError());
+        }
+        ok = ok && MdStyleIs(layer, want, what);
+    }
+    ~MdRun() { layer.OnDetach(registry); }
+    MdRun(const MdRun&) = delete;
+    MdRun& operator=(const MdRun&) = delete;
+};
+
+std::size_t MdAt(PtrControl control) {
+    return static_cast<std::size_t>(control);
+}
+
+// The settled boxes and hit rectangles of a modern layer, from the module on the layer's own data: what the layout says before any
+// slide. Only a convenience for a point to aim at: the numbers a case is held to are kMdTable's.
+struct MdGeom {
+    glm::dvec2 view{0.0};
+    std::array<Hud::Rect, 5> box;
+    std::array<Hud::Rect, 5> hit;
+};
+
+MdGeom MdGeometry(const MagicPortalsLayer& layer) {
+    MdGeom g;
+    g.view = layer.ViewPx();
+    const Controls::Insets& insets = layer.ControlsPolicy().testInsets;
+    g.box = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), g.view, insets);
+    g.hit = Controls::HitRects(layer.ControlsRules(), g.box, g.view, insets);
+    return g;
+}
+
+// THE DESIGN'S TABLE 1.2: the default places at 16:9 (a 455.1111 x 256 view), size 0.7, preset uniform, units, to the four decimals the
+// design prints. Each row: the box, then the hit rectangle (half-open), as x0, y0, x1, y1.
+struct MdRow {
+    PtrControl control;
+    const char* key;
+    double box[4];
+    double hit[4];
+};
+
+const MdRow kMdTable[5] = {
+    {PtrControl::Left, "walk_left", {15.6444, 208.4978, 47.5022, 240.3556}, {0.0, 208.4978, 53.1911, 256.0}},
+    {PtrControl::Right, "walk_right", {58.8800, 208.4978, 90.7378, 240.3556}, {53.1911, 208.4978, 90.7378, 256.0}},
+    {PtrControl::Reset, "restart", {346.1689, 15.6444, 387.1289, 56.6044}, {346.1689, 0.0, 392.8178, 56.6044}},
+    {PtrControl::Menu, "pause", {398.5067, 15.6444, 439.4667, 56.6044}, {392.8178, 0.0, 455.1111, 56.6044}},
+    {PtrControl::Clear, "clear_portals", {15.6444, 15.6444, 56.6044, 56.6044}, {0.0, 0.0, 56.6044, 56.6044}},
+};
+
+bool MdRectIs(const Hud::Rect& rect, const double (&want)[4], double eps) {
+    const glm::dvec2 max = rect.Max();
+    return std::fabs(rect.min.x - want[0]) <= eps && std::fabs(rect.min.y - want[1]) <= eps && std::fabs(max.x - want[2]) <= eps &&
+           std::fabs(max.y - want[3]) <= eps;
+}
+
+std::string MdShow(const Hud::Rect& rect) {
+    const glm::dvec2 max = rect.Max();
+    char text[160];
+    std::snprintf(text, sizeof(text), "(%.4f, %.4f)-(%.4f, %.4f)", rect.min.x, rect.min.y, max.x, max.y);
+    return text;
+}
+
+// The quad a modern control is drawn with, found by the picture's own file (the layer sends the path it wrote verbatim); -1 when the
+// frame has none. A flat quad has no file and is found by MdFlatQuads.
+int MdQuadOf(const std::vector<ScreenOverlay::Quad>& frame, const std::string& image) {
+    if (image.empty()) return -1;
+    for (std::size_t i = 0; i < frame.size(); ++i) {
+        if (frame[i].texture == image) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+// Flat quads, which a control with no picture is drawn as: no texture, the plate's light rim colour, and not the opening's black.
+std::vector<int> MdFlatQuads(const std::vector<ScreenOverlay::Quad>& frame) {
+    std::vector<int> found;
+    const PadArt::Rgb rim = PadArt::kPlateRim;
+    for (std::size_t i = 0; i < frame.size(); ++i) {
+        if (!frame[i].texture.empty()) continue;
+        if (NearD(frame[i].color.r, static_cast<double>(rim.r) / 255.0, 1e-6) && NearD(frame[i].color.g, static_cast<double>(rim.g) / 255.0, 1e-6) &&
+            NearD(frame[i].color.b, static_cast<double>(rim.b) / 255.0, 1e-6)) {
+            found.push_back(static_cast<int>(i));
+        }
+    }
+    return found;
+}
+
+// A touch that goes down and comes up in ONE tick (a quick click between two ticks): both edges on the one tick's input and the
+// pointer never held. No helper built this tick before: `tap` and `lift` are the two halves of a longer touch.
+void MdClick(MagicPortalsLayer& layer, entt::registry& registry, const glm::vec2& pointer) {
+    PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
+    Input::TickInput input;
+    input.mousePosition = pointer;
+    input.pressed = {MagicPortalsLayer::kTap};
+    input.released = {MagicPortalsLayer::kTap};
+    Input::BeginReplayedTick(input);
+    layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
+    Input::EndReplayedTick();
+}
+
+// What a touch fired: how many shots the level counts and the last tap's place, so that a case can say "nothing was fired".
+struct MdShots {
+    int fired = 0;
+    glm::dvec2 last{0.0};
+};
+
+MdShots MdShotsOf(const MagicPortalsLayer& layer) {
+    return MdShots{layer.SimLevel()->portals.shotsFired, PtrLastTap(layer)};
+}
+
+bool MdFiredNothingSince(const MagicPortalsLayer& layer, const MdShots& before) {
+    return layer.SimLevel()->portals.shotsFired == before.fired && PtrLastTap(layer) == before.last;
+}
+
+// ---- a held touch on a modern arrow walks the player (the twins of AHeldTouchOnTheLeftPadWalksThePlayerLeft) ----------------------
+
+// The four corners of the arrow's hit rectangle, 0.01 units inside, and its exact centre: each is the arrow's own claim, a touch held
+// there walks him that way, and the release, where it went down, fires nothing.
+void MdAHeldTouchOnAnArrow(bool left) {
+    const char* const testName = left ? "AHeldTouchOnTheModernLeftArrowWalksLeft" : "AHeldTouchOnTheModernRightArrowWalksRight";
+    MdRun run(MdPaths(), "level30", testName);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string side = left ? "left" : "right";
+    const PtrControl control = left ? PtrControl::Left : PtrControl::Right;
+    const MdGeom g = MdGeometry(layer);
+    // The rectangle under test is the design's: a probe of some other rectangle would pass for want of this one.
+    const MdRow& row = kMdTable[MdAt(control)];
+    CHECK_MSG(MdRectIs(g.hit[MdAt(control)], row.hit, 6e-5), side + " arrow: its hit rectangle is table 1.2's " + row.key + ": " + MdShow(g.hit[MdAt(control)]));
+    const glm::dvec2 lo = g.hit[MdAt(control)].min;
+    const glm::dvec2 hi = g.hit[MdAt(control)].Max();
+    constexpr double kIn = 0.01;
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+    } probes[] = {
+        {"top-left corner", glm::dvec2(lo.x + kIn, lo.y + kIn)},
+        {"top-right corner", glm::dvec2(hi.x - kIn, lo.y + kIn)},
+        {"bottom-left corner", glm::dvec2(lo.x + kIn, hi.y - kIn)},
+        {"bottom-right corner", glm::dvec2(hi.x - kIn, hi.y - kIn)},
+        {"centre", g.hit[MdAt(control)].Centre()},
+    };
+    const glm::dvec2 standing = playerPx(registry, layer);
+    // The control: with no touch down he stands where he landed.
+    PtrRest(layer, registry, 20);
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - standing.x) < 0.5, side + " arrow: with no touch down he stands: moved " + PtrNum(playerPx(registry, layer).x - standing.x));
+    int walked = 0;
+    for (const auto& probe : probes) {
+        // Put back where he stood, with the 400 ms between taps let go by.
+        HoldPlayerAt(registry, layer, standing);
+        PtrRest(layer, registry, 30);
+        const std::string where = side + " arrow, its " + probe.where + " " + Point(probe.at);
+        CHECK_MSG(layer.ControlAt(probe.at) == PtrClaim(control), where + ": claimed by " + PtrName(layer.ControlAt(probe.at)));
+        const glm::vec2 pixel = PtrPixel(layer, probe.at);
+        const double before = playerPx(registry, layer).x;
+        const MdShots shots = MdShotsOf(layer);
+        for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+        const double moved = (playerPx(registry, layer).x - before) * (left ? -1.0 : 1.0);
+        CHECK_MSG(moved > 8.0, where + ": held 8 ticks he walks " + side + " (2.4 units a tick): " + PtrNum(moved));
+        if (moved > 8.0) ++walked;
+        lift(layer, registry, pixel);
+        CHECK_MSG(MdFiredNothingSince(layer, shots), where + ": the release where it went down fires nothing: " + Point(PtrLastTap(layer)));
+    }
+    CHECK_MSG(walked == 5, side + " arrow: five probes, five walks: " + std::to_string(walked));
+    std::printf("  modern %s arrow: %d of 5 probes of its hit rectangle %s walked him\n", side.c_str(), walked, MdShow(g.hit[MdAt(control)]).c_str());
+    // And with the touch up he stops.
+    PtrRest(layer, registry, 10);
+    const double stopped = playerPx(registry, layer).x;
+    PtrRest(layer, registry, 10);
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - stopped) < 0.5, side + " arrow: with the touch up he stands again: " + PtrNum(playerPx(registry, layer).x - stopped));
+}
+
+void AHeldTouchOnTheModernLeftArrowWalksLeft() {
+    MdAHeldTouchOnAnArrow(true);
+}
+
+void AHeldTouchOnTheModernRightArrowWalksRight() {
+    MdAHeldTouchOnAnArrow(false);
+}
+
+// 0.01 units outside a hit rectangle's sides that face the WORLD, the claim is none and the release fires toward where the finger
+// was held, as the classic pad's 64.01 does: the left arrow's top, the right arrow's top and right side, and restart's left side and
+// the bottom of restart and pause. (The other sides are the view's edge, which the edge reach takes, or the seam between the arrows.)
+void ATouchJustOutsideAModernHitRectFiresAPortal() {
+    MdRun run(MdPaths(), "level30", "ATouchJustOutsideAModernHitRectFiresAPortal");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    constexpr double kOut = 0.01;
+    const glm::dvec2 rightHit = g.hit[MdAt(PtrControl::Right)].Max();
+    const glm::dvec2 resetHit = g.hit[MdAt(PtrControl::Reset)].Max();
+    const glm::dvec2 menuHit = g.hit[MdAt(PtrControl::Menu)].Max();
+    const double leftTop = g.hit[MdAt(PtrControl::Left)].min.y;
+    const double rightTop = g.hit[MdAt(PtrControl::Right)].min.y;
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+        PtrClaim inside; // what a point 0.02 units further in is
+        glm::dvec2 further;
+    } probes[] = {
+        {"the left arrow's top", glm::dvec2(26.0, leftTop - kOut), PtrControl::Left, glm::dvec2(26.0, leftTop + kOut)},
+        {"the right arrow's top", glm::dvec2(72.0, rightTop - kOut), PtrControl::Right, glm::dvec2(72.0, rightTop + kOut)},
+        {"the right arrow's right side", glm::dvec2(rightHit.x + kOut, 232.0), PtrControl::Right, glm::dvec2(rightHit.x - kOut, 232.0)},
+        {"restart's left side", glm::dvec2(g.hit[MdAt(PtrControl::Reset)].min.x - kOut, 30.0), PtrControl::Reset,
+         glm::dvec2(g.hit[MdAt(PtrControl::Reset)].min.x + kOut, 30.0)},
+        {"restart's bottom", glm::dvec2(370.0, resetHit.y + kOut), PtrControl::Reset, glm::dvec2(370.0, resetHit.y - kOut)},
+        {"pause's bottom", glm::dvec2(420.0, menuHit.y + kOut), PtrControl::Menu, glm::dvec2(420.0, menuHit.y - kOut)},
+    };
+    int fired = 0;
+    for (const auto& probe : probes) {
+        const std::string where = std::string("just outside ") + probe.where + " " + Point(probe.at);
+        CHECK_MSG(!layer.ControlAt(probe.at), where + ": claimed by " + PtrName(layer.ControlAt(probe.at)));
+        CHECK_MSG(layer.ControlAt(probe.further) == probe.inside, std::string("and 0.02 units further in it is ") + PtrName(probe.inside) + "'s: " + PtrName(layer.ControlAt(probe.further)));
+        const glm::vec2 pixel = PtrPixel(layer, probe.at);
+        const double before = playerPx(registry, layer).x;
+        const double age = layer.LevelAgeMs();
+        tap(layer, registry, pixel);
+        glm::dvec2 aimed(0.0);
+        CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), where + ": the pixel maps into the level");
+        lift(layer, registry, pixel);
+        const bool shot = glm::distance(PtrLastTap(layer), aimed) < 0.01;
+        CHECK_MSG(shot, where + ": the release fires toward " + Point(aimed) + ": the last tap is " + Point(PtrLastTap(layer)));
+        if (shot) ++fired;
+        CHECK_MSG(std::fabs(playerPx(registry, layer).x - before) < 3.0, where + ": he does not walk: " + PtrNum(playerPx(registry, layer).x - before));
+        CHECK_MSG(layer.LevelAgeMs() > age && !layer.Paused(), where + ": nothing reloaded and nothing paused");
+        PtrRest(layer, registry, 30);
+    }
+    CHECK_MSG(fired == 6, "six outside probes, six shots: " + std::to_string(fired));
+}
+
+// The two arrows' rectangles meet in ONE double, the middle of the gap between their boxes: a point on it is the RIGHT arrow's (half-open:
+// [min, max)), the double just below it is the left's, and a finger 0.01 units either side of it walks that arrow's way.
+void TheSharedSeamBetweenTheArrowsIsTheRightArrows() {
+    MdRun run(MdPaths(), "level30", "TheSharedSeamBetweenTheArrowsIsTheRightArrows");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    const double seam = g.hit[MdAt(PtrControl::Left)].Max().x;
+    CHECK_MSG(seam == g.hit[MdAt(PtrControl::Right)].min.x, "the left's right edge and the right's left edge are one number: " + PtrNum(seam) + ", " + PtrNum(g.hit[MdAt(PtrControl::Right)].min.x));
+    CHECK_MSG(NearD(seam, 53.1911, 6e-5), "the seam is table 1.2's 53.1911: " + PtrNum(seam));
+    CHECK_MSG(NearD(seam, (g.box[MdAt(PtrControl::Left)].Max().x + g.box[MdAt(PtrControl::Right)].min.x) * 0.5, 1e-12),
+              "and the middle of the gap between the boxes");
+    const double below = std::nextafter(seam, 0.0);
+    const double above = std::nextafter(seam, 1000.0);
+    for (const double y : {209.0, 230.0, 255.99}) {
+        CHECK_MSG(layer.ControlAt(glm::dvec2(seam, y)) == PtrClaim(PtrControl::Right),
+                  "a point ON the seam at y " + PtrNum(y) + " is the right arrow's: " + PtrName(layer.ControlAt(glm::dvec2(seam, y))));
+        CHECK_MSG(layer.ControlAt(glm::dvec2(below, y)) == PtrClaim(PtrControl::Left),
+                  "the double just below it is the left's: " + PtrName(layer.ControlAt(glm::dvec2(below, y))));
+        CHECK_MSG(layer.ControlAt(glm::dvec2(above, y)) == PtrClaim(PtrControl::Right), "and the double just above is the right's");
+    }
+    // No point between them is claimed twice or by none: a lattice across the seam changes hands exactly once, at it.
+    int changes = 0;
+    int none = 0;
+    PtrClaim last;
+    for (double x = seam - 2.0; x <= seam + 2.0; x += 0.0625) {
+        const PtrClaim claim = layer.ControlAt(glm::dvec2(x, 240.0));
+        if (!claim) ++none;
+        if (x > seam - 2.0 && claim != last) ++changes;
+        last = claim;
+    }
+    CHECK_MSG(changes == 1 && none == 0, "across the seam the claim changes hands once and is never none: " + std::to_string(changes) + " changes, " + std::to_string(none) + " none");
+    // By a finger: 0.01 units either side walks that arrow's way.
+    for (const bool onLeft : {true, false}) {
+        const glm::dvec2 at(seam + (onLeft ? -0.01 : 0.01), 235.0);
+        const glm::vec2 pixel = PtrPixel(layer, at);
+        PtrRest(layer, registry, 30);
+        const double before = playerPx(registry, layer).x;
+        for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+        const double moved = playerPx(registry, layer).x - before;
+        CHECK_MSG(onLeft ? moved < -8.0 : moved > 8.0, std::string("a finger 0.01 units ") + (onLeft ? "left" : "right") + " of the seam walks him " +
+                                                           (onLeft ? "left" : "right") + ": " + PtrNum(moved));
+        lift(layer, registry, pixel);
+    }
+}
+
+// The edge reach: the strip between a box and the view's edge is the control's, so a missed tap at the corner of the screen is not a
+// portal. Without a portal clear-portals is not shown and its corner is the world; with one it is claimed to the edge.
+void TheCornerEdgeOfTheViewIsAControlPressInModern() {
+    // Scope one: no portal.
+    {
+    MdRun run(MdPaths(), "level30", "TheCornerEdgeOfTheViewIsAControlPressInModern");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    const double W = g.view.x;
+    const double H = g.view.y;
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+        PtrClaim claim;
+    } rows[] = {
+        {"the view's left edge beside the left arrow", glm::dvec2(0.0, 230.0), PtrControl::Left},
+        {"the bottom-left corner", glm::dvec2(0.5, H - 0.5), PtrControl::Left},
+        {"under the left arrow's box", glm::dvec2(20.0, H - 0.01), PtrControl::Left},
+        {"under the right arrow's box", glm::dvec2(80.0, H - 0.01), PtrControl::Right},
+        {"the right arrow, left of its box", glm::dvec2(55.0, 250.0), PtrControl::Right},
+        {"above the left arrow", glm::dvec2(20.0, 208.4), PtrClaim{}},
+        {"right of the right arrow", glm::dvec2(91.0, 250.0), PtrClaim{}},
+        {"the top-right corner", glm::dvec2(W - 0.5, 0.5), PtrControl::Menu},
+        {"pause's strip above its box", glm::dvec2(420.0, 5.0), PtrControl::Menu},
+        {"pause's right strip", glm::dvec2(W - 0.01, 40.0), PtrControl::Menu},
+        {"restart's strip above its box", glm::dvec2(365.0, 5.0), PtrControl::Reset},
+        {"below pause", glm::dvec2(420.0, 56.7), PtrClaim{}},
+        {"the top-left corner (clear-portals is not shown without a portal)", glm::dvec2(0.5, 0.5), PtrClaim{}},
+        {"clear-portals' box (not shown)", glm::dvec2(30.0, 30.0), PtrClaim{}},
+    };
+    for (const auto& row : rows) {
+        CHECK_MSG(layer.ControlAt(row.at) == row.claim, std::string(row.where) + " " + Point(row.at) + ": claimed by " + PtrName(layer.ControlAt(row.at)) +
+                                                           ", wanted " + PtrName(row.claim));
+    }
+    // The middle of the seam between restart and pause, to the double.
+    const double middle = g.hit[MdAt(PtrControl::Reset)].Max().x;
+    CHECK_MSG(NearD(middle, 392.8178, 6e-5) && middle == g.hit[MdAt(PtrControl::Menu)].min.x, "restart's and pause's rectangles meet at table 1.2's 392.8178");
+    CHECK_MSG(layer.ControlAt(glm::dvec2(middle, 30.0)) == PtrClaim(PtrControl::Menu) && layer.ControlAt(glm::dvec2(std::nextafter(middle, 0.0), 30.0)) == PtrClaim(PtrControl::Reset),
+              "the point on it is pause's, the double below it restart's");
+    // A press in the edge strip is a control's: a touch at the corner pixel fires nothing, and the world beside it still fires.
+    const MdShots shots = MdShotsOf(layer);
+    MdClick(layer, registry, PtrPixel(layer, glm::dvec2(W - 0.5, 0.5)));
+    PtrRest(layer, registry, 3);
+    CHECK_MSG(layer.Paused() && MdFiredNothingSince(layer, shots), "a click on the top-right corner pixel opens the pause and fires nothing");
+    }
+    // Scope two, with a portal: clear-portals is shown and its strip is claimed to the corner. (One layer is attached at a time.)
+    MdRun withPortal(MdPaths(), "level30", "TheCornerEdgeOfTheViewIsAControlPressInModern: a portal");
+    if (!withPortal.ok) return;
+    shoot(withPortal.layer, withPortal.registry, screenOf(withPortal.registry, glm::dvec2(250.0, 150.0)));
+    landShot(withPortal.layer, withPortal.registry);
+    CHECK_MSG(withPortal.layer.SimLevel()->portals.placed.size() == 1u, "a portal is placed, so clear-portals is shown");
+    for (const glm::dvec2& at : {glm::dvec2(0.5, 0.5), glm::dvec2(0.0, 30.0), glm::dvec2(30.0, 0.0), glm::dvec2(56.5, 56.5), glm::dvec2(40.0, 5.0)}) {
+        CHECK_MSG(withPortal.layer.ControlAt(at) == PtrClaim(PtrControl::Clear), "with a portal " + Point(at) + " is clear-portals': " + PtrName(withPortal.layer.ControlAt(at)));
+    }
+    CHECK_MSG(!withPortal.layer.ControlAt(glm::dvec2(56.7, 30.0)) && !withPortal.layer.ControlAt(glm::dvec2(30.0, 56.7)), "and a thousandth beyond its box is the world");
+}
+
+// ---- sliding onto and off an arrow, and the slide itself ---------------------------------------------------------------------------
+
+// A touch that goes down in the world and is slid onto a modern arrow walks him from the tick it is on it, and one slid off stops: the
+// claim is asked of the touch's present place every tick. A scheduled drag is the one pointer path's moving finger, straight down a
+// column that crosses the arrow's top edge (so the finger never passes over the other arrow: a slant from the world would). The model
+// is the claim itself: on every tick that is steady (the claim the same a tick before and a tick after, so a tick's lag cannot matter)
+// he walks exactly when the claim is this arrow's.
+void ATouchSlidOntoAModernArrowWalksAndOffItStops() {
+    MdRun run(MdPaths(), "level30", "ATouchSlidOntoAModernArrowWalksAndOffItStops");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const glm::dvec2 view = layer.ViewPx();
+    const int span = 40;
+    for (const bool left : {true, false}) {
+        const PtrControl control = left ? PtrControl::Left : PtrControl::Right;
+        const std::string side = left ? "left" : "right";
+        const double x = left ? 26.0 : 72.0;
+        const glm::dvec2 world(x, 150.0);
+        const glm::dvec2 pad(x, 240.0);
+        struct Leg {
+            const char* what;
+            glm::dvec2 from;
+            glm::dvec2 to;
+        };
+        for (const Leg& leg : {Leg{"world to arrow", world, pad}, Leg{"arrow to world", pad, world}}) {
+            const int first = layer.LayerTicks() + 3;
+            layer.ScheduleDevDrag(first, leg.from / view, leg.to / view, first + span);
+            std::map<int, bool> claimed;
+            std::map<int, double> at;
+            at[layer.LayerTicks()] = playerPx(registry, layer).x;
+            while (layer.LayerTicks() < first + span + 2) {
+                tickWith(layer, registry, kRest, {}, {});
+                const int n = layer.LayerTicks();
+                at[n] = playerPx(registry, layer).x;
+                if (n >= first && n < first + span) {
+                    const double along = static_cast<double>(n - first) / static_cast<double>(span);
+                    const glm::dvec2 position = (leg.from / view + (leg.to / view - leg.from / view) * along) * view;
+                    claimed[n] = layer.ControlAt(position) == PtrClaim(control);
+                }
+            }
+            int steadyOn = 0;
+            int steadyOff = 0;
+            int wrong = 0;
+            std::string firstWrong;
+            for (int n = first + 1; n < first + span - 1; ++n) {
+                if (claimed[n - 1] != claimed[n] || claimed[n + 1] != claimed[n]) continue;
+                const double moved = at[n + 1] - at[n];
+                const bool walks = left ? moved < -1.0 : moved > 1.0;
+                const bool stands = std::fabs(moved) < 0.3;
+                (claimed[n] ? steadyOn : steadyOff) += 1;
+                if (claimed[n] ? !walks : !stands) {
+                    if (wrong == 0) firstWrong = "tick " + std::to_string(n) + " claimed " + std::to_string(static_cast<int>(claimed[n])) + " moved " + PtrNum(moved);
+                    ++wrong;
+                }
+            }
+            std::printf("  modern slide %s, %s: %d steady ticks on the arrow, %d off it, %d differ\n", side.c_str(), leg.what, steadyOn, steadyOff, wrong);
+            CHECK_MSG(steadyOn >= 4 && steadyOff >= 4, side + " " + leg.what + ": steady ticks on the arrow " + std::to_string(steadyOn) + ", off it " +
+                                                           std::to_string(steadyOff) + " (the drag must cross the rectangle)");
+            CHECK_MSG(wrong == 0, side + " " + leg.what + ": he walks exactly while the touch is on the " + side + " arrow: " + std::to_string(wrong) +
+                                      " steady ticks differ, the first " + firstWrong);
+            PtrRest(layer, registry, 40);
+        }
+    }
+}
+
+// Where a point of the view is claimed by the pair, as the two arrows' rectangles slid out of the left edge by `slide` units say, half-open.
+PtrClaim MdPairClaim(const MdGeom& g, double slide, const glm::dvec2& point) {
+    const auto inside = [&point, slide](const Hud::Rect& rect) {
+        const glm::dvec2 max = rect.Max();
+        return point.x >= rect.min.x - slide && point.y >= rect.min.y && point.x < max.x - slide && point.y < max.y;
+    };
+    if (inside(g.hit[MdAt(PtrControl::Left)])) return PtrControl::Left;
+    if (inside(g.hit[MdAt(PtrControl::Right)])) return PtrControl::Right;
+    return PtrClaim{};
+}
+
+// The arrows come in from the left (both centres are left of the view's middle), 128 units out over 700 ms, the classic pads' own slide
+// (ui.json), and the hit rectangle goes with the picture: at every age the claim over the lower part of the view (no corner button is
+// there) is the two rectangles shifted by the slide, and the settled claim is not.
+void TheModernPadsHitRectFollowsItsSlide() {
+    MdRun run(MdPaths(), "level30", "TheModernPadsHitRectFollowsItsSlide", glm::vec2(1280.0f, 720.0f), false);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    const Hud::Rules& rules = layer.HudRules();
+    int movedTicks = 0;
+    for (const int tick : {1, 7, 15, 22, 30, 40, 44, 50}) {
+        while (layer.LayerTicks() < tick) tickWith(layer, registry, kRest, {}, {});
+        const double age = layer.LevelAgeMs();
+        const double slide = Controls::ClassicSlideUnits(rules, age);
+        int wrong = 0;
+        int differ = 0;
+        int claimed = 0;
+        for (double y = 100.0; y <= g.view.y; y += 4.0) {
+            for (double x = 0.0; x <= g.view.x; x += 4.0) {
+                const glm::dvec2 point(x, y);
+                const PtrClaim want = MdPairClaim(g, slide, point);
+                const PtrClaim got = layer.ControlAt(point);
+                if (got != want) ++wrong;
+                if (got != MdPairClaim(g, 0.0, point)) ++differ;
+                if (got) ++claimed;
+            }
+        }
+        const std::string at = "tick " + std::to_string(tick) + " (" + PtrNum(age) + " ms, " + PtrNum(slide) + " units out)";
+        CHECK_MSG(wrong == 0, at + ": the claim is the two rectangles slid out by the slide: " + std::to_string(wrong) + " lattice points differ");
+        // The picture is where the claim is: the arrows' boxes are the settled boxes shifted by the same slide.
+        Hud::Rect leftBox;
+        Hud::Rect rightBox;
+        CHECK_MSG(layer.ControlRect(PtrControl::Left, leftBox) && layer.ControlRect(PtrControl::Right, rightBox) &&
+                      NearD(leftBox.min.x, g.box[MdAt(PtrControl::Left)].min.x - slide, 1e-9) &&
+                      NearD(rightBox.min.x, g.box[MdAt(PtrControl::Right)].min.x - slide, 1e-9) && NearD(leftBox.min.y, g.box[MdAt(PtrControl::Left)].min.y, 1e-9),
+                  at + ": the arrows are drawn where they are claimed: " + ShowRect(leftBox) + ", " + ShowRect(rightBox));
+        if (tick == 1) {
+            CHECK_MSG(claimed == 0 && slide > 100.0, at + ": under the opening the arrows are out of the view and claim nothing: " + std::to_string(claimed));
+        }
+        // While more than a few units out (a lattice of 4 units cannot see less) the claim is not the settled claim.
+        if (slide > 6.0) {
+            CHECK_MSG(differ > 20, at + ": mid-slide the claim is not the settled claim: " + std::to_string(differ) + " points differ");
+            if (differ > 20) ++movedTicks;
+        }
+        if (slide == 0.0) {
+            CHECK_MSG(differ == 0 && claimed > 200, at + ": settled: the claim is the settled claim, " + std::to_string(claimed) + " points are the pair's");
+        }
+    }
+    CHECK_MSG(movedTicks == 5, "five of the ticks (1, 7, 15, 22, 30) showed a claim that was not the settled one: " + std::to_string(movedTicks));
+}
+
+// ---- the camera, the lift and the tutorial hand ask the modern rectangles -------------------------------------------------------------
+
+struct MdFollow {
+    bool ok = false;
+    double moved = 0.0;
+    PtrClaim claim;
+    bool pairShown = false;
+};
+
+// A touch resting at `point` of the view for 20 ticks with the camera put 30 or more units off its target: how far the camera moves over
+// ticks 2 to 20. More than 5: the follow keeps running, the touch counts as on a walk control. None: it is held, as a touch in the world
+// holds it. `level` should be weightless, so that no pad is shown or claimed and the answer is the camera's own `onPad`.
+MdFollow MdFollowUnderATouch(const MagicPortalsLayer::Paths& paths, const std::string& level, Controls::Style want, const glm::dvec2& point,
+                             const std::string& what) {
+    MdFollow out;
+    MdRun run(paths, level, what, glm::vec2(1280.0f, 720.0f), true, want);
+    if (!run.ok) return out;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const glm::dvec2 view = layer.ViewPx();
+    Hud::Rect pad;
+    out.pairShown = layer.ControlRect(PtrControl::Left, pad);
+    out.claim = layer.ControlAt(point);
+    const glm::dvec2 player = playerPx(registry, layer);
+    const glm::dvec2 bounds = layer.BoundsPx();
+    const glm::dvec2 target = MagicPortals::Camera::Clamp(player, view, bounds);
+    glm::dvec2 placed = target;
+    for (const double side : {90.0, -90.0}) {
+        const glm::dvec2 wanted = MagicPortals::Camera::Clamp(target + glm::dvec2(side, 0.0), view, bounds);
+        if (std::fabs(wanted.x - target.x) >= 30.0) {
+            placed = wanted;
+            break;
+        }
+    }
+    CHECK_MSG(std::fabs(placed.x - target.x) >= 30.0, what + ": the camera can be put 30 units off its target " + Point(target) + " in a level " + Point(bounds) + " wide");
+    layer.PlaceCameraForTest(registry, placed);
+    const glm::vec2 pixel = PtrPixel(layer, point);
+    double atSecond = 0.0;
+    for (int tick = 1; tick <= 20; ++tick) {
+        PtrHold(layer, registry, pixel, tick == 1);
+        if (tick == 2) atSecond = layer.CameraCentrePx().x;
+    }
+    out.moved = std::fabs(layer.CameraCentrePx().x - atSecond);
+    out.ok = true;
+    return out;
+}
+
+// design D12: `onWalkControl` is asked of the rectangles whether or not the pair is shown or claimed, as the classic discs are. On 4-02
+// (weightless: no pair is drawn or claimed, in either style) a touch resting at a point of the MODERN rectangles keeps the camera's
+// follow running and one at a point of the CLASSIC discs only holds it, and the classic layer says the reverse: both consumers pinned
+// on the same points, which a camera still asking the discs under the modern pair (or the rectangles under the classic one) fails.
+void TheModernOnWalkControlIsUngatedLikeClassics() {
+    if (!OriginalArtIsThere("TheModernOnWalkControlIsUngatedLikeClassics")) return;
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+        bool modernOnPad;
+        bool classicOnPad;
+    } probes[] = {
+        // 0.01 units inside the left arrow's top edge, and 0.01 outside it: both inside the classic disc about the corner (55 units).
+        {"just inside the left arrow's top", glm::dvec2(26.0, 208.5078), true, true},
+        {"just above the left arrow", glm::dvec2(26.0, 208.4878), false, true},
+        // Inside the right arrow, 80 units from the corner: outside the classic disc (64).
+        {"inside the right arrow, outside the classic disc", glm::dvec2(80.0, 250.0), true, false},
+        // Inside the classic disc (56 units) and above the modern pair.
+        {"inside the classic disc, above the modern pair", glm::dvec2(5.0, 200.0), false, true},
+        {"in the world", glm::dvec2(227.0, 40.0), false, false},
+    };
+    for (const auto& probe : probes) {
+        const MdFollow modern = MdFollowUnderATouch(MdPaths(), "level1c", Controls::Style::Modern, probe.at, std::string("modern ") + probe.where);
+        const MdFollow classic = MdFollowUnderATouch(TestPaths(), "level1c", Controls::Style::Classic, probe.at, std::string("classic ") + probe.where);
+        if (!modern.ok || !classic.ok) continue;
+        std::printf("  4-02, a touch resting %s: the camera moves %.3f (modern), %.3f (classic)\n", probe.where, modern.moved, classic.moved);
+        // The pair is neither shown nor claimed on a weightless level, in either style: the follow is `onPad` alone.
+        CHECK_MSG(!modern.pairShown && !classic.pairShown && !modern.claim && !classic.claim,
+                  std::string(probe.where) + ": no pair, and nothing is claimed there on a weightless level");
+        if (probe.modernOnPad) {
+            CHECK_MSG(modern.moved > 5.0, std::string("modern, ") + probe.where + ": the follow keeps running, the camera moves " + PtrNum(modern.moved));
+        } else {
+            CHECK_MSG(modern.moved < 1e-9, std::string("modern, ") + probe.where + ": the follow waits, the camera moves " + PtrNum(modern.moved));
+        }
+        if (probe.classicOnPad) {
+            CHECK_MSG(classic.moved > 5.0, std::string("classic, ") + probe.where + ": the follow keeps running, the camera moves " + PtrNum(classic.moved));
+        } else {
+            CHECK_MSG(classic.moved < 1e-9, std::string("classic, ") + probe.where + ": the follow waits, the camera moves " + PtrNum(classic.moved));
+        }
+    }
+    // The negative control, on 4-01 (gravity, the pair is shown): a touch resting on the arrow follows, one in the world holds.
+    const MdFollow onArrow = MdFollowUnderATouch(MdPaths(), "level0c", Controls::Style::Modern, glm::dvec2(26.0, 232.0), "modern 4-01 on the arrow");
+    const MdFollow inWorld = MdFollowUnderATouch(MdPaths(), "level0c", Controls::Style::Modern, glm::dvec2(227.0, 40.0), "modern 4-01 in the world");
+    if (onArrow.ok && inWorld.ok) {
+        CHECK_MSG(onArrow.pairShown && onArrow.claim == PtrClaim(PtrControl::Left), "4-01 shows its pair and claims the point: " + PtrName(onArrow.claim));
+        CHECK_MSG(onArrow.moved > 5.0 && inWorld.moved < 1e-9, "and the follow runs on the arrow and waits in the world: " + PtrNum(onArrow.moved) + ", " + PtrNum(inWorld.moved));
+    }
+}
+
+// The camera follows him while a touch is held on a modern arrow, exactly as it follows the key.
+PtrCameraTrace MdCameraRun(int mode, int ticks, const std::string& what) {
+    PtrCameraTrace trace;
+    MdRun run(MdPaths(), "level30", what);
+    if (!run.ok) return trace;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    trace.ok = true;
+    // A point of the right arrow's rectangle that the classic right disc does not hold.
+    const glm::vec2 padPixel = PtrPixel(layer, glm::dvec2(80.0, 240.0));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(80.0, 240.0)) == PtrClaim(PtrControl::Right), what + ": the touch is on the right arrow");
+    trace.playerFrom = playerPx(registry, layer).x;
+    for (int tick = 0; tick < ticks; ++tick) {
+        if (mode == 0) {
+            tickWith(layer, registry, kRest, {MagicPortalsLayer::kRight}, {});
+        } else {
+            PtrHold(layer, registry, padPixel, tick == 0);
+        }
+        trace.centreX.push_back(layer.CameraCentrePx().x);
+    }
+    trace.playerTo = playerPx(registry, layer).x;
+    return trace;
+}
+
+void AHeldTouchOnAModernArrowKeepsTheCameraFollowing() {
+    const int ticks = 55;
+    const PtrCameraTrace key = MdCameraRun(0, ticks, "the key run");
+    const PtrCameraTrace pad = MdCameraRun(1, ticks, "the arrow run");
+    if (!key.ok || !pad.ok) return;
+    const double keyMoved = key.centreX.back() - key.centreX.front();
+    const double padMoved = pad.centreX.back() - pad.centreX.front();
+    std::printf("  modern camera over 55 ticks: key %.1f, arrow %.1f; the two end %.4f apart\n", keyMoved, padMoved,
+                std::fabs(pad.centreX.back() - key.centreX.back()));
+    CHECK_MSG(keyMoved > 30.0, "the control: walking right on the key, the camera follows: " + PtrNum(keyMoved));
+    CHECK_MSG(pad.playerTo - pad.playerFrom > 80.0, "a held touch on the modern right arrow walks him: " + PtrNum(pad.playerTo - pad.playerFrom));
+    CHECK_MSG(padMoved > 30.0, "and the camera follows him while the touch is held on the arrow: " + PtrNum(padMoved));
+    CHECK_MSG(std::fabs(pad.centreX.back() - key.centreX.back()) < 0.5,
+              "exactly where the key's follow had it: " + PtrNum(pad.centreX.back()) + " against " + PtrNum(key.centreX.back()));
+}
+
+// The other side: a touch held in the world holds the view where it was, in the modern layout as in the classic one.
+void AHeldTouchInTheWorldStopsItUnderTheModernControls() {
+    struct Run {
+        bool ok{false};
+        double placed{0.0};
+        std::vector<double> centreX;
+    };
+    const auto run = [](bool touch) {
+        Run out;
+        MdRun mdRun(MdPaths(), "level30", touch ? "the held run" : "the control run");
+        if (!mdRun.ok) return out;
+        MagicPortalsLayer& layer = mdRun.layer;
+        entt::registry& registry = mdRun.registry;
+        const glm::dvec2 view = layer.ViewPx();
+        const glm::dvec2 target = MagicPortals::Camera::Clamp(playerPx(registry, layer), view, layer.BoundsPx());
+        const glm::dvec2 placed = MagicPortals::Camera::Clamp(target + glm::dvec2(80.0, 0.0), view, layer.BoundsPx());
+        out.ok = std::fabs(placed.x - target.x) >= 60.0;
+        CHECK_MSG(out.ok, "the camera can be put 60 units off its target: " + PtrNum(placed.x) + " against " + PtrNum(target.x));
+        out.placed = placed.x;
+        layer.PlaceCameraForTest(registry, placed);
+        const glm::vec2 pixel = PtrPixel(layer, glm::dvec2(view.x * 0.5, 60.0));
+        for (int tick = 0; tick < 20; ++tick) {
+            if (touch) {
+                PtrHold(layer, registry, pixel, tick == 0);
+            } else {
+                tickWith(layer, registry, kRest, {}, {});
+            }
+            out.centreX.push_back(layer.CameraCentrePx().x);
+        }
+        return out;
+    };
+    const Run loose = run(false);
+    const Run held = run(true);
+    if (!loose.ok || !held.ok) return;
+    CHECK_MSG(loose.placed - loose.centreX.back() > 40.0, "the control: with no touch the follow draws the camera back from " + PtrNum(loose.placed) + " to " + PtrNum(loose.centreX.back()));
+    double worst = 0.0;
+    for (std::size_t tick = 1; tick < held.centreX.size(); ++tick) worst = std::max(worst, std::fabs(held.centreX[tick] - held.centreX[0]));
+    CHECK_MSG(worst < 1e-9, "and a touch held in the world holds it from the tick after the press: moved " + PtrNum(worst));
+}
+
+// movers.json `lift`: a touch that goes down inside a lift's picture, OFF the walk controls, sends it. 2-02's lift is 64 x 32 units
+// at its first marker. The camera is put so that the lift stands where each scenario wants it on the view, which holds a point on a
+// modern arrow and a point just off it in the one picture: the press on the arrow sends nothing, the press beside it sends the lift.
+// A: the lift centred on the right arrow's right edge (x 90.74), the points 80 and 100 units across. B: on the left arrow's top edge
+// (y 208.50), the points 220 and 202 down. (The classic discs would call the first of A off the pad: 80 units from the corner.)
+void APressOnAModernArrowOverALiftSendsNothingAndAPressOutsideSendsIt() {
+    const struct {
+        const char* name;
+        glm::dvec2 liftOnView;
+        glm::dvec2 onArrow;
+        glm::dvec2 beside;
+        PtrControl control;
+    } scenarios[] = {
+        {"A: the right arrow's right edge", glm::dvec2(90.7378, 240.0), glm::dvec2(80.0, 235.0), glm::dvec2(100.0, 235.0), PtrControl::Right},
+        {"B: the left arrow's top edge", glm::dvec2(30.0, 216.0), glm::dvec2(30.0, 220.0), glm::dvec2(30.0, 202.0), PtrControl::Left},
+    };
+    for (const auto& scenario : scenarios) {
+        const std::string what = std::string("2-02, ") + scenario.name;
+        MdRun run(MdPaths(), "level1a", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(!layer.SimLevel()->movers.lifts.empty(), "2-02 has a lift");
+        if (layer.SimLevel()->movers.lifts.empty()) return;
+        const MagicPortals::Mover::Lift& theLift = layer.SimLevel()->movers.lifts.front();
+        const glm::dvec2 view = layer.ViewPx();
+        const auto centreFor = [&]() { return theLift.motion.atPx - scenario.liftOnView + view * 0.5; };
+        CHECK_MSG(layer.ControlAt(scenario.onArrow) == PtrClaim(scenario.control) && !layer.ControlAt(scenario.beside),
+                  what + ": the two points are on the arrow and beside it: " + PtrName(layer.ControlAt(scenario.onArrow)) + " and " +
+                      PtrName(layer.ControlAt(scenario.beside)));
+        const glm::dvec2 liftAt = theLift.motion.atPx;
+        CHECK_MSG(theLift.motion.Holds(centreFor() - view * 0.5 + scenario.onArrow, theLift.sizeUnits) &&
+                      theLift.motion.Holds(centreFor() - view * 0.5 + scenario.beside, theLift.sizeUnits),
+                  what + ": both points are inside the lift's picture, " + Point(liftAt) + " " + Point(theLift.sizeUnits));
+        const int sends = theLift.motion.sends;
+        // The follow eases the camera on the press tick, so it is put again before every tick that matters.
+        layer.PlaceCameraForTest(registry, centreFor());
+        tap(layer, registry, PtrPixel(layer, scenario.onArrow));
+        const int sentByTheArrow = theLift.motion.sends - sends;
+        CHECK_MSG(sentByTheArrow == 0, what + ": a press on the arrow over the lift sends it nowhere: " + std::to_string(sentByTheArrow) + " sends");
+        lift(layer, registry, PtrPixel(layer, scenario.onArrow));
+        CHECK_MSG(theLift.motion.sends == sends && theLift.motion.atPx == liftAt, what + ": and its release sends nothing either");
+        layer.PlaceCameraForTest(registry, centreFor());
+        tap(layer, registry, PtrPixel(layer, scenario.beside));
+        CHECK_MSG(theLift.motion.sends == sends + 1, what + ": the control: a press just beside the arrow, over the same lift, sends it: " +
+                                                         std::to_string(theLift.motion.sends - sends) + " sends");
+        std::printf("  lift %s, %s: %d sends from the press on the arrow, then %d from the press beside it\n", theLift.name.c_str(), scenario.name,
+                    sentByTheArrow, theLift.motion.sends - sends - sentByTheArrow);
+    }
+}
+
+// effects.json smoke_vanish_hand_tap: a release on a walk control takes no tutorial hand; the same release off them, within the hand's 30
+// units, does. 1-02's hand_tap, the camera put so that the hand is under the release both times. In the modern layout the controls are
+// the rectangles: a release on the left arrow and on the right arrow's far side (80 units from the corner, outside the classic disc)
+// leave the hand, and the classic layer takes it from the second.
+void AReleaseOnAModernArrowTakesNoTutorialHand() {
+    if (!OriginalArtIsThere("AReleaseOnAModernArrowTakesNoTutorialHand")) return;
+    const char* const hand = "hand_tap_ent_622";
+    const glm::dvec2 onLeft(26.0, 235.0);
+    const glm::dvec2 onRight(80.0, 250.0);
+    {
+        MdRun run(MdPaths(), "level1", "AReleaseOnAModernArrowTakesNoTutorialHand");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.DrawnPicture(hand).drawn, "1-02's hand stands before any touch");
+        if (!layer.DrawnPicture(hand).drawn) return;
+        const glm::dvec2 view = layer.ViewPx();
+        const auto release = [&](const glm::dvec2& onView) {
+            const glm::vec2 pixel = PtrPixel(layer, onView);
+            const auto handUnder = [&]() { layer.PlaceCameraForTest(registry, layer.DrawnPicture(hand).ownerPx - onView + view * 0.5); };
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            handUnder();
+            tap(layer, registry, pixel);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            handUnder();
+            lift(layer, registry, pixel);
+            return layer.DrawnPicture(hand).drawn;
+        };
+        const glm::dvec2 offPad(view.x * 0.5, view.y * 0.5);
+        CHECK_MSG(layer.ControlAt(onLeft) == PtrClaim(PtrControl::Left) && layer.ControlAt(onRight) == PtrClaim(PtrControl::Right) && !layer.ControlAt(offPad),
+                  "the three points are on the left arrow, on the right arrow and off both");
+        CHECK_MSG(release(onLeft), "a release on the left arrow, the hand right under it, leaves the hand standing");
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.DrawnPicture(hand).drawn, "and it still stands a frame later");
+        CHECK_MSG(release(onRight), "a release on the right arrow, 80 units from the corner, leaves it too");
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.DrawnPicture(hand).drawn, "and it still stands a frame later");
+        CHECK_MSG(!release(offPad), "the control: the same release off the arrows takes it, on the release's tick");
+    }
+    {
+        // The classic layer's discs do not hold the second point.
+        MdRun run(TestPaths(), "level1", "AReleaseOnAModernArrowTakesNoTutorialHand: classic", glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.DrawnPicture(hand).drawn, "classic: 1-02's hand stands before any touch");
+        if (!layer.DrawnPicture(hand).drawn) return;
+        const glm::dvec2 view = layer.ViewPx();
+        const glm::vec2 pixel = PtrPixel(layer, onRight);
+        const auto handUnder = [&]() { layer.PlaceCameraForTest(registry, layer.DrawnPicture(hand).ownerPx - onRight + view * 0.5); };
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        handUnder();
+        tap(layer, registry, pixel);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        handUnder();
+        lift(layer, registry, pixel);
+        CHECK_MSG(!layer.ControlAt(onRight) && !layer.DrawnPicture(hand).drawn,
+                  "classic: the same release is on no pad, and it takes the hand: the two layouts do not ask the same shapes");
+    }
+}
+
+// ---- a weightless level has no pair, and its corner is the world ---------------------------------------------------------------------
+
+// 4-02 (level1c, the first weightless level) draws and claims no pair; the place where it would be is the world (a tap there fires a
+// portal) and restart and pause stay. 4-01 (level0c, with gravity) is the negative control: its pair is there, drawn and claimed.
+void TheModernPairIsHiddenAndUnclaimedOnAWeightlessLevelAndTheCornerIsWorld() {
+    for (const bool weightless : {true, false}) {
+        const std::string level = weightless ? "level1c" : "level0c";
+        const std::string what = std::string("4-0") + (weightless ? "2" : "1") + " (" + level + ")";
+        MdRun run(MdPaths(), level, what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(layer.SimLevel()->portals.noGravity == weightless, what + ": weightless is " + std::to_string(layer.SimLevel()->portals.noGravity));
+        const MdGeom g = MdGeometry(layer);
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        Hud::Rect rect;
+        for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+            CHECK_MSG(layer.ControlRect(arrow, rect) == !weightless, what + ": the " + PtrName(arrow) + " arrow is shown exactly where there is gravity");
+            CHECK_MSG((MdQuadOf(frame, layer.ModernImage(arrow)) >= 0) == !weightless, what + ": and drawn exactly there");
+            const glm::dvec2 centre = g.box[MdAt(arrow)].Centre();
+            const PtrClaim want = weightless ? PtrClaim{} : PtrClaim(arrow);
+            CHECK_MSG(layer.ControlAt(centre) == want, what + ": the " + PtrName(arrow) + " arrow's centre is claimed by " + PtrName(layer.ControlAt(centre)) + ", wanted " + PtrName(want));
+        }
+        for (const PtrControl corner : {PtrControl::Reset, PtrControl::Menu}) {
+            CHECK_MSG(layer.ControlRect(corner, rect) && MdQuadOf(frame, layer.ModernImage(corner)) >= 0 &&
+                          layer.ControlAt(g.box[MdAt(corner)].Centre()) == PtrClaim(corner),
+                      what + ": " + PtrName(corner) + " stays: shown, drawn and claimed");
+        }
+        if (weightless) {
+            // Where the pair would be is the world: a tap there fires toward it, and does not walk or reload anything.
+            const glm::dvec2 where(26.0, 235.0);
+            const glm::vec2 pixel = PtrPixel(layer, where);
+            glm::dvec2 aimed(0.0);
+            waitForFirstTap(layer, registry);
+            tap(layer, registry, pixel);
+            CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), what + ": the pixel maps into the level");
+            lift(layer, registry, pixel);
+            CHECK_MSG(glm::distance(PtrLastTap(layer), aimed) < 0.01, what + ": a tap where the pair would be fires toward it: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+        }
+    }
+}
+
+// ---- nothing is claimed under a pause, a popup, after the door or after a death (the twin of CTL-2's case) -----------------------------
+
+void NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd() {
+    if (!OriginalArtIsThere("NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd")) return;
+    // The control: in play a click on restart reloads and plays level_button.
+    {
+        MdRun run(MdPaths(), "level30", "NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd: the control");
+        if (!run.ok) return;
+        const MdGeom g = MdGeometry(run.layer);
+        MdClick(run.layer, run.registry, PtrPixel(run.layer, g.box[MdAt(PtrControl::Reset)].Centre()));
+        CHECK_MSG(run.layer.LevelAgeMs() == 0.0 && PtrLatched(run.layer, "level_button"), "the control: in play a click on restart reloads the level");
+    }
+    // A pause.
+    {
+        MdRun run(MdPaths(), "level30", "NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd: a pause");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const MdGeom g = MdGeometry(layer);
+        press(layer, registry, MagicPortalsLayer::kBack);
+        CHECK_MSG(layer.Paused(), "Escape pauses");
+        const double age = layer.LevelAgeMs();
+        const double x = playerPx(registry, layer).x;
+        const glm::dvec2 resetCentre = g.box[MdAt(PtrControl::Reset)].Centre();
+        // On the left arrow's top row, clear of the pause's own sound and music switches in the bottom-left.
+        const glm::dvec2 padPoint(26.0, 212.0);
+        MdClick(layer, registry, PtrPixel(layer, resetCentre));
+        tap(layer, registry, PtrPixel(layer, padPoint));
+        lift(layer, registry, PtrPixel(layer, padPoint));
+        CHECK_MSG(layer.Paused() && layer.LevelAgeMs() == age && !PtrLatched(layer, "level_button") && playerPx(registry, layer).x == x,
+                  "under the pause a click where restart is, or a press on the left arrow, reloads, walks and unpauses nothing");
+        Hud::Rect rect;
+        CHECK_MSG(layer.ControlAt(resetCentre) == PtrClaim(PtrControl::Reset) && !layer.ControlRect(PtrControl::Left, rect) && !layer.ControlAt(padPoint),
+                  "(the layout, under a pause: restart is still shown, the arrow is not)");
+    }
+    // A popup: 1-02's, raised as it loads and closed by a touch.
+    {
+        MdRun run(MdPaths(), "level1", "NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd: a popup", glm::vec2(1280.0f, 720.0f), false);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        PtrRest(layer, registry, 2);
+        CHECK_MSG(layer.PopupOpen(), "1-02 raises its popup as it loads");
+        const MdGeom g = MdGeometry(layer);
+        const glm::vec2 home = PtrPixel(layer, g.box[MdAt(PtrControl::Reset)].Centre());
+        MdClick(layer, registry, home);
+        CHECK_MSG(!PtrLatched(layer, "level_button"), "a click where restart will be, under the popup, reloads nothing");
+        // Closed (by this click or the one that closes it), the level runs, and now the same click reloads it.
+        CloseTheLevelStartPopup(layer, registry);
+        PtrRest(layer, registry, 60);
+        CHECK_MSG(!layer.PopupOpen() && layer.LevelAgeMs() > 0.0, "the popup is gone and the level runs: " + PtrNum(layer.LevelAgeMs()));
+        MdClick(layer, registry, home);
+        CHECK_MSG(layer.LevelAgeMs() == 0.0 && PtrLatched(layer, "level_button"), "the control: a click on it now reloads the level");
+    }
+    // The door.
+    {
+        MdRun run(MdPaths(), "level0", "NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd: the door", glm::vec2(1280.0f, 720.0f), false);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const int door = WalkLevel0IntoItsDoor(layer, registry);
+        CHECK_MSG(door > 0 && layer.Finishing(), "level0's door is reached");
+        if (door < 0) return;
+        const MdGeom g = MdGeometry(layer);
+        const glm::dvec2 resetCentre = g.box[MdAt(PtrControl::Reset)].Centre();
+        const glm::dvec2 padPoint(26.0, 235.0);
+        const double age = layer.LevelAgeMs();
+        const int pad = layer.EndPadAlphaByte();
+        MdClick(layer, registry, PtrPixel(layer, resetCentre));
+        tap(layer, registry, PtrPixel(layer, padPoint));
+        lift(layer, registry, PtrPixel(layer, padPoint));
+        CHECK_MSG(layer.Finishing() && layer.LevelAgeMs() > age && !PtrLatched(layer, "level_button") && !layer.Paused(),
+                  "after the door a click where restart was reloads nothing and the level runs on");
+        Hud::Rect rect;
+        CHECK_MSG(pad > 0 && !layer.ControlRect(PtrControl::Reset, rect) && !layer.ControlAt(resetCentre),
+                  "(the layout after the door: restart is cut)");
+    }
+    // A death.
+    {
+        MdRun run(MdPaths(), "level5", "NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd: a death", glm::vec2(1280.0f, 720.0f), false);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        PtrRest(layer, registry, 300);
+        const MagicPortals::Hazards::Hazard* hazard = layer.SimLevel()->hazards.FindHazard("death_area_ent_800");
+        CHECK(hazard != nullptr);
+        if (hazard == nullptr) return;
+        auto& transform = registry.get<TransformComponent>(layer.SimLevel()->player);
+        transform.position = glm::vec3(hazard->box.centre, transform.position.z);
+        PtrRest(layer, registry, 2);
+        CHECK_MSG(layer.Dying(), "the player is dead");
+        Hud::Rect reset;
+        CHECK_MSG(layer.ControlRect(PtrControl::Reset, reset), "restart is being dismissed, still shown");
+        const double age = layer.LevelAgeMs();
+        MdClick(layer, registry, PtrPixel(layer, reset.Centre()));
+        tap(layer, registry, PtrPixel(layer, reset.Centre()));
+        lift(layer, registry, PtrPixel(layer, reset.Centre()));
+        CHECK_MSG(layer.Dying() && layer.LevelAgeMs() > age && !PtrLatched(layer, "level_button"),
+                  "after a death a click on the restart being dismissed reloads nothing");
+    }
+}
+
+// ---- the corner buttons act on the RELEASE inside their area, after a press inside it ----------------------------------------------------
+
+enum class MdStep { Down, Hold, Up, Click };
+
+struct MdMove {
+    MdStep step;
+    glm::dvec2 at; // where the pointer is on that tick, in view units
+};
+
+// One touch, tick by tick: Down is the press tick (held), Hold a held tick, Up the tick it comes up (the pointer where `at` says,
+// which is NOT where the layer reads the release: it reads the last point the touch was held at), Click a press and release in one tick.
+void MdPlay(MagicPortalsLayer& layer, entt::registry& registry, const std::vector<MdMove>& moves) {
+    for (const MdMove& move : moves) {
+        const glm::vec2 pixel = PtrPixel(layer, move.at);
+        switch (move.step) {
+        case MdStep::Down:
+            PtrHold(layer, registry, pixel, true);
+            break;
+        case MdStep::Hold:
+            PtrHold(layer, registry, pixel, false);
+            break;
+        case MdStep::Up:
+            lift(layer, registry, pixel);
+            break;
+        case MdStep::Click:
+            MdClick(layer, registry, pixel);
+            break;
+        }
+    }
+}
+
+// Whether `control` has acted, as the layer says it can be seen: restart reloaded the level (its age is back to zero), pause opened the
+// pause, clear-portals took the placed portal.
+bool MdActed(PtrControl control, const MagicPortalsLayer& layer) {
+    switch (control) {
+    case PtrControl::Reset:
+        return layer.LevelAgeMs() == 0.0;
+    case PtrControl::Menu:
+        return layer.Paused();
+    case PtrControl::Clear:
+        return layer.SimLevel()->portals.placed.empty();
+    default:
+        return false;
+    }
+}
+
+// A touch's sequences on one corner button, each on a fresh layer: the button acts on the release and only then, only for a touch whose
+// press began on it, and wherever the touch's last held point is - not where the release tick's own pointer is.
+void MdCornerSequences(PtrControl control, const char* name) {
+    const std::string title = std::string("ModernRestartPauseAndClearActOnTheReleaseInsideTheirHitRect: ") + name;
+    const auto sequences = [&](const glm::dvec2& in, const glm::dvec2& out, const glm::dvec2& other) {
+        return std::vector<std::pair<std::string, std::pair<std::vector<MdMove>, bool>>>{
+            {"a press and a release inside", {{{MdStep::Down, in}, {MdStep::Hold, in}, {MdStep::Up, in}}, true}},
+            {"a press inside, slid off, released outside", {{{MdStep::Down, in}, {MdStep::Hold, in}, {MdStep::Hold, out}, {MdStep::Up, out}}, false}},
+            {"a press inside, held inside, the release tick's pointer outside", {{{MdStep::Down, in}, {MdStep::Hold, in}, {MdStep::Up, out}}, true}},
+            {"a press outside, slid on, released inside", {{{MdStep::Down, out}, {MdStep::Hold, out}, {MdStep::Hold, in}, {MdStep::Up, in}}, false}},
+            {"a press inside, slid onto another control, released there", {{{MdStep::Down, in}, {MdStep::Hold, in}, {MdStep::Hold, other}, {MdStep::Up, other}}, false}},
+            {"a press inside, slid off and back, released inside", {{{MdStep::Down, in}, {MdStep::Hold, in}, {MdStep::Hold, out}, {MdStep::Hold, in}, {MdStep::Up, in}}, true}},
+            {"a click (press and release in one tick) inside", {{{MdStep::Click, in}}, true}},
+        };
+    };
+    int ran = 0;
+    for (std::size_t which = 0; which < 7; ++which) {
+        MdRun run(MdPaths(), "level30", title);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (control == PtrControl::Clear) {
+            shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+            landShot(layer, registry);
+            CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, title + ": a portal is placed, so clear-portals is shown");
+        }
+        const MdGeom g = MdGeometry(layer);
+        const glm::dvec2 in = g.box[MdAt(control)].Centre();
+        // The world, left of the corner buttons and clear of every control; and the neighbour's centre: pause for restart, restart for the others.
+        const glm::dvec2 out(150.0, 100.0);
+        const PtrControl neighbour = control == PtrControl::Reset ? PtrControl::Menu : PtrControl::Reset;
+        const glm::dvec2 other = g.box[MdAt(neighbour)].Centre();
+        CHECK_MSG(layer.ControlAt(in) == PtrClaim(control) && !layer.ControlAt(out) && layer.ControlAt(other) == PtrClaim(neighbour),
+                  title + ": the three points are on the button, in the world and on its neighbour: " + PtrName(layer.ControlAt(in)) + ", " +
+                      PtrName(layer.ControlAt(out)) + ", " + PtrName(layer.ControlAt(other)));
+        const auto all = sequences(in, out, other);
+        const auto& [what, move] = all[which];
+        const std::string where = title + ", " + what;
+        const MdShots shots = MdShotsOf(layer);
+        CHECK_MSG(!MdActed(control, layer), where + ": it has not acted before the touch");
+        MdPlay(layer, registry, move.first);
+        const bool acted = MdActed(control, layer);
+        CHECK_MSG(acted == move.second, where + ": " + (move.second ? "acts" : "acts on nothing") + ": it " + (acted ? "acted" : "did not act"));
+        if (control == PtrControl::Reset) {
+            CHECK_MSG(acted == PtrLatched(layer, "level_button"), where + ": and its sound is latched exactly when it acted");
+        } else if (control == PtrControl::Clear) {
+            CHECK_MSG(acted == PtrLatched(layer, "portal_spent"), where + ": and its sound is latched exactly when it acted");
+        }
+        if (neighbour == PtrControl::Menu) CHECK_MSG(!layer.Paused(), where + ": the neighbour did not act");
+        if (neighbour == PtrControl::Reset && control != PtrControl::Reset) CHECK_MSG(layer.LevelAgeMs() > 0.0, where + ": the neighbour did not act");
+        // Nothing the touch did was a shot: the press that began on the button spent the touch, and one that began in the world and came up on a
+        // control is that control's (no shot is fired toward a button).
+        CHECK_MSG(MdFiredNothingSince(layer, shots), where + ": the touch fired nothing");
+        if (acted && control == PtrControl::Clear) {
+            Hud::Rect rect;
+            CHECK_MSG(!layer.ControlRect(PtrControl::Clear, rect), where + ": clear-portals hides as it clears");
+        }
+        ++ran;
+    }
+    CHECK_MSG(ran == 7, title + ": seven sequences ran");
+}
+
+// The press alone acts on nothing: pressed and held on a button, then (separately) lifted, in two assertions on one layer per button.
+void MdCornerWaitsForTheRelease(PtrControl control, const char* name) {
+    const std::string title = std::string("ModernRestartPauseAndClearActOnTheReleaseInsideTheirHitRect: ") + name + " waits for the release";
+    MdRun run(MdPaths(), "level30", title);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (control == PtrControl::Clear) {
+        shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+        landShot(layer, registry);
+    }
+    const MdGeom g = MdGeometry(layer);
+    const glm::dvec2 in = g.box[MdAt(control)].Centre();
+    const glm::vec2 pixel = PtrPixel(layer, in);
+    CHECK_MSG(layer.ControlAt(in) == PtrClaim(control), title + ": the point is the button's");
+    PtrHold(layer, registry, pixel, true);
+    CHECK_MSG(!MdActed(control, layer), title + ": the press itself does nothing");
+    for (int tick = 0; tick < 5; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(!MdActed(control, layer), title + ": nor does holding it, 5 ticks");
+    lift(layer, registry, pixel);
+    CHECK_MSG(MdActed(control, layer), title + ": the release inside acts, on its own tick");
+}
+
+void ModernRestartPauseAndClearActOnTheReleaseInsideTheirHitRect() {
+    const struct {
+        PtrControl control;
+        const char* name;
+    } corners[] = {{PtrControl::Reset, "restart"}, {PtrControl::Menu, "pause"}, {PtrControl::Clear, "clear-portals"}};
+    for (const auto& corner : corners) {
+        MdCornerWaitsForTheRelease(corner.control, corner.name);
+        MdCornerSequences(corner.control, corner.name);
+    }
+    // And the variant that claims with the classic rules acts on the PRESS, as classic does: its corner rectangles are the classic ones.
+    {
+        MdRun run(MdPaths("modern", true), "level30", "ModernRestart...: the classic-claims variant");
+        if (!run.ok) return;
+        const glm::dvec2 view = run.layer.ViewPx();
+        const glm::dvec2 classicRestart(view.x - 48.0, 16.0);
+        CHECK_MSG(run.layer.ControlAt(classicRestart) == PtrClaim(PtrControl::Reset), "classic claims: restart is the classic rectangle (W-64..W-32, 0..32)");
+        PtrHold(run.layer, run.registry, PtrPixel(run.layer, classicRestart), true);
+        CHECK_MSG(run.layer.LevelAgeMs() == 0.0 && PtrLatched(run.layer, "level_button"), "and it reloads the level on the press itself");
+    }
+}
+
+// A press in the strip between a box and the view's edge is the control's: 5 units above the drawn box (and, for pause, 3 units from
+// the right edge), pressed and released there, the button acts.
+void AModernCornerPressInTheEdgeStripActs() {
+    const struct {
+        PtrControl control;
+        const char* name;
+        double dx;
+        double dy;
+    } rows[] = {
+        {PtrControl::Reset, "restart", 0.0, -5.0},
+        {PtrControl::Menu, "pause", 0.0, -5.0},
+        {PtrControl::Menu, "pause (its right strip)", 1000.0, 0.0},
+        {PtrControl::Clear, "clear-portals", 0.0, -5.0},
+        {PtrControl::Clear, "clear-portals (its left strip)", -1000.0, 0.0},
+    };
+    for (const auto& row : rows) {
+        const std::string title = std::string("AModernCornerPressInTheEdgeStripActs: ") + row.name;
+        MdRun run(MdPaths(), "level30", title);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (row.control == PtrControl::Clear) {
+            shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+            landShot(layer, registry);
+        }
+        const MdGeom g = MdGeometry(layer);
+        const Hud::Rect box = g.box[MdAt(row.control)];
+        // 1000 stands for "the view's edge": the strip's middle between the box and the edge.
+        const double x = row.dx > 0.0 ? (box.Max().x + g.view.x) * 0.5 : (row.dx < 0.0 ? box.min.x * 0.5 : box.Centre().x);
+        const double y = row.dy != 0.0 ? box.min.y + row.dy : box.Centre().y;
+        const glm::dvec2 at(x, y);
+        CHECK_MSG(!g.box[MdAt(row.control)].Contains(at) && g.hit[MdAt(row.control)].Contains(at) && layer.ControlAt(at) == PtrClaim(row.control),
+                  title + ": " + Point(at) + " is outside the drawn box and inside the control's hit rectangle: " + PtrName(layer.ControlAt(at)));
+        MdPlay(layer, registry, {{MdStep::Down, at}, {MdStep::Hold, at}});
+        CHECK_MSG(!MdActed(row.control, layer), title + ": the press does nothing");
+        MdPlay(layer, registry, {{MdStep::Up, at}});
+        CHECK_MSG(MdActed(row.control, layer), title + ": the release in the strip acts");
+    }
+}
+
+// Clear-portals is shown exactly while a portal is placed, hides as it clears, and the touch that cleared fires nothing; a touch in its
+// area while no portal exists is the world's, and a click on its box when it is shown clears a second time to nothing.
+void ModernClearHidesAsItClearsAndItsTouchFiresNothing() {
+    glm::dvec2 centre(0.0);
+    Hud::Rect rect;
+    {
+        MdRun run(MdPaths(), "level30", "ModernClearHidesAsItClearsAndItsTouchFiresNothing");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const MdGeom g = MdGeometry(layer);
+        centre = g.box[MdAt(PtrControl::Clear)].Centre();
+        CHECK_MSG(!layer.ControlRect(PtrControl::Clear, rect) && !layer.ControlAt(centre), "no portal: clear-portals is not shown and its place is the world");
+        // The world: a tap there fires toward it.
+        waitForFirstTap(layer, registry);
+        const glm::vec2 pixel = PtrPixel(layer, centre);
+        glm::dvec2 aimed(0.0);
+        CHECK(layer.ViewportToLevelPx(registry, pixel, aimed));
+        tap(layer, registry, pixel);
+        lift(layer, registry, pixel);
+        CHECK_MSG(glm::distance(PtrLastTap(layer), aimed) < 0.01, "a tap on the empty place fires toward it: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+        landShot(layer, registry);
+    }
+    // A portal, so that it is shown (the same shot as the classic case's).
+    MdRun second(MdPaths(), "level30", "ModernClearHidesAsItClearsAndItsTouchFiresNothing: with a portal");
+    if (!second.ok) return;
+    MagicPortalsLayer& with = second.layer;
+    entt::registry& registry2 = second.registry;
+    shoot(with, registry2, screenOf(registry2, glm::dvec2(250.0, 150.0)));
+    landShot(with, registry2);
+    CHECK_MSG(with.SimLevel()->portals.placed.size() == 1u && with.ControlRect(PtrControl::Clear, rect) && with.ControlAt(centre) == PtrClaim(PtrControl::Clear),
+              "a portal is placed, so clear-portals is shown and claims its place");
+    const int fired = with.SimLevel()->portals.shotsFired;
+    const glm::dvec2 lastTap = PtrLastTap(with);
+    MdPlay(with, registry2, {{MdStep::Down, centre}, {MdStep::Hold, centre}, {MdStep::Up, centre}});
+    CHECK_MSG(with.SimLevel()->portals.placed.empty() && PtrLatched(with, "portal_spent"), "the release clears the placed portals, with its sound");
+    CHECK_MSG(!with.ControlRect(PtrControl::Clear, rect) && !with.ControlAt(centre), "and clear-portals is gone from the same tick, its place the world again");
+    CHECK_MSG(with.SimLevel()->portals.shotsFired == fired && PtrLastTap(with) == lastTap && !with.SimLevel()->portals.flight,
+              "and the touch fired nothing into the corner it left");
+}
+
+// ---- what is drawn, and where ------------------------------------------------------------------------------------------------------------
+
+// The five controls at the window shapes the design tabulates: each drawn where it is laid out, laid out where table 1.2 says (the pair never
+// moves with the aspect; restart and pause hang from the right edge, so their x does), claimed at its centre.
+void TheSettledModernControlsAreTheirDrawnRectangles() {
+    struct Window {
+        const char* name;
+        glm::vec2 size;
+    };
+    for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"5:4", glm::vec2(900.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)},
+                                 Window{"3:2", glm::vec2(1080.0f, 720.0f)}, Window{"16:10", glm::vec2(1152.0f, 720.0f)}, Window{"21:9", glm::vec2(1680.0f, 720.0f)},
+                                 Window{"32:9", glm::vec2(2560.0f, 720.0f)}}) {
+        const std::string in = std::string(" at ") + window.name;
+        MdRun run(MdPaths(), "level30", std::string("TheSettledModernControlsAreTheirDrawnRectangles") + in, window.size);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        PtrRest(layer, registry, 5);
+        const MdGeom g = MdGeometry(layer);
+        const double W = 256.0 * static_cast<double>(window.size.x) / static_cast<double>(window.size.y);
+        // (The view's width is 256 x the viewport's aspect, which is a float: a window's exact ratio is not always one.)
+        CHECK_MSG(NearD(g.view.x, W, 1e-3) && NearD(layer.ViewPx().y, 256.0, 1e-9), std::string("the view is 256 units tall and ") + PtrNum(W) + " wide" + in);
+        // The design's numbers, from its own literals: the pair's rows are the window's; restart and pause hang from the right edge by the margin
+        // (15.6444) and the gap (11.3778) around boxes of 40.96, and the seam between them is the middle of the gap.
+        const double pauseX = W - 15.6444 - 40.96;
+        const double restartX = W - 67.9822 - 40.96;
+        const double middle = (restartX + 40.96 + pauseX) * 0.5;
+        const double box[5][4] = {{15.6444, 208.4978, 47.5022, 240.3556},
+                                  {58.8800, 208.4978, 90.7378, 240.3556},
+                                  {restartX, 15.6444, restartX + 40.96, 56.6044},
+                                  {pauseX, 15.6444, pauseX + 40.96, 56.6044},
+                                  {15.6444, 15.6444, 56.6044, 56.6044}};
+        const double hit[5][4] = {{0.0, 208.4978, 53.1911, 256.0},
+                                  {53.1911, 208.4978, 90.7378, 256.0},
+                                  {restartX, 0.0, middle, 56.6044},
+                                  {middle, 0.0, W, 56.6044},
+                                  {0.0, 0.0, 56.6044, 56.6044}};
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        for (const PtrControl control : {PtrControl::Left, PtrControl::Right, PtrControl::Reset, PtrControl::Menu}) {
+            const std::string name = std::string(kMdTable[MdAt(control)].key) + in;
+            Hud::Rect laid;
+            CHECK_MSG(layer.ControlRect(control, laid) && MdRectIs(laid, box[MdAt(control)], 2e-4), name + ": laid out at " + MdShow(laid));
+            CHECK_MSG(SameRect(laid, g.box[MdAt(control)], 1e-9), name + ": and the module's own box on the data");
+            CHECK_MSG(MdRectIs(g.hit[MdAt(control)], hit[MdAt(control)], 2e-4), name + ": its hit rectangle is " + MdShow(g.hit[MdAt(control)]));
+            const int quad = MdQuadOf(frame, layer.ModernImage(control));
+            CHECK_MSG(quad >= 0 && SameRect(OnView(layer, frame[static_cast<std::size_t>(quad < 0 ? 0 : quad)]), laid, 1e-3),
+                      name + ": drawn into its box (the generated picture's body is exactly the box's face)");
+            CHECK_MSG(layer.ControlAt(laid.Centre()) == PtrClaim(control), name + ": its centre is its own claim: " + PtrName(layer.ControlAt(laid.Centre())));
+        }
+        Hud::Rect clear;
+        CHECK_MSG(!layer.ControlRect(PtrControl::Clear, clear) && MdRectIs(g.box[MdAt(PtrControl::Clear)], box[4], 2e-4) && MdRectIs(g.hit[MdAt(PtrControl::Clear)], hit[4], 2e-4),
+                  std::string("clear-portals is not shown with no portal, and its place is the design's") + in);
+        // The INFO line, at 16:9, is table 1.2 to the printed digit (the layer logs it once at every level's start).
+        if (std::string(window.name) == "16:9") {
+            const std::string line =
+                "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(149.6,720.0) px, walk_right (165.6,586.4)-(255.2,676.0) px hit "
+                "(149.6,586.4)-(255.2,720.0) px, restart (973.6,44.0)-(1088.8,159.2) px hit (973.6,0.0)-(1104.8,159.2) px, pause (1120.8,44.0)-(1236.0,159.2) px "
+                "hit (1104.8,0.0)-(1280.0,159.2) px, clear_portals (44.0,44.0)-(159.2,159.2) px hit (0.0,0.0)-(159.2,159.2) px, in a 1280x720 px window (view "
+                "455.11x256.00 units)";
+            CHECK_MSG(layer.ControlsRectsLine() == line, std::string("the INFO line is table 1.2's: ") + layer.ControlsRectsLine());
+        }
+    }
+}
+
+// One tick's pad quad alpha, when the pad is drawn: the byte over 255, or -1.
+double MdPadAlpha(const std::vector<ScreenOverlay::Quad>& frame, const MagicPortalsLayer& layer, PtrControl pad) {
+    const int at = MdQuadOf(frame, layer.ModernImage(pad));
+    return at < 0 ? -1.0 : static_cast<double>(frame[static_cast<std::size_t>(at)].color.a);
+}
+
+// The pads are drawn at the classic pulse's own byte, at every tick of the opening and after (idle_scale and opacity 1.0 leave it alone), and
+// restart and pause at the flat 120 once they are in (their entrance is the original's, below).
+void TheModernPadsPulseTheClassicByte() {
+    for (const char* level : {"level0", "level30"}) {
+        const bool tutorial = std::string(level) == "level0";
+        MdRun run(MdPaths(), level, std::string("TheModernPadsPulseTheClassicByte: ") + level, glm::vec2(1280.0f, 720.0f), false);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const Hud::Rules& rules = layer.HudRules();
+        int wrong = 0;
+        int drawn = 0;
+        std::string first;
+        for (int tick = 1; tick <= 130; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+            const int byte = Controls::ClassicWalkAlphaByte(rules, layer.LevelAgeMs(), tutorial);
+            for (const PtrControl pad : {PtrControl::Left, PtrControl::Right}) {
+                const double alpha = MdPadAlpha(frame, layer, pad);
+                if (alpha >= 0.0) ++drawn;
+                if (!NearD(alpha, static_cast<double>(byte) / 255.0, 1e-6)) {
+                    if (wrong == 0) first = "tick " + std::to_string(tick) + " " + PtrName(pad) + " drew " + PtrNum(alpha * 255.0) + " of byte " + std::to_string(byte);
+                    ++wrong;
+                }
+            }
+        }
+        CHECK_MSG(wrong == 0, std::string(level) + ": every pad quad's alpha is the classic pulse's byte over 255 on 130 ticks: " + std::to_string(wrong) + " differ, the first " + first);
+        CHECK_MSG(drawn == 260, std::string(level) + ": both pads are drawn on all 130 ticks: " + std::to_string(drawn));
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        for (const PtrControl corner : {PtrControl::Reset, PtrControl::Menu}) {
+            const int at = MdQuadOf(frame, layer.ModernImage(corner));
+            CHECK_MSG(at >= 0 && NearD(frame[static_cast<std::size_t>(at < 0 ? 0 : at)].color.a, 120.0 / 255.0, 1e-6),
+                      std::string(level) + ": " + PtrName(corner) + " is drawn at the flat 120 of 255");
+        }
+    }
+}
+
+// The pads' end byte at a door is the classic byte and the modern pad decays from it exactly as the classic one does, a tick at a time: the
+// same byte on the same ticks in the two styles, and the modern picture's alpha is that byte over 255.
+void TheModernEndByteDecaysFromTheSameByte() {
+    std::vector<int> classic;
+    {
+        MdRun run(TestPaths(), "level0", "TheModernEndByteDecaysFromTheSameByte: classic", glm::vec2(1280.0f, 720.0f), false, Controls::Style::Classic);
+        if (!run.ok) return;
+        const int door = WalkLevel0IntoItsDoor(run.layer, run.registry);
+        CHECK_MSG(door == 217, "classic: holding right reaches level0's door on tick 217: " + std::to_string(door));
+        classic.push_back(run.layer.EndPadAlphaByte());
+        for (int tick = 0; tick < 30; ++tick) {
+            tickWith(run.layer, run.registry, kRest, {}, {});
+            classic.push_back(run.layer.EndPadAlphaByte());
+        }
+        CHECK_MSG(classic.front() == 163 && classic.back() < classic.front(), "classic: the end byte is 163 at the door and decays: " + std::to_string(classic.back()));
+    }
+    MdRun run(MdPaths(), "level0", "TheModernEndByteDecaysFromTheSameByte", glm::vec2(1280.0f, 720.0f), false);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const int door = WalkLevel0IntoItsDoor(layer, registry);
+    CHECK_MSG(door == 217, "modern: holding right reaches level0's door on tick 217: " + std::to_string(door));
+    int same = 0;
+    int drawnAs = 0;
+    for (std::size_t tick = 0; tick < classic.size(); ++tick) {
+        if (tick > 0) tickWith(layer, registry, kRest, {}, {});
+        if (layer.EndPadAlphaByte() == classic[tick]) ++same;
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const double alpha = MdPadAlpha(frame, layer, PtrControl::Left);
+        if (NearD(alpha, static_cast<double>(layer.EndPadAlphaByte()) / 255.0, 1e-6)) ++drawnAs;
+    }
+    CHECK_MSG(same == static_cast<int>(classic.size()), "the end byte is the classic layer's on all 31 ticks from the door's: " + std::to_string(same));
+    CHECK_MSG(drawnAs == static_cast<int>(classic.size()), "and the modern pad is drawn at it on all 31: " + std::to_string(drawnAs));
+}
+
+// The original's draw order, kept: the tutorial's rings first, restart and pause, then (clear-portals) the opening's black under the pads, the
+// pads, and the black over them.
+void TheModernPadsAreDrawnBetweenTheTwoBlacks() {
+    MdRun run(MdPaths(), "level0", "TheModernPadsAreDrawnBetweenTheTwoBlacks");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    const std::vector<int> blacks = BlackIndices(frame);
+    CHECK_MSG(blacks.size() == 2u, "the opening's two blacks are up at 800 ms: " + std::to_string(blacks.size()));
+    if (blacks.size() != 2u) return;
+    const int left = MdQuadOf(frame, layer.ModernImage(PtrControl::Left));
+    const int right = MdQuadOf(frame, layer.ModernImage(PtrControl::Right));
+    const int reset = MdQuadOf(frame, layer.ModernImage(PtrControl::Reset));
+    const int menu = MdQuadOf(frame, layer.ModernImage(PtrControl::Menu));
+    CHECK_MSG(left >= 0 && right >= 0 && reset >= 0 && menu >= 0, "all four controls are drawn");
+    CHECK_MSG(reset < menu && menu < blacks[0] && blacks[0] < left && left < right && right < blacks[1],
+              "restart, pause, the black under the pads, the left pad, the right pad, the black over them: " + std::to_string(reset) + ", " + std::to_string(menu) + ", " +
+                  std::to_string(blacks[0]) + ", " + std::to_string(left) + ", " + std::to_string(right) + ", " + std::to_string(blacks[1]));
+    // Each at its own alpha, and the blacks at the wall clock's.
+    const Hud::Rules& rules = layer.HudRules();
+    CHECK_MSG(NearD(frame[static_cast<std::size_t>(blacks[0])].color.a, Hud::OverlayLayersAlpha(rules, layer.LevelFrameWallMs(), rules.overlay.layers - rules.overlay.layersOverPads), 1e-6),
+              "the black under the pads is the wall clock's alpha");
+}
+
+// The tutorial's two rings, over each arrow's BOX centre, `size_over_box` boxes across at their fullest and growing as the classic ring does, in
+// the classic ring's own alpha, sliding in with the arrow; and drawn first, under everything.
+void TheModernRingFollowsTheArrowsBoxCentre() {
+    if (!OriginalArtIsThere("TheModernRingFollowsTheArrowsBoxCentre")) return;
+    MdRun run(MdPaths(), "level0", "TheModernRingFollowsTheArrowsBoxCentre", glm::vec2(1280.0f, 720.0f), false);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Hud::Rules& rules = layer.HudRules();
+    int seen = 0;
+    for (const int tick : {20, 40, 60, 120, 200}) {
+        while (layer.LayerTicks() < tick) tickWith(layer, registry, kRest, {}, {});
+        const Hud::Ring ring = Hud::RingAt(rules, layer.LevelAgeMs(), true);
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const std::string at = "tick " + std::to_string(tick);
+        if (!ring.shown) {
+            CHECK_MSG(CountImage(frame, rules.pads.ringSprite) == 0, at + ": the ring is not up, and none is drawn");
+            continue;
+        }
+        CHECK_MSG(CountImage(frame, rules.pads.ringSprite) == 2, at + ": two rings are drawn");
+        ++seen;
+        // Quads in the frame's order: the left ring, then the right.
+        std::vector<int> rings;
+        for (std::size_t i = 0; i < frame.size(); ++i) {
+            if (EndsWith(frame[i].texture, "/" + rules.pads.ringSprite)) rings.push_back(static_cast<int>(i));
+        }
+        if (rings.size() != 2u) continue;
+        Hud::Rect leftBox;
+        Hud::Rect rightBox;
+        CHECK(layer.ControlRect(PtrControl::Left, leftBox) && layer.ControlRect(PtrControl::Right, rightBox));
+        const double side = 3.125 * leftBox.size.x * ring.sizeUnits / rules.pads.ringSizeUnits;
+        const Hud::Rect want[2] = {Hud::Rect{leftBox.Centre() - glm::dvec2(side * 0.5), glm::dvec2(side)},
+                                   Hud::Rect{rightBox.Centre() - glm::dvec2(side * 0.5), glm::dvec2(side)}};
+        for (int which = 0; which < 2; ++which) {
+            const ScreenOverlay::Quad& quad = frame[static_cast<std::size_t>(rings[static_cast<std::size_t>(which)])];
+            CHECK_MSG(SameRect(OnView(layer, quad), want[which], 2e-3) && NearD(quad.color.a, ring.alpha, 1e-6),
+                      at + ": ring " + std::to_string(which) + " is centred on the arrow's box centre, " + PtrNum(side) + " across: " + ShowRect(OnView(layer, quad)) + " against " +
+                          ShowRect(want[which]));
+        }
+        const int restartQuad = MdQuadOf(frame, layer.ModernImage(PtrControl::Reset));
+        CHECK_MSG(restartQuad >= 0 && rings[0] < restartQuad && rings[1] < restartQuad && rings[0] < MdQuadOf(frame, layer.ModernImage(PtrControl::Left)),
+                  at + ": the rings are drawn first, under the controls");
+    }
+    CHECK_MSG(seen >= 3, "the ring was up on at least three of the five ticks: " + std::to_string(seen));
+}
+
+// The corner buttons come in as the original's UIButtons do and clear-portals does not: at 512 ms (tick 32) restart and pause are 2.8 units out
+// along the ray from the view's centre and not at their 120 yet; clear-portals, added with the first portal, is flat at its place and its 120. The
+// rectangles are the modern boxes, the entrance the original's: LevelEnd::HudEntered on the module's placements.
+void TheModernCornerButtonsComeInAsTheOriginalsDo() {
+    MdRun run(MdPaths(), "level30", "TheModernCornerButtonsComeInAsTheOriginalsDo", glm::vec2(1280.0f, 720.0f), false);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!PtrLandEarly(registry, layer, glm::vec2(1280.0f, 720.0f), "level30")) return;
+    while (layer.LayerTicks() < kEarlyTick) tickWith(layer, registry, kRest, {}, {});
+    const double age = layer.LevelAgeMs();
+    CHECK_MSG(NearD(age, static_cast<double>(kEarlyTick) * kScriptMs, 1e-9) && age < 700.0, "the level is 512 ms old, inside the 700 ms entrance: " + PtrNum(age));
+    const MdGeom g = MdGeometry(layer);
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    const auto alphaOf = [&](PtrControl control) {
+        const int at = MdQuadOf(frame, layer.ModernImage(control));
+        return at < 0 ? -1.0 : static_cast<double>(frame[static_cast<std::size_t>(at)].color.a);
+    };
+    constexpr double kHalfPi = 1.5707963267948966;
+    const double flat = 120.0 / 255.0;
+    Hud::Rect clear;
+    CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear), "clear-portals is shown the tick after its portal is placed");
+    CHECK_MSG(SameRect(clear, g.box[MdAt(PtrControl::Clear)], 1e-9) && MdRectIs(clear, kMdTable[MdAt(PtrControl::Clear)].box, 6e-5),
+              "clear-portals is at its box from its first frame (no entrance): " + ShowRect(clear));
+    CHECK_MSG(NearD(alphaOf(PtrControl::Clear), flat, 1e-6), "and drawn at the flat 120 of 255: " + PtrNum(alphaOf(PtrControl::Clear)));
+    CHECK_MSG(layer.ControlAt(clear.Centre()) == PtrClaim(PtrControl::Clear), "and its centre is its claim");
+    const double away = 32.0 * (1.0 - std::sin(age / 700.0 * kHalfPi));
+    const double enteringAlpha = 120.0 / 255.0 * std::floor(age / 700.0 * 255.0) / 255.0;
+    for (const PtrControl control : {PtrControl::Reset, PtrControl::Menu}) {
+        Hud::Rect now;
+        CHECK_MSG(layer.ControlRect(control, now), std::string(kMdTable[MdAt(control)].key) + " is shown, coming in");
+        const glm::dvec2 shift = now.min - g.box[MdAt(control)].min;
+        CHECK_MSG(NearD(glm::length(shift), away, 1e-6) && shift.x > 0.0 && shift.y < 0.0 && now.size == g.box[MdAt(control)].size,
+                  std::string(kMdTable[MdAt(control)].key) + " is " + PtrNum(away) + " units out from its box along the ray from the centre, up and to the right: " + Point(shift));
+        CHECK_MSG(NearD(alphaOf(control), enteringAlpha, 1e-6) && enteringAlpha < flat - 0.05,
+                  std::string(kMdTable[MdAt(control)].key) + " is drawn at " + PtrNum(enteringAlpha) + ", well below the flat " + PtrNum(flat) + ": " + PtrNum(alphaOf(control)));
+        CHECK_MSG(layer.ControlAt(now.Centre()) == PtrClaim(control), std::string(kMdTable[MdAt(control)].key) + "'s claim follows its sliding rectangle: " + PtrName(layer.ControlAt(now.Centre())));
+        // Its hit rectangle moved with the picture: the strip above it is still its own, shifted.
+        CHECK_MSG(layer.ControlAt(glm::dvec2(now.Centre().x, now.min.y - 3.0)) == PtrClaim(control) || now.min.y - 3.0 < 0.0,
+                  std::string(kMdTable[MdAt(control)].key) + ": and so is the strip above it");
+    }
+    const MagicPortals::LevelEnd::Dismissed asCorner = MagicPortals::LevelEnd::HudEntered(
+        layer.LevelEndRules(), Controls::PlacementFor(layer.ControlsRules(), layer.HudRules(), layer.ControlsApplied(), PtrControl::Clear, g.view, layer.ControlsPolicy().testInsets),
+        layer.HudRules().alphaByte, g.view, age);
+    CHECK_MSG(glm::length(asCorner.rect.min - clear.min) > 1.0 && asCorner.alpha < flat - 0.05,
+              "(clear-portals as a corner would be " + Point(asCorner.rect.min) + " at " + PtrNum(asCorner.alpha) + ")");
+}
+
+// ---- the claim map, pinned (the twin of TheClassicClaimMapIsPinned) ------------------------------------------------------------------------
+
+// The modern claim of every 4th unit of the view, at 16:9 and 4:3, at the same ticks as the classic map's (the arrows mid-slide, settled; restart
+// and pause coming in), clear-portals hidden and shown, with an early shot's state, the weightless level, the other two looks and three more
+// window shapes. tests/golden/modern_claim.json holds one FNV-1a hash of the claim codes per state, and the counts. It was recorded by this
+// binary (`--record-modern-golden`), checked against an independent model before it was kept, and is never re-recorded to make a change pass.
+GoldenEntries MdClaimEntries() {
+    GoldenEntries entries;
+    struct Window {
+        const char* name;
+        glm::vec2 size;
+    };
+    for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)}}) {
+        for (const bool clearShown : {false, true}) {
+            MdRun run(MdPaths(), "level30", std::string("the modern claim map, ") + window.name, window.size, false);
+            if (!run.ok) continue;
+            MagicPortalsLayer& layer = run.layer;
+            entt::registry& registry = run.registry;
+            if (clearShown) {
+                waitForFirstTap(layer, registry);
+                shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)) * (window.size / glm::vec2(1280.0f, 720.0f)));
+                landShot(layer, registry);
+                CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, std::string(window.name) + ": a portal is placed");
+            }
+            const std::vector<int> ticks = clearShown ? std::vector<int>{100, 313} : std::vector<int>{1, 7, 15, 22, 30, 40, 44, 313};
+            for (const int tick : ticks) {
+                CHECK_MSG(layer.LayerTicks() <= tick, std::string(window.name) + ": the layer is not past tick " + std::to_string(tick));
+                while (layer.LayerTicks() < tick) tickWith(layer, registry, kRest, {}, {});
+                Hud::Rect clear;
+                CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear) == clearShown,
+                          std::string(window.name) + " tick " + std::to_string(tick) + ": clear-portals is " + (clearShown ? "shown" : "hidden"));
+                char key[112];
+                std::snprintf(key, sizeof(key), "modern claim %s clear=%d tick %d age %.0f ms", window.name, clearShown ? 1 : 0, tick, layer.LevelAgeMs());
+                entries[key] = PtrClaimSnapshot(layer);
+            }
+        }
+    }
+    // Clear-portals shown while restart and pause still slide in: the one state where its flat place differs from a corner's entrance.
+    {
+        MdRun run(MdPaths(), "level30", "the modern claim map, an early shot", glm::vec2(1280.0f, 720.0f), false);
+        if (run.ok && PtrLandEarly(run.registry, run.layer, glm::vec2(1280.0f, 720.0f), "16:9")) {
+            while (run.layer.LayerTicks() < kEarlyTick) tickWith(run.layer, run.registry, kRest, {}, {});
+            Hud::Rect clear;
+            CHECK_MSG(run.layer.ControlRect(PtrControl::Clear, clear), "16:9 tick " + std::to_string(kEarlyTick) + ": clear-portals is shown");
+            char key[112];
+            std::snprintf(key, sizeof(key), "modern claim 16:9 clear=1 tick %d age %.0f ms (an early shot)", kEarlyTick, run.layer.LevelAgeMs());
+            entries[key] = PtrClaimSnapshot(run.layer);
+        }
+    }
+    // Settled states at tick 60: the weightless level (no pair), the gravity level beside it, the other two looks, three more window shapes.
+    const struct {
+        const char* what;
+        std::string flag;
+        const char* level;
+        glm::vec2 window;
+    } settled[] = {
+        {"4-02 weightless, 16:9", "modern", "level1c", glm::vec2(1280.0f, 720.0f)},
+        {"4-01 with gravity, 16:9", "modern", "level0c", glm::vec2(1280.0f, 720.0f)},
+        {"preset=balanced, 16:9", "modern,preset=balanced", "level30", glm::vec2(1280.0f, 720.0f)},
+        {"preset=mr, 16:9", "modern,preset=mr", "level30", glm::vec2(1280.0f, 720.0f)},
+        {"5:4", "modern", "level30", glm::vec2(900.0f, 720.0f)},
+        {"21:9", "modern", "level30", glm::vec2(1680.0f, 720.0f)},
+        {"32:9", "modern", "level30", glm::vec2(2560.0f, 720.0f)},
+    };
+    for (const auto& state : settled) {
+        MdRun run(MdPaths(state.flag), state.level, std::string("the modern claim map, ") + state.what, state.window, false);
+        if (!run.ok) continue;
+        while (run.layer.LayerTicks() < 60) tickWith(run.layer, run.registry, kRest, {}, {});
+        char key[160];
+        std::snprintf(key, sizeof(key), "modern claim %s (%s) tick 60 age %.0f ms", state.what, state.level, run.layer.LevelAgeMs());
+        entries[key] = PtrClaimSnapshot(run.layer);
+    }
+    return entries;
+}
+
+// Like PtrCheckGolden, with the hint that names the recorder of the modern one.
+void MdCheckGolden(const char* file, const GoldenEntries& now) {
+    GoldenEntries golden;
+    std::string error;
+    const bool read = PtrReadGolden(kGoldenDir + "/" + file, golden, error);
+    CHECK_MSG(read, error + " - record it with: test_mp test_mp_layer --record-modern-golden <tests/golden>");
+    if (!read) return;
+    for (const auto& [key, value] : now) {
+        const auto found = golden.find(key);
+        CHECK_MSG(found != golden.end() && found->second == value,
+                  std::string(file) + ": \"" + key + "\" is now " + value + ", the golden has " + (found == golden.end() ? std::string("no such entry") : found->second));
+    }
+    for (const auto& [key, value] : golden) {
+        CHECK_MSG(now.find(key) != now.end(), std::string(file) + ": the golden's \"" + key + "\" was not produced now");
+    }
+}
+
+void TheModernClaimMapIsPinned() {
+    const GoldenEntries now = MdClaimEntries();
+    // 2 windows x (8 ticks clear hidden + 2 ticks clear shown) + 1 early-shot state + 7 settled states.
+    CHECK_MSG(now.size() == 28u, "28 modern claim snapshots: " + std::to_string(now.size()));
+    MdCheckGolden("modern_claim.json", now);
+}
+
+// ---- the modern rectangles are half-open at the view's far edges (the plan's carry-over 7) ------------------------------------------------
+
+// A point at x == W or y == H is no modern control's (the rectangles are [min, max)), where classic's closed pause rectangle and discs claim it.
+// Decided, and said in the step: a pointer exactly on the view's far edge is the world's under the modern controls.
+void TheModernRectanglesAreHalfOpenAtTheViewsFarEdges() {
+    const struct {
+        const char* what;
+        bool classicClaims;
+    } layers[] = {{"modern", false}, {"the classic-claims variant", true}};
+    for (const auto& which : layers) {
+        MdRun run(MdPaths("modern", which.classicClaims), "level30", std::string("TheModernRectanglesAreHalfOpenAtTheViewsFarEdges: ") + which.what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        const double W = layer.ViewPx().x;
+        const double H = layer.ViewPx().y;
+        const double inside = std::nextafter(W, 0.0);
+        const std::string in = std::string(which.what) + ": ";
+        if (!which.classicClaims) {
+            for (const double y : {1.0, 28.0, 56.5}) {
+                CHECK_MSG(!layer.ControlAt(glm::dvec2(W, y)), in + "x == W at y " + PtrNum(y) + " is no control's: " + PtrName(layer.ControlAt(glm::dvec2(W, y))));
+                CHECK_MSG(layer.ControlAt(glm::dvec2(inside, y)) == PtrClaim(PtrControl::Menu), in + "and the double just inside it is pause's");
+            }
+            for (const double x : {1.0, 26.0, 80.0}) {
+                CHECK_MSG(!layer.ControlAt(glm::dvec2(x, H)), in + "y == H at x " + PtrNum(x) + " is no control's: " + PtrName(layer.ControlAt(glm::dvec2(x, H))));
+                CHECK_MSG(layer.ControlAt(glm::dvec2(x, std::nextafter(H, 0.0))).has_value(), in + "and the double just above it is an arrow's");
+            }
+            CHECK_MSG(!layer.ControlAt(glm::dvec2(W, H)) && !layer.ControlAt(glm::dvec2(0.0, H)), in + "nor are the view's two bottom corners");
+            // The far edges' near neighbours are claimed: the top row and the left column are inside (min edges are closed).
+            CHECK_MSG(layer.ControlAt(glm::dvec2(inside, 0.0)) == PtrClaim(PtrControl::Menu) && layer.ControlAt(glm::dvec2(0.0, 230.0)) == PtrClaim(PtrControl::Left),
+                      in + "while the top row and the left column are inside (the min edges are closed)");
+        } else {
+            CHECK_MSG(layer.ControlAt(glm::dvec2(W, 16.0)) == PtrClaim(PtrControl::Menu) && layer.ControlAt(glm::dvec2(26.0, H)) == PtrClaim(PtrControl::Left) &&
+                          layer.ControlAt(glm::dvec2(W, H)) == PtrClaim(PtrControl::Right),
+                      in + "classic's closed rectangles and discs claim x == W and y == H: " + PtrName(layer.ControlAt(glm::dvec2(W, 16.0))) + ", " +
+                          PtrName(layer.ControlAt(glm::dvec2(26.0, H))) + ", " + PtrName(layer.ControlAt(glm::dvec2(W, H))));
+        }
+    }
+}
+
+// ---- the three looks (K2) -------------------------------------------------------------------------------------------------------------------
+
+// `--controls modern,preset=<look>` draws the owner's three candidates: the box a look has, from the design's own constants (128 px a box
+// at size 1.0, margins of 44 px and a gap of 32 px, a bottom margin of 44 / 34 / 11 px, at 2.8125 px a unit), the pair's top at or below
+// the character's row (206), and the claim at the pair's top edge.
+void TheThreeLooksAreTheDesignsPairTops() {
+    const double unit = 256.0 / 720.0;
+    const struct {
+        const char* flag;
+        const char* name;
+        double size;
+        double bottomPx;
+        Controls::Preset preset;
+    } looks[] = {
+        {"modern", "uniform", 0.7, 44.0, Controls::Preset::Uniform},
+        {"modern,preset=uniform", "uniform, asked for", 0.7, 44.0, Controls::Preset::Uniform},
+        {"modern,preset=balanced", "balanced", 0.8, 34.0, Controls::Preset::Balanced},
+        {"modern,preset=mr", "mr", 1.0, 11.0, Controls::Preset::Mr},
+    };
+    std::set<std::string> lines;
+    for (const auto& look : looks) {
+        const std::string title = std::string("TheThreeLooksAreTheDesignsPairTops: ") + look.name;
+        MdRun run(MdPaths(look.flag), "level30", title);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        const double side = 128.0 * look.size * unit;
+        const double top = 256.0 - look.bottomPx * unit - side;
+        const double leftX = 44.0 * unit;
+        const double rightX = leftX + side + 32.0 * unit;
+        Hud::Rect left;
+        Hud::Rect right;
+        Hud::Rect restart;
+        CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && layer.ControlRect(PtrControl::Right, right) && layer.ControlRect(PtrControl::Reset, restart),
+                  title + ": the pair and restart are shown");
+        CHECK_MSG(NearD(left.size.x, side, 1e-6) && NearD(left.min.x, leftX, 1e-6) && NearD(left.min.y, top, 1e-6) && NearD(right.min.x, rightX, 1e-6) &&
+                      NearD(right.min.y, top, 1e-6) && NearD(right.size.y, side, 1e-6),
+                  title + ": the pair is " + PtrNum(side) + " units a box with its top at " + PtrNum(top) + ": " + ShowRect(left) + ", " + ShowRect(right));
+        CHECK_MSG(top >= 206.0 && NearD(restart.size.x, 40.96, 1e-6), title + ": the top is at or below the character's row (206) and restart keeps its 40.96: " + PtrNum(top));
+        CHECK_MSG(layer.ControlsApplied().PresetIn(layer.ControlsRules()) == look.preset, title + ": the look in force is the one asked for");
+        CHECK_MSG(layer.ControlAt(glm::dvec2(leftX + 1.0, top - 0.01)).has_value() == false && layer.ControlAt(glm::dvec2(leftX + 1.0, top + 0.01)) == PtrClaim(PtrControl::Left) &&
+                      layer.ControlAt(glm::dvec2(rightX + 1.0, top + 0.01)) == PtrClaim(PtrControl::Right),
+                  title + ": the claim begins at the pair's top edge");
+        lines.insert(layer.ControlsRectsLine());
+    }
+    // uniform twice (default and asked for) and two others: three distinct INFO lines.
+    CHECK_MSG(lines.size() == 3u, "three looks, three different INFO lines: " + std::to_string(lines.size()));
+}
+
+// ---- the flag's keys are held, not applied, before CTL-10 (carry-over 4) -------------------------------------------------------------------
+
+struct MdSnap {
+    bool ok = false;
+    std::string line;
+    std::string rects;
+    std::array<Hud::Rect, 5> box;
+    std::array<bool, 5> shown{};
+    std::uint64_t hud = 0;
+    std::vector<int> claims;
+    Controls::Tuning tuning;
+    Controls::Tuning applied;
+    Controls::Rules rules;
+};
+
+MdSnap MdSnapshotOf(const std::string& flag) {
+    MdSnap snap;
+    MdRun run(MdPaths(flag), "level30", "the snapshot of --controls " + flag);
+    if (!run.ok) return snap;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)));
+    landShot(layer, registry);
+    snap.line = layer.ControlsLine();
+    snap.rects = layer.ControlsRectsLine();
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        Hud::Rect rect;
+        snap.shown[MdAt(id)] = layer.ControlRect(id, rect);
+        snap.box[MdAt(id)] = rect;
+    }
+    snap.hud = PtrHashQuads(HudFrame(registry, layer));
+    const glm::dvec2 view = layer.ViewPx();
+    for (double y = 0.0; y <= view.y; y += 16.0) {
+        for (double x = 0.0; x <= view.x; x += 16.0) {
+            const PtrClaim claim = layer.ControlAt(glm::dvec2(x, y));
+            snap.claims.push_back(claim ? static_cast<int>(*claim) : -1);
+        }
+    }
+    snap.tuning = layer.ControlsTuning();
+    snap.applied = layer.ControlsApplied();
+    snap.rules = layer.ControlsRules();
+    snap.ok = true;
+    return snap;
+}
+
+// `--controls modern,size=1.4,opacity=1.8,walk_left=10:10` is read (every key on the table's grids) and HELD, and the layout it lays out is
+// the same one `--controls modern` lays out - the boxes, the INFO line, the HUD's every quad, the claim over the view - because the plan applies
+// size, opacity and moves at CTL-10. `preset=` is the one key that is the LOOK and is applied now.
+void TheFlagsKeysAreHeldNotAppliedBeforeCTL10() {
+    const MdSnap plain = MdSnapshotOf("modern");
+    const MdSnap keyed = MdSnapshotOf("modern,size=1.4,opacity=1.8,walk_left=10:10");
+    const MdSnap look = MdSnapshotOf("modern,preset=balanced,size=1.4");
+    if (!plain.ok || !keyed.ok || !look.ok) return;
+    // Read and held on the tuning...
+    CHECK_MSG(plain.tuning.IsDefault(plain.rules), "plain: the tuning is the base");
+    CHECK_MSG(keyed.tuning.Size(keyed.rules) == 1.4 && keyed.tuning.Opacity(keyed.rules) == 1.8 && keyed.tuning.move[MdAt(PtrControl::Left)] == glm::dvec2(10.0, 10.0),
+              "the keys are read onto the tuning: size 1.4, opacity 1.8 and walk_left moved by (10, 10)");
+    // ... and not what the layout is laid out with.
+    CHECK_MSG(!keyed.applied.sizeSteps && !keyed.applied.opacitySteps && !keyed.applied.preset &&
+                  std::all_of(keyed.applied.move.begin(), keyed.applied.move.end(), [](const glm::dvec2& move) { return move == glm::dvec2(0.0); }),
+              "what the layout applies holds no size, no opacity, no look and no move");
+    CHECK_MSG(keyed.rects == plain.rects && !plain.rects.empty(), "the INFO line is the plain run's: " + keyed.rects);
+    int sameBoxes = 0;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::size_t at = MdAt(id);
+        if (keyed.shown[at] == plain.shown[at] && SameRect(keyed.box[at], plain.box[at], 1e-12)) ++sameBoxes;
+    }
+    CHECK_MSG(sameBoxes == 5, "all five boxes are the plain run's, clear-portals included: " + std::to_string(sameBoxes));
+    CHECK_MSG(keyed.hud == plain.hud && keyed.hud != 0, "every HUD quad is the plain run's: " + PtrHex(keyed.hud) + " against " + PtrHex(plain.hud));
+    CHECK_MSG(keyed.claims == plain.claims && !plain.claims.empty(), "and so is the claim over the view");
+    // The look is applied: preset=balanced with a size beside it is balanced's own 0.8 and not the 1.4.
+    CHECK_MSG(look.applied.preset == Controls::Preset::Balanced && !look.applied.sizeSteps, "preset=balanced is applied and the size beside it is not");
+    CHECK_MSG(NearD(look.box[MdAt(PtrControl::Left)].size.x, 128.0 * 0.8 * 256.0 / 720.0, 1e-6) && look.rects != plain.rects,
+              "so the pair is balanced's 0.8 box, " + PtrNum(look.box[MdAt(PtrControl::Left)].size.x) + " units");
+}
+
+// ---- the INFO line names the window the run is in -------------------------------------------------------------------------------------------
+
+// The game attaches its layers BEFORE the first frame publishes the viewport, so the first level's start does not know the window: a line said
+// then would name the default 1280x720 whatever the window was (the captures at 960x720 and 1680x720 did exactly that). The layer says it on
+// the first tick instead, and says the window's own size and the corner buttons where that window puts them (the pair never moves: it hangs from
+// the bottom-left corner in pixels).
+void TheModernRectanglesLineNamesTheWindowItIsIn() {
+    const struct {
+        const char* name;
+        glm::vec2 window;
+        const char* view;
+    } rows[] = {
+        {"4:3", glm::vec2(960.0f, 720.0f), "341.33x256.00"},
+        {"21:9", glm::vec2(1680.0f, 720.0f), "597.33x256.00"},
+        {"16:9", glm::vec2(1280.0f, 720.0f), "455.11x256.00"},
+    };
+    for (const auto& row : rows) {
+        const std::string what = std::string("TheModernRectanglesLineNamesTheWindowItIsIn: ") + row.name;
+        entt::registry registry; // no viewport yet, as at the game's attach
+        MagicPortalsLayer layer(MdPaths(), "level30");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.LoadError().empty() && layer.SimLevel() != nullptr, what + " loads: " + layer.LoadError());
+        if (!MdStyleIs(layer, Controls::Style::Modern, what)) {
+            layer.OnDetach(registry);
+            continue;
+        }
+        CHECK_MSG(layer.ControlsRectsLine().empty(), what + ": before any frame has published the viewport the line is not said: '" + layer.ControlsRectsLine() + "'");
+        publishViewport(registry, row.window);
+        tickWith(layer, registry, kRest, {}, {});
+        const double wx = static_cast<double>(row.window.x);
+        char restart[200];
+        char pause[200];
+        std::snprintf(restart, sizeof(restart), "restart (%.1f,44.0)-(%.1f,159.2) px hit (%.1f,0.0)-(%.1f,159.2) px", wx - 306.4, wx - 191.2, wx - 306.4, wx - 175.2);
+        std::snprintf(pause, sizeof(pause), "pause (%.1f,44.0)-(%.1f,159.2) px hit (%.1f,0.0)-(%.1f,159.2) px", wx - 159.2, wx - 44.0, wx - 175.2, wx);
+        const std::string line = layer.ControlsRectsLine();
+        const std::string size = std::string("in a ") + std::to_string(static_cast<int>(row.window.x)) + "x720 px window (view " + row.view + " units)";
+        CHECK_MSG(line.rfind("controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(149.6,720.0) px, walk_right ", 0) == 0,
+                  what + ": the pair is where it is at every window: " + line);
+        CHECK_MSG(line.find(restart) != std::string::npos && line.find(pause) != std::string::npos,
+                  what + ": restart and pause hang from the right edge of THIS window: " + line);
+        CHECK_MSG(line.size() >= size.size() && line.compare(line.size() - size.size(), size.size(), size) == 0, what + ": and the line ends by naming it: " + line);
+        layer.OnDetach(registry);
+    }
+}
+
+// ---- the modern layer with no picture, with no scratch directory, and its hard-rule limits ---------------------------------------------------------
+
+// Classic's rule is "no picture, no control": with the level's art directory empty the five classic controls are dropped, and a tap that
+// would have worked one fires into the world. The modern five are built from the start and never dropped for a missing picture.
+void AModernControlIsNeverDroppedForAMissingPicture() {
+    const std::filesystem::path empty = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-no-art";
+    std::error_code ec;
+    std::filesystem::create_directories(empty, ec);
+    for (const bool modern : {false, true}) {
+        MagicPortalsLayer::Paths paths = modern ? MdPaths() : TestPaths();
+        paths.art = empty.string();
+        const std::string what = std::string("AModernControlIsNeverDroppedForAMissingPicture: ") + (modern ? "modern" : "classic");
+        MdRun run(paths, "level30", what, glm::vec2(1280.0f, 720.0f), true, modern ? Controls::Style::Modern : Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(!layer.ArtError().empty(), what + ": the level's art is missing");
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const glm::dvec2 view = layer.ViewPx();
+        int claimed = 0;
+        int drawn = 0;
+        Hud::Rect rect;
+        for (const PtrControl control : {PtrControl::Left, PtrControl::Right, PtrControl::Reset, PtrControl::Menu}) {
+            const bool shown = layer.ControlRect(control, rect);
+            const glm::dvec2 centre = shown ? rect.Centre() : glm::dvec2(view.x * 0.5, 100.0);
+            if (layer.ControlAt(centre) == PtrClaim(control)) ++claimed;
+            if (modern && MdQuadOf(frame, layer.ModernImage(control)) >= 0) ++drawn;
+            CHECK_MSG(shown == modern, what + ": " + PtrName(control) + " is " + (shown ? "shown" : "not shown"));
+        }
+        if (modern) {
+            CHECK_MSG(claimed == 4 && drawn == 4, what + ": all four are claimed and drawn (the generated pictures need no art): " + std::to_string(claimed) + ", " + std::to_string(drawn));
+        } else {
+            const Hud::Rules& rules = layer.HudRules();
+            CHECK_MSG(claimed == 0 && CountImage(frame, rules.pads.leftSprite) == 0 && CountImage(frame, rules.restart.sprite) == 0,
+                      what + ": classic drops every control whose picture it cannot read: " + std::to_string(claimed) + " claimed");
+        }
+    }
+}
+
+// With no art to read and no scratch directory to write (Paths::prisms empty) the five are FLAT QUADS on their boxes' faces, in the plate's own
+// light colour, at the alpha the picture would have had: nothing is dropped and no file is made.
+void ModernRunsWithNoOriginalArtDrawFlatQuads() {
+    const ControlsScratchGuard scratch;
+    const std::filesystem::path empty = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-no-art";
+    std::error_code ec;
+    std::filesystem::create_directories(empty, ec);
+    // A level cannot load with an empty Paths::prisms (its colliders are written there), so the picture-less run is reached by the other way
+    // the generated tier fails: the picture cannot be WRITTEN. A scratch copy of the data names every generated file ".", which is a directory
+    // of the scratch directory and cannot be opened as a file: the layer says so once for each and draws a flat quad (design 4.2, tier 4).
+    const std::string data = ControlsScratchData("flat-quads", [](const std::string& text) {
+        std::string edited = text;
+        std::size_t at = 0;
+        int renamed = 0;
+        while ((at = edited.find("\"modern_", at)) != std::string::npos) {
+            const std::size_t end = edited.find(".png\"", at);
+            if (end == std::string::npos) break;
+            edited.replace(at + 1, end + 4 - (at + 1), ".");
+            ++renamed;
+            at += 3;
+        }
+        CHECK_MSG(renamed == 5, "controls.json names the five generated pictures this case renames: " + std::to_string(renamed));
+        return std::optional<std::string>(edited);
+    });
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.art = empty.string();
+    paths.portData = data;
+    std::vector<int> flatClaims;
+    {
+        MdRun run(paths, "level30", "ModernRunsWithNoOriginalArtDrawFlatQuads");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(!layer.ArtError().empty(), "the level's art is missing too");
+        for (const Controls::Id id : Controls::kClaimOrder) CHECK_MSG(layer.ModernImage(id).empty(), std::string(kMdTable[MdAt(id)].key) + ": no picture was made");
+        const MdGeom g = MdGeometry(layer);
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const std::vector<int> flat = MdFlatQuads(frame);
+        CHECK_MSG(flat.size() == 4u, "four flat quads (clear-portals is not shown): " + std::to_string(flat.size()));
+        // Each on its box's solid face: the box shrunk by 14 / 128 of it on every side.
+        for (const PtrControl control : {PtrControl::Left, PtrControl::Right, PtrControl::Reset, PtrControl::Menu}) {
+            const Hud::Rect box = g.box[MdAt(control)];
+            const Hud::Rect face{box.min + box.size * 0.109375, box.size * 0.78125};
+            int found = -1;
+            for (const int index : flat) {
+                if (SameRect(OnView(layer, frame[static_cast<std::size_t>(index)]), face, 1e-3)) found = index;
+            }
+            CHECK_MSG(found >= 0, std::string(kMdTable[MdAt(control)].key) + ": a flat quad on its face " + MdShow(face));
+            if (found < 0) continue;
+            const double alpha = static_cast<double>(frame[static_cast<std::size_t>(found)].color.a);
+            const double want = (control == PtrControl::Left || control == PtrControl::Right)
+                                    ? Controls::ClassicWalkAlphaByte(layer.HudRules(), layer.LevelAgeMs(), false) / 255.0
+                                    : 120.0 / 255.0;
+            CHECK_MSG(NearD(alpha, want, 1e-6), std::string(kMdTable[MdAt(control)].key) + ": at the alpha its picture would have: " + PtrNum(alpha * 255.0));
+            CHECK_MSG(layer.ControlAt(box.Centre()) == PtrClaim(control), std::string(kMdTable[MdAt(control)].key) + ": and claimed as ever");
+        }
+        const glm::dvec2 flatView = layer.ViewPx();
+        for (double y = 0.0; y <= flatView.y; y += 8.0) {
+            for (double x = 0.0; x <= flatView.x; x += 8.0) {
+                const PtrClaim claim = layer.ControlAt(glm::dvec2(x, y));
+                flatClaims.push_back(claim ? static_cast<int>(*claim) : -1);
+            }
+        }
+    }
+    // The picture-less run claims exactly what the pictured one does.
+    MdRun pictured(MdPaths(), "level30", "ModernRunsWithNoOriginalArtDrawFlatQuads: with pictures");
+    if (!pictured.ok) return;
+    std::vector<int> pictureClaims;
+    const glm::dvec2 view = pictured.layer.ViewPx();
+    for (double y = 0.0; y <= view.y; y += 8.0) {
+        for (double x = 0.0; x <= view.x; x += 8.0) {
+            const PtrClaim claim = pictured.layer.ControlAt(glm::dvec2(x, y));
+            pictureClaims.push_back(claim ? static_cast<int>(*claim) : -1);
+        }
+    }
+    CHECK_MSG(!flatClaims.empty() && flatClaims == pictureClaims, "the claim over the view does not depend on the pictures");
+}
+
+// THE HARD RULE, as far as a test can see it: the five pictures the layer draws are the pixels sim/PadArt draws, written as PNGs into the
+// directory the layer is given for what it generates (Paths::prisms - a temporary one in main and in every suite), and nowhere else: not
+// beside the saves, not under the repository. A classic run writes none. No Asantee byte is involved: the pictures are arithmetic.
+void TheModernPicturesAreWrittenOnlyToTheScratchDirectory() {
+    const ControlsScratchGuard scratch;
+    MagicPortalsLayer::Paths paths = MdPaths();
+    const std::string saves = ControlsScratchSaves("pictures");
+    paths.saveDir = saves;
+    std::error_code ec;
+    const std::filesystem::path repository = std::filesystem::path(MAGICPORTALS_GOLDEN_DIR).parent_path().parent_path();
+    // The files of an earlier run are removed first, so that what is found was written by THIS run.
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        std::filesystem::remove(paths.prisms / (std::string("modern_") + Controls::KeyOf(id) + ".png"), ec);
+    }
+    {
+        MdRun classic(TestPaths(), "level30", "TheModernPicturesAreWrittenOnlyToTheScratchDirectory: classic", glm::vec2(1280.0f, 720.0f), false, Controls::Style::Classic);
+        if (!classic.ok) return;
+        int written = 0;
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            written += std::filesystem::exists(paths.prisms / (std::string("modern_") + Controls::KeyOf(id) + ".png"), ec) ? 1 : 0;
+            CHECK_MSG(classic.layer.ModernImage(id).empty(), std::string(Controls::KeyOf(id)) + ": a classic run makes no modern picture");
+        }
+        CHECK_MSG(written == 0 && classic.layer.ControlsRectsLine().empty(), "a classic run writes no modern picture and logs no modern rectangles");
+    }
+    MdRun run(paths, "level30", "TheModernPicturesAreWrittenOnlyToTheScratchDirectory");
+    if (!run.ok) return;
+    int exact = 0;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::string name = Controls::KeyOf(id);
+        const std::string image = run.layer.ModernImage(id);
+        CHECK_MSG(!image.empty(), name + ": it has a picture");
+        if (image.empty()) continue;
+        const std::filesystem::path file(image);
+        CHECK_MSG(std::filesystem::equivalent(file.parent_path(), paths.prisms, ec) && file.filename().string() == "modern_" + name + ".png",
+                  name + ": written into Paths::prisms as modern_" + name + ".png: " + image);
+        const std::string normal = file.lexically_normal().generic_string();
+        const std::string repo = repository.lexically_normal().generic_string();
+        CHECK_MSG(normal.compare(0, repo.size(), repo) != 0, name + ": and not under the repository " + repo);
+        CHECK_MSG(normal.find(std::filesystem::path(saves).lexically_normal().generic_string()) == std::string::npos, name + ": nor beside the saves");
+        int w = 0;
+        int h = 0;
+        int n = 0;
+        stbi_uc* pixels = stbi_load(image.c_str(), &w, &h, &n, 4);
+        CHECK_MSG(pixels != nullptr && w == 128 && h == 128, name + ": a 128 x 128 PNG (the box in pixels, controls.json layout.box_px)");
+        if (pixels == nullptr) continue;
+        const PadArt::Bitmap drawn = PadArt::Draw(PadArt::GlyphOf(id), 128, 0.109375);
+        const bool same = w == 128 && h == 128 && !drawn.Empty() && std::memcmp(pixels, drawn.rgba.data(), drawn.rgba.size()) == 0;
+        CHECK_MSG(same, name + ": every byte is what sim/PadArt draws (arithmetic, no file read)");
+        if (same) ++exact;
+        stbi_image_free(pixels);
+    }
+    CHECK_MSG(exact == 5, "five pictures, each exactly the glyph: " + std::to_string(exact));
+    bool stray = false;
+    for (const auto& entry : std::filesystem::directory_iterator(saves, ec)) {
+        if (entry.path().extension() == ".png") stray = true;
+    }
+    CHECK_MSG(!stray && !ControlsFileExistsIn(saves), "the save directory holds no picture and no controls.json");
+}
+
+// ---- the variant that claims classic under the modern layout and draw (G3 b) ----------------------------------------------------------------------
+
+// Paths::controls.classicClaims: every claim consumer asks the classic shapes - the discs for the pair, the classic rectangles for the corner
+// buttons, `onPad` for the camera, the lift and the hand - while the layout and the draw are the modern ones. A pad that draws in one place and
+// presses in another is that variant's definition: the census that uses it compares what each consumer does.
+void TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw() {
+    MdRun run(MdPaths("modern", true), "level30", "TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsPolicy().classicClaims, "the policy says classic claims");
+    const MdGeom g = MdGeometry(layer);
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    // Drawn modern: the pair's pictures stand in the modern boxes.
+    Hud::Rect left;
+    const int quad = MdQuadOf(frame, layer.ModernImage(PtrControl::Left));
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && SameRect(left, g.box[MdAt(PtrControl::Left)], 1e-9) && quad >= 0 &&
+                  SameRect(OnView(layer, frame[static_cast<std::size_t>(quad < 0 ? 0 : quad)]), left, 1e-3),
+              "drawn at the modern box: " + ShowRect(left));
+    // Claimed classic: a point of the classic disc and outside the modern rectangle is the pad's, a point of the modern rectangle and outside the
+    // disc is not, and the modern box's centre of restart is the world.
+    const glm::dvec2 view = g.view;
+    CHECK_MSG(layer.ControlAt(glm::dvec2(5.0, 200.0)) == PtrClaim(PtrControl::Left), "a point of the classic disc above the modern pair is the left pad's");
+    CHECK_MSG(!layer.ControlAt(glm::dvec2(80.0, 250.0)), "a point of the modern right arrow outside every disc is the world: " + PtrName(layer.ControlAt(glm::dvec2(80.0, 250.0))));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(view.x - 5.0, 200.0)) == PtrClaim(PtrControl::Right), "and the classic right disc is the right pad's");
+    CHECK_MSG(!layer.ControlAt(g.box[MdAt(PtrControl::Reset)].Centre()) && layer.ControlAt(glm::dvec2(view.x - 48.0, 16.0)) == PtrClaim(PtrControl::Reset) &&
+                  layer.ControlAt(glm::dvec2(view.x - 16.0, 16.0)) == PtrClaim(PtrControl::Menu),
+              "restart and pause are claimed where the classic buttons are, not where the modern boxes are");
+    // A held touch at the classic-only point walks him left, and one at the modern-only point does not.
+    const glm::vec2 classicPixel = PtrPixel(layer, glm::dvec2(5.0, 200.0));
+    const glm::vec2 modernPixel = PtrPixel(layer, glm::dvec2(80.0, 250.0));
+    double before = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, classicPixel, tick == 0);
+    CHECK_MSG(playerPx(registry, layer).x - before < -8.0, "a touch held at the classic disc walks him left: " + PtrNum(playerPx(registry, layer).x - before));
+    lift(layer, registry, classicPixel);
+    PtrRest(layer, registry, 30);
+    before = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, modernPixel, tick == 0);
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - before) < 3.0, "and one at the modern rectangle does not move him: " + PtrNum(playerPx(registry, layer).x - before));
+    lift(layer, registry, modernPixel);
+    // The camera's follow asks the discs too: on the weightless level a touch at the classic-only point follows, at the modern-only point holds.
+    if (!OriginalArtIsThere("TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw: the camera")) return;
+    const MdFollow classicOnly = MdFollowUnderATouch(MdPaths("modern", true), "level1c", Controls::Style::Modern, glm::dvec2(5.0, 200.0), "classic claims, the classic point");
+    const MdFollow modernOnly = MdFollowUnderATouch(MdPaths("modern", true), "level1c", Controls::Style::Modern, glm::dvec2(80.0, 250.0), "classic claims, the modern point");
+    if (classicOnly.ok && modernOnly.ok) {
+        CHECK_MSG(classicOnly.moved > 5.0 && modernOnly.moved < 1e-9, "the camera asks the classic discs in the variant: " + PtrNum(classicOnly.moved) + ", " + PtrNum(modernOnly.moved));
+    }
+}
+
+// ---- a held touch on the modern right arrow walks like a held key (the in-process replacement of the first pass's --trace gate) -------------------
+
+struct MdWalkTrace {
+    bool ok = false;
+    std::vector<glm::dvec2> player;
+    std::vector<glm::dvec2> camera;
+};
+
+// 1-01 from the start for 200 ticks, the right walk by a scheduled touch on the arrow's centre (down on tick 60, held to 160, up on 161) or by
+// a scheduled hold from `from` to `to`.
+MdWalkTrace MdWalkRun(bool byTouch, int from, int to, const std::string& what) {
+    MdWalkTrace trace;
+    MdRun run(MdPaths(), "level0", what, glm::vec2(1280.0f, 720.0f), false);
+    if (!run.ok) return trace;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    if (byTouch) {
+        layer.ScheduleDevTap(60, g.box[MdAt(PtrControl::Right)].Centre() / g.view, 161);
+    } else {
+        layer.ScheduleDevHold(from, to, 1.0f);
+    }
+    for (int tick = 1; tick <= 200; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        trace.player.push_back(playerPx(registry, layer));
+        trace.camera.push_back(layer.CameraCentrePx());
+    }
+    trace.ok = true;
+    return trace;
+}
+
+void AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey() {
+    const MdWalkTrace key = MdWalkRun(false, 60, 160, "the held key");
+    const MdWalkTrace touch = MdWalkRun(true, 0, 0, "the touch on the arrow");
+    const MdWalkTrace shifted = MdWalkRun(false, 61, 161, "the key held one tick late");
+    if (!key.ok || !touch.ok || !shifted.ok) return;
+    const auto compare = [](const MdWalkTrace& a, const MdWalkTrace& b, std::string& first) {
+        int differ = 0;
+        for (std::size_t tick = 0; tick < a.player.size(); ++tick) {
+            if (a.player[tick] != b.player[tick] || a.camera[tick] != b.camera[tick]) {
+                if (differ == 0) first = "tick " + std::to_string(tick + 1);
+                ++differ;
+            }
+        }
+        return differ;
+    };
+    const auto walking = [](const MdWalkTrace& trace, int& firstTick, int& lastTick, double& walked) {
+        firstTick = -1;
+        lastTick = -1;
+        walked = trace.player.back().x - trace.player.front().x;
+        for (std::size_t tick = 1; tick < trace.player.size(); ++tick) {
+            if (std::fabs(trace.player[tick].x - trace.player[tick - 1].x) > 0.01) {
+                if (firstTick < 0) firstTick = static_cast<int>(tick) + 1;
+                lastTick = static_cast<int>(tick) + 1;
+            }
+        }
+    };
+    std::string first;
+    const int differ = compare(key, touch, first);
+    int keyFirst = 0;
+    int keyLast = 0;
+    int touchFirst = 0;
+    int touchLast = 0;
+    double keyWalked = 0.0;
+    double touchWalked = 0.0;
+    walking(key, keyFirst, keyLast, keyWalked);
+    walking(touch, touchFirst, touchLast, touchWalked);
+    std::printf("  a held key and a touch on the modern right arrow, 200 ticks: walked %.1f and %.1f units, first moving tick %d and %d, last %d and %d, %d ticks differ\n",
+                keyWalked, touchWalked, keyFirst, touchFirst, keyLast, touchLast, differ);
+    CHECK_MSG(keyWalked > 80.0 && touchWalked > 80.0, "both walk him right: " + PtrNum(keyWalked) + " and " + PtrNum(touchWalked));
+    CHECK_MSG(keyFirst == touchFirst && keyLast == touchLast && keyFirst >= 60 && keyLast <= 180,
+              "from the same tick to the same tick: " + std::to_string(keyFirst) + " to " + std::to_string(keyLast) + " against " + std::to_string(touchFirst) + " to " + std::to_string(touchLast));
+    CHECK_MSG(differ == 0, "and the player and the camera are EXACTLY equal on every one of the 200 ticks: " + std::to_string(differ) + " differ, the first " + first);
+    // The control that lets the equality fail: the same walk one tick late is not the same.
+    std::string firstShifted;
+    const int shiftedDiffer = compare(key, shifted, firstShifted);
+    CHECK_MSG(shiftedDiffer > 50, "the same key held one tick late differs on " + std::to_string(shiftedDiffer) + " ticks, the first " + firstShifted + ": the comparison can fail");
+}
+
+// ---- a classic layer ignores everything modern --------------------------------------------------------------------------------------------
+
+// What `Paths::controls` TestPaths() hands a case: a bare layer's "classic, nothing" - unless the case below, which re-runs the classic pointer
+// path under another policy, has set it for the length of its run.
+struct MdClassicWithEverythingSet {
+    explicit MdClassicWithEverythingSet(const Controls::Policy& policy) { TestControlsPolicy() = policy; }
+    ~MdClassicWithEverythingSet() { TestControlsPolicy() = Controls::Policy{}; }
+    MdClassicWithEverythingSet(const MdClassicWithEverythingSet&) = delete;
+    MdClassicWithEverythingSet& operator=(const MdClassicWithEverythingSet&) = delete;
+};
+
+// `{available, forced = Classic}` with every other modern field set to something that would show if a classic run read it: the table is read (the
+// feature is available) and the style is Classic because the policy FORCES it. Every CTL-2 pin - the held touches, the hit circle, the slide, the
+// camera, the lift and the hand gates, the claim order, the corner buttons, the weightless quirk, the settled rectangles, the entrance, the end byte,
+// the claim map and the HUD of all 128 levels against their goldens - is run again under it, and holds.
+void AClassicLayerIgnoresEverythingModern() {
+    Controls::Policy policy;
+    policy.valid = true;
+    policy.available = true;
+    policy.forced = Controls::Style::Classic;
+    policy.saveAllowed = false;
+    policy.classicClaims = true;
+    policy.testInsets = Controls::Insets{9.0, 9.0, 9.0, 9.0};
+    policy.artDir = "C:/nowhere/at/all";
+    Controls::Tuning saved;
+    saved.sizeSteps = 14;
+    saved.move[0] = glm::dvec2(30.0, -30.0);
+    policy.tuning = saved;
+    {
+        // The layer says what it is: classic, forced, the table read, no modern picture written, no modern rectangles logged.
+        const MdClassicWithEverythingSet set(policy);
+        MdRun run(TestPaths(), "level30", "AClassicLayerIgnoresEverythingModern", glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ModernReady() && layer.ControlsPolicy().available && layer.ControlsPolicy().forced == Controls::Style::Classic,
+                  "the table is read and the policy is as given: " + MdDescribe(layer));
+        CHECK_MSG(layer.ControlsLine() == kControlsLineFlag, "and the line says it was forced, not that it is the shipped default: '" + layer.ControlsLine() + "'");
+        CHECK_MSG(layer.ControlsRectsLine().empty() && layer.ControlsError().empty(), "no modern rectangles are logged");
+        for (const Controls::Id id : Controls::kClaimOrder) CHECK_MSG(layer.ModernImage(id).empty(), std::string(Controls::KeyOf(id)) + ": no modern picture");
+        // Drawn and claimed as a bare layer's: the original's pad pictures, the classic disc.
+        if (OriginalArtIsThere("AClassicLayerIgnoresEverythingModern: the drawn half")) {
+            const std::vector<ScreenOverlay::Quad> frame = HudFrame(run.registry, layer);
+            CHECK_MSG(CountImage(frame, layer.HudRules().pads.leftSprite) == 1 && CountImage(frame, layer.HudRules().restart.sprite) == 1,
+                      "the original's own pictures are drawn");
+            CHECK_MSG(layer.ControlAt(glm::dvec2(5.0, 250.0)) == PtrClaim(PtrControl::Left) && !layer.ControlAt(glm::dvec2(80.0, 250.0)),
+                      "and the classic discs claim");
+        }
+    }
+    if (!OriginalArtIsThere("AClassicLayerIgnoresEverythingModern: the CTL-2 pins")) return;
+    const MdClassicWithEverythingSet set(policy);
+    AHeldTouchOnTheLeftPadWalksThePlayerLeft();
+    AHeldTouchOnTheRightPadWalksThePlayerRight();
+    ThePadHitCircleIsStrictlyInside();
+    ATouchSlidOntoAPadWalksAndOffItStops();
+    AHeldTouchOnAPadKeepsTheCameraFollowing();
+    AHeldTouchInTheWorldStopsIt();
+    APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt();
+    AReleaseOnAPadTakesNoTutorialHand();
+    TheClaimOrderIsLeftRightResetMenuClear();
+    RestartPauseAndClearActOnThePressAndSpendTheTouch();
+    ARestingTouchInAWeightlessCornerStillCountsAsOnAPad();
+    NothingClaimsUnderAPauseAPopupOrAfterTheDoorOrADeath();
+    TheSettledControlsAreTheirDrawnRectangles();
+    TheClearButtonIsFlatWhileRestartAndPauseSlideIn();
+    TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath();
+    TheClassicClaimMapIsPinned();
+    TheClassicHudQuadsOfEveryLevelArePinned();
+}
+
+// `test_mp test_mp_layer --record-modern-golden <dir>`: writes modern_claim.json on the code as it stands. Like the classic recorder it never
+// overwrites a file: a golden is recorded once, checked against an independent model, and corrected only by deleting it by hand.
+int MdRecordGolden(const std::string& dir) {
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const GoldenEntries claim = MdClaimEntries();
+    const bool wrote = !claim.empty() &&
+                       PtrWriteGolden(dir + "/modern_claim.json",
+                                      "The MODERN claim map (planning step 182, CTL-6): which control a point of the view is on when the layer plays "
+                                      "`--controls modern`, every 4th unit, at 16:9 and 4:3 at several ticks of a level's age with clear-portals hidden and "
+                                      "shown, an early shot's state, the weightless level, the other two looks and three more window shapes. Recorded by "
+                                      "`test_mp test_mp_layer --record-modern-golden` on the modern claim code of that step, and checked against an "
+                                      "independent model of the design's table 1.2 (out/parity/program/CTL/CTL6/work/model_claim.py) before it was kept. "
+                                      "It is never re-recorded to make a change pass: if the layout changes on purpose, the step says so and records why. "
+                                      "Hashes are FNV-1a over one claim code per point; no pixel and no Asantee byte is here.",
+                                      claim);
+    const int result = ::test::summary("test_mp_layer --record-modern-golden", 0);
+    return wrote ? result : 1;
+}
+
+// The modern controls' cases, in one list so that a developer can run them alone (`test_mp test_mp_layer --modern-only`) and the whole suite runs
+// them last. AClassicLayerIgnoresEverythingModern is the longest (it runs CTL-2's pins again) and goes at the end.
+void runModernTests() {
+    AHeldTouchOnTheModernLeftArrowWalksLeft();
+    AHeldTouchOnTheModernRightArrowWalksRight();
+    ATouchJustOutsideAModernHitRectFiresAPortal();
+    TheSharedSeamBetweenTheArrowsIsTheRightArrows();
+    TheCornerEdgeOfTheViewIsAControlPressInModern();
+    TheModernRectanglesAreHalfOpenAtTheViewsFarEdges();
+    ATouchSlidOntoAModernArrowWalksAndOffItStops();
+    TheModernPadsHitRectFollowsItsSlide();
+    AHeldTouchOnAModernArrowKeepsTheCameraFollowing();
+    AHeldTouchInTheWorldStopsItUnderTheModernControls();
+    TheModernOnWalkControlIsUngatedLikeClassics();
+    APressOnAModernArrowOverALiftSendsNothingAndAPressOutsideSendsIt();
+    AReleaseOnAModernArrowTakesNoTutorialHand();
+    TheModernPairIsHiddenAndUnclaimedOnAWeightlessLevelAndTheCornerIsWorld();
+    ModernRestartPauseAndClearActOnTheReleaseInsideTheirHitRect();
+    AModernCornerPressInTheEdgeStripActs();
+    ModernClearHidesAsItClearsAndItsTouchFiresNothing();
+    NothingModernClaimsUnderAPauseAPopupOrAfterTheEnd();
+    TheSettledModernControlsAreTheirDrawnRectangles();
+    TheModernPadsPulseTheClassicByte();
+    TheModernPadsAreDrawnBetweenTheTwoBlacks();
+    TheModernEndByteDecaysFromTheSameByte();
+    TheModernRingFollowsTheArrowsBoxCentre();
+    TheModernCornerButtonsComeInAsTheOriginalsDo();
+    AModernControlIsNeverDroppedForAMissingPicture();
+    ModernRunsWithNoOriginalArtDrawFlatQuads();
+    TheModernPicturesAreWrittenOnlyToTheScratchDirectory();
+    TheThreeLooksAreTheDesignsPairTops();
+    TheFlagsKeysAreHeldNotAppliedBeforeCTL10();
+    TheModernRectanglesLineNamesTheWindowItIsIn();
+    TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw();
+    AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey();
+    TheModernClaimMapIsPinned();
+    AClassicLayerIgnoresEverythingModern();
 }
 
 void runTests() {
@@ -23927,19 +26179,29 @@ void runTests() {
     ControlsStyleReportsTheResolvedStyle();
     AForcedModernResolvesModernAndThePolicyIsRecorded();
     ABrokenControlsDataLeavesClassicAlone();
+    // The modern controls, played (planning step 182).
+    runModernTests();
 }
 
 } // namespace
 
 MP_SUITE_MAIN_ARGS("test_mp_layer", argc, argv) {
-    // --record-golden <dir>: writes tests/golden's two files on the code as it stands instead of running the suite.
+    // --record-golden <dir>: writes tests/golden's two classic files on the code as it stands instead of running the suite;
+    // --record-modern-golden <dir>: writes modern_claim.json the same way; --modern-only: runs only the modern controls' cases (planning step 182).
     std::string recordDir;
+    std::string recordModernDir;
+    bool modernOnly = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--record-golden" && i + 1 < argc) {
             recordDir = argv[++i];
+        } else if (arg == "--record-modern-golden" && i + 1 < argc) {
+            recordModernDir = argv[++i];
+        } else if (arg == "--modern-only") {
+            modernOnly = true;
         } else {
-            std::printf("test_mp test_mp_layer [--record-golden <dir for classic_claim.json and classic_hud.json>]\n");
+            std::printf("test_mp test_mp_layer [--record-golden <dir for classic_claim.json and classic_hud.json>]\n"
+                        "                      [--record-modern-golden <dir for modern_claim.json>] [--modern-only]\n");
             return 2;
         }
     }
@@ -23956,6 +26218,11 @@ MP_SUITE_MAIN_ARGS("test_mp_layer", argc, argv) {
         return 77;
     }
     if (!recordDir.empty()) return PtrRecordGoldens(recordDir);
+    if (!recordModernDir.empty()) return MdRecordGolden(recordModernDir);
+    if (modernOnly) {
+        runModernTests();
+        return ::test::summary("test_mp_layer --modern-only", 60);
+    }
     runTests();
     return ::test::summary("test_mp_layer", 60);
 }

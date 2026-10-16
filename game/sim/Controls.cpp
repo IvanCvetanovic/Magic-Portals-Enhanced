@@ -134,6 +134,9 @@ bool Finite(double v) {
     return std::isfinite(v);
 }
 
+// The largest margin, as a fraction of a picture or of a box on each side, that leaves anything of it: a half leaves nothing.
+constexpr double kMaxInset = 0.499;
+
 // ---- reading controls.json ---------------------------------------------------------------------
 
 std::string Named(const std::string& where, const char* key) {
@@ -182,10 +185,17 @@ bool Object(const Json::Value& block, const char* key, std::string& why, const s
 }
 
 // The whole number of steps `value` is on a grid of `divisor` steps to the unit, or false when it is
-// not on it (a thousandth of a step off is not).
+// not on it (a thousandth of a step off is not) or is not a number of steps an int holds.
 bool OnGrid(double value, int divisor, int& steps) {
     const double scaled = value * static_cast<double>(divisor);
     const double whole = std::round(scaled);
+    // The range comes BEFORE the conversion, written as a test that a number passes: a double beyond an int is not a number of
+    // steps, and converting it is undefined behaviour - which `--controls modern,size=1e30` reaches from the command line. A
+    // NaN fails it, and so does the infinity that 1e308 times a divisor overflows to (the comparison below would be a NaN
+    // and would let it through).
+    constexpr double kLowest = static_cast<double>(std::numeric_limits<int>::lowest());
+    constexpr double kHighest = static_cast<double>(std::numeric_limits<int>::max());
+    if (!(whole >= kLowest && whole <= kHighest)) return false;
     if (std::fabs(scaled - whole) > 1e-9) return false;
     steps = static_cast<int>(whole);
     return true;
@@ -206,7 +216,8 @@ bool ReadGrid(const Json::Value& block, Grid& out, std::string& why, const std::
     grid.divisor = static_cast<int>(divisor);
     if (!OnGrid(grid.min, grid.divisor, grid.lowSteps) || !OnGrid(grid.max, grid.divisor, grid.highSteps) ||
         grid.lowSteps >= grid.highSteps) {
-        why = where + ".min and .max are not whole steps apart, or max is not above min";
+        // (Also where a limit is more steps than an int counts: a step of a millionth under a limit of a million.)
+        why = where + ".min and .max are not whole steps of .step that an int can count, or max is not above min";
         return false;
     }
     out = grid;
@@ -234,8 +245,10 @@ bool ReadArt(const Json::Value& art, Rules& read, std::string& why) {
             if (!Object(block, KeyOf(id), why, where)) return false;
             const Json::Value& entry = block[KeyOf(id)];
             ArtEntry read_entry;
+            // A picture the port draws itself has the margin sim/PadArt can draw, and no more: a value that loads must draw.
+            const double mostInset = tier == ArtTier::Generated ? kMaxGeneratedBodyInset : kMaxInset;
             if (!Text(entry, "file", read_entry.file, why, where + "." + KeyOf(id)) ||
-                !Num(entry, "body_inset", 0.0, 0.499, read_entry.bodyInset, why, where + "." + KeyOf(id))) {
+                !Num(entry, "body_inset", 0.0, mostInset, read_entry.bodyInset, why, where + "." + KeyOf(id))) {
                 return false;
             }
             read.art[static_cast<std::size_t>(tier)][Index(id)] = read_entry;
@@ -509,7 +522,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return fail();
     }
     if (!Num(layout, "gap_px", 0.0, kBig, read.gapPx, why, "layout") || !Num(layout, "box_px", 1e-9, kBig, read.boxPx, why, "layout") ||
-        !Num(layout, "face_inset", 0.0, 0.499, read.faceInset, why, "layout") ||
+        !Num(layout, "face_inset", 0.0, kMaxInset, read.faceInset, why, "layout") ||
         !Num(layout, "corner_box_factor", 1e-9, kBig, read.cornerBoxFactor, why, "layout") ||
         !Num(layout, "corner_min_size", 1e-9, kBig, read.cornerMinSize, why, "layout") ||
         !Object(layout, "margin_px", why, "layout") ||
@@ -531,11 +544,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
             why = where + ".size is not a step of the size grid, or is outside it";
             return fail();
         }
-        // The one optional number: a preset that names no bottom margin keeps layout.margin_px.bottom.
-        rule.marginBottomPx = read.marginBottomPx;
-        if (block.Has("margin_bottom_px") && !Num(block, "margin_bottom_px", 0.0, kBig, rule.marginBottomPx, why, where)) {
-            return fail();
-        }
+        // Every look names its own bottom margin, and a key that is missing is refused naming it. (It used to fall back to
+        // layout.margin_px.bottom, so a misspelt one loaded cleanly and drew the pair at the wrong height.)
+        if (!Num(block, "margin_bottom_px", 0.0, kBig, rule.marginBottomPx, why, where)) return fail();
         read.presets[Index(preset)] = rule;
     }
     std::string defaultPreset;
@@ -675,13 +686,13 @@ Tuning Tuning::ReadFrom(const Json::Value& controls, const Rules& rules) {
         const double scaled = std::round(value.AsNumber() * static_cast<double>(grid.divisor));
         return static_cast<int>(std::clamp(scaled, static_cast<double>(grid.lowSteps), static_cast<double>(grid.highSteps)));
     };
-    out.sizeSteps = steps(controls["size"], rules.size);
-    out.opacitySteps = steps(controls["opacity"], rules.opacity);
+    out.sizeSteps = steps(controls[TuningKey::kSize], rules.size);
+    out.opacitySteps = steps(controls[TuningKey::kOpacity], rules.opacity);
 
     // A save made against another arrangement keeps what is not a place and drops the places.
-    const Json::Value& layout = controls["layout"];
-    const bool sameLayout = !controls.Has("layout") || (layout.IsNumber() && layout.AsNumber() == static_cast<double>(kLayoutVersion));
-    const Json::Value& moves = controls["move"];
+    const Json::Value& layout = controls[TuningKey::kLayout];
+    const bool sameLayout = !controls.Has(TuningKey::kLayout) || (layout.IsNumber() && layout.AsNumber() == static_cast<double>(kLayoutVersion));
+    const Json::Value& moves = controls[TuningKey::kMove];
     if (sameLayout && moves.IsObject()) {
         for (const Id id : kClaimOrder) {
             const Json::Value& pair = moves[KeyOf(id)];
@@ -694,14 +705,19 @@ Tuning Tuning::ReadFrom(const Json::Value& controls, const Rules& rules) {
 }
 
 std::string Tuning::ToJson(const Rules& rules) const {
+    return "{" + ToJsonMembers(rules) + "}";
+}
+
+std::string Tuning::ToJsonMembers(const Rules& rules) const {
     const Tuning clamped = Clamped(rules);
     std::string text;
     const auto add = [&text](const std::string& member) {
         text += text.empty() ? "" : ",";
         text += member;
     };
-    if (clamped.sizeSteps) add("\"size\":" + NumberText(rules.size.ValueOf(*clamped.sizeSteps)));
-    if (clamped.opacitySteps) add("\"opacity\":" + NumberText(rules.opacity.ValueOf(*clamped.opacitySteps)));
+    const auto member = [](const char* key) { return std::string("\"") + key + "\":"; };
+    if (clamped.sizeSteps) add(member(TuningKey::kSize) + NumberText(rules.size.ValueOf(*clamped.sizeSteps)));
+    if (clamped.opacitySteps) add(member(TuningKey::kOpacity) + NumberText(rules.opacity.ValueOf(*clamped.opacitySteps)));
     std::string moves;
     for (const Id id : kClaimOrder) {
         const glm::dvec2& m = clamped.move[Index(id)];
@@ -709,15 +725,15 @@ std::string Tuning::ToJson(const Rules& rules) const {
         moves += moves.empty() ? "" : ",";
         moves += std::string("\"") + KeyOf(id) + "\":[" + NumberText(m.x) + "," + NumberText(m.y) + "]";
     }
-    if (!moves.empty()) add("\"move\":{" + moves + "}");
-    return "{" + text + "}";
+    if (!moves.empty()) add(member(TuningKey::kMove) + "{" + moves + "}");
+    return text;
 }
 
 const char* FlagUsage() {
     static const std::string usage = [] {
-        std::string text = "--controls <classic|modern>[,key=value...]  keys: preset=";
+        std::string text = std::string("--controls <classic|modern>[,key=value...]  keys: ") + TuningKey::kPreset + "=";
         for (const Preset preset : kPresets) text += std::string(preset == kPresets.front() ? "" : "|") + NameOf(preset);
-        text += ", size=<n>, opacity=<n>, and a move as <key>=<dx>:<dy> for ";
+        text += std::string(", ") + TuningKey::kSize + "=<n>, " + TuningKey::kOpacity + "=<n>, and a move as <key>=<dx>:<dy> for ";
         for (const Id id : kClaimOrder) text += std::string(id == kClaimOrder.front() ? "" : ", ") + KeyOf(id);
         return text;
     }();
@@ -741,13 +757,13 @@ bool Tuning::ParseFlag(const std::string& items, FlagItems& out, std::string& er
         }
         const std::string key = item.substr(0, equals);
         const std::string value = item.substr(equals + 1);
-        if (key == "preset") {
+        if (key == TuningKey::kPreset) {
             if (read.preset) return refuse("preset is given twice");
             const auto preset = PresetOfName(value);
             if (!preset) return refuse("'" + value + "' is not a preset");
             read.preset = preset;
-        } else if (key == "size" || key == "opacity") {
-            std::optional<double>& slot = key == "size" ? read.size : read.opacity;
+        } else if (key == TuningKey::kSize || key == TuningKey::kOpacity) {
+            std::optional<double>& slot = key == TuningKey::kSize ? read.size : read.opacity;
             if (slot) return refuse(key + " is given twice");
             double number = 0.0;
             if (!ParseNumber(value, number)) return refuse("'" + value + "' is not a number for " + key);

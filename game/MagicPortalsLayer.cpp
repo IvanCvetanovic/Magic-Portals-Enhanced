@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <map>
 #include <sstream>
 #include <string>
@@ -29,6 +30,7 @@
 // app publishes in the registry's context, which a suite's bare registry has not.
 #include "renderer/TextureRegistry.hpp"
 
+#include "sim/PadArt.hpp"
 #include "sim/Player.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Units.hpp"
@@ -63,13 +65,20 @@ constexpr const char* kBossTrack = "boss";
 constexpr const char* kNoMusicFlag = "no_music";
 
 // The modern controls' table, and the INFO lines a run says which controls it plays with
-// (planning step 181). Whoever greps a capture's log for `controls: modern` (the design's N1) reads
-// kControlsModernRequested, whose first words are the line CTL-6 keeps when it takes the rest away.
+// (planning steps 181 and 182). Whoever greps a capture's log for `controls: modern` (the design's N1)
+// finds the attach line (which style, and why) and, once per level start, the rectangles' line
+// (kControlsModernRectsPrefix): both begin with the words the grep names.
 constexpr const char* kControlsFile = "/controls.json";
 constexpr const char* kControlsClassicFlag = "controls: classic (--controls classic)";
-constexpr const char* kControlsModernRequested = "controls: modern requested, drawn classic until the layer plays it";
+constexpr const char* kControlsModernFlag = "controls: modern (--controls modern)";
 constexpr const char* kControlsClassicDefault = "controls: classic (the shipped default)";
+constexpr const char* kControlsModernDefault = "controls: modern (the shipped default)";
 constexpr const char* kControlsClassicUnavailable = "controls: classic (modern is unavailable: see the error above)";
+constexpr const char* kControlsModernRectsPrefix = "controls: modern, ";
+// What the flag's size, opacity and move keys cost until CTL-10 applies them: said once at attach, so a capture
+// that asked for one does not take its absence for a bug.
+constexpr const char* kControlsKeysHeld =
+    "controls: the flag's size, opacity and move keys are checked and held, not applied before CTL-10";
 
 // Markers - buttons, crystals, the exit, portals - stand in front of the bodies.
 constexpr float kMarkerZ = 0.5f;
@@ -476,10 +485,14 @@ void MagicPortalsLayer::resolveControls() {
     const Controls::Policy& policy = m_paths.controls;
     m_controlsRules = Controls::Rules{};
     m_controlsTuning = Controls::Tuning{};
+    m_controlsApplied = Controls::Tuning{};
     m_controlsStyle = Controls::Style::Classic;
     m_modernReady = false;
     m_controlsLine.clear();
     m_controlsError.clear();
+    m_controlsRectsLine.clear();
+    m_controlsRectsPending = false;
+    for (std::string& image : m_modernImages) image.clear();
 
     // The feature does not exist in this run (design 2.1): a bare layer, a developer's run, --controls
     // classic. Nothing is read, so a table that will not read cannot touch such a run. Only the flag
@@ -516,8 +529,62 @@ void MagicPortalsLayer::resolveControls() {
     m_modernReady = true;
     // Nothing is saved yet (the store is CTL-9's), so a player's run takes the shipped default.
     m_controlsStyle = Controls::ResolveStyle(policy, std::nullopt, m_controlsRules.defaultMode);
-    m_controlsLine = m_controlsStyle == Controls::Style::Modern ? kControlsModernRequested : kControlsClassicDefault;
+    // THE LAYOUT APPLIES THE LOOK AND NOTHING ELSE until CTL-10: the flag's size, opacity and moves are on
+    // m_controlsTuning (read, on the table's grids, held), and the plan applies them there. `preset=` is the
+    // one key a capture needs now (the owner's comparison of the three looks).
+    m_controlsApplied.preset = m_controlsTuning.preset;
+    // WHY the style is what it is: the flag when there was one (it forces its style, a hand-built
+    // `{available, forced = Classic}` policy included), otherwise the shipped default.
+    const bool modern = m_controlsStyle == Controls::Style::Modern;
+    if (policy.forced) {
+        m_controlsLine = modern ? kControlsModernFlag : kControlsClassicFlag;
+    } else {
+        m_controlsLine = modern ? kControlsModernDefault : kControlsClassicDefault;
+    }
     SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
+    if (modern) {
+        const Controls::FlagItems& flag = policy.flag;
+        const bool keysHeld = flag.size || flag.opacity ||
+                              std::any_of(flag.move.begin(), flag.move.end(),
+                                          [](const std::optional<glm::dvec2>& move) { return move.has_value(); });
+        if (keysHeld) SUPERSONIC_LOG_INFO("Magic Portals") << kControlsKeysHeld << std::endl;
+        // The pictures the five controls are drawn with, once for the run.
+        resolveModernImages();
+    }
+}
+
+void MagicPortalsLayer::resolveModernImages() {
+    for (const Control control : Controls::kClaimOrder) {
+        m_modernImages[static_cast<std::size_t>(control)] = modernGlyphImage(control);
+    }
+}
+
+std::string MagicPortalsLayer::modernGlyphImage(Control control) {
+    // THE GENERATED TIER (design 4.2, tier 3): the glyph sim/PadArt draws, written as a PNG into the directory the layer
+    // is given for what it generates (Paths::prisms: the multiplies' own, a temporary directory in main and in the suites).
+    // Never into a tracked path and never next to the saves: that is the hard rule's reason for drawing the glyphs instead
+    // of keeping them. With no such directory the control is a flat quad (tier 4), which is what every suite draws.
+    if (m_paths.prisms.empty()) return {};
+    const auto& entry = m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::Generated)][static_cast<std::size_t>(control)];
+    if (!entry) return {};
+    const int px = static_cast<int>(std::lround(m_controlsRules.boxPx));
+    const PadArt::Bitmap bitmap = PadArt::Draw(PadArt::GlyphOf(control), px, entry->bodyInset);
+    if (bitmap.Empty()) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "the modern " << Controls::KeyOf(control) << " could not be drawn at " << px
+                                             << " px: it is a flat quad" << std::endl;
+        return {};
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(m_paths.prisms, ec);
+    // Rewritten at every attach and never skipped for being there: the picture is a function of the data and of
+    // sim/PadArt, so a file left by an older build would otherwise be drawn in their place.
+    const std::filesystem::path target = m_paths.prisms / entry->file;
+    if (stbi_write_png(target.string().c_str(), bitmap.size, bitmap.size, 4, bitmap.rgba.data(), bitmap.size * 4) == 0) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "a modern control's picture could not be written: " << target.string()
+                                             << " - it is a flat quad" << std::endl;
+        return {};
+    }
+    return target.string();
 }
 
 void MagicPortalsLayer::OnDetach(entt::registry& registry) {
@@ -741,6 +808,7 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     buildControls();
     placeCamera(registry);
     layOutControls();
+    logModernControls(registry);
     // The sign starts from where the level put it, aimed at this camera.
     tickNoPortalSign(0.0);
     // A new level is a cut, not a pan: there is nothing to draw the camera
@@ -845,6 +913,7 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     // nothing in the new one when it comes up.
     m_shotTouch = Portals::TouchTrack{};
     m_handTouch = Portals::TouchTrack{};
+    m_pressedControl.reset();
     // And the camera's record of it: a touch still held into the next level is
     // taken up there where it is, and moves nothing until it moves.
     m_cameraTouch = Camera::TouchRecord{};
@@ -7943,6 +8012,10 @@ void MagicPortalsLayer::updateHud(entt::registry& registry) {
 
 void MagicPortalsLayer::buildControls() {
     unloadControls();
+    // THE MODERN FIVE come first and need no art: a modern control is never dropped for a picture that is
+    // missing (a flat quad stands in), where classic's rule is "no picture, no control". They still need the
+    // HUD's rules - the slide, the pulse and the ring are ui.json's, which the module takes as an argument.
+    if (playsModern() && m_hudReady && m_current >= 0) buildModernControls();
     // No art, no HUD: the level is being drawn as boxes, and the keys still work.
     if (!m_artReady || !m_hudReady || m_current < 0) return;
     const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(m_current)];
@@ -7968,6 +8041,8 @@ void MagicPortalsLayer::buildControls() {
         {Control::Clear, m_hudRules.clearPortals.sprite},
     };
     for (const Made& one : made) {
+        // The modern controls were built above, from their own pictures.
+        if (playsModern()) break;
         ControlButton button;
         button.kind = one.kind;
         // menuImage prefers sprites/hd/, which is what the original draws on any
@@ -8059,7 +8134,20 @@ void MagicPortalsLayer::buildControls() {
     }
 }
 
+void MagicPortalsLayer::buildModernControls() {
+    // All five, in the claim order, which is the order a touch is asked in (controlUnderPointer).
+    for (const Control kind : Controls::kClaimOrder) {
+        ControlButton button;
+        button.kind = kind;
+        button.image = m_modernImages[static_cast<std::size_t>(kind)];
+        const auto& entry = m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::Generated)][static_cast<std::size_t>(kind)];
+        button.bodyInset = entry ? entry->bodyInset : 0.0;
+        m_controls.push_back(button);
+    }
+}
+
 void MagicPortalsLayer::unloadControls() {
+    // The modern pictures (m_modernImages) are the run's, not the level's: not cleared here.
     m_controls.clear();
     m_ringImage.clear();
     m_plaqueImage.clear();
@@ -8130,6 +8218,103 @@ void MagicPortalsLayer::layOutControls() {
         }
         return std::make_tuple(Controls::ClassicPlace(m_hudRules, kind, view), false, 0.0);
     };
+
+    // THE MODERN CONTROLS (planning step 182), BESIDE the classic code below, which is not on this path and is not
+    // touched: what is shown, and when, is the same rule (the pads while the level plays or decays, a weightless level
+    // none, a pause and a popup none; restart and pause entering and being dismissed; clear while a portal lives), and
+    // what differs is where each is, what it claims and the byte it is drawn at - all from sim/Controls.
+    if (playsModern()) {
+        const Controls::Rules& rules = m_controlsRules;
+        // Only the look of the tuning is applied until CTL-10 (resolveControls).
+        const Controls::Tuning& tuning = m_controlsApplied;
+        const Controls::Insets& insets = m_paths.controls.testInsets;
+        const Controls::Layout layout =
+            Controls::LayOut(Controls::Style::Modern, rules, m_hudRules, tuning, view, insets, m_levelAgeMs);
+        // The pads' byte: the pulse's while playing, and what a level's end left them at as they decay. The decay's start
+        // byte is the classic byte in both styles (endHud), and the opacity and the idle scale multiply at the draw.
+        const int padByte = playing ? Controls::ClassicWalkAlphaByte(m_hudRules, m_levelAgeMs, tutorialPads()) : m_padEndByte;
+        const double padAlphaModern = static_cast<double>(Controls::AlphaByte(rules, tuning, padByte)) / 255.0;
+        // The same multiplier on the corner buttons' own alpha, which is a fraction (their entrance is a ramp). At the
+        // defaults it is 1.0 and the alpha is the classic one to the bit.
+        const double shade = rules.idleScale * tuning.Opacity(rules);
+        for (ControlButton& button : m_controls) {
+            const Controls::Frame& settled = layout.At(button.kind);
+            Controls::Frame frame = settled;
+            switch (button.kind) {
+            case Control::Left:
+            case Control::Right:
+                // LayOut has slid each arrow in from its nearer side, with its hit rectangle.
+                button.shown = pads;
+                button.alpha = padAlphaModern;
+                break;
+            case Control::Reset:
+            case Control::Menu:
+            case Control::Clear: {
+                // As Hud::Placement, so LevelEnd's entrance and dismissal run on it unchanged (the classic ones' own).
+                const Hud::Placement placement =
+                    Controls::PlacementFor(rules, m_hudRules, tuning, button.kind, view, insets);
+                const bool clear = button.kind == Control::Clear;
+                // PortalManager::update: none in a level that grants no portal, and otherwise exactly while a placed one is
+                // alive - and at a death, dismissed with the other two if it was up.
+                const bool present = clear ? (playing ? m_level.portals.budget > 0 && !m_level.portals.placed.empty()
+                                                      : m_clearShownAtEnd)
+                                           : true;
+                Hud::Rect drawn = settled.rect;
+                double alpha = 0.0;
+                bool shown = false;
+                if (playing && !clear) {
+                    const LevelEnd::Dismissed in =
+                        LevelEnd::HudEntered(m_levelEndRules, placement, m_hudRules.alphaByte, view, m_levelAgeMs);
+                    drawn = in.rect;
+                    shown = present && in.shown;
+                    alpha = in.alpha;
+                } else if (playing) {
+                    shown = present;
+                    alpha = Hud::Opacity(m_hudRules);
+                } else if (m_dying && present) {
+                    const LevelEnd::Dismissed out =
+                        LevelEnd::HudDismissed(m_levelEndRules, placement, m_hudRules.alphaByte, view, m_dyingClockMs);
+                    drawn = out.rect;
+                    shown = out.shown;
+                    alpha = out.alpha;
+                }
+                // The hit rectangle goes with the picture while it comes in or goes out.
+                frame = Controls::FollowDrawn(settled, drawn);
+                button.shown = shown;
+                button.alpha = std::min(1.0, alpha * shade);
+                break;
+            }
+            }
+            button.rect = frame.rect;
+            button.hit = frame.hit;
+            // A picture is drawn so that its body fills the box's face; a flat quad IS the face.
+            button.picture = Controls::DrawRect(frame.rect, rules.faceInset, button.image.empty() ? 0.0 : button.bodyInset);
+            if (claimsClassic()) {
+                // THE TEST VARIANT: the claim is the classic one - the pads' discs about the screen corners, the corner
+                // buttons' drawn classic rectangle - under the modern layout and draw. One answer to "what does a touch
+                // work", the original's, so that the routes' census can tell a claim that took a tap from a layout, a
+                // draw or a policy that moved a number.
+                switch (button.kind) {
+                case Control::Left:
+                case Control::Right:
+                    button.hit = Controls::ClassicWalkFrame(m_hudRules, button.kind, view, m_levelAgeMs).hit;
+                    break;
+                case Control::Reset:
+                case Control::Menu:
+                case Control::Clear: {
+                    const bool present = button.kind == Control::Clear
+                                             ? (playing ? m_level.portals.budget > 0 && !m_level.portals.placed.empty()
+                                                        : m_clearShownAtEnd)
+                                             : true;
+                    button.hit = Controls::ClassicCornerFrame(std::get<0>(corner(button.kind, present))).hit;
+                    break;
+                }
+                }
+            }
+        }
+        return;
+    }
+
     for (ControlButton& button : m_controls) {
         switch (button.kind) {
         case Control::Left:
@@ -8158,6 +8343,47 @@ void MagicPortalsLayer::layOutControls() {
             break;
         }
     }
+}
+
+void MagicPortalsLayer::logModernControls(const entt::registry& registry) {
+    m_controlsRectsLine.clear();
+    m_controlsRectsPending = false;
+    if (!playsModern() || !m_hudReady) return;
+    // The window is known only once a frame has published it, which the game's first level (loaded at attach) precedes: it says
+    // so on its first tick instead, so that the line never names a window it is not in.
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    if (viewport == nullptr || !(viewport->Size().x > 0.0f) || !(viewport->Size().y > 0.0f)) {
+        m_controlsRectsPending = true;
+        return;
+    }
+    // The settled boxes and hit rectangles (Controls::Boxes / HitRects), not the frames of this tick, which have the
+    // pair still sliding in: these are the numbers of the design's table 1.2, in the window's pixels. The layout is
+    // in units of the view's height (256), so a pixel is the window's height over it, whatever the window's width.
+    const glm::dvec2 view = ViewPx();
+    const glm::dvec2 windowPx(viewport->Size());
+    const double toPx = windowPx.y / view.y;
+    const Controls::Insets& insets = m_paths.controls.testInsets;
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(m_controlsRules, m_controlsApplied, view, insets);
+    const std::array<Hud::Rect, 5> hits = Controls::HitRects(m_controlsRules, boxes, view, insets);
+    std::ostringstream line;
+    line << kControlsModernRectsPrefix << std::fixed << std::setprecision(1);
+    const auto rect = [&](const Hud::Rect& r) {
+        const glm::dvec2 max = r.Max();
+        line << "(" << r.min.x * toPx << "," << r.min.y * toPx << ")-(" << max.x * toPx << "," << max.y * toPx << ") px";
+    };
+    bool first = true;
+    for (const Control control : Controls::kClaimOrder) {
+        const std::size_t at = static_cast<std::size_t>(control);
+        line << (first ? "" : ", ") << Controls::KeyOf(control) << " ";
+        first = false;
+        rect(boxes[at]);
+        line << " hit ";
+        rect(hits[at]);
+    }
+    line << ", in a " << std::setprecision(0) << windowPx.x << "x" << windowPx.y << " px window (view " << std::setprecision(2)
+         << view.x << "x" << view.y << " units)";
+    m_controlsRectsLine = line.str();
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsRectsLine << std::endl;
 }
 
 bool MagicPortalsLayer::ControlRect(Control control, Hud::Rect& out) const {
@@ -8421,6 +8647,24 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         }
         return nullptr;
     };
+    // A control's quad. Classic: the picture in its rectangle, white at its alpha. Modern (planning step 182): the
+    // picture in the rectangle derived from the box, or, where there is none to draw, a flat quad on the box's face
+    // in the plate's own light rim colour, which reads at the HUD's alpha on a bright level and a dark one.
+    const bool modern = playsModern();
+    const auto addControl = [&](const ControlButton& button) {
+        if (!modern) {
+            add(button.rect, button.image, white(button.alpha));
+            return;
+        }
+        if (button.image.empty()) {
+            const PadArt::Rgb rim = PadArt::kPlateRim;
+            add(button.picture, button.image,
+                glm::vec4(static_cast<float>(rim.r) / 255.0f, static_cast<float>(rim.g) / 255.0f,
+                          static_cast<float>(rim.b) / 255.0f, static_cast<float>(button.alpha)));
+            return;
+        }
+        add(button.picture, button.image, white(button.alpha));
+    };
     // Text on the view, centred on `at` or from it as its top-left, a quad a
     // letter over the font's own pages.
     const auto write = [&](const std::string& fontName, const std::string& words, const glm::dvec2& at,
@@ -8460,6 +8704,20 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         ring.shown && padsShown && !m_finishing && !m_dying && !m_ringImage.empty()) {
         for (const Control walk : {Control::Left, Control::Right}) {
             Hud::Rect rect;
+            if (modern) {
+                // On the arrow's box centre, as many boxes across as controls.json says, sliding in with it.
+                const ControlButton* pad = nullptr;
+                for (const ControlButton& button : m_controls) {
+                    if (button.kind == walk) pad = &button;
+                }
+                if (pad == nullptr) continue;
+                const Controls::RingPlace place =
+                    Controls::RingFor(m_controlsRules, m_hudRules, ring, Controls::Frame{pad->rect, pad->hit});
+                rect.size = glm::dvec2(place.sizeUnits);
+                rect.min = place.centre - rect.size * 0.5;
+                add(rect, m_ringImage, white(place.alpha));
+                continue;
+            }
             rect.size = glm::dvec2(ring.sizeUnits);
             rect.min = Controls::ClassicRingCentre(m_hudRules, walk, view, m_levelAgeMs) - rect.size * 0.5;
             add(rect, m_ringImage, white(ring.alpha));
@@ -8472,7 +8730,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     // Each at the alpha layOutControls left it: its 120, or what a death's
     // dismiss has left of it.
     for (const Control kind : {Control::Reset, Control::Menu}) {
-        if (const ControlButton* button = find(kind)) add(button->rect, button->image, white(button->alpha));
+        if (const ControlButton* button = find(kind)) addControl(*button);
     }
     if (!m_plaqueImage.empty() && !m_medalImage.empty()) {
         // As GameLayer's last update left it (tickPlaqueDismissal).
@@ -8484,7 +8742,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         add(centred(m_hudRules.plaque.medalCentreUnits, m_hudRules.plaque.medalSizeUnits), m_medalImage,
             white(plaque));
     }
-    if (const ControlButton* clear = find(Control::Clear)) add(clear->rect, clear->image, white(clear->alpha));
+    if (const ControlButton* clear = find(Control::Clear)) addControl(*clear);
 
     // 4. The pause, when one is up: CustomGameMenuLayer, the CURRENT UI layer,
     //    which UILayerManager::draw draws after GameLayer - so over restart,
@@ -8582,7 +8840,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     const auto black = [](double alpha) { return glm::vec4(0.0f, 0.0f, 0.0f, static_cast<float>(alpha)); };
     add(whole, std::string(), black(Hud::OverlayLayersAlpha(m_hudRules, LevelFrameWallMs(), under)));
     for (const Control kind : {Control::Left, Control::Right}) {
-        if (const ControlButton* button = find(kind)) add(button->rect, button->image, white(button->alpha));
+        if (const ControlButton* button = find(kind)) addControl(*button);
     }
     add(whole, std::string(), black(Hud::OverlayLayersAlpha(m_hudRules, LevelFrameWallMs(), over)));
 
@@ -8641,6 +8899,15 @@ const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(c
 }
 
 bool MagicPortalsLayer::onWalkControl(const glm::dvec2& viewPoint) const {
+    if (playsModern() && m_hudReady && !claimsClassic()) {
+        // THE MODERN PAIR'S HIT RECTANGLES at this age, asked as classic's discs are: whether or not the pair is shown
+        // (a weightless level has none and a touch resting where it would be still counts - design D12), and whether or
+        // not any control was built. From the data and the view alone, so the camera, the lift gate and the hand gate
+        // ask the very rectangles the claim does.
+        const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, m_controlsRules, m_hudRules, m_controlsApplied,
+                                                         ViewPx(), m_paths.controls.testInsets, m_levelAgeMs);
+        return layout.At(Control::Left).hit.Contains(viewPoint) || layout.At(Control::Right).hit.Contains(viewPoint);
+    }
     return Controls::ClassicOnWalkControl(m_hudRules, ViewPx(), m_levelAgeMs, viewPoint);
 }
 
@@ -8750,7 +9017,22 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         m_shotTouch = Portals::TouchTrack{};
         release = Portals::TouchRelease{};
     }
-    const ControlButton* under = controlUnderPointer(touch);
+    // MODERN CORNER BUTTONS ACT ON THE RELEASE inside their hit rectangle after a press inside it (design D11: the
+    // original's own Button rule, which classic does not follow: it acts on the press, a recorded deviation). `began` is the
+    // control THIS touch's press began on, from an earlier tick; a press anywhere starts a record, and a touch that is up
+    // (or off the game) ends it. The data can ask for the press instead (controls.json corner.act_on); the test variant
+    // with the classic claims acts on the press as classic does.
+    const bool actsOnRelease = playsModern() && !claimsClassic() && m_controlsRules.cornerActOn == Controls::ActOn::Release;
+    const std::optional<Control> began = touch.pressed ? std::nullopt : m_pressedControl;
+    if (touch.pressed || !touch.held || !touch.over) m_pressedControl.reset();
+    // On the tick a touch comes up every reader takes the last point it was HELD at (above). A press that went down on a
+    // corner button spent the shot's record, so the release tick's own point is the raw one: read where it was last held.
+    Touch claimTouch = touch;
+    if (actsOnRelease && handRelease.released) {
+        claimTouch.atView = handRelease.atView;
+        claimTouch.atPx = handRelease.atPx;
+    }
+    const ControlButton* under = controlUnderPointer(claimTouch);
     const bool held = touch.held;
     const bool pressed = touch.pressed;
 
@@ -8763,6 +9045,14 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     if (under != nullptr) {
         // Read before the switch: a restart unloads the controls `under` points into.
         const Control kind = under->kind;
+        // Whether a corner control is worked on this tick: classic, on the press; modern, on the release over the control
+        // the press began on (a press and a release inside one tick are both of them).
+        const bool isCorner = kind != Control::Left && kind != Control::Right;
+        bool act = pressed;
+        if (actsOnRelease) {
+            if (isCorner && pressed && held) m_pressedControl = kind;
+            act = isCorner && handRelease.released && (pressed || began == kind);
+        }
         switch (kind) {
         // HELD, not tapped: a walk button is leaned on, and IsDown is what a
         // replayed tick feeds (Input.hpp lists it among the queries a replay
@@ -8780,7 +9070,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // Its sound is getRestartLevelButtonSound's teleport (GameLayer::GameLayer
         // #207-216, Game::Game #74; planning step 142 - silent before).
         case Control::Reset:
-            if (pressed && m_current >= 0) {
+            if (act && m_current >= 0) {
                 latch("level_button");
                 loadLevel(registry, m_current);
             }
@@ -8788,14 +9078,14 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // GameLayer's menu button calls GameState::showMenuPopup (bytes
         // 98935..99036): the pause, over this level, rather than out of it.
         case Control::Menu:
-            if (pressed) openPause(registry);
+            if (act) openPause(registry);
             break;
         // PortalManager::killAll(true): the placed portals go, those that never
         // carried anything are given back, and it plays playPortalKilledSound at
         // its entry (#5). The button is not there with none placed (update
         // #62-72), and a press that finds none - the port's own case - is silent.
         case Control::Clear:
-            if (pressed && m_level.portals.KillAll(true) > 0) latch("portal_spent");
+            if (act && m_level.portals.KillAll(true) > 0) latch("portal_spent");
             break;
         }
         // A TAP THAT WORKED A CONTROL IS SPENT. Without this, leaning on the
@@ -11640,6 +11930,8 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
     // And last, after every write the tick made to a picture or the camera: the frame
     // draws them where the tick left them, as the original's frame draws its entities.
     drawPicturesAtTick(registry);
+    // A modern run whose first level began before the viewport was published says its rectangles now (logModernControls).
+    if (m_controlsRectsPending) logModernControls(registry);
 }
 
 void MagicPortalsLayer::drawPicturesAtTick(entt::registry& registry) {
@@ -12139,6 +12431,7 @@ void MagicPortalsLayer::openPause(entt::registry& registry) {
     // came up, back in the level (the port's own divergence, not the original's).
     m_shotTouch = Portals::TouchTrack{};
     m_handTouch = Portals::TouchTrack{};
+    m_pressedControl.reset();
     // And so is the camera's record of it, which the pause does not follow: a touch
     // still held when the level resumes is taken up there.
     m_cameraTouch = Camera::TouchRecord{};

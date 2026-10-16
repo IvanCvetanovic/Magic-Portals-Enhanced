@@ -16,7 +16,8 @@
     "",
     "sim/Controls.LoadRules reads this file STRICTLY: every key below that does not begin with an underscore must be there with its",
     "own type and range, or the file is refused and the run plays the classic controls. Unknown keys are ignored, so a later step",
-    "may add one. `layout.presets.<name>.margin_bottom_px` alone is optional (it falls back to `layout.margin_px.bottom`)."
+    "may add one. That includes `layout.presets.<name>.margin_bottom_px`: every look names its own (it used to fall back to",
+    "`layout.margin_px.bottom`, and a misspelt key then loaded cleanly at the shared 44 px, a pair drawn at the wrong height)."
   ],
 
   "_source": [
@@ -197,7 +198,8 @@
       "Which picture each control is drawn with, per tier, and the transparent margin that picture carries (design 1.3, 4.2). A tier's",
       "file is searched for in its own place: mr = reference/magic-rampage/controls (gitignored, never committed); original = the",
       "original's own sprite folder, through the layer's menuImage; generated = the pad art the port draws itself (sim/PadArt) into prisms.",
-      "The first tier whose picture is present is used; a tier's `body_inset` is the fraction of its picture that is transparent on each side."
+      "The first tier whose picture is present is used; a tier's `body_inset` is the fraction of its picture that is transparent on each side.",
+      "A `generated` entry's body_inset is at most 0.25 (sim/PadArt draws no more, and the loader refuses a value that would load and draw nothing)."
     ],
     "mr": {
       "walk_left": {
@@ -228,17 +230,17 @@
     },
     "original": {
       "restart": {
-        "_source": [ "body_inset 0: the original's restart_level_button.png (ui.json hud.restart.sprite) is opaque to its box." ],
+        "_source": [ "body_inset 0: MEASURED (alpha >= 250 box is the whole 64 x 64 image, CTL/mapC_art.md): the original's restart_level_button.png (ui.json hud.restart.sprite) is opaque to its box." ],
         "file": "restart_level_button.png",
         "body_inset": 0.0
       },
       "pause": {
-        "_source": [ "body_inset 0: the original's main_menu_shortcut.png (ui.json hud.pause.sprite) is opaque to its box." ],
+        "_source": [ "body_inset 0: MEASURED (alpha >= 250 box is the whole 64 x 64 image, CTL/mapC_art.md): the original's main_menu_shortcut.png (ui.json hud.pause.sprite) is opaque to its box." ],
         "file": "main_menu_shortcut.png",
         "body_inset": 0.0
       },
       "clear_portals": {
-        "_source": [ "body_inset 0: the original's clear_portals_button.png (ui.json hud.clear_portals.sprite) is opaque to its box." ],
+        "_source": [ "body_inset 0: MEASURED (alpha >= 250 box is the whole 64 x 64 image, CTL/mapC_art.md): the original's clear_portals_button.png (ui.json hud.clear_portals.sprite) is opaque to its box." ],
         "file": "clear_portals_button.png",
         "body_inset": 0.0
       }
@@ -278,9 +280,11 @@
       "change with it from 0 to 16 (CTL/arith2/final_layout.py, census_aspects.py).",
       "slack_units 0: PORT: the hit rectangle is not shrunk when a recorded shot is judged unreachable.",
       "character_row_units 206: MEASURED, the standard waist line of the character in view units (review 2 F1; CTL/arith2/final_layout.py):",
-      "the default pair's top must sit at or below it."
+      "the default pair's top must sit at or below it. THE ONE SOURCE of that number: the adjustment screen's guide at the character's row",
+      "(CTL-11; the design's 3.3 calls it adjust.character_row_y) reads it from here and keeps no second copy."
     ],
-    "_guess": true,
+    "_guess_em_units": true,
+    "_guess_slack_units": true,
     "em_units": 16,
     "slack_units": 0,
     "character_row_units": 206

@@ -439,10 +439,11 @@ int main(int argc, char** argv) {
                   << "  " << MagicPortals::Controls::FlagUsage() << "\n"
                   << "                    which on-screen controls the run plays: the original's (classic)\n"
                   << "                    or Magic Rampage's inset ones (modern, built step by step:\n"
-                  << "                    docs/planning/2026-10-15-modern-controls.md). Until the layer plays\n"
-                  << "                    the modern ones it draws classic whatever is asked, and its log\n"
-                  << "                    line says so; the size, opacity and move keys are read and checked,\n"
-                  << "                    not yet applied. A developer's run (--fixed-step, --route,\n"
+                  << "                    docs/planning/2026-10-15-modern-controls.md). Modern lays out,\n"
+                  << "                    draws and claims the five inset controls (pictures drawn by the\n"
+                  << "                    game; Magic Rampage's own art is a later step); of its keys only\n"
+                  << "                    preset= is applied so far: size, opacity and the moves are read,\n"
+                  << "                    checked and held. A developer's run (--fixed-step, --route,\n"
                   << "                    --visit-levels) is classic unless the flag says otherwise. Writes\n"
                   << "                    nothing\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
@@ -508,7 +509,8 @@ int main(int argc, char** argv) {
     // WHICH CONTROLS THIS RUN PLAYS (planning step 181), resolved once and handed down: the flag and the kind
     // of run (the rig's three flags make it a developer's, whose controls are the classic ones whatever the
     // data says). After --help, which needs no valid flag, and before anything is opened, so a refused
-    // flag costs nothing. Until CTL-6 the layer plays classic whatever this resolves and says so.
+    // flag costs nothing. The layer plays whatever this resolves (planning step 182): classic where the
+    // feature does not exist in the run or the table will not read.
     {
         MagicPortals::Controls::Policy policy = MagicPortals::Controls::ResolvePolicy(
             controlsFlag, paths.fixedStep, !routeFile.empty(), !visit.levels.empty());

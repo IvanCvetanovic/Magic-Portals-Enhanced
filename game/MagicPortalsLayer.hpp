@@ -196,9 +196,11 @@ public:
         // Controls::ResolvePolicy made of --controls and of the kind of run. The default is the
         // policy of a run with no such thing - "classic, nothing": the feature does not exist, no
         // store is opened and controls.json is not read - which is what every suite's bare Paths
-        // is, so the suites and the parity rig cannot meet the feature by accident. The plan's
-        // fuller list (the art directory, a test's safe-area insets, the classic-claims variant)
-        // is added by the step that first reads each.
+        // is, so the suites and the parity rig cannot meet the feature by accident. What no command
+        // line says - the classic-claims variant, a test's safe-area insets, the art directory, a
+        // saved tuning a test injects - is in the same struct (Controls::Policy, sim/Controls.hpp),
+        // each field "classic, nothing" by default; this layer reads classicClaims and testInsets
+        // (planning step 182).
         Controls::Policy controls;
     };
 
@@ -1226,11 +1228,13 @@ public:
     // read, and for a player's run while the shipped default is classic; Modern for
     // --controls modern, and for a player's run once the data's default_mode says so.
     //
-    // PLUMBING ONLY UNTIL CTL-6. The layer DRAWS AND CLAIMS THE CLASSIC CONTROLS whatever this
-    // says, and the INFO line says so ("modern requested, drawn classic until the layer plays
-    // it"); nothing on the classic path reads it, so a classic run is the classic run it was.
-    // Whoever asserts a modern behaviour reads this first and fails unless it is Modern (the
-    // design's N1), and CTL-6 takes that wording out of the line.
+    // THE LAYER PLAYS WHAT THIS SAYS (planning step 182, CTL-6): under Modern it lays out, draws
+    // and claims the five inset controls of sim/Controls (always all five, whatever pictures are
+    // on disk), under Classic the original's, and a run that resolves Classic is the classic run
+    // it always was - the classic code is not on any modern path. Whoever asserts a modern
+    // behaviour reads this first and fails unless it is Modern (the design's N1): a typo in
+    // controls.json makes the run Classic with one error line, and a gate that did not look would
+    // pass on the wrong controls.
     Controls::Style ControlsStyle() const { return m_controlsStyle; }
     // What main resolved, as the layer was given it.
     const Controls::Policy& ControlsPolicy() const { return m_paths.controls; }
@@ -1238,13 +1242,26 @@ public:
     // whenever the policy says the feature does not exist, and when either would not read.
     bool ModernReady() const { return m_modernReady; }
     const Controls::Rules& ControlsRules() const { return m_controlsRules; }
-    // The flag's tuning applied to those rules (preset= is the one key in force before CTL-10).
+    // The flag's tuning as it was read onto those rules: its size, opacity and moves are held here and
+    // are NOT applied before CTL-10. What the layout applies is ControlsApplied() below.
     const Controls::Tuning& ControlsTuning() const { return m_controlsTuning; }
+    // The tuning the modern layout is laid out with: the LOOK (`preset=`) and nothing else, so the
+    // flag's size, opacity and moves are inert until CTL-10 decides how they are applied.
+    const Controls::Tuning& ControlsApplied() const { return m_controlsApplied; }
     // The INFO line the run logged once at attach, or empty where it logs none: a developer's or a
     // bare run is silent, so its log is the log it always was. And the one ERROR line, or empty:
     // why controls.json or the flag's tuning would not read.
     const std::string& ControlsLine() const { return m_controlsLine; }
     const std::string& ControlsError() const { return m_controlsError; }
+    // The INFO line the modern controls log once at each level's start: `controls: modern, ` then each
+    // control's BOX and HIT rectangle, settled (the slide is over), in the window's pixels - the
+    // numbers of the design's table 1.2 at 1280 x 720. Empty in a classic run, and before a level
+    // has started.
+    const std::string& ControlsRectsLine() const { return m_controlsRectsLine; }
+    // The picture a modern control is drawn with (the generated tier, written into Paths::prisms once at
+    // attach), or empty where there is none - no prisms, or it could not be written - and the control is
+    // a flat quad. Empty for a classic run.
+    const std::string& ModernImage(Control control) const { return m_modernImages[static_cast<std::size_t>(control)]; }
 
     // The no-portal sign's rectangle on the view as the last tick left it, in
     // design units; false in a level that places none.
@@ -3238,6 +3255,11 @@ private:
         Controls::HitShape hit;
         bool shown{false};
         double alpha{0.0}; // display-space, as last laid out
+        // MODERN ONLY (planning step 182): `rect` is the control's BOX, which the layout and the claim are
+        // measured on; the picture is drawn into `picture`, derived from it so that the picture's solid body
+        // sits on the box's solid face (Controls::DrawRect), or onto the face itself for a flat quad.
+        Hud::Rect picture;
+        double bodyInset{0.0}; // the fraction of the picture that is transparent on each side
     };
     std::vector<ControlButton> m_controls;
 
@@ -3252,10 +3274,36 @@ private:
     void resolveControls();
     Controls::Rules m_controlsRules;
     Controls::Tuning m_controlsTuning;
+    // The part of the tuning the layout applies until CTL-10: the look, nothing else (see ControlsApplied).
+    Controls::Tuning m_controlsApplied;
     Controls::Style m_controlsStyle{Controls::Style::Classic};
     bool m_modernReady{false};
     std::string m_controlsLine;
     std::string m_controlsError;
+    std::string m_controlsRectsLine;
+    // Set when a level starts before the viewport is known (the game's first level: the engine publishes it with the first frame, after OnAttach):
+    // the INFO line of ControlsRectsLine is then said on the first tick, with the window's own size, and not at load with the default one.
+    bool m_controlsRectsPending{false};
+
+    // THE MODERN CONTROLS (planning step 182), beside the classic ones and never on their path. The one
+    // predicate for "this run plays them": the style resolved Modern, which it does only once the table and the
+    // flag read (resolveControls).
+    bool playsModern() const { return m_controlsStyle == Controls::Style::Modern && m_modernReady; }
+    // The test variant that claims with the classic rules under the modern layout and draw: the hit shapes,
+    // the camera's / lift's / hand's `onPad`, and the corner buttons acting on the press (Paths::controls).
+    bool claimsClassic() const { return m_paths.controls.classicClaims; }
+    // Each modern control's picture, resolved ONCE per run at attach and never touched by a level's load
+    // (unloadControls does not clear it): the generated tier, a file written into Paths::prisms, or empty
+    // for a flat quad. By Id.
+    std::array<std::string, 5> m_modernImages;
+    void resolveModernImages();
+    std::string modernGlyphImage(Control control);
+    void buildModernControls();
+    // The INFO line of ControlsRectsLine, logged once per level start.
+    void logModernControls(const entt::registry& registry);
+    // The control a press began on, while that touch is down: what a modern corner button acts on at the
+    // release (the original's Button rule), cleared when the touch is up.
+    std::optional<Control> m_pressedControl;
 
     double m_levelAgeMs{0.0};
     // The frame time the level's age last gained (the script's, ScriptClock::Ms): what a wall's colour
@@ -3477,7 +3525,9 @@ private:
     // Whether a point on the view is on either walk control, at this view and this age.
     // The camera's `onPad`, the lift gate and the tutorial hand's gate all ask this, and it
     // reads the layout rules and not the controls built for the level: it does not depend on
-    // the pads being shown or their pictures being there.
+    // the pads being shown or their pictures being there. Under the modern controls it asks
+    // the two arrows' hit rectangles (design D12: ungated by `shown`, like classic's), and
+    // under the test variant that claims classic (Paths::controls.classicClaims) the discs.
     bool onWalkControl(const glm::dvec2& viewPoint) const;
     // Whether the level being played is the one whose pads pulse long and ring.
     bool tutorialPads() const;

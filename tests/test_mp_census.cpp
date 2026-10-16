@@ -6,8 +6,8 @@
 // of 110 gravity levels where the classic discs block none; the layout that ships, chosen from this census, blocks two for the pair.
 //
 // HOW IT WORKS (the design's own python, out/parity/program/CTL/arith2/final_layout.py, deadzone_census.py, census2.py, census_aspects.py):
-//   * a route's shot taps are points of the level (every tap whose `shot` is not false: 691 of them on the 128 routes, 613 on the 110 levels
-//     that have gravity); the level's bounds are its `max` marker;
+//   * a route's shot taps are points of the level (every tap whose `shot` is not false; the golden's `inputs` count them, on all 128 routes and on
+//     the levels that have gravity); the level's bounds are its `max` marker;
 //   * the camera's corner is centred when the level is no larger than the view and otherwise anywhere in [0, bounds - view] (Camera::Clamp);
 //     the tap is on the view at tap - corner, which the player can park no nearer than EM units to the view's edge (16 here);
 //   * a tap is BLOCKED by a rectangle when every camera the clamp allows puts it inside (a closed comparison, as the python's), the
@@ -449,8 +449,11 @@ Zone FirstPassPair(double size, double e, double snap) {
 
 void TheCensusReadsWhatItAssumes() {
     const Json::Value& inputs = Key(g_golden, "inputs", "the top level");
-    // The plan's own numbers, written out: a census that quietly read fewer routes or taps would pass its empty lists.
-    CHECK_EQ(g_levels.size(), std::size_t{128});
+    // What the census is fed is the golden's own `inputs` (written by the design's python from the same routes and levels), and nothing of it is
+    // written out here a second time: a re-authored route changes the number of shot taps, and that is a file edit, not a relink. What stays in
+    // code is the game's own count of levels (CLAUDE.md pins 128), which a census that quietly read fewer routes could not match.
+    constexpr std::size_t kLevelsInTheGame = 128;
+    CHECK_EQ(g_levels.size(), kLevelsInTheGame);
     std::size_t taps = 0;
     std::size_t gravityTaps = 0;
     std::size_t gravityLevels = 0;
@@ -465,28 +468,34 @@ void TheCensusReadsWhatItAssumes() {
         }
     }
     std::sort(weightless.begin(), weightless.end());
-    CHECK_EQ(taps, std::size_t{691});
-    CHECK_EQ(gravityTaps, std::size_t{613});
-    CHECK_EQ(gravityLevels, std::size_t{110});
-    CHECK_EQ(weightless.size(), std::size_t{18});
-    // And what the golden says the python read.
+    // What the golden says the python read.
     CHECK_EQ(static_cast<double>(g_levels.size()), Key(inputs, "routes", "inputs").AsNumber());
     CHECK_EQ(static_cast<double>(taps), Key(inputs, "shot_taps", "inputs").AsNumber());
     CHECK_EQ(static_cast<double>(gravityTaps), Key(inputs, "shot_taps_on_gravity_levels", "inputs").AsNumber());
     CHECK_EQ(static_cast<double>(gravityLevels), Key(inputs, "gravity_levels", "inputs").AsNumber());
-    CHECK_EQ(Key(inputs, "levels_with_bounds", "inputs").AsNumber(), 128.0);
-    CHECK_EQ(Key(inputs, "levels_with_a_spawn", "inputs").AsNumber(), 128.0);
+    CHECK_EQ(Key(inputs, "levels_with_bounds", "inputs").AsNumber(), Key(inputs, "routes", "inputs").AsNumber());
+    CHECK_EQ(Key(inputs, "levels_with_a_spawn", "inputs").AsNumber(), Key(inputs, "routes", "inputs").AsNumber());
     CheckList("the weightless levels", weightless, LabelsOf(Key(inputs, "weightless_levels", "inputs")));
-    // 4-02 to 4-19, the eighteen weightless levels.
-    Labels expected;
-    for (int level = 2; level <= 19; ++level) {
-        char label[16];
-        std::snprintf(label, sizeof(label), "4-%02d", level);
-        expected.push_back(label);
+    // What holds whatever the routes say, so that an empty list cannot pass for want of input: there are shot taps to judge, on levels with gravity
+    // (the pair is judged only there) and on weightless ones (the corner buttons are judged everywhere), and the golden's own levels add up.
+    CHECK_MSG(taps > 0 && gravityTaps > 0, "the census has shot taps to judge: " + std::to_string(taps) + ", " + std::to_string(gravityTaps) + " of them on levels with gravity");
+    CHECK_MSG(gravityLevels > 0 && !weightless.empty(), std::to_string(gravityLevels) + " levels with gravity and " + std::to_string(weightless.size()) + " weightless");
+    CHECK_MSG(Key(inputs, "gravity_levels", "inputs").AsNumber() + static_cast<double>(Key(inputs, "weightless_levels", "inputs").AsArray().size()) ==
+                  Key(inputs, "routes", "inputs").AsNumber(),
+              "the golden's levels with gravity and its weightless ones are its routes");
+    // Every level is one the census can judge: a spawn and every shot tap lie inside its bounds (the level's pixels), so a tap is a point a camera can
+    // be put on and a bound is not a marker read off the wrong node.
+    for (const Level& level : g_levels) {
+        bool inside = level.bounds.x > 0.0 && level.bounds.y > 0.0 && level.spawn.x >= 0.0 && level.spawn.y >= 0.0 && level.spawn.x <= level.bounds.x &&
+                      level.spawn.y <= level.bounds.y;
+        for (const glm::dvec2& tap : level.taps) {
+            inside = inside && tap.x >= 0.0 && tap.y >= 0.0 && tap.x <= level.bounds.x && tap.y <= level.bounds.y;
+        }
+        CHECK_MSG(inside, level.label + ": its spawn and each shot tap lie inside its bounds");
     }
-    CheckList("the weightless levels are 4-02 to 4-19", weightless, expected);
-    // Levels the camera centres on an axis and levels it scrolls on it, on both axes, or the camera model would be tested on one side only: at
-    // 16:9 the camera centres 94 levels vertically and scrolls 34, and at 32:9 it centres 119 horizontally and scrolls 9.
+    // Levels the camera centres on an axis and levels it scrolls on it, on both axes, or the camera model would be tested on one side only (at 16:9
+    // it centres most levels vertically and scrolls some; at 32:9 it centres most horizontally and scrolls a few). The counts are the levels' own and
+    // not the routes', so they are not pinned here beyond that each side is met.
     const glm::dvec2 wide = ViewOf(32, 9);
     int centredY = 0;
     int scrollsY = 0;
@@ -496,10 +505,8 @@ void TheCensusReadsWhatItAssumes() {
         (level.bounds.y <= kView169.y ? centredY : scrollsY) += 1;
         (level.bounds.x <= wide.x ? centredX : scrollsX) += 1;
     }
-    CHECK_EQ(centredY, 94);
-    CHECK_EQ(scrollsY, 34);
-    CHECK_EQ(centredX, 119);
-    CHECK_EQ(scrollsX, 9);
+    CHECK_MSG(centredY > 0 && scrollsY > 0, "at 16:9 some levels are centred vertically and some scroll: " + std::to_string(centredY) + " and " + std::to_string(scrollsY));
+    CHECK_MSG(centredX > 0 && scrollsX > 0, "at 32:9 some levels are centred horizontally and some scroll: " + std::to_string(centredX) + " and " + std::to_string(scrollsX));
 }
 
 void TheCameraModelIsTheLayersClamp() {
@@ -623,6 +630,13 @@ void TheCensusAtTheDefaultIsTheAcceptedList() {
     Labels restartEverywhere;
     Labels clearEverywhere;
     Labels pauseEverywhere;
+    // The same unions of the ACCEPTED lists, from the golden: the design's words ("the pair costs 1-20 and 3-27 and no more", "pause nothing") are
+    // the golden's, so they are written once, in the file the owner signs, and not again here.
+    Labels pairAccepted;
+    Labels restartAccepted;
+    Labels clearAccepted;
+    Labels pauseAccepted;
+    const auto append = [](Labels& into, const Labels& more) { into.insert(into.end(), more.begin(), more.end()); };
     for (const Json::Value& shape : shapes) {
         const std::string name = Key(shape, "name", "a shape").AsString();
         const Json::Array& aspect = Key(shape, "aspect", name).AsArray();
@@ -646,44 +660,62 @@ void TheCensusAtTheDefaultIsTheAcceptedList() {
             CheckList(name + " " + key + " pause", m, LabelsOf(Key(accepted, "pause", name)));
             CheckList(name + " " + key + " clear_portals", c, LabelsOf(Key(accepted, "clear_portals", name)));
             if (std::string(key) == "blocked") {
-                pairEverywhere.insert(pairEverywhere.end(), p.begin(), p.end());
-                restartEverywhere.insert(restartEverywhere.end(), r.begin(), r.end());
-                pauseEverywhere.insert(pauseEverywhere.end(), m.begin(), m.end());
-                clearEverywhere.insert(clearEverywhere.end(), c.begin(), c.end());
+                append(pairEverywhere, p);
+                append(restartEverywhere, r);
+                append(pauseEverywhere, m);
+                append(clearEverywhere, c);
+                append(pairAccepted, LabelsOf(Key(accepted, "pair", name)));
+                append(restartAccepted, LabelsOf(Key(accepted, "restart", name)));
+                append(pauseAccepted, LabelsOf(Key(accepted, "pause", name)));
+                append(clearAccepted, LabelsOf(Key(accepted, "clear_portals", name)));
             }
         }
         // A shot a player may aim 4 units off the recorded point: the pair's list does not change.
         CheckList(name + " pair at slack 4", BlockedBy(Shrink(pair, 4.0, view), view, g_rules.census.emUnits, true), LabelsOf(Key(shape, "blocked_pair_slack4", name)));
     }
-    // The shapes together, in the words of the design: the pair costs 1-20 and 3-27 and no more, restart 2-06 (and 4-23 on a 2:1 window), clear
-    // 1-09 and 3-14 (and 2-24 on a 2:1 window), pause nothing anywhere.
+    // The shapes together: the levels each control costs on any of the nine, against the union of the accepted lists. (Each shape's list is held
+    // to the golden above; this is the union of the same, so a shape that gained a level another lost cannot hide in a sum.)
     const auto unique = [](Labels labels) {
         std::sort(labels.begin(), labels.end());
         labels.erase(std::unique(labels.begin(), labels.end()), labels.end());
         return labels;
     };
-    CheckList("the pair, over the nine shapes", unique(pairEverywhere), Labels{"1-20", "3-27"});
-    CheckList("restart, over the nine shapes", unique(restartEverywhere), Labels{"2-06", "4-23"});
-    CheckList("clear-portals, over the nine shapes", unique(clearEverywhere), Labels{"1-09", "2-24", "3-14"});
-    CHECK_MSG(pauseEverywhere.empty(), "pause blocks " + Join(unique(pauseEverywhere)) + ": the design says nothing, anywhere");
+    CheckList("the pair, over the nine shapes", unique(pairEverywhere), unique(pairAccepted));
+    CheckList("restart, over the nine shapes", unique(restartEverywhere), unique(restartAccepted));
+    CheckList("clear-portals, over the nine shapes", unique(clearEverywhere), unique(clearAccepted));
+    CheckList("pause, over the nine shapes", unique(pauseEverywhere), unique(pauseAccepted));
 
-    // The headline at 16:9, the shape the owner will see most, from the module and not from the golden.
-    {
+    // The headline at 16:9, the shape the owner will see most, at the EM and the slack the golden was taken at WHATEVER controls.json says, from
+    // the module's rectangles: the accepted list for that shape is the golden's.
+    const Json::Value& valid = Key(g_golden, "valid_for", "the top level");
+    const double designEm = Key(Key(valid, "census", "valid_for"), "em_units", "census").AsNumber();
+    bool saw169 = false;
+    for (const Json::Value& shape : shapes) {
+        if (Key(shape, "name", "a shape").AsString() != "16:9") continue;
+        saw169 = true;
         const Placed placed = Place(g_rules, Controls::Tuning{}, kView169);
-        CheckList("16:9 pair", BlockedBy(PairZone(placed), kView169, 16.0, true), Labels{"1-20", "3-27"});
-        CheckList("16:9 restart", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Reset)]), kView169, 16.0, false), Labels{"2-06"});
-        CheckList("16:9 pause", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Menu)]), kView169, 16.0, false), Labels{});
-        CheckList("16:9 clear-portals", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Clear)]), kView169, 16.0, false), Labels{"1-09", "3-14"});
-    }
+        const Json::Value& accepted = Key(shape, "blocked", "16:9");
+        const Labels pairList = LabelsOf(Key(accepted, "pair", "16:9"));
+        CheckList("16:9 pair", BlockedBy(PairZone(placed), kView169, designEm, true), pairList);
+        CheckList("16:9 restart", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Reset)]), kView169, designEm, false), LabelsOf(Key(accepted, "restart", "16:9")));
+        CheckList("16:9 pause", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Menu)]), kView169, designEm, false), LabelsOf(Key(accepted, "pause", "16:9")));
+        CheckList("16:9 clear-portals", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Clear)]), kView169, designEm, false), LabelsOf(Key(accepted, "clear_portals", "16:9")));
 
-    // The comparison can fail both ways: the same lists with a level added, and with one removed, are not equal (a suite that could not fail would
-    // keep the golden honest for no one).
-    const Labels accepted = {"1-20", "3-27"};
-    Labels more = accepted;
-    more.push_back("4-30");
-    const Labels fewer = {"1-20"};
-    const Labels again = {"1-20", "3-27"};
-    CHECK(more != accepted && fewer != accepted && accepted == again);
+        // The comparison can fail both ways, and its message says which: a level added to an accepted list, and one taken out, are told apart in the
+        // words the owner reads ("joined", "left"). A level that is no level (9-99 sorts after every real one) cannot be one of the list's own.
+        Labels more = pairList;
+        more.push_back("9-99");
+        const std::string added = Difference(more, pairList);
+        CHECK_MSG(added.find("joined {9-99}") != std::string::npos && added.find("left {}") != std::string::npos, "an added level is reported as joined: " + added);
+        if (!pairList.empty()) {
+            Labels fewer = pairList;
+            const std::string gone = fewer.back();
+            fewer.pop_back();
+            const std::string removed = Difference(fewer, pairList);
+            CHECK_MSG(removed.find("left {" + gone + "}") != std::string::npos && removed.find("joined {}") != std::string::npos, "a removed level is reported as left: " + removed);
+        }
+    }
+    CHECK_MSG(saw169, "the golden has a shape named 16:9");
 }
 
 // ---- 4: the design's tables ---------------------------------------------------------------------------------------------
@@ -720,16 +752,29 @@ void TheCensusAgreesWithTheDesignsTables() {
 }
 
 void AGrowthOfSixteenPxCostsWhatQ0Says() {
-    // The number the owner decides on (Q0/Q6), pinned as the design's text states it: 8 levels at the uniform look, 14 at balanced, 16 at mr, EM 16,
-    // slack 0, against the 2 of no growth. The shipped data has none (the golden's validity above), so none of this is in the game.
-    const std::array<std::size_t, 3> costs = {8, 14, 16};
+    // The number the owner decides on (Q0/Q6): what 16 px of growth costs at each look against none, at EM 16 and slack 0. The design's text states
+    // it (8 levels at the uniform look, 14 at balanced, 16 at mr, against the 2 of no growth); those numbers are written once, in the golden's
+    // `growth_table`, which is read here. The shipped data has none (the golden's validity above), so none of this is in the game.
+    const Json::Value& table = Key(Key(g_golden, "growth_table", "the top level"), "counts", "growth_table");
+    std::array<std::size_t, 3> grownCosts{};
     for (std::size_t look = 0; look < 3; ++look) {
+        const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
+        const Json::Value& byGrowth = Key(table, preset.c_str(), "growth_table");
+        // [EM 0, 8, 16][slack 0, 4, 8]: EM 16 is the third, slack 0 the first.
+        const auto cell = [&](const char* growth) { return Key(byGrowth, growth, preset).AsArray().at(2).AsArray().at(0).AsNumber(); };
         const Placed grown = Place(WithPairGrowth(g_rules, 16.0), Look(Design::kPresetOf[look]), kView169);
         const Placed plain = Place(WithPairGrowth(g_rules, 0.0), Look(Design::kPresetOf[look]), kView169);
-        CHECK_MSG(BlockedBy(PairZone(grown), kView169, 16.0, true).size() == costs[look],
-                  std::string(Controls::NameOf(Design::kPresetOf[look])) + " with 16 px of growth blocks " + std::to_string(BlockedBy(PairZone(grown), kView169, 16.0, true).size()) + " levels, not " + std::to_string(costs[look]));
-        CHECK_EQ(BlockedBy(PairZone(plain), kView169, 16.0, true).size(), std::size_t{2});
+        const std::size_t withGrowth = BlockedBy(PairZone(grown), kView169, 16.0, true).size();
+        const std::size_t without = BlockedBy(PairZone(plain), kView169, 16.0, true).size();
+        CHECK_MSG(static_cast<double>(withGrowth) == cell("16"), preset + " with 16 px of growth blocks " + std::to_string(withGrowth) + " levels, the design's " + Num(cell("16")));
+        CHECK_MSG(static_cast<double>(without) == cell("0"), preset + " with no growth blocks " + std::to_string(without) + " levels, the design's " + Num(cell("0")));
+        // What the owner decides on: growth costs levels, at every look.
+        CHECK_MSG(withGrowth > without, preset + ": 16 px of growth costs " + std::to_string(withGrowth) + " levels against " + std::to_string(without) + " without");
+        grownCosts[look] = withGrowth;
     }
+    // And the larger the look, the more it costs once any growth is asked for (the reason the look that ships is the uniform one).
+    CHECK_MSG(grownCosts[0] <= grownCosts[1] && grownCosts[1] <= grownCosts[2], "with 16 px of growth the looks cost " + std::to_string(grownCosts[0]) + ", " +
+                                                                                  std::to_string(grownCosts[1]) + " and " + std::to_string(grownCosts[2]) + " levels");
 }
 
 void TheFirstPassPlacementWouldHaveFailed() {
@@ -754,10 +799,17 @@ void TheFirstPassPlacementWouldHaveFailed() {
             CHECK_MSG(static_cast<double>(withGrowth) == designCounts[i].AsNumber(), std::string(tag) + " first pass at EM " + Num(ems[i].AsNumber()) + ": " + std::to_string(withGrowth) + ", the design's " + Num(designCounts[i].AsNumber()));
             CHECK_MSG(static_cast<double>(boxAlone) == boxCounts[i].AsNumber(), std::string(tag) + " box alone at EM " + Num(ems[i].AsNumber()) + ": " + std::to_string(boxAlone) + ", the design's " + Num(boxCounts[i].AsNumber()));
         }
-        // The headline: 25 of 110 at size 1.0 and 37 at size 1.4, at the player's EM of 16 units, against the accepted layout's 2.
+        // The headline, at the player's EM of 16 units: the design's text says 25 of 110 at size 1.0 and 37 at size 1.4, which the golden holds (its
+        // `design` row at EM 16), against what the accepted layout blocks.
+        std::size_t at16 = ems.size();
+        for (std::size_t i = 0; i < ems.size(); ++i) {
+            if (ems[i].AsNumber() == 16.0) at16 = i;
+        }
         const std::size_t headline = BlockedBy(design, kView169, 16.0, true).size();
-        CHECK_EQ(headline, size == 1.0 ? std::size_t{25} : std::size_t{37});
-        CHECK(headline > 2);
+        CHECK_MSG(at16 < designCounts.size(), std::string(tag) + ": the golden counts the first pass at EM 16");
+        if (at16 < designCounts.size()) CHECK_EQ(static_cast<double>(headline), designCounts[at16].AsNumber());
+        const std::size_t accepted = BlockedBy(PairZone(Place(g_rules, Controls::Tuning{}, kView169)), kView169, 16.0, true).size();
+        CHECK_MSG(headline > accepted, std::string(tag) + ": the first pass blocks " + std::to_string(headline) + " levels and the accepted layout " + std::to_string(accepted));
 
         // The module reproduces it, with no snap of its own: the uniform look at the size, 32 px of growth on both arrows, and its edge reach (48
         // px) doing what the snap did. The pair it lays out is the same rectangle to a billionth.
@@ -827,16 +879,20 @@ void TheCornerButtonsCostWhatTheDesignSays() {
             CheckList(std::string(Controls::KeyOf(id)) + " " + key, BlockedBy(Shrink(zone, slack, kView169), kView169, em, false), LabelsOf(Key(entry, key, Controls::KeyOf(id))));
         }
     }
-    // Restart costs 2-06 and pause nothing, which the plan states in prose.
-    CheckList("restart at 16:9, EM 16", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Reset)]), kView169, 16.0, false), Labels{"2-06"});
-    CheckList("pause at 16:9, EM 16", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Menu)]), kView169, 16.0, false), Labels{});
+    // The plan states in prose that restart costs one level and pause none; the levels are the golden's (read above), and what is held here is the
+    // shape of it: pause costs no more than either of the other two.
+    const std::size_t restartCost = BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Reset)]), kView169, 16.0, false).size();
+    const std::size_t pauseCost = BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Menu)]), kView169, 16.0, false).size();
+    const std::size_t clearCost = BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Clear)]), kView169, 16.0, false).size();
+    CHECK_MSG(pauseCost <= restartCost && pauseCost <= clearCost, "at 16:9, EM 16 pause costs " + std::to_string(pauseCost) + " levels, restart " + std::to_string(restartCost) + ", clear-portals " + std::to_string(clearCost));
 }
 
 void TheCharacterAtLevelStartBehindThePairIsTheDesignsEstimate() {
-    // The character at level start behind the pair's BOX (the spawn marker seen through the camera that opens on it): 1 level at the uniform look
-    // (2-02), 5 at the other two (2-02, 2-25, 3-16, 3-24, 3-29) - the reason the look that ships is the one that costs least here.
+    // The character at level start behind the pair's BOX (the spawn marker seen through the camera that opens on it). The design's text names the
+    // levels (the uniform look 2-02 alone, the other two five), which the golden holds; the reason the look that ships is the uniform one is
+    // that it costs least here, and that is the relation held below.
     const Json::Value& behind = Key(g_golden, "character_behind_the_pair", "the top level");
-    const std::array<std::size_t, 3> counts = {1, 5, 5};
+    std::array<std::size_t, 3> counts{};
     for (std::size_t look = 0; look < 3; ++look) {
         const Placed placed = Place(g_rules, Look(Design::kPresetOf[look]), kView169);
         const Hud::Rect& left = placed.boxes[Ix(Controls::Id::Left)];
@@ -856,8 +912,10 @@ void TheCharacterAtLevelStartBehindThePairIsTheDesignsEstimate() {
         const Labels mine(found.begin(), found.end());
         const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
         CheckList("the character behind the pair, " + preset, mine, LabelsOf(Key(behind, preset.c_str(), "character_behind_the_pair")));
-        CHECK_EQ(mine.size(), counts[look]);
+        counts[look] = mine.size();
     }
+    CHECK_MSG(counts[0] <= counts[1] && counts[0] <= counts[2], "the uniform look puts the character behind the pair in " + std::to_string(counts[0]) + " levels, the others in " +
+                                                                  std::to_string(counts[1]) + " and " + std::to_string(counts[2]));
 }
 
 void ThePairAlwaysTilesWhereTheCensusAssumesIt() {

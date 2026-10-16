@@ -629,6 +629,8 @@ void TheModernRulesAreTheFilesNumbers() {
     CHECK(rules.hintMarginUnits == 8.0);
     CHECK(rules.census.emUnits == 16.0 && rules.census.slackUnits == 0.0 && rules.census.characterRowUnits == 206.0);
     CHECK(rules.defaultMode == Controls::Style::Classic);
+    // The margin a picture the port draws itself may carry: a quarter on each side (sim/PadArt's own bound is this number).
+    CHECK(Controls::kMaxGeneratedBodyInset == 0.25);
 
     // The art: Magic Rampage's five and the generated five by Id, the original's three corner sprites and no walk pad.
     const std::array<const char*, 5> mrFiles = {"walk_left.png", "walk_right.png", "restart.png", "pause.png", "clear_portals.png"};
@@ -902,6 +904,77 @@ void ACornerButtonNeverShrinksBelowItsMinimumSize() {
     const Hud::Rect face = Controls::DrawRect(box, 0.109375, 0.109375);
     CHECK_MSG(Near(box.size.x * (1.0 - 2.0 * 0.109375), 32.0, 1e-9), "a corner box's solid face is the classic button's 32 units");
     CHECK_MSG(Near(face.size.x, 40.96, 1e-9), "a Magic Rampage picture fills the box");
+}
+
+// ---- design 1.2's size table, and Appendix A's rows for the narrowest windows --------------------------------------------
+
+// The plan prints a number to the precision it has, and each is held to it: a pair's area to a tenth (0.06), the table's boxes and edges to four
+// decimals (kTable, 6e-5), Appendix A's corner x to three decimals (6e-4) and its clear-portals edge to two (6e-3). Beside each printed number is
+// the same number worked from the plan's own formula (the margin 44 px, the gap 32, the box 128 and the 720 reference, by height), to four
+// decimals, which rounds to the printed one and is what the tolerance 6e-5 is about.
+void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
+    const Controls::Rules rules = LoadModern();
+    struct Column {
+        int steps;           // the size's step on the grid: 4 is 0.4
+        double arrow;        // an arrow's box
+        double corner;       // a corner button's box, 0.9 x 128 px x max(size, 1)
+        double pairRight;    // the right arrow's right edge
+        double pairTop;      // both arrows' top
+        double pairHitArea;  // the two arrows' hit rectangles together, u^2
+        double ofClassic;    // that against the classic discs' 6,434.0, to two decimals
+    };
+    const std::array<Column, 5> columns = {{{4, 18.2044, 40.96, 63.4311, 222.1511, 2147.1, 0.33},
+                                            {7, 31.8578, 40.96, 90.7378, 208.4978, 4310.2, 0.67},
+                                            {10, 45.5111, 40.96, 118.0444, 194.8444, 7219.1, 1.12},
+                                            {12, 54.6133, 49.152, 136.2489, 185.7422, 9572.5, 1.49},
+                                            {14, 63.7156, 57.344, 154.4533, 176.6400, 12257.4, 1.91}}};
+    for (const Column& c : columns) {
+        Controls::Tuning tuning;
+        tuning.sizeSteps = c.steps;
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
+        const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
+        const std::string at = "size " + Num(static_cast<double>(c.steps) / 10.0) + ": ";
+        CHECK_MSG(Near(boxes[0].size.x, c.arrow, kTable) && Near(boxes[1].size.x, c.arrow, kTable) && Near(boxes[0].size.y, c.arrow, kTable), at + "the arrow's box is " + Num(boxes[0].size.x));
+        for (const std::size_t corner : {2u, 3u, 4u}) {
+            CHECK_MSG(Near(boxes[corner].size.x, c.corner, kTable) && Near(boxes[corner].size.y, c.corner, kTable), at + "corner " + std::to_string(corner) + " is " + Num(boxes[corner].size.x));
+        }
+        CHECK_MSG(Near(boxes[1].Max().x, c.pairRight, kTable), at + "the pair's right edge is " + Num(boxes[1].Max().x));
+        CHECK_MSG(Near(boxes[0].min.y, c.pairTop, kTable) && Near(boxes[1].min.y, c.pairTop, kTable), at + "the pair's top is " + Num(boxes[0].min.y));
+        // The pair's hit area: the two rectangles together, which is what the plan prints, not a sum of two rounded areas.
+        const double area = AreaOf(hits[0]) + AreaOf(hits[1]);
+        CHECK_MSG(Near(area, c.pairHitArea, 0.06), at + "the pair's hit area is " + Num(area) + ", the plan's " + Num(c.pairHitArea));
+        CHECK_MSG(Near(area / kClassicPair, c.ofClassic, 0.0051), at + "the pair's hit area is " + Num(area / kClassicPair) + " of the classic discs', the plan's " + Num(c.ofClassic));
+    }
+
+    // Appendix A: at the narrowest supported windows, with the arrows at their largest (size 1.4, so the corner boxes are 57.344), where the pair
+    // and the corner buttons are closest: pause and restart's left edges, clear-portals' right edge, the pair's right edge and top.
+    struct Narrow {
+        const char* name;
+        double ratio;
+        double pauseX;        // worked from the formula, four decimals
+        double pauseXPlan;    // as the plan prints it
+        double restartX;
+        double restartXPlan;
+        double clearRight;
+        double clearRightPlan;
+    };
+    const std::array<Narrow, 2> narrow = {{{"5:4 (W 320)", 1.25, 247.0116, 247.012, 178.2898, 178.290, 72.9884, 72.99},
+                                           {"4:3 (W 341.333)", 4.0 / 3.0, 268.3449, 268.345, 199.6231, 199.623, 72.9884, 72.99}}};
+    Controls::Tuning largest;
+    largest.sizeSteps = 14;
+    for (const Narrow& n : narrow) {
+        const glm::dvec2 view = ViewOf(n.ratio);
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, largest, view, kNoInsets);
+        const std::string at = std::string(n.name) + " size 1.4: ";
+        CHECK_MSG(Near(boxes[3].min.x, n.pauseX, kTable) && Near(boxes[3].min.x, n.pauseXPlan, 6e-4), at + "pause.x is " + Num(boxes[3].min.x) + ", the plan's " + Num(n.pauseXPlan));
+        CHECK_MSG(Near(boxes[2].min.x, n.restartX, kTable) && Near(boxes[2].min.x, n.restartXPlan, 6e-4), at + "restart.x is " + Num(boxes[2].min.x) + ", the plan's " + Num(n.restartXPlan));
+        CHECK_MSG(Near(boxes[4].Max().x, n.clearRight, kTable) && Near(boxes[4].Max().x, n.clearRightPlan, 6e-3), at + "clear-portals' right edge is " + Num(boxes[4].Max().x) + ", the plan's " + Num(n.clearRightPlan));
+        // The pair is the bottom-left group and never moves with the window: its right edge and top are the 16:9 table's last column.
+        CHECK_MSG(Near(boxes[1].Max().x, 154.4533, kTable) && Near(boxes[0].min.y, 176.64, kTable), at + "the pair's right edge " + Num(boxes[1].Max().x) + " and top " + Num(boxes[0].min.y));
+        // And the corner row stays right of the clear-portals box and left of the window: pause ends exactly 44 px (15.6444) from the right edge.
+        CHECK_MSG(Near(view.x - boxes[3].Max().x, 44.0 / kPxPerUnit, 1e-9) && boxes[2].Max().x < boxes[3].min.x && boxes[4].Max().x < boxes[2].min.x,
+                  at + "the corner row is in order and pause keeps its margin from the right edge");
+    }
 }
 
 // ---- the hit rule ---------------------------------------------------------------------------------------------
@@ -1486,10 +1559,8 @@ void MoveForIsTheInverseOfPlace() {
         const glm::dvec2 max = box.Max();
         const bool inside = box.min.x >= -1e-9 && box.min.y >= -1e-9 && max.x <= view.x + 1e-9 && max.y <= view.y + 1e-9;
         // It is where the clamped wish is, to the snap of a tenth either way.
-        Controls::Tuning none = tuning;
         const glm::dvec2 clampedWish = Controls::ClampBox(wish, box.size, view, insets);
         const bool near = Near(box.min.x, clampedWish.x, 0.05 + 1e-9) && Near(box.min.y, clampedWish.y, 0.05 + 1e-9);
-        (void)none;
         if (!tenths || !inside || !near) ++offLattice;
     }
     CHECK_MSG(offLattice == 0, std::to_string(offLattice) + " of 3,000 off-lattice wishes were not tenths, inside, and near the clamped wish");
@@ -1969,6 +2040,15 @@ bool LoadScratch(const std::string& name, const std::string& text, Controls::Rul
 
 void WhatIsRefused() {
     namespace Json = Supersonic::Json;
+    // The scratch copies this case writes go when it ends, and any that a run which crashed left go before it starts.
+    struct Clean {
+        static void Run() {
+            std::error_code ec;
+            std::filesystem::remove_all(ScratchDir(), ec);
+        }
+        Clean() { Run(); }
+        ~Clean() { Run(); }
+    } clean;
     const Json::Value root = ReadControls();
     std::vector<Path> paths;
     Path prefix;
@@ -1980,32 +2060,31 @@ void WhatIsRefused() {
     std::string error;
     CHECK_MSG(LoadScratch("whole.json", Write(root), rules, error), "the file rewritten loads: " + error);
 
-    // Each key removed, one at a time, in a scratch copy: refused, and the message names it. The one optional key is the exception.
+    // Each key removed, one at a time, in a scratch copy: refused, and the message names it. Every key, the three looks' bottom margins included
+    // (they were the one optional key, which fell back to layout.margin_px.bottom, and a misspelt one then loaded cleanly at the wrong height).
     long refused = 0;
-    long optional = 0;
     for (const Path& path : paths) {
-        const bool isOptional = path.size() == 4 && path[0] == "layout" && path[1] == "presets" && path[3] == "margin_bottom_px";
         Controls::Rules r;
         std::string why;
         const bool loaded = LoadScratch("removed.json", Write(Edit(root, path, 0, std::nullopt)), r, why);
-        if (isOptional) {
-            ++optional;
-            CHECK_MSG(loaded, Dotted(path) + " is optional: " + why);
-        } else {
-            ++refused;
-            CHECK_MSG(!loaded && why.find(path.back()) != std::string::npos, "removing " + Dotted(path) + " is refused, naming it: " + why);
-        }
+        const bool named = !loaded && why.find(path.back()) != std::string::npos;
+        if (named) ++refused;
+        CHECK_MSG(named, "removing " + Dotted(path) + " is refused, naming it: " + why);
     }
-    CHECK_MSG(refused > 90 && optional == 3, std::to_string(refused) + " keys refused, " + std::to_string(optional) + " optional");
-    // The optional bottom margin falls back to layout.margin_px.bottom, which is then read.
-    {
-        Json::Value edited = Edit(root, Path{"layout", "presets", "balanced", "margin_bottom_px"}, 0, std::nullopt);
-        edited = Edit(edited, Path{"layout", "margin_px", "bottom"}, 0, Json::Value(50.0));
-        Controls::Rules r;
-        std::string why;
-        CHECK_MSG(LoadScratch("fallback.json", Write(edited), r, why), why);
-        CHECK_MSG(r.presets[static_cast<std::size_t>(Controls::Preset::Balanced)].marginBottomPx == 50.0 && r.presets[static_cast<std::size_t>(Controls::Preset::Uniform)].marginBottomPx == 44.0,
-                  "a preset with no bottom margin of its own keeps margin_px.bottom");
+    CHECK_MSG(refused > 90 && refused == static_cast<long>(paths.size()), std::to_string(refused) + " keys refused of " + std::to_string(paths.size()));
+    // A look's bottom margin misspelt is a missing one: refused, naming the key and the look, whichever look and however it is misspelt - and it
+    // is no longer rescued by layout.margin_px.bottom, which is still read (so a file that drops it is refused too, above).
+    for (const Controls::Preset preset : Controls::kPresets) {
+        for (const char* wrong : {"margin_botom_px", "margin_bottom", "Margin_bottom_px", "margin_bottom_px "}) {
+            const std::string look = Controls::NameOf(preset);
+            Json::Value edited = Edit(root, Path{"layout", "presets", look, "margin_bottom_px"}, 0, std::nullopt);
+            edited = Edit(edited, Path{"layout", "presets", look, wrong}, 0, Json::Value(30.0));
+            Controls::Rules r;
+            std::string why;
+            const bool loaded = LoadScratch("misspelt.json", Write(edited), r, why);
+            CHECK_MSG(!loaded && why.find("margin_bottom_px") != std::string::npos && why.find(look) != std::string::npos,
+                      std::string("'") + wrong + "' for the " + look + " look is refused, naming margin_bottom_px and the look: " + why);
+        }
     }
 
     // A typo in a `_source`, a note, or a key this reader does not know is not refused: provenance is not read.
@@ -2076,6 +2155,17 @@ void WhatIsRefused() {
         {{"hint", "margin_units"}, number(-1.0), false},
         {{"art", "mr", "walk_left", "body_inset"}, number(0.5), false},
         {{"art", "mr", "walk_left", "body_inset"}, number(0.6), false},
+        // A picture the port draws itself carries a margin sim/PadArt can draw, and no more: what loads, draws. A picture read from a file is
+        // not PadArt's, and may carry a larger margin up to the loader's own bound.
+        {{"art", "generated", "walk_left", "body_inset"}, number(0.25), true},
+        {{"art", "generated", "walk_left", "body_inset"}, number(0.0), true},
+        {{"art", "generated", "walk_left", "body_inset"}, number(0.2501), false},
+        {{"art", "generated", "walk_left", "body_inset"}, number(0.3), false},
+        {{"art", "generated", "pause", "body_inset"}, number(0.4), false},
+        {{"art", "generated", "clear_portals", "body_inset"}, number(-0.01), false},
+        {{"art", "mr", "walk_left", "body_inset"}, number(0.3), true},
+        {{"art", "original", "pause", "body_inset"}, number(0.3), true},
+        {{"art", "original", "pause", "body_inset"}, number(0.5), false},
         {{"art", "mr", "walk_left", "file"}, text(""), false},
         {{"art", "mr", "walk_left", "file"}, number(3.0), false},
         {{"art", "original", "pause"}, number(3.0), false},
@@ -2093,6 +2183,18 @@ void WhatIsRefused() {
         CHECK_MSG(loaded == edit.loads, Dotted(edit.path) + " = " + Write(edit.value) + (edit.loads ? " loads" : " is refused") + (loaded ? "" : ": " + why));
         if (!edit.loads) CHECK_MSG(!loaded && why.find(edit.path.back()) != std::string::npos, Dotted(edit.path) + ": the message names it: " + why);
     }
+    // A grid whose limits are more steps than an int counts is refused whole, naming it, and not converted out of range: a step of a millionth
+    // under a limit of a million is 10^12 steps. (Two numbers at once, which the single-edit table above cannot say.) The step alone, a millionth,
+    // is no trouble: it is the limit that overflows.
+    for (const char* grid : {"size", "opacity"}) {
+        Json::Value tooMany = Edit(root, Path{grid, "step"}, 0, number(0.000001));
+        tooMany = Edit(tooMany, Path{grid, "max"}, 0, number(1000000.0));
+        Controls::Rules r;
+        std::string why;
+        CHECK_MSG(!LoadScratch("big_grid.json", Write(tooMany), r, why) && why.find(grid) != std::string::npos && why.find("max") != std::string::npos,
+                  std::string(grid) + " with 10^12 steps is refused, naming it: " + why);
+    }
+
     // The values the mutation gate sets are read as set: the file is read, not copied.
     {
         Controls::Rules r;
@@ -2275,9 +2377,11 @@ void TheFlagGrammar() {
     CHECK(Controls::Tuning::ParseFlag("preset=mr,size=1.4,opacity=1.8,walk_left=1:2,walk_right=3:4,restart=-5:6,pause=7:-8,clear_portals=0:0", items, error));
     CHECK(items.preset == Controls::Preset::Mr && items.size == 1.4 && items.opacity == 1.8 && items.move[2] && items.move[2]->x == -5.0 && items.move[3] && items.move[3]->y == -8.0);
     // What is refused, each with a message that carries the usage.
-    const std::array<const char*, 24> bad = {"size", "=1", "size=", "size=abc", "size=1.2x", "size=1,size=2", "opacity=1,opacity=1", "preset=Mr", "preset=", "preset=big",
+    const std::array<const char*, 28> bad = {"size", "=1", "size=", "size=abc", "size=1.2x", "size=1,size=2", "opacity=1,opacity=1", "preset=Mr", "preset=", "preset=big",
                                              "preset=mr,preset=mr", "walk_left=10", "walk_left=1:2:3", "walk_left=a:b", "walk_left=2000:0", "walk_left=0:-2000",
-                                             "walk_left=1:2,walk_left=3:4", "bogus=1", "size=1,,opacity=1", ",size=1", "size=1,", "size=inf", "size=nan", "walk_left=1:inf"};
+                                             "walk_left=1:2,walk_left=3:4", "bogus=1", "size=1,,opacity=1", ",size=1", "size=1,", "size=inf", "size=nan", "walk_left=1:inf",
+                                             // A number beyond what a double holds is not a number; one inside it, however large, parses and is the grid's to refuse (below).
+                                             "size=1e999", "size=-1e999", "opacity=1e999", "walk_left=1e999:0"};
     for (const char* text : bad) {
         Controls::FlagItems refused;
         std::string why;
@@ -2291,7 +2395,17 @@ void TheFlagGrammar() {
     Controls::FlagItems flag;
     flag.size = 1.2;
     CHECK(Controls::Tuning::FromFlag(flag, rules, tuning, error) && tuning.sizeSteps && *tuning.sizeSteps == 12);
-    for (const double bad_size : {1.25, 0.3, 1.5, 0.0, -1.0, 10.0}) {
+    // A number that parses and is nowhere near the grid is refused by the grid, whole, and never converted to a count of steps first: 1e30 and 1e308 are
+    // far past an int (and 1e308 times the grid's divisor is an infinity), and 214748364.8 is the first size whose tenths an int cannot hold.
+    for (const char* huge : {"size=1e30", "size=-1e30", "size=1e308", "size=-1e308", "opacity=1e30", "opacity=-1e30", "opacity=1e308", "opacity=-1e308"}) {
+        Controls::FlagItems parsed;
+        std::string why;
+        CHECK_MSG(Controls::Tuning::ParseFlag(huge, parsed, why) && parsed.Any(), std::string("'") + huge + "' is a number and parses");
+        Controls::Tuning applied;
+        const std::string key = std::string(huge).substr(0, std::string(huge).find('='));
+        CHECK_MSG(!Controls::Tuning::FromFlag(parsed, rules, applied, why) && why.find(key) != std::string::npos, std::string("'") + huge + "' is refused by the grid, naming it: " + why);
+    }
+    for (const double bad_size : {1.25, 0.3, 1.5, 0.0, -1.0, 10.0, 1e30, -1e30, 1e308, -1e308, 214748364.7, 214748364.8, -214748364.8, 4294967296.0}) {
         Controls::FlagItems f;
         f.size = bad_size;
         CHECK_MSG(!Controls::Tuning::FromFlag(f, rules, tuning, error) && error.find("size") != std::string::npos, "size " + Num(bad_size) + " is refused: " + error);
@@ -2301,7 +2415,7 @@ void TheFlagGrammar() {
         f.size = good_size;
         CHECK_MSG(Controls::Tuning::FromFlag(f, rules, tuning, error) && Near(tuning.Size(rules), good_size, 1e-12), "size " + Num(good_size));
     }
-    for (const double bad_opacity : {1.1, 0.1, 1.9, 2.0, 0.0}) {
+    for (const double bad_opacity : {1.1, 0.1, 1.9, 2.0, 0.0, 1e30, -1e30, 1e308, -1e308, 429496729.4, 429496729.6, -429496729.6, 4294967296.0}) {
         Controls::FlagItems f;
         f.opacity = bad_opacity;
         CHECK_MSG(!Controls::Tuning::FromFlag(f, rules, tuning, error) && error.find("opacity") != std::string::npos, "opacity " + Num(bad_opacity) + " is refused: " + error);
@@ -2320,13 +2434,14 @@ void TheFlagGrammar() {
     CHECK(Controls::Tuning::FromFlag(same, rules, tuning, error) && !tuning.sizeSteps && tuning.IsDefault(rules));
     same.preset = Controls::Preset::Mr;
     CHECK(Controls::Tuning::FromFlag(same, rules, tuning, error) && tuning.sizeSteps && *tuning.sizeSteps == 7 && tuning.Size(rules) == 0.7);
-    // The flag's tuning replaces what was saved: the caller's job, shown here as the flag's result not holding the saved size.
-    Controls::Tuning saved;
-    saved.sizeSteps = 12;
+    // The tuning FromFlag makes carries the flag's own keys and nothing else: it takes no saved tuning to merge with. That the flag REPLACES what was
+    // saved, rather than merging with it, is the caller's, and the step that opens the store (CTL-10) pins it; what is held here is that one key gives
+    // exactly one key.
     Controls::FlagItems onlyOpacity;
     onlyOpacity.opacity = 0.6;
     Controls::Tuning fromFlag;
-    CHECK(Controls::Tuning::FromFlag(onlyOpacity, rules, fromFlag, error) && !fromFlag.sizeSteps && fromFlag.opacitySteps && saved.sizeSteps);
+    CHECK(Controls::Tuning::FromFlag(onlyOpacity, rules, fromFlag, error) && !fromFlag.sizeSteps && fromFlag.opacitySteps && *fromFlag.opacitySteps == 3 && !fromFlag.preset &&
+          std::all_of(fromFlag.move.begin(), fromFlag.move.end(), [](const glm::dvec2& m) { return m == glm::dvec2(0.0); }));
 }
 
 void APresetKeyIsParsedAndAnUnknownOneIsRefused() {
@@ -2390,6 +2505,103 @@ void TheClassicStyleIsTheClassicFunctions() {
     CHECK(closedFollows.hit.rect.min.x == closed.hit.rect.min.x - 4.0 && closedFollows.hit.rect.min.y == closed.hit.rect.min.y + 9.0 && closedFollows.hit.rect.size == closed.hit.rect.size);
 }
 
+// ---- the tuning's keys, spelt in one place ---------------------------------------------------------------------------
+
+void TheTuningKeysAreOnePlaceAndTheMembersSpliceIntoAnObject() {
+    namespace Key = Controls::TuningKey;
+    const Controls::Rules rules = LoadModern();
+    // The eight spellings, written out once here: the flag's parser, the saved file's reader and its writer take them from the constants, so a
+    // key that changes changes in all three and a test that still says the old one fails.
+    CHECK(std::string(Key::kPreset) == "preset" && std::string(Key::kSize) == "size" && std::string(Key::kOpacity) == "opacity" && std::string(Key::kMove) == "move");
+    CHECK(std::string(Key::kLayout) == "layout" && std::string(Key::kMode) == "mode" && std::string(Key::kVersion) == "version" && std::string(Key::kControls) == "controls");
+    // The flag takes the keys by those spellings, and its usage text (which main prints) names them.
+    Controls::FlagItems items;
+    std::string error;
+    CHECK(Controls::Tuning::ParseFlag(std::string(Key::kPreset) + "=mr," + Key::kSize + "=1.2," + Key::kOpacity + "=0.6", items, error) && items.preset == Controls::Preset::Mr &&
+          items.size == 1.2 && items.opacity == 0.6);
+    for (const char* key : {Key::kPreset, Key::kSize, Key::kOpacity}) {
+        CHECK_MSG(std::string(Controls::FlagUsage()).find(std::string(key) + "=") != std::string::npos, std::string("the usage names ") + key);
+    }
+    // The saved file's reader and writer take them too: a tuning of every kind, written and read back by the constants' spellings.
+    Controls::Tuning tuning;
+    tuning.sizeSteps = 12;
+    tuning.opacitySteps = 3;
+    tuning.move[0] = glm::dvec2(2.0, -3.5);
+    tuning.move[3] = glm::dvec2(-10.0, 5.0);
+    const std::string members = tuning.ToJsonMembers(rules);
+    CHECK_MSG(members == std::string("\"") + Key::kSize + "\":1.2,\"" + Key::kOpacity + "\":0.6,\"" + Key::kMove + "\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}",
+              "the members: " + members);
+    CHECK_MSG(tuning.ToJson(rules) == "{" + members + "}", "ToJson is the members in braces: " + tuning.ToJson(rules));
+    // A default tuning has no members, and its object is empty.
+    CHECK(kNoTuning.ToJsonMembers(rules).empty() && kNoTuning.ToJson(rules) == "{}");
+    // The members are not closed, so a writer with members of its own splices them without stripping braces: the saved file's `controls` object
+    // (the mode and the layout number beside the tuning) and the file around it, read back as the same tuning.
+    for (const Controls::Tuning& t : {kNoTuning, tuning}) {
+        const std::string inner = t.ToJsonMembers(rules);
+        const std::string object = std::string("{\"") + Key::kMode + "\":\"modern\",\"" + Key::kLayout + "\":" + std::to_string(Controls::kLayoutVersion) + (inner.empty() ? "" : "," + inner) + "}";
+        const std::string file = std::string("{\"") + Key::kVersion + "\":1,\"" + Key::kControls + "\":" + object + "}";
+        const Supersonic::Json::Value root = ParseText(file);
+        CHECK_MSG(root.IsObject() && root[Key::kControls].IsObject(), "the spliced file parses as an object holding the controls: " + file);
+        const Controls::Tuning back = Controls::Tuning::ReadFrom(root[Key::kControls], rules);
+        CHECK_MSG(SameTuning(back, t.Clamped(rules)), "the spliced controls read back as the tuning: " + object);
+        CHECK_MSG(back.ToJsonMembers(rules) == inner, "and write the same members again: " + back.ToJsonMembers(rules));
+    }
+}
+
+// ---- what a policy carries beside what the command line said -----------------------------------------------------------------
+
+bool NoInsets(const Controls::Insets& insets) {
+    return insets.left == 0.0 && insets.top == 0.0 && insets.right == 0.0 && insets.bottom == 0.0;
+}
+
+void ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor() {
+    // Classic, nothing: a bare layer's policy, which every suite uses, meets none of the four.
+    const Controls::Policy braces{};
+    const Controls::Policy plainDefault;
+    for (const Controls::Policy* bare : {&braces, &plainDefault}) {
+        CHECK(bare->valid && bare->error.empty() && !bare->available && !bare->forced && !bare->saveAllowed && !bare->flag.Any());
+        CHECK_MSG(!bare->classicClaims && NoInsets(bare->testInsets) && bare->artDir.empty() && !bare->tuning, "a default policy has no test seam set");
+    }
+    // The command line has no word for them: whatever it says, and whatever kind of run it is, ResolvePolicy leaves the four where they were.
+    long resolved = 0;
+    const std::vector<std::optional<std::string>> flags = {std::nullopt, std::string("classic"), std::string("modern"),
+                                                           std::string("modern,preset=mr,size=1.2,opacity=0.6,walk_left=1:2")};
+    for (const std::optional<std::string>& flag : flags) {
+        for (int kind = 0; kind < 8; ++kind) {
+            const Controls::Policy policy = Controls::ResolvePolicy(flag, (kind & 1) != 0, (kind & 2) != 0, (kind & 4) != 0);
+            // `classic` takes a developer's run and a player's the same way, and a flag with keys on a developer's run is still a flag.
+            CHECK_MSG(policy.valid, flag.value_or("(none)") + " resolves: " + policy.error);
+            CHECK_MSG(!policy.classicClaims && NoInsets(policy.testInsets) && policy.artDir.empty() && !policy.tuning,
+                      "--controls " + flag.value_or("(none)") + " leaves the test seams alone, kind " + std::to_string(kind));
+            ++resolved;
+        }
+    }
+    CHECK_EQ(static_cast<int>(resolved), 32);
+    // A test sets them by hand, on the policy it resolved, and they ride the copy the layer is given.
+    Controls::Policy given = Controls::ResolvePolicy(std::string("modern"), false, false, false);
+    given.classicClaims = true;
+    given.testInsets = Controls::Insets{3.0, 4.0, 5.0, 6.0};
+    given.artDir = "some/where";
+    Controls::Tuning injected;
+    injected.sizeSteps = 12;
+    given.tuning = injected;
+    const Controls::Policy copy = given;
+    CHECK(copy.classicClaims && copy.testInsets.left == 3.0 && copy.testInsets.top == 4.0 && copy.testInsets.right == 5.0 && copy.testInsets.bottom == 6.0);
+    CHECK(copy.artDir == "some/where" && copy.tuning && copy.tuning->sizeSteps && *copy.tuning->sizeSteps == 12);
+    // And they are not what decides the style: the same policy without them plays the same.
+    Controls::Policy plain = given;
+    plain.classicClaims = false;
+    plain.testInsets = Controls::Insets{};
+    plain.artDir.clear();
+    plain.tuning.reset();
+    const std::array<std::optional<Controls::Style>, 3> saveds = {std::nullopt, Controls::Style::Classic, Controls::Style::Modern};
+    for (const std::optional<Controls::Style>& saved : saveds) {
+        for (const Controls::Style shipped : {Controls::Style::Classic, Controls::Style::Modern}) {
+            CHECK(Controls::ResolveStyle(given, saved, shipped) == Controls::ResolveStyle(plain, saved, shipped));
+        }
+    }
+}
+
 void runTests() {
     ClassicHitEqualsTheHudFunctionsEverywhere();
     ClassicFramesAreTheHudsRectsExactly();
@@ -2412,6 +2624,7 @@ void runTests() {
     TheSizeStepsEndExactlyOnTheLimits();
     MarginsAndGapsDoNotGrowWithSize();
     ACornerButtonNeverShrinksBelowItsMinimumSize();
+    ThePlansSizeTableAndItsNarrowWindowRowsArePinned();
     NoTwoDefaultBoxesOverlapAtAnyAspectOrSize();
     TheSeamIsSplitAtItsMiddleAndNothingOverlaps();
     TheEdgeReachGoesToTheViewEdgeOnlyWithinTheReach();
@@ -2435,6 +2648,8 @@ void runTests() {
     TheDefaultsOfAnAbsentTuningFileAreTheBase();
     ATuningIsWrittenOnOneLineAndReadBackExactly();
     TheFlagGrammar();
+    TheTuningKeysAreOnePlaceAndTheMembersSpliceIntoAnObject();
+    ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor();
     APresetKeyIsParsedAndAnUnknownOneIsRefused();
     TheClassicStyleIsTheClassicFunctions();
 }

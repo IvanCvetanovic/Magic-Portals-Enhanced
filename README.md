@@ -337,6 +337,17 @@ the verdicts pinned in `tools/parity/reachability.json` (it needs the parity ven
 tools/parity/.venv/Scripts/python tools/parity/reachability.py --check
 ```
 
+**What the modern controls cost the routes** (`--controls modern`, planning step 182). `test_mp_routes --controls modern`
+plays every route three times: the classic reference, whose every tick is recorded; the modern layout and draw with the CLASSIC
+claims, which must equal the reference on every tick (it is the run in which each touch of the route is asked what the modern
+claim would say of it); and the modern run, which must equal the reference up to the tick before the first touch a modern control
+takes, and change something from there when that touch is a shot. It prints the touches the modern claim takes per route and per
+control. `--classic-claims` runs the second alone and `--controls classic` the reference alone.
+
+```bash
+build/tests/test_mp.exe test_mp_routes --controls modern
+```
+
 ## Run it
 
 From this repository's root:
@@ -370,7 +381,7 @@ configures once - if `build\`'s data paths move, delete `build-play\` and run it
 |---|---|
 | `←`/`→` or `A`/`D`, held | walk |
 | left mouse button | fire a portal shot toward the pointer; the portal opens where the shot arrives |
-| left mouse on the on-screen controls | walk pads (held), restart, pause, clear portals |
+| left mouse on the on-screen controls | walk pads (held), restart, pause, clear portals. Classic: restart, pause and clear act on the press. `--controls modern`: they act when the button comes up, if the press began on it (slide off and it is cancelled) |
 | left mouse on a menu | buttons and tiles; drag scrolls the credits and the achievements, the wheel scrolls the achievements |
 | `Esc` | in a level: pause, and resume from it; closes a popup; in a menu: back a screen; on the main menu: quit |
 | `R` | retry the level |
@@ -414,7 +425,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--levels <dir>` | read the converted levels from here instead of the configured path |
 | `--art <dir>` | the directory the levels' art paths resolve against (default: the one above the levels) |
 | `--data <dir>` | read Enhanced's `data/` from here instead of the configured path |
-| `--controls <classic\|modern>[,key=value...]` | which on-screen controls the run plays: the original's (`classic`) or Magic Rampage's inset ones (`modern`; keys `preset=uniform\|balanced\|mr`, `size=`, `opacity=` and a move as `<control>=<dx>:<dy>`). A run with none of the rig's flags (`--fixed-step`, `--route`, `--visit-levels`) may play either, a rig run is classic unless this says otherwise, and the flag writes nothing. **Plumbing only until the layer plays the modern layout (CTL-6 of the modern-controls plan): it draws classic whatever is asked, and logs `controls: modern requested, drawn classic until the layer plays it`; every key is checked against the table's grids and held on the tuning, and none has an effect until the layer draws modern.** A flag that is neither style, or a key that is not one, exits 1 with the usage; `docs/planning/2026-10-15-modern-controls.md` |
+| `--controls <classic\|modern>[,key=value...]` | which on-screen controls the run plays: the original's (`classic`) or Magic Rampage's inset ones (`modern`; keys `preset=uniform\|balanced\|mr`, `size=`, `opacity=` and a move as `<control>=<dx>:<dy>`). A run with none of the rig's flags (`--fixed-step`, `--route`, `--visit-levels`) may play either, a rig run is classic unless this says otherwise, and the flag writes nothing. **The layer plays the modern layout (CTL-6 of the modern-controls plan): five inset controls (the pair at the bottom left, restart and pause at the top right, clear-portals at the top left), their pictures drawn by the game and written to a temporary directory, never to a tracked path; restart, pause and clear act on the release inside their area after a press inside it. Its log says `controls: modern (--controls modern)` at attach and, at each level start (the game's first level says it on its first tick, when the window is known), `controls: modern, walk_left (x,y)-(x,y) px hit (x,y)-(x,y) px, ...` (the settled boxes and hit areas in the window's pixels). Of the keys only `preset=` is applied so far; every key is checked against the table's grids, and `size=`, `opacity=` and the moves are held and logged as not applied until CTL-10.** A flag that is neither style, or a key that is not one, exits 1 with the usage; `docs/planning/2026-10-15-modern-controls.md` |
 | `--light-masks-off` | DEV: draw lights and halos but let no light reach a sprite |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
