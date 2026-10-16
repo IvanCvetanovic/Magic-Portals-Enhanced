@@ -30,6 +30,13 @@
 #include "Route.hpp"
 #include "sim/Controls.hpp"
 
+// Where Magic Rampage's modern-control pictures are looked for (game/CMakeLists.txt, SUPERSONIC_MAGICPORTALS_PADART): a
+// definition of THIS file alone, so the suites, which never open the folder, are not rebuilt for it. Empty where the
+// build did not say, which is "nowhere" and costs a modern run its first picture tier, nothing else.
+#ifndef MAGICPORTALS_PADART_DIR
+#define MAGICPORTALS_PADART_DIR ""
+#endif
+
 namespace {
 
 // The diagnostics file, and the previous run's beside it, both in the temp
@@ -141,10 +148,29 @@ int main(int argc, char** argv) {
     // (docs/planning/2026-10-15-modern-controls.md 2.1, 2.2). Taken out here, before the engine's parser,
     // which refuses what it does not know; resolved below, once the rig's own flags are all read.
     std::optional<std::string> controlsFlag;
+    // `--padart <absolute dir>` (planning step 184): the folder a modern run looks for Magic Rampage's five pictures in,
+    // instead of the one the build was told. An empty folder is the way to see the next tiers (the original's own corner
+    // sprites, then the drawn glyphs).
+    std::string padArtDir = MAGICPORTALS_PADART_DIR;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--light-masks-off") {
             lightMasksOff = true;
+            continue;
+        }
+        if (arg == "--padart") {
+            if (i + 1 >= argc) {
+                std::cerr << "--padart needs an absolute directory\n";
+                return EXIT_FAILURE;
+            }
+            // Absolute, because the game makes engine/ its working directory before it opens anything: a relative path
+            // would be looked for there and found nowhere, and the run would quietly draw the next tier.
+            const std::string value = argv[++i];
+            if (value.empty() || !std::filesystem::path(value).is_absolute()) {
+                std::cerr << "--padart needs an absolute directory, got '" << value << "'\n";
+                return EXIT_FAILURE;
+            }
+            padArtDir = value;
             continue;
         }
         if (arg == "--controls") {
@@ -440,12 +466,15 @@ int main(int argc, char** argv) {
                   << "                    which on-screen controls the run plays: the original's (classic)\n"
                   << "                    or Magic Rampage's inset ones (modern, built step by step:\n"
                   << "                    docs/planning/2026-10-15-modern-controls.md). Modern lays out,\n"
-                  << "                    draws and claims the five inset controls (pictures drawn by the\n"
-                  << "                    game; Magic Rampage's own art is a later step); of its keys only\n"
+                  << "                    draws and claims the five inset controls (pictures: Magic Rampage's\n"
+                  << "                    own where --padart's folder holds them, then the original's own\n"
+                  << "                    corner sprites, then ones the game draws); of its keys only\n"
                   << "                    preset= is applied so far: size, opacity and the moves are read,\n"
                   << "                    checked and held. A developer's run (--fixed-step, --route,\n"
                   << "                    --visit-levels) is classic unless the flag says otherwise. Writes\n"
                   << "                    nothing\n"
+                  << "  --padart <dir>    the folder of Magic Rampage's five control pictures a modern run\n"
+                  << "                    tries first, an absolute path (default " << padArtDir << ")\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
                   << "  --data <dir>      Enhanced's data directory (default " << paths.data << ")\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json), the sound and music\n"
@@ -519,6 +548,9 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
         paths.controls = std::move(policy);
+        // After the move, which replaces the whole struct: the command line has no word for the folder in
+        // ResolvePolicy, so it is set here. Classic never reads it.
+        paths.controls.artDir = padArtDir;
     }
 
     // The diagnostics to a FILE as well as the console.

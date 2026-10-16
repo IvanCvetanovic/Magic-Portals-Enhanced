@@ -25,6 +25,7 @@
 
 #include <array>
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <string>
 
@@ -259,6 +260,48 @@ struct Rules {
 // preset's `margin_bottom_px` included (a misspelt one is a missing one, and is refused naming it).
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
+// ---- the pictures a modern run draws (planning step 184) -----------------------------------------------
+
+// A file name as controls.json may name a picture: ONE file in the folder of its tier, which the layer joins to that folder
+// (Magic Rampage's, the original's sprites, the scratch directory the generated pictures are written to). Not empty, not "." or
+// "..", no separator of either kind, no colon (a drive, or an NTFS stream), no control character, no ".." anywhere, and not ending
+// in a dot or a space (Windows would read it as another name). LoadRules refuses an `art` entry that is not one, naming it, so that
+// a name from the data can never climb out of the folder it is joined to - the generated tier WRITES there.
+bool IsBareFileName(const std::string& name);
+
+// The sizes, in pixels, that the Magic Rampage tool recorded for its pictures in the manifest.json beside them
+// (`outputs.<file>.size` = [width, height]), by file name.
+struct ArtManifest {
+    std::map<std::string, glm::ivec2> sizes;
+};
+
+// Reads `path`. A file that is not there is no manifest and no error: an empty ArtManifest and true (a folder of pictures dropped by
+// hand has none). A file that is there and cannot be read, or whose `outputs` hold a size that is not two whole numbers from 1 to
+// kMaxManifestPx, gives false and `why`, naming it, with `out` empty: the caller holds every picture to the default size.
+inline constexpr int kMaxManifestPx = 16384;
+bool ReadArtManifest(const std::string& path, ArtManifest& out, std::string& why);
+
+// The size a Magic Rampage picture called `file` must have: the manifest's where it names the file, else `defaultPx` square
+// (layout.box_px, the size every one of the five is made at). A picture of any other size would be drawn mis-scaled and say nothing.
+glm::ivec2 ExpectedArtSize(const ArtManifest& manifest, const std::string& file, int defaultPx);
+
+// A control's picture came from one of the tiers, or from none: a flat quad is drawn.
+using ArtSource = std::optional<ArtTier>;
+
+// The five tiers a run resolved, in the order of Id (walk_left, walk_right, restart, pause, clear_portals).
+using ArtSources = std::array<ArtSource, 5>;
+
+// "mr", "original", "generated" or "flat".
+const char* NameOf(const ArtSource& source);
+
+// The INFO line a run says once: `modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr`, in the
+// order of kClaimOrder's keys as the data spells them (walk_left, walk_right, restart, pause, clear_portals).
+std::string ArtLine(const ArtSources& sources);
+
+// True when the five do not all come from one tier: a mixed look (Magic Rampage's grey faces beside the original's white
+// corner buttons, or the drawn glyphs beside either). Said as a WARN, once, with the line above.
+bool ArtMixed(const ArtSources& sources);
+
 // ---- the tuning ---------------------------------------------------------------------------------
 
 // The keys a tuning is spelt with, in the flag (`--controls modern,size=1.2`) and in the saved file's `controls` object
@@ -452,13 +495,14 @@ struct Policy {
 
     // WHAT NO COMMAND LINE SAYS. The layer's `Paths::controls` IS this struct, so what a test or a later step hands the
     // layer beside the resolved policy lives here, in one place, each field defaulting to "classic, nothing" (a bare layer,
-    // which is every suite's, meets none of them). ResolvePolicy never sets one of these four: the command line has no word
-    // for them. They are the plan's `Paths::controls` fields, added together by planning step 182 (the step that links the
+    // which is every suite's, meets none of them). ResolvePolicy never sets one of these five: the command line has no word
+    // for them (main sets artDir itself, from --padart or the build's folder, after it has the policy). They are the plan's `Paths::controls` fields, added together by planning step 182 (the step that links the
     // layer to the module, and the layer, the routes and the later suites read them from here) rather than one at a time by
     // the step that first reads each, as step 181 had it.
     bool classicClaims = false;       // CTL-6: the modern layout and draw with the CLASSIC claims, a test's variant
     Insets testInsets;                // CTL-6 and CTL-7: a test's safe-area insets, in units; none on a desktop
     std::string artDir;               // CTL-8: where Magic Rampage's pictures are looked for; empty: nowhere
+    bool withoutOriginalArt = false;  // CTL-8: a test's variant: the original's own corner sprites (the second tier) are not tried
     std::optional<Tuning> tuning;     // CTL-10: a saved tuning a test injects in place of the store's, which the flag's keys then replace
 };
 

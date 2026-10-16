@@ -4,9 +4,13 @@
 #include "MagicPortalsLayer.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <map>
+#include <random>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -26,9 +30,9 @@
 #include "core/SimulationClock.hpp"
 #include "core/SpriteAnimationSystem.hpp"
 #include "core/ViewportInfo.hpp"
+#include "platform/SafeArea.hpp"
 // For handing a level's lightmaps back when it goes. Only through the pointer the
 // app publishes in the registry's context, which a suite's bare registry has not.
-#include "platform/SafeArea.hpp"
 #include "renderer/TextureRegistry.hpp"
 
 #include "sim/PadArt.hpp"
@@ -516,7 +520,9 @@ void MagicPortalsLayer::resolveControls() {
     m_controlsError.clear();
     m_controlsRectsLine.clear();
     m_controlsRectsPending = false;
-    for (std::string& image : m_modernImages) image.clear();
+    m_modernArt.fill(ModernArt{});
+    m_modernArtLine.clear();
+    m_modernArtWarnings.clear();
 
     // The feature does not exist in this run (design 2.1): a bare layer, a developer's run, --controls
     // classic. Nothing is read, so a table that will not read cannot touch such a run. Only the flag
@@ -577,38 +583,189 @@ void MagicPortalsLayer::resolveControls() {
     }
 }
 
+namespace {
+
+// The manifest the Magic Rampage tool writes beside its five pictures (tools/art/make_mr_controls.py): the sizes it recorded.
+constexpr const char* kMagicRampageManifest = "manifest.json";
+
+// The PNG a glyph's pixels encode to, in memory, by stb's encoder: the same bytes for the same pixels every time, which is what lets
+// a run find that the file already on disk is the one it would write. False where the encoder gave nothing.
+bool EncodePng(const PadArt::Bitmap& bitmap, std::string& bytes) {
+    bytes.clear();
+    const auto append = [](void* context, void* data, int size) {
+        static_cast<std::string*>(context)->append(static_cast<const char*>(data), static_cast<std::size_t>(size));
+    };
+    const int ok = stbi_write_png_to_func(append, &bytes, bitmap.size, bitmap.size, 4, bitmap.rgba.data(), bitmap.size * 4);
+    return ok != 0 && !bytes.empty();
+}
+
+// Whether `path` is a file whose bytes are exactly `bytes`.
+bool FileHolds(const std::filesystem::path& path, const std::string& bytes) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || std::filesystem::file_size(path, ec) != bytes.size()) return false;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+    std::string held(bytes.size(), '\0');
+    in.read(held.data(), static_cast<std::streamsize>(held.size()));
+    return in.gcount() == static_cast<std::streamsize>(held.size()) && held == bytes;
+}
+
+// A name no other process, and no earlier call, has used for its half-written copy.
+std::string UniqueSuffix() {
+    static std::atomic<unsigned> counter{0};
+    std::random_device device;
+    return std::to_string(device()) + "-" + std::to_string(counter.fetch_add(1));
+}
+
+enum class Wrote { AlreadyThere, Written, Failed };
+
+// Puts `bytes` at `target` without ever showing anyone a half-written file. The generated pictures live in a directory every modern
+// window shares, and a window reads them as it draws: writing them in place (as stb's own file writer does, truncating first) lets a
+// second window that starts meanwhile load a torn PNG. So nothing is written when the file already is exactly these bytes - the usual
+// case, since every run of one build draws the same pixels - and otherwise the bytes go to a name of their own and are renamed over
+// the target in one step. Windows refuses that rename while another window holds the target open; if the target then holds the bytes,
+// that other window put them there and nothing is lost.
+Wrote WriteWhole(const std::filesystem::path& target, const std::string& bytes) {
+    if (FileHolds(target, bytes)) return Wrote::AlreadyThere;
+    std::filesystem::path temporary = target;
+    temporary += "." + UniqueSuffix() + ".tmp";
+    {
+        std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        out.flush();
+        if (!out) {
+            out.close();
+            std::error_code ec;
+            std::filesystem::remove(temporary, ec);
+            return Wrote::Failed;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(temporary, target, ec);
+    if (!ec) return Wrote::Written;
+    std::filesystem::remove(temporary, ec);
+    return FileHolds(target, bytes) ? Wrote::AlreadyThere : Wrote::Failed;
+}
+
+} // namespace
+
+void MagicPortalsLayer::warnModernArt(const std::string& text) {
+    m_modernArtWarnings.push_back(text);
+    SUPERSONIC_LOG_WARN("Magic Portals") << text << std::endl;
+}
+
 void MagicPortalsLayer::resolveModernImages() {
+    // THE FOUR TIERS (design 4.2), tried in this order for each control and resolved ONCE for the run - not per level, so that the
+    // adjustment screen can draw them with no level loaded and unloadControls never touches them: Magic Rampage's own picture from
+    // Paths::controls.artDir; the original's own sprite (the three corner buttons only: it has none for an arrow); the glyph the game
+    // draws and writes into Paths::prisms; and last a flat quad, which is a control with no file.
+    const int boxPx = static_cast<int>(std::lround(m_controlsRules.boxPx));
+    Controls::ArtManifest manifest;
+    if (!m_paths.controls.artDir.empty()) {
+        std::string why;
+        const std::filesystem::path file = std::filesystem::path(m_paths.controls.artDir) / kMagicRampageManifest;
+        if (!Controls::ReadArtManifest(file.string(), manifest, why)) {
+            manifest = Controls::ArtManifest{};
+            warnModernArt("Magic Rampage's picture manifest could not be read, so every picture is held to " + std::to_string(boxPx) +
+                          " x " + std::to_string(boxPx) + " px: " + why);
+        }
+    }
+    Controls::ArtSources sources;
     for (const Control control : Controls::kClaimOrder) {
-        m_modernImages[static_cast<std::size_t>(control)] = modernGlyphImage(control);
+        ModernArt& art = m_modernArt[static_cast<std::size_t>(control)];
+        art = ModernArt{};
+        if (!pickMagicRampagePicture(control, manifest, art) && !pickOriginalPicture(control, art)) pickGeneratedPicture(control, art);
+        sources[static_cast<std::size_t>(control)] = art.source;
+    }
+    m_modernArtLine = Controls::ArtLine(sources);
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_modernArtLine << std::endl;
+    if (Controls::ArtMixed(sources)) {
+        warnModernArt("the modern controls are drawn from more than one set of pictures (" + m_modernArtLine + "): their looks differ");
     }
 }
 
-std::string MagicPortalsLayer::modernGlyphImage(Control control) {
-    // THE GENERATED TIER (design 4.2, tier 3): the glyph sim/PadArt draws, written as a PNG into the directory the layer
-    // is given for what it generates (Paths::prisms: the multiplies' own, a temporary directory in main and in the suites).
-    // Never into a tracked path and never next to the saves: that is the hard rule's reason for drawing the glyphs instead
-    // of keeping them. With no such directory the control is a flat quad (tier 4), which is what every suite draws.
-    if (m_paths.prisms.empty()) return {};
+bool MagicPortalsLayer::pickMagicRampagePicture(Control control, const Controls::ArtManifest& manifest, ModernArt& out) {
+    // Nowhere to look. A path joined to "" would be read against the working directory.
+    if (m_paths.controls.artDir.empty()) return false;
+    const auto& entry =
+        m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::MagicRampage)][static_cast<std::size_t>(control)];
+    if (!entry) return false;
+    const std::filesystem::path file = std::filesystem::path(m_paths.controls.artDir) / entry->file;
+    std::error_code ec;
+    // A picture that is not there is the usual case on every machine without the owner's folder, and says nothing.
+    if (!std::filesystem::is_regular_file(file, ec)) return false;
+    const std::string name = Controls::KeyOf(control);
+    const glm::dvec2 size = imageSizePx(file.string());
+    if (size == glm::dvec2(0.0)) {
+        warnModernArt(name + ": Magic Rampage's picture exists and cannot be read, so the next tier is used: " + file.string());
+        return false;
+    }
+    // A picture of another size would be drawn mis-scaled with no word said (a canvas dropped in by hand), so it is not used.
+    const int fallbackPx = static_cast<int>(std::lround(m_controlsRules.boxPx));
+    const glm::ivec2 want = Controls::ExpectedArtSize(manifest, entry->file, fallbackPx);
+    if (glm::ivec2(size) != want) {
+        warnModernArt(name + ": Magic Rampage's picture is " + std::to_string(static_cast<int>(size.x)) + " x " +
+                      std::to_string(static_cast<int>(size.y)) + " px, and " + std::to_string(want.x) + " x " + std::to_string(want.y) +
+                      " is what the manifest and the layout say, so the next tier is used: " + file.string());
+        return false;
+    }
+    out.image = file.string();
+    out.source = Controls::ArtTier::MagicRampage;
+    out.bodyInset = entry->bodyInset;
+    return true;
+}
+
+bool MagicPortalsLayer::pickOriginalPicture(Control control, ModernArt& out) {
+    if (m_paths.controls.withoutOriginalArt) return false;
+    // The original has a sprite for each corner button and none for an arrow (the entry is absent).
+    const auto& entry = m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::Original)][static_cast<std::size_t>(control)];
+    if (!entry) return false;
+    // The same lookup the classic buttons use: the hd twin where there is one. A sprite that is missing or unreadable is a tier that is
+    // not there, whatever the size it has: it is drawn into the box's face at its own shape, as the original's buttons are.
+    const std::string path = menuImage(entry->file);
+    if (imageSizePx(path) == glm::dvec2(0.0)) {
+        // One that is there and cannot be read is said; one that is not there is a machine without the original's art, and says nothing.
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(path, ec)) {
+            warnModernArt(std::string(Controls::KeyOf(control)) + ": the original's sprite exists and cannot be read, so the next tier is used: " + path);
+        }
+        return false;
+    }
+    out.image = path;
+    out.source = Controls::ArtTier::Original;
+    out.bodyInset = entry->bodyInset;
+    return true;
+}
+
+bool MagicPortalsLayer::pickGeneratedPicture(Control control, ModernArt& out) {
+    // THE GENERATED TIER (design 4.2, tier 3): the glyph sim/PadArt draws, written as a PNG into the directory the layer is given for
+    // what it generates (Paths::prisms: the multiplies' own, a temporary directory in main and in the suites). Never into a tracked path
+    // and never next to the saves: that is the hard rule's reason for drawing the glyphs instead of keeping them. With no such
+    // directory the control is a flat quad (tier 4). Only a control that reaches this tier gets a file: five Magic Rampage pictures
+    // write nothing.
+    if (m_paths.prisms.empty()) return false;
     const auto& entry = m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::Generated)][static_cast<std::size_t>(control)];
-    if (!entry) return {};
+    if (!entry) return false;
+    const std::string name = Controls::KeyOf(control);
     const int px = static_cast<int>(std::lround(m_controlsRules.boxPx));
     const PadArt::Bitmap bitmap = PadArt::Draw(PadArt::GlyphOf(control), px, entry->bodyInset);
-    if (bitmap.Empty()) {
-        SUPERSONIC_LOG_WARN("Magic Portals") << "the modern " << Controls::KeyOf(control) << " could not be drawn at " << px
-                                             << " px: it is a flat quad" << std::endl;
-        return {};
+    std::string bytes;
+    if (bitmap.Empty() || !EncodePng(bitmap, bytes)) {
+        warnModernArt("the modern " + name + " could not be drawn at " + std::to_string(px) + " px: it is a flat quad");
+        return false;
     }
     std::error_code ec;
     std::filesystem::create_directories(m_paths.prisms, ec);
-    // Rewritten at every attach and never skipped for being there: the picture is a function of the data and of
-    // sim/PadArt, so a file left by an older build would otherwise be drawn in their place.
+    // entry->file is a bare file name (Controls::LoadRules refused any other), so this stays inside prisms.
     const std::filesystem::path target = m_paths.prisms / entry->file;
-    if (stbi_write_png(target.string().c_str(), bitmap.size, bitmap.size, 4, bitmap.rgba.data(), bitmap.size * 4) == 0) {
-        SUPERSONIC_LOG_WARN("Magic Portals") << "a modern control's picture could not be written: " << target.string()
-                                             << " - it is a flat quad" << std::endl;
-        return {};
+    if (WriteWhole(target, bytes) == Wrote::Failed) {
+        warnModernArt("a modern control's picture could not be written: " + target.string() + " - it is a flat quad");
+        return false;
     }
-    return target.string();
+    out.image = target.string();
+    out.source = Controls::ArtTier::Generated;
+    out.bodyInset = entry->bodyInset;
+    return true;
 }
 
 void MagicPortalsLayer::OnDetach(entt::registry& registry) {
@@ -8169,15 +8326,16 @@ void MagicPortalsLayer::buildModernControls() {
     for (const Control kind : Controls::kClaimOrder) {
         ControlButton button;
         button.kind = kind;
-        button.image = m_modernImages[static_cast<std::size_t>(kind)];
-        const auto& entry = m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::Generated)][static_cast<std::size_t>(kind)];
-        button.bodyInset = entry ? entry->bodyInset : 0.0;
+        const ModernArt& art = m_modernArt[static_cast<std::size_t>(kind)];
+        button.image = art.image;
+        // The margin of the picture's OWN tier: a sprite with none (the original's) is drawn into the box's face, not into the box.
+        button.bodyInset = art.bodyInset;
         m_controls.push_back(button);
     }
 }
 
 void MagicPortalsLayer::unloadControls() {
-    // The modern pictures (m_modernImages) are the run's, not the level's: not cleared here.
+    // The modern pictures (m_modernArt) are the run's, not the level's: not cleared here.
     m_controls.clear();
     m_ringImage.clear();
     m_plaqueImage.clear();

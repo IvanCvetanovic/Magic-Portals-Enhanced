@@ -2169,6 +2169,24 @@ void WhatIsRefused() {
         {{"art", "mr", "walk_left", "file"}, text(""), false},
         {{"art", "mr", "walk_left", "file"}, number(3.0), false},
         {{"art", "original", "pause"}, number(3.0), false},
+        // A picture's file is joined to the folder of its tier, and the generated tier WRITES there (planning step 184): it is ONE file in it
+        // (Controls::IsBareFileName), in every tier. A folder, a ".." or a drive is refused at load, naming the key; a plain other name loads.
+        {{"art", "mr", "walk_left", "file"}, text("../walk_left.png"), false},
+        {{"art", "mr", "pause", "file"}, text("..\\pause.png"), false},
+        {{"art", "mr", "walk_left", "file"}, text("left_arrow.png"), true},
+        {{"art", "original", "restart", "file"}, text("sprites/restart_level_button.png"), false},
+        {{"art", "original", "clear_portals", "file"}, text("C:/clear_portals_button.png"), false},
+        {{"art", "original", "pause", "file"}, text("pause_button.png"), true},
+        {{"art", "generated", "walk_left", "file"}, text("../modern_walk_left.png"), false},
+        {{"art", "generated", "walk_right", "file"}, text("/tmp/modern_walk_right.png"), false},
+        {{"art", "generated", "restart", "file"}, text("C:\\modern_restart.png"), false},
+        {{"art", "generated", "pause", "file"}, text("C:modern_pause.png"), false},
+        {{"art", "generated", "clear_portals", "file"}, text(".."), false},
+        {{"art", "generated", "clear_portals", "file"}, text("."), false},
+        {{"art", "generated", "walk_left", "file"}, text("a..b.png"), false},
+        {{"art", "generated", "walk_left", "file"}, text("modern_walk_left.png "), false},
+        {{"art", "generated", "walk_left", "file"}, text("modern_walk_left."), false},
+        {{"art", "generated", "walk_left", "file"}, text("renamed_walk_left.png"), true},
         {{"census", "em_units"}, number(-1.0), false},
         {{"default_mode"}, text("retro"), false},
         {{"default_mode"}, text("modern"), true},
@@ -2560,7 +2578,8 @@ void ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor() {
     const Controls::Policy plainDefault;
     for (const Controls::Policy* bare : {&braces, &plainDefault}) {
         CHECK(bare->valid && bare->error.empty() && !bare->available && !bare->forced && !bare->saveAllowed && !bare->flag.Any());
-        CHECK_MSG(!bare->classicClaims && NoInsets(bare->testInsets) && bare->artDir.empty() && !bare->tuning, "a default policy has no test seam set");
+        CHECK_MSG(!bare->classicClaims && NoInsets(bare->testInsets) && bare->artDir.empty() && !bare->withoutOriginalArt && !bare->tuning,
+                  "a default policy has no test seam set");
     }
     // The command line has no word for them: whatever it says, and whatever kind of run it is, ResolvePolicy leaves the four where they were.
     long resolved = 0;
@@ -2571,7 +2590,7 @@ void ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor() {
             const Controls::Policy policy = Controls::ResolvePolicy(flag, (kind & 1) != 0, (kind & 2) != 0, (kind & 4) != 0);
             // `classic` takes a developer's run and a player's the same way, and a flag with keys on a developer's run is still a flag.
             CHECK_MSG(policy.valid, flag.value_or("(none)") + " resolves: " + policy.error);
-            CHECK_MSG(!policy.classicClaims && NoInsets(policy.testInsets) && policy.artDir.empty() && !policy.tuning,
+            CHECK_MSG(!policy.classicClaims && NoInsets(policy.testInsets) && policy.artDir.empty() && !policy.withoutOriginalArt && !policy.tuning,
                       "--controls " + flag.value_or("(none)") + " leaves the test seams alone, kind " + std::to_string(kind));
             ++resolved;
         }
@@ -2582,23 +2601,182 @@ void ThePolicyCarriesTheSeamsTheCommandLineHasNoWordFor() {
     given.classicClaims = true;
     given.testInsets = Controls::Insets{3.0, 4.0, 5.0, 6.0};
     given.artDir = "some/where";
+    given.withoutOriginalArt = true;
     Controls::Tuning injected;
     injected.sizeSteps = 12;
     given.tuning = injected;
     const Controls::Policy copy = given;
     CHECK(copy.classicClaims && copy.testInsets.left == 3.0 && copy.testInsets.top == 4.0 && copy.testInsets.right == 5.0 && copy.testInsets.bottom == 6.0);
-    CHECK(copy.artDir == "some/where" && copy.tuning && copy.tuning->sizeSteps && *copy.tuning->sizeSteps == 12);
+    CHECK(copy.artDir == "some/where" && copy.withoutOriginalArt && copy.tuning && copy.tuning->sizeSteps && *copy.tuning->sizeSteps == 12);
     // And they are not what decides the style: the same policy without them plays the same.
     Controls::Policy plain = given;
     plain.classicClaims = false;
     plain.testInsets = Controls::Insets{};
     plain.artDir.clear();
+    plain.withoutOriginalArt = false;
     plain.tuning.reset();
     const std::array<std::optional<Controls::Style>, 3> saveds = {std::nullopt, Controls::Style::Classic, Controls::Style::Modern};
     for (const std::optional<Controls::Style>& saved : saveds) {
         for (const Controls::Style shipped : {Controls::Style::Classic, Controls::Style::Modern}) {
             CHECK(Controls::ResolveStyle(given, saved, shipped) == Controls::ResolveStyle(plain, saved, shipped));
         }
+    }
+}
+
+// ---- the pictures a modern run draws (planning step 184) ------------------------------------------------------------------------------
+
+// A name controls.json may give a picture is ONE file in the folder of its tier. The rows are written out, with the reason each is refused,
+// because a name that climbs out of the folder is a file written (the generated tier) or read (the others) somewhere the data did not mean.
+void ABareFileNameIsOneFileInOneFolder() {
+    const std::vector<std::string> bare = {"walk_left.png", "modern_walk_left.png", "a.png", "x", "restart_level_button.png",
+                                           "dots.in.name.png", ".hidden", "-dash", "UPPER.PNG", "with space.png", "(1).png"};
+    for (const std::string& name : bare) CHECK_MSG(Controls::IsBareFileName(name), "'" + name + "' is a bare file name");
+    struct Refused {
+        std::string name;
+        const char* why;
+    };
+    const std::vector<Refused> refused = {
+        {"", "empty"},
+        {".", "the folder itself"},
+        {"..", "the folder above"},
+        {"../x.png", "climbs out"},
+        {"..\\x.png", "climbs out, the other separator"},
+        {"a/../x.png", "climbs out in the middle"},
+        {"sub/x.png", "a folder"},
+        {"sub\\x.png", "a folder, the other separator"},
+        {"/x.png", "rooted"},
+        {"\\x.png", "rooted, the other separator"},
+        {"\\\\server\\share\\x.png", "a network path"},
+        {"C:/x.png", "a drive and a folder"},
+        {"C:\\x.png", "a drive and a folder, the other separator"},
+        {"C:x.png", "a drive's own working directory"},
+        {"x.png:stream", "an NTFS stream"},
+        {"a..b.png", "a pair of dots anywhere"},
+        {"x.png ", "Windows reads a trailing space as nothing"},
+        {"x.png.", "Windows reads a trailing dot as nothing"},
+        {std::string("x\0y.png", 7), "a NUL"},
+        {"x\ty.png", "a control character"},
+        {"x\ny.png", "a line break"},
+    };
+    for (const Refused& row : refused) CHECK_MSG(!Controls::IsBareFileName(row.name), std::string("a name that is ") + row.why + " is refused");
+    // The shipped names are bare in every tier (LoadRules would have refused the file), and the generated ones are the layer's write targets.
+    Controls::Rules rules;
+    std::string error;
+    CHECK_MSG(Controls::LoadRules(kControls, rules, error), "controls.json reads: " + error);
+    int checked = 0;
+    for (std::size_t tier = 0; tier < Controls::kArtTierCount; ++tier) {
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            const std::optional<Controls::ArtEntry>& entry = rules.art[tier][static_cast<std::size_t>(id)];
+            if (!entry) continue;
+            ++checked;
+            CHECK_MSG(Controls::IsBareFileName(entry->file), "art file '" + entry->file + "' is bare");
+        }
+    }
+    CHECK_EQ(checked, 13); // five of Magic Rampage's, three of the original's, five of the generated
+}
+
+// The sizes the Magic Rampage tool recorded, and what a picture must measure.
+void TheArtManifestGivesTheSizesAPictureMustHave() {
+    struct Clean {
+        static void Run() {
+            std::error_code ec;
+            std::filesystem::remove_all(ScratchDir(), ec);
+        }
+        Clean() { Run(); }
+        ~Clean() { Run(); }
+    } clean;
+    const auto write = [](const char* name, const std::string& text) {
+        const std::filesystem::path path = ScratchDir() / name;
+        std::ofstream file(path, std::ios::binary | std::ios::trunc);
+        file << text;
+        return path.string();
+    };
+    Controls::ArtManifest manifest;
+    std::string why;
+    // A folder dropped in by hand has no manifest: nothing is wrong, and the default size is what is held to.
+    CHECK_MSG(Controls::ReadArtManifest((ScratchDir() / "no-manifest.json").string(), manifest, why) && manifest.sizes.empty() && why.empty(),
+              "an absent manifest is no manifest and no error");
+    CHECK(Controls::ExpectedArtSize(manifest, "walk_left.png", 128) == glm::ivec2(128, 128));
+
+    // The tool's own shape (tools/art/make_mr_controls.py): `outputs.<file>.size` = [w, h], beside members that are not read.
+    const std::string whole = R"({"body_rect": [14, 14, 114, 114], "canvas": [128, 128], "outputs": {
+        "walk_left.png": {"size": [128, 128], "sha256": "x", "body": [14, 14, 114, 114]},
+        "restart.png": {"size": [64, 96]},
+        "pause.png": {"sha256": "no size recorded"},
+        "not-an-entry.png": 7}})";
+    CHECK_MSG(Controls::ReadArtManifest(write("whole.json", whole), manifest, why), "a manifest in the tool's shape reads: " + why);
+    CHECK_EQ(static_cast<int>(manifest.sizes.size()), 2); // walk_left and restart: an entry with no size, or not an entry, names none
+    CHECK(Controls::ExpectedArtSize(manifest, "walk_left.png", 128) == glm::ivec2(128, 128));
+    CHECK_MSG(Controls::ExpectedArtSize(manifest, "restart.png", 128) == glm::ivec2(64, 96), "the manifest's size wins over the default");
+    CHECK_MSG(Controls::ExpectedArtSize(manifest, "pause.png", 128) == glm::ivec2(128, 128), "a picture it records no size for is held to the default");
+    CHECK_MSG(Controls::ExpectedArtSize(manifest, "clear_portals.png", 72) == glm::ivec2(72, 72),
+              "and the default is the caller's, layout.box_px, not a literal here");
+    CHECK_MSG(Controls::ReadArtManifest(write("no-outputs.json", R"({"canvas": [128, 128]})"), manifest, why) && manifest.sizes.empty(),
+              "a manifest with no outputs names no size");
+
+    // A manifest that is there and cannot be trusted is refused whole, naming what is wrong, with nothing half-read left behind.
+    struct Bad {
+        const char* what;
+        std::string text;
+        const char* mentions;
+    };
+    const std::vector<Bad> bad = {
+        {"not JSON", "{\"outputs\": ", "bad.json"},
+        {"not an object", "[]", "not an object"},
+        {"one number", R"({"outputs": {"a.png": {"size": [128]}}})", "a.png"},
+        {"three numbers", R"({"outputs": {"a.png": {"size": [128, 128, 4]}}})", "a.png"},
+        {"a string", R"({"outputs": {"a.png": {"size": [128, "x"]}}})", "a.png"},
+        {"zero", R"({"outputs": {"a.png": {"size": [0, 128]}}})", "a.png"},
+        {"negative", R"({"outputs": {"a.png": {"size": [-128, 128]}}})", "a.png"},
+        {"fractional", R"({"outputs": {"a.png": {"size": [128.5, 128]}}})", "a.png"},
+        {"huge", R"({"outputs": {"a.png": {"size": [128, 99999]}}})", "a.png"},
+        {"an object", R"({"outputs": {"a.png": {"size": {"w": 128, "h": 128}}}})", "a.png"},
+    };
+    for (const Bad& row : bad) {
+        Controls::ArtManifest out;
+        out.sizes["stale.png"] = glm::ivec2(1, 1);
+        std::string message;
+        const bool read = Controls::ReadArtManifest(write("bad.json", row.text), out, message);
+        CHECK_MSG(!read && out.sizes.empty() && message.find(row.mentions) != std::string::npos,
+                  std::string(row.what) + " is refused, naming it, with nothing kept: " + message);
+    }
+}
+
+// The INFO line and the WARN a resolution says, from the five tiers it found.
+void TheArtLineSaysWhereEachPictureCameFrom() {
+    using Tier = Controls::ArtTier;
+    CHECK(std::string(Controls::NameOf(Controls::ArtSource(Tier::MagicRampage))) == "mr");
+    CHECK(std::string(Controls::NameOf(Controls::ArtSource(Tier::Original))) == "original");
+    CHECK(std::string(Controls::NameOf(Controls::ArtSource(Tier::Generated))) == "generated");
+    CHECK(std::string(Controls::NameOf(Controls::ArtSource{})) == "flat");
+
+    Controls::ArtSources all;
+    all.fill(Tier::MagicRampage);
+    CHECK_MSG(Controls::ArtLine(all) == "modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr", Controls::ArtLine(all));
+    CHECK(!Controls::ArtMixed(all));
+    all.fill(Tier::Generated);
+    CHECK(Controls::ArtLine(all) == "modern controls art: walk_left=generated walk_right=generated restart=generated pause=generated clear_portals=generated");
+    CHECK(!Controls::ArtMixed(all));
+    all.fill(Controls::ArtSource{});
+    CHECK(Controls::ArtLine(all) == "modern controls art: walk_left=flat walk_right=flat restart=flat pause=flat clear_portals=flat");
+    CHECK_MSG(!Controls::ArtMixed(all), "five flat quads are one look");
+
+    // No Magic Rampage picture on a machine that has the original's: the arrows drawn, the corners the original's own - a mixed look.
+    Controls::ArtSources fallback;
+    fallback.fill(Tier::Original);
+    fallback[static_cast<std::size_t>(Controls::Id::Left)] = Tier::Generated;
+    fallback[static_cast<std::size_t>(Controls::Id::Right)] = Tier::Generated;
+    CHECK_MSG(Controls::ArtLine(fallback) ==
+                  "modern controls art: walk_left=generated walk_right=generated restart=original pause=original clear_portals=original",
+              Controls::ArtLine(fallback));
+    CHECK(Controls::ArtMixed(fallback));
+
+    // One control of five from another tier is a mixed look, whichever it is.
+    for (const Controls::Id odd : Controls::kClaimOrder) {
+        Controls::ArtSources one;
+        one.fill(Tier::MagicRampage);
+        one[static_cast<std::size_t>(odd)] = Controls::ArtSource{};
+        CHECK_MSG(Controls::ArtMixed(one), std::string(Controls::KeyOf(odd)) + " drawn flat among four Magic Rampage pictures is mixed");
     }
 }
 
@@ -2713,6 +2891,11 @@ void runTests() {
 
     // The safe area (planning step 183).
     TheSafeAreaInPixelsBecomesInsetsInUnitsByThePointersFactor();
+
+    // The pictures a modern run draws (planning step 184).
+    ABareFileNameIsOneFileInOneFolder();
+    TheArtManifestGivesTheSizesAPictureMustHave();
+    TheArtLineSaysWhereEachPictureCameFrom();
 }
 
 } // namespace

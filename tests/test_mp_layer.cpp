@@ -73,9 +73,11 @@
 #include "sim/Units.hpp"
 
 #include <stb_image.h>
+#include <stb_image_write.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -23742,6 +23744,10 @@ Controls::Policy MdPolicy(const std::string& flag, bool classicClaims = false) {
 MagicPortalsLayer::Paths MdPaths(const std::string& flag = "modern", bool classicClaims = false) {
     MagicPortalsLayer::Paths paths = TestPaths();
     paths.controls = MdPolicy(flag, classicClaims);
+    // The cases of this group were written for the five DRAWN glyphs, and a machine that has the original's art would give three of them its own
+    // corner sprites (planning step 184, the second tier), drawn into the box's face, not the box. So the original's tier is OFF here, and the
+    // cases that are about the tiers (the group after TheModernPicturesAreWrittenOnlyToTheScratchDirectory) turn it back on.
+    paths.controls.withoutOriginalArt = true;
     return paths;
 }
 
@@ -25523,8 +25529,10 @@ void ModernRunsWithNoOriginalArtDrawFlatQuads() {
     std::error_code ec;
     std::filesystem::create_directories(empty, ec);
     // A level cannot load with an empty Paths::prisms (its colliders are written there), so the picture-less run is reached by the other way
-    // the generated tier fails: the picture cannot be WRITTEN. A scratch copy of the data names every generated file ".", which is a directory
-    // of the scratch directory and cannot be opened as a file: the layer says so once for each and draws a flat quad (design 4.2, tier 4).
+    // the generated tier fails: the picture cannot be WRITTEN. A scratch copy of the data renames every generated file to a bare name ending in
+    // ".dir", and a DIRECTORY of that name stands in the scratch directory: nothing can be written there (the rename of the half-written copy over
+    // it is refused), the layer says so once for each and draws a flat quad (design 4.2, tier 4). (The names were "." until planning step 184, which
+    // refuses a name that is not one file in the folder; the empty-`prisms` branch is TheLastTierIsAFlatQuadWithNoPrisms's.)
     const std::string data = ControlsScratchData("flat-quads", [](const std::string& text) {
         std::string edited = text;
         std::size_t at = 0;
@@ -25532,9 +25540,9 @@ void ModernRunsWithNoOriginalArtDrawFlatQuads() {
         while ((at = edited.find("\"modern_", at)) != std::string::npos) {
             const std::size_t end = edited.find(".png\"", at);
             if (end == std::string::npos) break;
-            edited.replace(at + 1, end + 4 - (at + 1), ".");
+            edited.replace(end, 4, ".dir");
             ++renamed;
-            at += 3;
+            at = end + 1;
         }
         CHECK_MSG(renamed == 5, "controls.json names the five generated pictures this case renames: " + std::to_string(renamed));
         return std::optional<std::string>(edited);
@@ -25542,6 +25550,12 @@ void ModernRunsWithNoOriginalArtDrawFlatQuads() {
     MagicPortalsLayer::Paths paths = MdPaths();
     paths.art = empty.string();
     paths.portData = data;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::filesystem::path blocker = paths.prisms / (std::string("modern_") + Controls::KeyOf(id) + ".dir");
+        ControlsScratchDirs().push_back(blocker);
+        std::filesystem::create_directories(blocker, ec);
+        CHECK_MSG(std::filesystem::is_directory(blocker, ec), "a directory stands where " + blocker.string() + " would be written");
+    }
     std::vector<int> flatClaims;
     {
         MdRun run(paths, "level30", "ModernRunsWithNoOriginalArtDrawFlatQuads");
@@ -25550,6 +25564,16 @@ void ModernRunsWithNoOriginalArtDrawFlatQuads() {
         entt::registry& registry = run.registry;
         CHECK_MSG(!layer.ArtError().empty(), "the level's art is missing too");
         for (const Controls::Id id : Controls::kClaimOrder) CHECK_MSG(layer.ModernImage(id).empty(), std::string(kMdTable[MdAt(id)].key) + ": no picture was made");
+        CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=flat walk_right=flat restart=flat pause=flat clear_portals=flat",
+                  "and the run says so once: " + layer.ModernArtLine());
+        int unwritable = 0;
+        for (const std::string& warning : layer.ModernArtWarnings()) unwritable += warning.find("could not be written") != std::string::npos ? 1 : 0;
+        CHECK_MSG(unwritable == 5, "five pictures could not be written, each said: " + std::to_string(unwritable));
+        int halfWritten = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(paths.prisms, ec)) {
+            halfWritten += entry.path().extension() == ".tmp" ? 1 : 0;
+        }
+        CHECK_MSG(halfWritten == 0, "and no half-written copy is left beside the directories: " + std::to_string(halfWritten));
         const MdGeom g = MdGeometry(layer);
         const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
         const std::vector<int> flat = MdFlatQuads(frame);
@@ -25650,6 +25674,656 @@ void TheModernPicturesAreWrittenOnlyToTheScratchDirectory() {
         if (entry.path().extension() == ".png") stray = true;
     }
     CHECK_MSG(!stray && !ControlsFileExistsIn(saves), "the save directory holds no picture and no controls.json");
+}
+
+// ---- where the modern pictures come from (planning step 184, CTL-8) ---------------------------------------------------------------------------
+//
+// The four tiers (design 4.2) for each of the five controls: Magic Rampage's own picture from Paths::controls.artDir, the original's own sprite
+// (the three corner buttons only), the glyph the game draws into Paths::prisms, and a flat quad. These cases read NO file of Magic Rampage's: every
+// picture they use is a flat grey PNG the case writes into its own scratch directory with the engine's stb writer, and the original's sprites are
+// stand-ins of the same kind in a scratch `Paths::original` - the one exception, TheDrawRectUsesTheTiersMargin, lets the real original's corner
+// sprites stand where a stand-in would not show their real shape, and skips without them. The older modern cases run with the original's tier OFF
+// (MdPaths(): Policy::withoutOriginalArt), as they were written for the drawn glyphs; the cases below turn it back on, where it is their subject.
+
+// By Id: the shipped file names (controls.json art.mr and art.original). Written out, as the design's table 4.2 has them.
+constexpr const char* kArtMrFile[5] = {"walk_left.png", "walk_right.png", "restart.png", "pause.png", "clear_portals.png"};
+constexpr const char* kArtOriginalFile[5] = {nullptr, nullptr, "restart_level_button.png", "main_menu_shortcut.png", "clear_portals_button.png"};
+
+std::size_t ArtAt(Controls::Id id) {
+    return static_cast<std::size_t>(id);
+}
+
+// A flat grey PNG, w x h, straight alpha 255: the stand-in for a picture of Magic Rampage's or of the original's.
+bool ArtWritePng(const std::filesystem::path& file, int w, int h, std::uint8_t grey = 128) {
+    std::error_code ec;
+    std::filesystem::create_directories(file.parent_path(), ec);
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, grey);
+    for (std::size_t i = 3; i < rgba.size(); i += 4) rgba[i] = 255;
+    return stbi_write_png(file.string().c_str(), w, h, 4, rgba.data(), w * 4) != 0;
+}
+
+bool ArtWriteText(const std::filesystem::path& file, const std::string& text) {
+    std::error_code ec;
+    std::filesystem::create_directories(file.parent_path(), ec);
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    out << text;
+    return static_cast<bool>(out);
+}
+
+// One scratch directory per case, removed by the case's ControlsScratchGuard. `prisms` is two folders down so that a name that climbs out of it
+// lands INSIDE `root`, which the guard removes, and not in %TEMP%.
+struct ArtCase {
+    std::filesystem::path root;
+    std::filesystem::path mr;       // Paths::controls.artDir
+    std::filesystem::path original; // Paths::original, for the cases that give the original's sprites of their own
+    std::filesystem::path prisms;   // Paths::prisms
+
+    explicit ArtCase(const std::string& name) {
+        root = std::filesystem::temp_directory_path() / ("supersonic-test-mp-layer-art-" + name);
+        ControlsScratchDirs().push_back(root);
+        std::error_code ec;
+        std::filesystem::remove_all(root, ec);
+        std::filesystem::create_directories(root, ec);
+        mr = root / "mr";
+        original = root / "original";
+        prisms = root / "deep" / "prisms";
+    }
+};
+
+void ArtWriteMr(const ArtCase& art, std::initializer_list<Controls::Id> which, int px = 128) {
+    for (const Controls::Id id : which) CHECK_MSG(ArtWritePng(art.mr / kArtMrFile[ArtAt(id)], px, px), std::string("the stand-in for ") + kArtMrFile[ArtAt(id)] + " is written");
+}
+
+// The manifest the tool writes: `outputs.<file>.size`, every one 128 x 128 unless the row says otherwise.
+void ArtWriteManifest(const ArtCase& art, const std::vector<std::pair<std::string, glm::ivec2>>& sizes) {
+    std::string text = "{\"canvas\": [128, 128], \"outputs\": {";
+    bool first = true;
+    for (const auto& [file, size] : sizes) {
+        text += std::string(first ? "" : ", ") + "\"" + file + "\": {\"size\": [" + std::to_string(size.x) + ", " + std::to_string(size.y) + "]}";
+        first = false;
+    }
+    text += "}}";
+    CHECK_MSG(ArtWriteText(art.mr / "manifest.json", text), "the manifest is written");
+}
+
+enum class ArtOriginal { Off, StandIn, Real };
+
+// The paths of a case: the older cases' (MdPaths(), modern, the original's tier off) with a scratch `prisms` and a scratch folder for Magic
+// Rampage's pictures when `magicRampage`, and the original's tier as `original` says: off, or on over the stand-ins in art.original, or on over
+// the real ones.
+MagicPortalsLayer::Paths ArtPaths(const ArtCase& art, bool magicRampage, ArtOriginal original) {
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.prisms = art.prisms;
+    paths.controls.artDir = magicRampage ? art.mr.string() : std::string();
+    paths.controls.withoutOriginalArt = original == ArtOriginal::Off;
+    if (original == ArtOriginal::StandIn) paths.original = art.original.string();
+    return paths;
+}
+
+// A layer attached to the menu (no level named), which is all the resolution of the pictures needs: it happens at attach, whatever else is.
+struct ArtAttached {
+    entt::registry registry;
+    MagicPortalsLayer layer;
+    bool ok = false;
+
+    ArtAttached(const MagicPortalsLayer::Paths& paths, const std::string& what) : layer(paths, "") {
+        publishViewport(registry);
+        layer.OnAttach(registry);
+        ok = MdStyleIs(layer, Controls::Style::Modern, what);
+    }
+    ~ArtAttached() { layer.OnDetach(registry); }
+    ArtAttached(const ArtAttached&) = delete;
+    ArtAttached& operator=(const ArtAttached&) = delete;
+};
+
+int ArtWarningsWith(const MagicPortalsLayer& layer, const std::string& text) {
+    int found = 0;
+    for (const std::string& warning : layer.ModernArtWarnings()) found += warning.find(text) != std::string::npos ? 1 : 0;
+    return found;
+}
+
+const std::string kArtMixedWarning = "more than one set of pictures";
+
+// The files in a directory, by name (empty where there is none), and how many of them are a half-written copy.
+std::vector<std::string> ArtFilesIn(const std::filesystem::path& dir) {
+    std::vector<std::string> names;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) names.push_back(entry.path().filename().string());
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+int ArtCountTemporaries(const std::filesystem::path& dir) {
+    int found = 0;
+    for (const std::string& name : ArtFilesIn(dir)) found += name.size() >= 4 && name.compare(name.size() - 4, 4, ".tmp") == 0 ? 1 : 0;
+    return found;
+}
+
+bool ArtIsAPng(const std::string& path) {
+    int w = 0;
+    int h = 0;
+    int n = 0;
+    stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &n, 4);
+    if (pixels == nullptr) return false;
+    stbi_image_free(pixels);
+    return true;
+}
+
+// Magic Rampage's five win over everything below them, and they are drawn into their boxes (their transparent margin is 14 px of 128, so the
+// solid body is exactly the box's face). Nothing is written into `prisms` for a picture that is not drawn.
+void TheMagicRampageFileWinsWhenItIsReadable() {
+    const ControlsScratchGuard scratch;
+    ArtCase art("mr-wins");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear});
+    ArtWriteManifest(art, {{"walk_left.png", {128, 128}}, {"walk_right.png", {128, 128}}, {"restart.png", {128, 128}}, {"pause.png", {128, 128}},
+                           {"clear_portals.png", {128, 128}}});
+    // The original's tier is ON, over whatever the real original has: Magic Rampage's is tried first and wins.
+    MdRun run(ArtPaths(art, true, ArtOriginal::Real), "level30", "TheMagicRampageFileWinsWhenItIsReadable");
+    if (!run.ok) return;
+    const MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr", "the INFO line: " + layer.ModernArtLine());
+    CHECK_MSG(layer.ModernArtWarnings().empty(), "five of one set is not a mixed look, and nothing was refused: " + std::to_string(layer.ModernArtWarnings().size()) + " warnings");
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(run.registry, layer);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::string key = Controls::KeyOf(id);
+        CHECK_MSG(layer.ModernSource(id) == Controls::ArtSource(Controls::ArtTier::MagicRampage), key + ": from Magic Rampage's folder");
+        CHECK_MSG(layer.ModernImage(id) == (art.mr / kArtMrFile[ArtAt(id)]).string(), key + ": the file is the folder's own: " + layer.ModernImage(id));
+        CHECK_MSG(NearD(layer.ModernBodyInset(id), 0.109375, 1e-12), key + ": and carries the margin Magic Rampage's pictures do (14 / 128)");
+        Hud::Rect box;
+        if (!layer.ControlRect(id, box)) {
+            CHECK_MSG(id == Controls::Id::Clear, key + " is shown");
+            continue;
+        }
+        const int quad = MdQuadOf(frame, layer.ModernImage(id));
+        CHECK_MSG(quad >= 0 && SameRect(OnView(layer, frame[static_cast<std::size_t>(quad < 0 ? 0 : quad)]), box, 1e-3), key + ": drawn into its box with that file");
+    }
+    // Nothing the five replaced was drawn or written.
+    int glyphs = 0;
+    for (const std::string& name : ArtFilesIn(art.prisms)) glyphs += name.rfind("modern_", 0) == 0 ? 1 : 0;
+    CHECK_MSG(glyphs == 0 && ArtCountTemporaries(art.prisms) == 0, "five Magic Rampage pictures write no glyph into the scratch directory: " + std::to_string(glyphs));
+}
+
+// A file that is there and cannot be read is skipped with a WARN. For the three corners the next tier is the original's own sprite, found as the
+// classic buttons find theirs (the hd twin first); a sprite that cannot be read either goes on to the drawn glyph. A file that is NOT there is the
+// usual case and says nothing.
+void AnUnreadableFileFallsToTheOriginalsSpriteForTheThreeCorners() {
+    const ControlsScratchGuard scratch;
+    ArtCase art("unreadable");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right});
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        CHECK(ArtWriteText(art.mr / kArtMrFile[ArtAt(corner)], "this is not a PNG, though it is named like one"));
+    }
+    CHECK(ArtWritePng(art.original / "sprites" / "hd" / kArtOriginalFile[ArtAt(Controls::Id::Reset)], 128, 128));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Reset)], 64, 64)); // the plain one beside it: the hd twin is the one used
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Menu)], 64, 64));
+    CHECK(ArtWriteText(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Clear)], "not a PNG either"));
+    auto attached = std::make_unique<ArtAttached>(ArtPaths(art, true, ArtOriginal::StandIn), "AnUnreadableFileFallsToTheOriginalsSpriteForTheThreeCorners");
+    ArtAttached& run = *attached;
+    if (!run.ok) return;
+    const MagicPortalsLayer& layer = run.layer;
+    using Tier = Controls::ArtTier;
+    CHECK_MSG(layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::MagicRampage) &&
+                  layer.ModernSource(Controls::Id::Right) == Controls::ArtSource(Tier::MagicRampage),
+              "the two arrows have readable files and keep them");
+    CHECK_MSG(layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original) &&
+                  layer.ModernImage(Controls::Id::Reset) == art.original.string() + "/sprites/hd/restart_level_button.png",
+              "restart: the original's hd sprite, as the classic button finds it: " + layer.ModernImage(Controls::Id::Reset));
+    CHECK_MSG(layer.ModernSource(Controls::Id::Menu) == Controls::ArtSource(Tier::Original) &&
+                  layer.ModernImage(Controls::Id::Menu) == art.original.string() + "/sprites/main_menu_shortcut.png",
+              "pause: the original's plain sprite where there is no hd twin: " + layer.ModernImage(Controls::Id::Menu));
+    CHECK_MSG(layer.ModernSource(Controls::Id::Clear) == Controls::ArtSource(Tier::Generated) &&
+                  layer.ModernImage(Controls::Id::Clear) == (art.prisms / "modern_clear_portals.png").string() && ArtIsAPng(layer.ModernImage(Controls::Id::Clear)),
+              "clear-portals: its original sprite cannot be read either, so the drawn glyph: " + layer.ModernImage(Controls::Id::Clear));
+    CHECK_MSG(layer.ModernBodyInset(Controls::Id::Reset) == 0.0 && layer.ModernBodyInset(Controls::Id::Menu) == 0.0,
+              "the original's sprites are opaque to their edges: no margin");
+    CHECK_MSG(NearD(layer.ModernBodyInset(Controls::Id::Clear), 0.109375, 1e-12) && NearD(layer.ModernBodyInset(Controls::Id::Left), 0.109375, 1e-12),
+              "and the others carry the margin of their own tier");
+    CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=mr walk_right=mr restart=original pause=original clear_portals=generated", layer.ModernArtLine());
+    // The WARNs: the three Magic Rampage files and the one original sprite that exist and cannot be read, each naming its control, and the mixed look.
+    CHECK_MSG(ArtWarningsWith(layer, "cannot be read") == 4, "four pictures exist and cannot be read: " + std::to_string(ArtWarningsWith(layer, "cannot be read")));
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        CHECK_MSG(ArtWarningsWith(layer, std::string(Controls::KeyOf(corner)) + ": Magic Rampage's picture exists and cannot be read") == 1,
+                  std::string(Controls::KeyOf(corner)) + "'s Magic Rampage file is named once");
+    }
+    CHECK_MSG(ArtWarningsWith(layer, "clear_portals: the original's sprite exists and cannot be read") == 1, "and clear-portals' original sprite once");
+    CHECK_MSG(ArtWarningsWith(layer, kArtMixedWarning) == 1 && layer.ModernArtWarnings().size() == 5u,
+              "and one WARN that the look is mixed: " + std::to_string(layer.ModernArtWarnings().size()) + " in all");
+    // A file that is not there says nothing: the same run with the three corner files removed, the first layer detached.
+    attached.reset();
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        std::error_code ec;
+        std::filesystem::remove(art.mr / kArtMrFile[ArtAt(corner)], ec);
+    }
+    ArtAttached absent(ArtPaths(art, true, ArtOriginal::StandIn), "AnUnreadableFileFallsToTheOriginalsSpriteForTheThreeCorners: absent");
+    if (!absent.ok) return;
+    CHECK_MSG(ArtWarningsWith(absent.layer, "Magic Rampage's picture") == 0, "three files that are not there are not warned about");
+    CHECK_MSG(absent.layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original), "and the original's sprite is used just the same");
+}
+
+// A picture of another size than the manifest's (else 128 x 128) would be drawn mis-scaled and say nothing: it is skipped to the next tier, with a
+// WARN that gives both sizes. The manifest's sizes win over 128, and a manifest that cannot be read holds every picture to 128.
+void AFileOfTheWrongSizeFallsToTheNextTierWithAWarning() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("wrong-size");
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Reset)], 64, 64));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Menu)], 64, 64));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Clear)], 64, 64));
+    // Left right; right is 64 x 64 and the manifest says so; restart is a hand-dropped 406 x 406 canvas; pause is 128 x 120; clear-portals is absent.
+    CHECK(ArtWritePng(art.mr / "walk_left.png", 128, 128));
+    CHECK(ArtWritePng(art.mr / "walk_right.png", 64, 64));
+    CHECK(ArtWritePng(art.mr / "restart.png", 406, 406));
+    CHECK(ArtWritePng(art.mr / "pause.png", 128, 120));
+    ArtWriteManifest(art, {{"walk_left.png", {128, 128}}, {"walk_right.png", {64, 64}}, {"restart.png", {128, 128}}, {"pause.png", {128, 128}}});
+    {
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "AFileOfTheWrongSizeFallsToTheNextTierWithAWarning: manifest");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::MagicRampage), "the right size is used");
+        CHECK_MSG(layer.ModernSource(Controls::Id::Right) == Controls::ArtSource(Tier::MagicRampage),
+                  "and so is 64 x 64 where the manifest says 64 x 64: the manifest's size wins over 128");
+        CHECK_MSG(layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original), "a 406 x 406 canvas is not used: the original's sprite is");
+        CHECK_MSG(layer.ModernSource(Controls::Id::Menu) == Controls::ArtSource(Tier::Original), "nor is 128 x 120");
+        CHECK_MSG(layer.ModernSource(Controls::Id::Clear) == Controls::ArtSource(Tier::Original), "and a file that is not there is the original's too");
+        CHECK_MSG(ArtWarningsWith(layer, "restart: Magic Rampage's picture is 406 x 406 px, and 128 x 128 is what the manifest and the layout say") == 1,
+                  "the 406 x 406 canvas is warned about with both sizes");
+        CHECK_MSG(ArtWarningsWith(layer, "pause: Magic Rampage's picture is 128 x 120 px, and 128 x 128 is what the manifest and the layout say") == 1,
+                  "and so is 128 x 120");
+        CHECK_MSG(ArtWarningsWith(layer, "Magic Rampage's picture") == 2 && ArtWarningsWith(layer, kArtMixedWarning) == 1 && layer.ModernArtWarnings().size() == 3u,
+                  "two WARNs for two pictures, the mixed look, and nothing for the absent file: " + std::to_string(layer.ModernArtWarnings().size()));
+        CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=mr walk_right=mr restart=original pause=original clear_portals=original", layer.ModernArtLine());
+    }
+    // No manifest: 128 x 128 is what every picture must be, so the 64 x 64 arrow is now too small and falls to the drawn glyph.
+    std::error_code ec;
+    std::filesystem::remove(art.mr / "manifest.json", ec);
+    {
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "AFileOfTheWrongSizeFallsToTheNextTierWithAWarning: no manifest");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ModernSource(Controls::Id::Right) == Controls::ArtSource(Tier::Generated) && ArtIsAPng(layer.ModernImage(Controls::Id::Right)),
+                  "with no manifest the 64 x 64 arrow is held to layout.box_px (128): the drawn glyph");
+        CHECK_MSG(ArtWarningsWith(run.layer, "walk_right: Magic Rampage's picture is 64 x 64 px, and 128 x 128 is what the manifest and the layout say") == 1,
+                  "and is warned about");
+    }
+    // A manifest that is there and cannot be read: one WARN, and 128 x 128 for every picture.
+    CHECK(ArtWriteText(art.mr / "manifest.json", "{\"outputs\": "));
+    {
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "AFileOfTheWrongSizeFallsToTheNextTierWithAWarning: broken manifest");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(ArtWarningsWith(layer, "manifest could not be read, so every picture is held to 128 x 128 px") == 1, "the broken manifest is said once");
+        CHECK_MSG(layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::MagicRampage) &&
+                      layer.ModernSource(Controls::Id::Right) == Controls::ArtSource(Tier::Generated),
+                  "and the default size is what is held to");
+    }
+}
+
+// With no Magic Rampage file and no sprite of the original's for an arrow (it has none), an arrow is a drawn glyph: the PNG sim/PadArt's pixels make, in
+// Paths::prisms, byte for byte. The corners are the original's where the original's tier is on and the glyphs where it is off; a glyph no control
+// reaches is not written. Nowhere to look for Magic Rampage's is no error: an empty folder, a folder that does not exist and no folder at all
+// resolve alike.
+void TheArrowsFallToTheDrawnGlyphWithNoFile() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("glyph");
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(corner)], 64, 64));
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(art.mr, ec); // an EMPTY folder
+    const auto glyphPath = [&](Controls::Id id) { return (art.prisms / (std::string("modern_") + Controls::KeyOf(id) + ".png")).string(); };
+    // The picture is exactly what sim/PadArt draws at the box's size with the margin controls.json gives it.
+    const auto isTheGlyph = [](const std::string& image, Controls::Id id) {
+        int w = 0;
+        int h = 0;
+        int n = 0;
+        stbi_uc* pixels = stbi_load(image.c_str(), &w, &h, &n, 4);
+        if (pixels == nullptr) return false;
+        const PadArt::Bitmap drawn = PadArt::Draw(PadArt::GlyphOf(id), 128, 0.109375);
+        const bool same = w == 128 && h == 128 && !drawn.Empty() && std::memcmp(pixels, drawn.rgba.data(), drawn.rgba.size()) == 0;
+        stbi_image_free(pixels);
+        return same;
+    };
+    {
+        // The original's tier is on: the arrows are drawn, and only they are written.
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "TheArrowsFallToTheDrawnGlyphWithNoFile: the original's sprites there");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        for (const Controls::Id arrow : {Controls::Id::Left, Controls::Id::Right}) {
+            const std::string key = Controls::KeyOf(arrow);
+            CHECK_MSG(layer.ModernSource(arrow) == Controls::ArtSource(Tier::Generated) && layer.ModernImage(arrow) == glyphPath(arrow),
+                      key + ": the drawn glyph, in the scratch directory: " + layer.ModernImage(arrow));
+            CHECK_MSG(isTheGlyph(layer.ModernImage(arrow), arrow), key + ": and every byte is what sim/PadArt draws");
+            CHECK_MSG(NearD(layer.ModernBodyInset(arrow), 0.109375, 1e-12), key + ": with the generated tier's margin");
+        }
+        for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+            const std::string key = Controls::KeyOf(corner);
+            CHECK_MSG(layer.ModernSource(corner) == Controls::ArtSource(Tier::Original), key + ": the original's sprite");
+            std::error_code none;
+            CHECK_MSG(!std::filesystem::exists(glyphPath(corner), none), key + ": whose glyph is therefore not written");
+        }
+        CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=generated walk_right=generated restart=original pause=original clear_portals=original",
+                  layer.ModernArtLine());
+        CHECK_MSG(layer.ModernArtWarnings().size() == 1u && ArtWarningsWith(layer, kArtMixedWarning) == 1, "the only WARN is the mixed look");
+    }
+    {
+        // The original's tier is off (a machine without the original's art): five glyphs, one set, no WARN.
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::Off), "TheArrowsFallToTheDrawnGlyphWithNoFile: no original");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        int exact = 0;
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            CHECK_MSG(layer.ModernSource(id) == Controls::ArtSource(Tier::Generated) && layer.ModernImage(id) == glyphPath(id),
+                      std::string(Controls::KeyOf(id)) + ": the drawn glyph");
+            exact += isTheGlyph(layer.ModernImage(id), id) ? 1 : 0;
+        }
+        CHECK_MSG(exact == 5, "five glyphs, each exactly sim/PadArt's: " + std::to_string(exact));
+        CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=generated walk_right=generated restart=generated pause=generated clear_portals=generated" &&
+                      layer.ModernArtWarnings().empty(),
+                  "one set of pictures is not a mixed look: " + layer.ModernArtLine());
+        CHECK_MSG(ArtCountTemporaries(art.prisms) == 0, "and no half-written copy is left in the scratch directory");
+    }
+    // A folder that does not exist, and none at all, resolve like the empty one and say nothing.
+    for (const bool named : {true, false}) {
+        MagicPortalsLayer::Paths paths = ArtPaths(art, true, ArtOriginal::Off);
+        paths.controls.artDir = named ? (art.root / "no" / "such" / "folder").string() : std::string();
+        ArtAttached run(paths, std::string("TheArrowsFallToTheDrawnGlyphWithNoFile: ") + (named ? "a folder that is not there" : "no folder"));
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::Generated) && run.layer.ModernArtWarnings().empty(),
+                  "the arrows are drawn and nothing is said");
+    }
+}
+
+// The last tier. With no scratch directory to write the glyphs in (Paths::prisms empty: a level cannot load in that case, but the pictures are
+// resolved at attach, before any level) a control with nothing above it is a flat quad - no file, no source, no margin - and nothing is written
+// anywhere: a path joined to "" would land in the working directory. Magic Rampage's own pictures and the original's need no scratch directory
+// and still win.
+void TheLastTierIsAFlatQuadWithNoPrisms() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("flat-tier");
+    const auto glyphsInTheWorkingDirectory = [] {
+        int found = 0;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::current_path(), ec)) {
+            found += entry.path().filename().string().rfind("modern_", 0) == 0 ? 1 : 0;
+        }
+        return found;
+    };
+    const int before = glyphsInTheWorkingDirectory();
+    {
+        MagicPortalsLayer::Paths paths = ArtPaths(art, false, ArtOriginal::Off);
+        paths.prisms.clear();
+        ArtAttached run(paths, "TheLastTierIsAFlatQuadWithNoPrisms: nothing at all");
+        if (!run.ok) return;
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            const std::string key = Controls::KeyOf(id);
+            CHECK_MSG(run.layer.ModernImage(id).empty() && !run.layer.ModernSource(id) && run.layer.ModernBodyInset(id) == 0.0,
+                      key + ": no file, no tier, no margin: a flat quad on the box's face");
+        }
+        CHECK_MSG(run.layer.ModernArtLine() == "modern controls art: walk_left=flat walk_right=flat restart=flat pause=flat clear_portals=flat" &&
+                      run.layer.ModernArtWarnings().empty(),
+                  "the line says so, and five flat quads are one look: " + run.layer.ModernArtLine());
+    }
+    {
+        // The original's sprites there, still no scratch directory: the arrows are flat and the corners the original's own.
+        for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+            CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(corner)], 64, 64));
+        }
+        MagicPortalsLayer::Paths paths = ArtPaths(art, false, ArtOriginal::StandIn);
+        paths.prisms.clear();
+        ArtAttached run(paths, "TheLastTierIsAFlatQuadWithNoPrisms: the original's sprites");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ModernArtLine() == "modern controls art: walk_left=flat walk_right=flat restart=original pause=original clear_portals=original",
+                  run.layer.ModernArtLine());
+        CHECK_MSG(run.layer.ModernImage(Controls::Id::Left).empty() && !run.layer.ModernSource(Controls::Id::Right) &&
+                      run.layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original) && !run.layer.ModernImage(Controls::Id::Reset).empty(),
+                  "flat arrows, the original's corners");
+        CHECK_MSG(run.layer.ModernArtWarnings().size() == 1u && ArtWarningsWith(run.layer, kArtMixedWarning) == 1, "a mixed look");
+    }
+    {
+        // Magic Rampage's five need no scratch directory either.
+        ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear});
+        MagicPortalsLayer::Paths paths = ArtPaths(art, true, ArtOriginal::Off);
+        paths.prisms.clear();
+        ArtAttached run(paths, "TheLastTierIsAFlatQuadWithNoPrisms: Magic Rampage's");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ModernArtLine() == "modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr", run.layer.ModernArtLine());
+    }
+    CHECK_MSG(glyphsInTheWorkingDirectory() == before, "and nothing was written into the working directory by a path joined to an empty one");
+}
+
+// The tiers are resolved ONCE for the run, at attach: not per level. The folder goes after the first level has loaded; two more loads of the level
+// (a restart is the same load a skip and a door make) must not find the pictures gone, and must not say anything again. A new layer on the same
+// paths, which resolves again, does find them gone: the control that the retention is the one resolution.
+void TheTiersAreResolvedOncePerRunAndNeverClearedByALevelLoad() {
+    const ControlsScratchGuard scratch;
+    ArtCase art("once");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear});
+    const MagicPortalsLayer::Paths paths = ArtPaths(art, true, ArtOriginal::Off);
+    // (A pointer, so that the first layer is detached before the second attaches: two attached at once are not what this case is about.)
+    auto first = std::make_unique<MdRun>(paths, "level30", "TheTiersAreResolvedOncePerRunAndNeverClearedByALevelLoad");
+    MdRun& run = *first;
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    std::array<std::string, 5> images;
+    std::array<Controls::ArtSource, 5> sources;
+    std::array<double, 5> insets{};
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        images[ArtAt(id)] = layer.ModernImage(id);
+        sources[ArtAt(id)] = layer.ModernSource(id);
+        insets[ArtAt(id)] = layer.ModernBodyInset(id);
+        CHECK_MSG(sources[ArtAt(id)] == Controls::ArtSource(Controls::ArtTier::MagicRampage) && !images[ArtAt(id)].empty(),
+                  std::string(Controls::KeyOf(id)) + ": Magic Rampage's at attach");
+    }
+    const std::string line = layer.ModernArtLine();
+    const std::vector<std::string> warnings = layer.ModernArtWarnings();
+    std::error_code ec;
+    std::filesystem::remove_all(art.mr, ec);
+    CHECK_MSG(!std::filesystem::exists(art.mr, ec), "the folder is gone");
+    for (int load = 1; load <= 2; ++load) {
+        press(layer, run.registry, MagicPortalsLayer::kRetry);
+        const std::string what = "after the level was loaded again, " + std::to_string(load);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.LoadError().empty(), what + ": the level loads: " + layer.LoadError());
+        PtrRest(layer, run.registry, 60);
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(run.registry, layer);
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            const std::string key = Controls::KeyOf(id);
+            CHECK_MSG(layer.ModernImage(id) == images[ArtAt(id)] && layer.ModernSource(id) == sources[ArtAt(id)] && layer.ModernBodyInset(id) == insets[ArtAt(id)],
+                      key + ": picture, tier and margin are what attach resolved, " + what);
+        }
+        CHECK_MSG(layer.ModernArtLine() == line && layer.ModernArtWarnings() == warnings, "and the line and the warnings are not said again, " + what);
+        CHECK_MSG(MdQuadOf(frame, images[ArtAt(Controls::Id::Left)]) >= 0 && MdQuadOf(frame, images[ArtAt(Controls::Id::Reset)]) >= 0,
+                  "and the new level draws them, " + what);
+    }
+    // The negative control: attached afresh with the folder gone, the same paths resolve to the next tier.
+    first.reset();
+    MdRun fresh(paths, "level30", "TheTiersAreResolvedOncePerRunAndNeverClearedByALevelLoad: a new layer");
+    if (!fresh.ok) return;
+    CHECK_MSG(fresh.layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Controls::ArtTier::Generated),
+              "a new layer finds the folder gone: the retention above was the one resolution, not a folder still there");
+}
+
+// A picture with no transparent margin (the original's sprites are opaque to their edges) is drawn into the box's FACE, not into the box: its body
+// is the whole picture, and the face is 0.78125 of the box (a margin of 14 px of 128 on each side), so it is 22 percent smaller than the box. A
+// picture with the margin (Magic Rampage's) is drawn so that its body is the face, which is the box. The real original's corner sprites stand
+// here, where a stand-in would not show their real shape; the case skips without them.
+void TheDrawRectUsesTheTiersMargin() {
+    if (!OriginalArtIsThere("TheDrawRectUsesTheTiersMargin")) return;
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("drawrect");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right});
+    MdRun run(ArtPaths(art, true, ArtOriginal::Real), "level30", "TheDrawRectUsesTheTiersMargin");
+    if (!run.ok) return;
+    const MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=mr walk_right=mr restart=original pause=original clear_portals=original", layer.ModernArtLine());
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(run.registry, layer);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::string key = Controls::KeyOf(id);
+        const bool original = id == Controls::Id::Reset || id == Controls::Id::Menu || id == Controls::Id::Clear;
+        CHECK_MSG(layer.ModernSource(id) == Controls::ArtSource(original ? Tier::Original : Tier::MagicRampage), key + ": from the tier the line says");
+        CHECK_MSG(NearD(layer.ModernBodyInset(id), original ? 0.0 : 0.109375, 1e-12), key + ": with that tier's margin (the original's 0, Magic Rampage's 14 / 128)");
+        Hud::Rect box;
+        if (!layer.ControlRect(id, box)) continue; // clear-portals is not shown with no portal placed
+        const int quad = MdQuadOf(frame, layer.ModernImage(id));
+        CHECK_MSG(quad >= 0, key + ": drawn");
+        if (quad < 0) continue;
+        const Hud::Rect drawn = OnView(layer, frame[static_cast<std::size_t>(quad)]);
+        // The face: the box shrunk by 14 / 128 of it on every side. A margin-less sprite fills it; a picture with the margin fills the box.
+        const Hud::Rect face{box.min + box.size * 0.109375, box.size * 0.78125};
+        CHECK_MSG(SameRect(drawn, original ? face : box, 1e-3), key + ": drawn " + ShowRect(drawn) + ", the " + (original ? "face " + ShowRect(face) : "box " + ShowRect(box)));
+        if (original) {
+            CHECK_MSG(NearD(drawn.size.x / box.size.x, 0.78125, 1e-4) && NearD(1.0 - drawn.size.x / box.size.x, 0.21875, 1e-4),
+                      key + ": 22 percent smaller than its box (0.78125 of it)");
+            CHECK_MSG(NearD(drawn.Centre().x, box.Centre().x, 1e-3) && NearD(drawn.Centre().y, box.Centre().y, 1e-3), key + ": on the box's own centre");
+        }
+    }
+}
+
+// A picture's file name from the data is joined to the folder of its tier, and the generated tier WRITES there: a name that is not one file in it is
+// refused where the data is read, naming the key, and the run plays classic with one error line - the same way a typo in controls.json is. Nothing is
+// written or read at the place the name pointed to. A plain other name is used (the control).
+void AGeneratedFileNameThatClimbsOutIsRefusedAtLoad() {
+    const ControlsScratchGuard scratch;
+    ArtCase art("climb");
+    // The names as the JSON text spells them (a backslash doubled), with the key they are in and the name they replace.
+    struct Row {
+        const char* what;
+        const char* tier;
+        Controls::Id id;
+        std::string text;
+    };
+    const std::string absolute = (art.root / "abs-escape.png").generic_string();
+    const std::vector<Row> rows = {
+        {"climbs out", "generated", Controls::Id::Left, "../escape.png"},
+        {"climbs out by the other separator", "generated", Controls::Id::Right, "..\\\\escape.png"},
+        {"an absolute path", "generated", Controls::Id::Reset, absolute},
+        {"a folder", "generated", Controls::Id::Menu, "sub/dir.png"},
+        {"a drive", "generated", Controls::Id::Clear, "C:escape.png"},
+        {"a name that is only dots", "generated", Controls::Id::Left, ".."},
+        {"in Magic Rampage's tier", "mr", Controls::Id::Left, "../mr_escape.png"},
+        {"in the original's tier", "original", Controls::Id::Reset, "../orig_escape.png"},
+    };
+    const auto oldName = [](const Row& row) {
+        const std::string tier = row.tier;
+        if (tier == "mr") return std::string(kArtMrFile[ArtAt(row.id)]);
+        if (tier == "original") return std::string(kArtOriginalFile[ArtAt(row.id)]);
+        return std::string("modern_") + Controls::KeyOf(row.id) + ".png";
+    };
+    int number = 0;
+    for (const Row& row : rows) {
+        const std::string needle = "\"" + oldName(row) + "\"";
+        const std::string data = ControlsScratchData("climb-" + std::to_string(number++), [&](const std::string& text) {
+            const std::size_t first = text.find(needle);
+            CHECK_MSG(first != std::string::npos && text.find(needle, first + 1) == std::string::npos,
+                      std::string(row.what) + ": the file name " + needle + " is in controls.json once");
+            std::string edited = text;
+            if (first != std::string::npos) edited.replace(first, needle.size(), "\"" + row.text + "\"");
+            return std::optional<std::string>(edited);
+        });
+        MagicPortalsLayer::Paths paths = ArtPaths(art, true, ArtOriginal::Real);
+        paths.portData = data;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "");
+        layer.OnAttach(registry);
+        const std::string where = std::string("art.") + row.tier + "." + Controls::KeyOf(row.id) + ".file";
+        CHECK_MSG(!layer.ModernReady() && layer.ControlsStyle() == Controls::Style::Classic, std::string(row.what) + ": modern is unavailable: " + MdDescribe(layer));
+        CHECK_MSG(layer.ControlsError().find(where + " is not a bare file name") != std::string::npos, std::string(row.what) + ": the error names " + where + ": " + layer.ControlsError());
+        CHECK_MSG(layer.ControlsLine() == kControlsLineUnavailable, std::string(row.what) + ": and the run says it plays classic: " + layer.ControlsLine());
+        CHECK_MSG(layer.ModernArtLine().empty() && layer.ModernImage(row.id).empty(), std::string(row.what) + ": no picture was resolved");
+        layer.OnDetach(registry);
+    }
+    // Nothing was written where a name pointed, anywhere under the case's folder (the scratch directory is two folders down in it).
+    int stray = 0;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(art.root, ec)) {
+        const std::string name = entry.path().filename().string();
+        stray += name.find("escape") != std::string::npos || name == "dir.png" ? 1 : 0;
+    }
+    CHECK_MSG(stray == 0, "no file was made at any place a refused name pointed: " + std::to_string(stray));
+    // The control: another bare name for the same glyph is accepted and is the file written, inside the scratch directory.
+    const std::string renamed = ControlsScratchData("climb-control", [](const std::string& text) {
+        const std::string needle = "\"modern_walk_left.png\"";
+        std::string edited = text;
+        const std::size_t at = edited.find(needle);
+        CHECK_MSG(at != std::string::npos, "the generated left arrow's file is in controls.json");
+        if (at != std::string::npos) edited.replace(at, needle.size(), "\"renamed_walk_left.png\"");
+        return std::optional<std::string>(edited);
+    });
+    MagicPortalsLayer::Paths paths = ArtPaths(art, false, ArtOriginal::Off);
+    paths.portData = renamed;
+    ArtAttached run(paths, "AGeneratedFileNameThatClimbsOutIsRefusedAtLoad: a plain other name");
+    if (!run.ok) return;
+    CHECK_MSG(run.layer.ModernImage(Controls::Id::Left) == (art.prisms / "renamed_walk_left.png").string() && ArtIsAPng(run.layer.ModernImage(Controls::Id::Left)) &&
+                  !std::filesystem::exists(art.prisms / "modern_walk_left.png", ec),
+              "a plain other name is the file written, in the scratch directory: " + run.layer.ModernImage(Controls::Id::Left));
+}
+
+// The five generated pictures live in a directory every modern window shares. They are written only when the file there is not already exactly
+// these bytes (so a second window starting finds them and touches nothing), and when they are written it is whole, through a name of its own and
+// a rename: a file is never seen half-written. Pinned by what a run leaves: an untouched file keeps its time, a damaged or missing one is made
+// whole, and no temporary copy is left behind.
+void TheGeneratedFilesAreWrittenOnlyWhenTheyDiffer() {
+    const ControlsScratchGuard scratch;
+    ArtCase art("rewrite");
+    const MagicPortalsLayer::Paths paths = ArtPaths(art, false, ArtOriginal::Off); // all five reach the drawn glyph
+    const auto file = [&](Controls::Id id) { return art.prisms / (std::string("modern_") + Controls::KeyOf(id) + ".png"); };
+    const auto attach = [&](const char* what) {
+        ArtAttached run(paths, std::string("TheGeneratedFilesAreWrittenOnlyWhenTheyDiffer: ") + what);
+        return run.ok;
+    };
+    namespace fs = std::filesystem;
+    std::error_code ec;
+
+    if (!attach("the first attach")) return;
+    std::array<std::string, 5> bytes;
+    std::array<fs::file_time_type, 5> stamp;
+    const auto old = fs::file_time_type::clock::now() - std::chrono::hours(2);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        bytes[ArtAt(id)] = ReadWholeFile(file(id));
+        CHECK_MSG(bytes[ArtAt(id)].size() > 100 && bytes[ArtAt(id)].compare(1, 3, "PNG") == 0, std::string(Controls::KeyOf(id)) + ": written, and a PNG");
+        fs::last_write_time(file(id), old, ec);
+        stamp[ArtAt(id)] = fs::last_write_time(file(id), ec);
+    }
+    CHECK_MSG(ArtCountTemporaries(art.prisms) == 0, "the first attach leaves no half-written copy");
+
+    // Attached again with the files as they should be: none is written, which is seen by the time they carry.
+    if (!attach("the second attach")) return;
+    int untouched = 0;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        untouched += fs::last_write_time(file(id), ec) == stamp[ArtAt(id)] && ReadWholeFile(file(id)) == bytes[ArtAt(id)] ? 1 : 0;
+    }
+    CHECK_MSG(untouched == 5, "five files already as they would be written are not written again: " + std::to_string(untouched));
+
+    // Two damaged (cut short; the same length with one byte changed), and their times set back, then one gone: each is made whole, the others keep
+    // their time.
+    {
+        std::ofstream cut(file(Controls::Id::Left), std::ios::binary | std::ios::trunc);
+        cut << "short";
+    }
+    {
+        std::string changed = bytes[ArtAt(Controls::Id::Reset)];
+        changed[changed.size() / 2] = static_cast<char>(changed[changed.size() / 2] ^ 0x55);
+        std::ofstream out(file(Controls::Id::Reset), std::ios::binary | std::ios::trunc);
+        out.write(changed.data(), static_cast<std::streamsize>(changed.size()));
+    }
+    for (const Controls::Id id : {Controls::Id::Left, Controls::Id::Reset}) fs::last_write_time(file(id), stamp[ArtAt(id)], ec);
+    if (!attach("after damage")) return;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const bool damaged = id == Controls::Id::Left || id == Controls::Id::Reset;
+        const std::string key = Controls::KeyOf(id);
+        CHECK_MSG(ReadWholeFile(file(id)) == bytes[ArtAt(id)], key + ": whole, the bytes it should be");
+        CHECK_MSG((fs::last_write_time(file(id), ec) != stamp[ArtAt(id)]) == damaged, key + (damaged ? ": rewritten" : ": left alone"));
+    }
+    fs::remove(file(Controls::Id::Menu), ec);
+    if (!attach("after one was removed")) return;
+    CHECK_MSG(ReadWholeFile(file(Controls::Id::Menu)) == bytes[ArtAt(Controls::Id::Menu)], "a missing file is written");
+    CHECK_MSG(ArtCountTemporaries(art.prisms) == 0, "and no temporary copy is left behind by any of the writes");
+    int glyphs = 0;
+    for (const std::string& name : ArtFilesIn(art.prisms)) glyphs += name.rfind("modern_", 0) == 0 && name.size() > 4 && name.compare(name.size() - 4, 4, ".png") == 0 ? 1 : 0;
+    CHECK_MSG(glyphs == 5, "five pictures: " + std::to_string(glyphs));
 }
 
 // ---- the variant that claims classic under the modern layout and draw (G3 b) ----------------------------------------------------------------------
@@ -25803,7 +26477,13 @@ void AClassicLayerIgnoresEverythingModern() {
     policy.saveAllowed = false;
     policy.classicClaims = true;
     policy.testInsets = Controls::Insets{9.0, 9.0, 9.0, 9.0};
-    policy.artDir = "C:/nowhere/at/all";
+    // Magic Rampage's folder with five pictures in it, and the original's tier asked off: a classic run that read either would show it in
+    // ModernImage, which is empty below.
+    const ControlsScratchGuard scratch;
+    ArtCase art("classic-ignores");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear});
+    policy.artDir = art.mr.string();
+    policy.withoutOriginalArt = true;
     Controls::Tuning saved;
     saved.sizeSteps = 14;
     saved.move[0] = glm::dvec2(30.0, -30.0);
@@ -25818,7 +26498,10 @@ void AClassicLayerIgnoresEverythingModern() {
                   "the table is read and the policy is as given: " + MdDescribe(layer));
         CHECK_MSG(layer.ControlsLine() == kControlsLineFlag, "and the line says it was forced, not that it is the shipped default: '" + layer.ControlsLine() + "'");
         CHECK_MSG(layer.ControlsRectsLine().empty() && layer.ControlsError().empty(), "no modern rectangles are logged");
-        for (const Controls::Id id : Controls::kClaimOrder) CHECK_MSG(layer.ModernImage(id).empty(), std::string(Controls::KeyOf(id)) + ": no modern picture");
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            CHECK_MSG(layer.ModernImage(id).empty() && !layer.ModernSource(id), std::string(Controls::KeyOf(id)) + ": no modern picture, from no tier");
+        }
+        CHECK_MSG(layer.ModernArtLine().empty() && layer.ModernArtWarnings().empty(), "and no modern art line or warning: a classic run resolves no tier");
         // Drawn and claimed as a bare layer's: the original's pad pictures, the classic disc.
         if (OriginalArtIsThere("AClassicLayerIgnoresEverythingModern: the drawn half")) {
             const std::vector<ScreenOverlay::Quad> frame = HudFrame(run.registry, layer);
@@ -26485,6 +27168,16 @@ void runModernTests() {
     AModernControlIsNeverDroppedForAMissingPicture();
     ModernRunsWithNoOriginalArtDrawFlatQuads();
     TheModernPicturesAreWrittenOnlyToTheScratchDirectory();
+    // Where the pictures come from (planning step 184).
+    TheMagicRampageFileWinsWhenItIsReadable();
+    AnUnreadableFileFallsToTheOriginalsSpriteForTheThreeCorners();
+    AFileOfTheWrongSizeFallsToTheNextTierWithAWarning();
+    TheArrowsFallToTheDrawnGlyphWithNoFile();
+    TheLastTierIsAFlatQuadWithNoPrisms();
+    TheTiersAreResolvedOncePerRunAndNeverClearedByALevelLoad();
+    TheDrawRectUsesTheTiersMargin();
+    AGeneratedFileNameThatClimbsOutIsRefusedAtLoad();
+    TheGeneratedFilesAreWrittenOnlyWhenTheyDiffer();
     TheThreeLooksAreTheDesignsPairTops();
     TheFlagsKeysAreHeldNotAppliedBeforeCTL10();
     TheModernRectanglesLineNamesTheWindowItIsIn();

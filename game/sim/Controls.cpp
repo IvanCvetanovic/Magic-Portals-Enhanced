@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -251,6 +252,12 @@ bool ReadArt(const Json::Value& art, Rules& read, std::string& why) {
                 !Num(entry, "body_inset", 0.0, mostInset, read_entry.bodyInset, why, where + "." + KeyOf(id))) {
                 return false;
             }
+            // The layer JOINS this name to the folder of its tier, and the generated tier writes there: a name that climbs out of
+            // the folder (a separator, "..", a drive) is refused here, at load, so no path built from the data can leave it.
+            if (!IsBareFileName(read_entry.file)) {
+                why = where + "." + KeyOf(id) + ".file is not a bare file name (no folder, no \"..\", no drive): \"" + read_entry.file + "\"";
+                return false;
+            }
             read.art[static_cast<std::size_t>(tier)][Index(id)] = read_entry;
         }
     }
@@ -263,22 +270,6 @@ bool ReadArt(const Json::Value& art, Rules& read, std::string& why) {
 double UnitsOf(const Rules& rules, const glm::dvec2& viewUnits, double px) {
     return px * viewUnits.y / rules.referenceHeightPx;
 }
-
-} // namespace
-
-Insets InsetsFromWindowPx(double left, double top, double right, double bottom, double windowHeightPx, double viewHeightUnits) {
-    Insets insets;
-    if (!(windowHeightPx > 0.0) || !(viewHeightUnits > 0.0) || !std::isfinite(windowHeightPx) || !std::isfinite(viewHeightUnits)) return insets;
-    const double unitsPerPx = viewHeightUnits / windowHeightPx;
-    const auto side = [unitsPerPx](double px) { return std::isfinite(px) && px > 0.0 ? px * unitsPerPx : 0.0; };
-    insets.left = side(left);
-    insets.top = side(top);
-    insets.right = side(right);
-    insets.bottom = side(bottom);
-    return insets;
-}
-
-namespace {
 
 // A move is whole tenths of a unit: one division, so 0.3 is the double 0.3 and not the product 3 x 0.1.
 double SnapMoveAxis(double v) {
@@ -410,6 +401,18 @@ std::string NumberText(double v) {
 }
 
 } // namespace
+
+Insets InsetsFromWindowPx(double left, double top, double right, double bottom, double windowHeightPx, double viewHeightUnits) {
+    Insets insets;
+    if (!(windowHeightPx > 0.0) || !(viewHeightUnits > 0.0) || !Finite(windowHeightPx) || !Finite(viewHeightUnits)) return insets;
+    const double unitsPerPx = viewHeightUnits / windowHeightPx;
+    const auto side = [unitsPerPx](double px) { return Finite(px) && px > 0.0 ? px * unitsPerPx : 0.0; };
+    insets.left = side(left);
+    insets.top = side(top);
+    insets.right = side(right);
+    insets.bottom = side(bottom);
+    return insets;
+}
 
 const char* KeyOf(Id id) {
     switch (id) {
@@ -620,6 +623,85 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
     out = std::move(read);
     return true;
+}
+
+// ---- the pictures a modern run draws -----------------------------------------------------------------------
+
+bool IsBareFileName(const std::string& name) {
+    if (name.empty() || name == "." || name == "..") return false;
+    // Windows reads "name." and "name " as "name", so a name that ends in either is another file than it says.
+    if (name.back() == '.' || name.back() == ' ') return false;
+    for (const char c : name) {
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (u < 0x20 || c == '/' || c == '\\' || c == ':') return false;
+    }
+    return name.find("..") == std::string::npos;
+}
+
+bool ReadArtManifest(const std::string& path, ArtManifest& out, std::string& why) {
+    out.sizes.clear();
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) return true;
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        why = path + ": cannot open";
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string text = buffer.str();
+    Json::Parser parser(text);
+    Json::Value root;
+    if (!parser.Parse(root)) {
+        why = path + ": " + parser.Error();
+        return false;
+    }
+    if (!root.IsObject()) {
+        why = path + ": the document is not an object";
+        return false;
+    }
+    ArtManifest read;
+    // `outputs` names the pictures; a manifest without it names no size, which is the default's case.
+    for (const auto& [name, entry] : root["outputs"].AsObject()) {
+        // A picture the tool recorded without a size has none to be held to.
+        if (!entry.IsObject() || !entry.Has("size")) continue;
+        const Json::Array& size = entry["size"].AsArray();
+        const auto whole = [](const Json::Value& v) {
+            return v.IsNumber() && Finite(v.AsNumber()) && v.AsNumber() == std::floor(v.AsNumber()) && v.AsNumber() >= 1.0 &&
+                   v.AsNumber() <= static_cast<double>(kMaxManifestPx);
+        };
+        if (size.size() != 2 || !whole(size[0]) || !whole(size[1])) {
+            why = path + ": outputs." + name + ".size is not two whole numbers from 1 to " + std::to_string(kMaxManifestPx);
+            return false;
+        }
+        read.sizes[name] = glm::ivec2(static_cast<int>(size[0].AsNumber()), static_cast<int>(size[1].AsNumber()));
+    }
+    out = std::move(read);
+    return true;
+}
+
+glm::ivec2 ExpectedArtSize(const ArtManifest& manifest, const std::string& file, int defaultPx) {
+    const auto named = manifest.sizes.find(file);
+    return named != manifest.sizes.end() ? named->second : glm::ivec2(defaultPx);
+}
+
+const char* NameOf(const ArtSource& source) {
+    return source ? NameOf(*source) : "flat";
+}
+
+std::string ArtLine(const ArtSources& sources) {
+    std::string line = "modern controls art:";
+    for (const Id id : kClaimOrder) {
+        line += std::string(" ") + KeyOf(id) + "=" + NameOf(sources[Index(id)]);
+    }
+    return line;
+}
+
+bool ArtMixed(const ArtSources& sources) {
+    for (const ArtSource& source : sources) {
+        if (source != sources[0]) return true;
+    }
+    return false;
 }
 
 // ---- the tuning ------------------------------------------------------------------------------------------

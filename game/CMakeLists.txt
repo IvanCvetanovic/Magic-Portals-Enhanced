@@ -43,6 +43,19 @@ add_executable(MagicPortals
 
 target_link_libraries(MagicPortals PRIVATE MagicPortalsGame)
 
+# Where the modern controls look for Magic Rampage's pictures (planning step 184, docs/magic-rampage-controls.md): a
+# gitignored folder of this repository, made by tools/art/make_mr_controls.py and READ at run time. The default is
+# absolute, because the game changes its working directory into engine/ before it opens anything; the picture files
+# are the owner's, never committed, and no packaging script learns about them. The name is one uppercase word after
+# MAGICPORTALS_ so that tools/parity/play_build.bat's findstr copies it into a play tree like the others.
+get_filename_component(_magicPortalsPadArt "${CMAKE_CURRENT_SOURCE_DIR}/../reference/magic-rampage/controls" ABSOLUTE)
+set(SUPERSONIC_MAGICPORTALS_PADART "${_magicPortalsPadArt}"
+    CACHE PATH "Magic Rampage's modern-control pictures (reference/magic-rampage/controls in this repository, gitignored)")
+# On main.cpp ALONE, as a per-source definition: a PUBLIC one on MagicPortalsSim would recompile every test object
+# and relink test_mp for a path no suite reads. main.cpp hands it to the layer as Paths::controls.artDir.
+set_source_files_properties(main.cpp PROPERTIES
+    COMPILE_DEFINITIONS "MAGICPORTALS_PADART_DIR=\"${SUPERSONIC_MAGICPORTALS_PADART}\"")
+
 add_executable(MagicPortalsSpike
     spike/main.cpp
 )

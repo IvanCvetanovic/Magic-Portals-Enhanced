@@ -1273,10 +1273,19 @@ public:
     // Whether the touch now held is being swallowed (see m_swallowUntilUp): a test's precondition for "it did not walk because it was
     // swallowed", not because nothing claimed it.
     bool TouchSwallowed() const { return m_swallowUntilUp; }
-    // The picture a modern control is drawn with (the generated tier, written into Paths::prisms once at
-    // attach), or empty where there is none - no prisms, or it could not be written - and the control is
-    // a flat quad. Empty for a classic run.
-    const std::string& ModernImage(Control control) const { return m_modernImages[static_cast<std::size_t>(control)]; }
+    // The picture a modern control is drawn with, resolved once at attach through the four tiers (planning step 184): Magic Rampage's file,
+    // the original's own corner sprite, the glyph the game draws (written into Paths::prisms), or empty where there is none - and the
+    // control is a flat quad. Empty for a classic run.
+    const std::string& ModernImage(Control control) const { return m_modernArt[static_cast<std::size_t>(control)].image; }
+    // The tier that picture came from (mr, original or generated), or empty for a flat quad.
+    Controls::ArtSource ModernSource(Control control) const { return m_modernArt[static_cast<std::size_t>(control)].source; }
+    // The transparent margin that picture carries, as a fraction of it on each side: what its tier's `art` entry says. 0 for a flat quad.
+    double ModernBodyInset(Control control) const { return m_modernArt[static_cast<std::size_t>(control)].bodyInset; }
+    // The INFO line a modern run says once, `modern controls art: walk_left=mr walk_right=mr ...`, or empty where it says none.
+    const std::string& ModernArtLine() const { return m_modernArtLine; }
+    // Every WARN the resolution said, in order: a Magic Rampage file that exists and cannot be used, a picture that could not be written,
+    // a mixed look. A test reads them here because it cannot read the log.
+    const std::vector<std::string>& ModernArtWarnings() const { return m_modernArtWarnings; }
 
     // The no-portal sign's rectangle on the view as the last tick left it, in
     // design units; false in a level that places none.
@@ -3310,12 +3319,22 @@ private:
     // The test variant that claims with the classic rules under the modern layout and draw: the hit shapes,
     // the camera's / lift's / hand's `onPad`, and the corner buttons acting on the press (Paths::controls).
     bool claimsClassic() const { return m_paths.controls.classicClaims; }
-    // Each modern control's picture, resolved ONCE per run at attach and never touched by a level's load
-    // (unloadControls does not clear it): the generated tier, a file written into Paths::prisms, or empty
-    // for a flat quad. By Id.
-    std::array<std::string, 5> m_modernImages;
+    // Each modern control's picture, resolved ONCE per run at attach and never touched by a level's load (unloadControls does not clear
+    // it): the file, the tier it came from and that tier's margin. By Id. A control with no file is a flat quad (tier four).
+    struct ModernArt {
+        std::string image;
+        Controls::ArtSource source;
+        double bodyInset{0.0};
+    };
+    std::array<ModernArt, 5> m_modernArt;
+    std::string m_modernArtLine;
+    std::vector<std::string> m_modernArtWarnings;
+    // The four tiers, in order (design 4.2): resolveModernImages tries each for each control, and says what it found once.
     void resolveModernImages();
-    std::string modernGlyphImage(Control control);
+    bool pickMagicRampagePicture(Control control, const Controls::ArtManifest& manifest, ModernArt& out);
+    bool pickOriginalPicture(Control control, ModernArt& out);
+    bool pickGeneratedPicture(Control control, ModernArt& out);
+    void warnModernArt(const std::string& text);
     void buildModernControls();
     // The INFO line of ControlsRectsLine, logged once per level start.
     void logModernControls(const entt::registry& registry);
