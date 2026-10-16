@@ -5806,6 +5806,18 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       u. Optional fix: advance the swing to the tick before the test (a behaviour change). Also left by the step: 3-32's
       black knight's own burn was not seen in view (off its route's camera; the same picture on the level's escort and
       on 4-28's knight was), and `test_mp_play`'s floor (step 133's (6)).
+- [ ] **A dark vertical gap in 1-01's world art at a wide window** (found in passing by CTL-6's pictures verifier,
+      2026-10-16, while it read the window-shape captures of the modern controls; GAMEPLAY: none; no step's work and
+      not the HUD's). In the standing classic baseline **A9b** (`out/parity/program/CTL/baseline/A9b.png`, `level0`
+      at `--window 1680x720`, frame 420: 21:9, view 597 x 256 units) the sky picture inside the first arch stops at
+      about x 200 px and the stone to its left is black from about x 140 to 200, both in the upper window (y about
+      150 to 290) and in the lower one (y about 375 to 610); the verifier's modern captures show it at 1680 and at
+      1924 x 720 (there up to about x 320), so it is the world's, not a control's. Cause not diagnosed (a sky or background
+      picture only as wide as the level's 16:9 view is the first guess, and it is only a guess). **Not compared with
+      the original**: nothing in the reference library is known to show the original at a wide window, so whether it
+      shows the same, or is a port-only artefact of letting the window be wider than the original's view, is not
+      known. Next: a capture of `level0` at 1280, 1500, 1680 and 1924 wide (same frame) to see where the band
+      starts, then the layer that draws that picture.
 
 **Before the owner's testing:** delete `%APPDATA%/Magic Portals/scores.json` for a fresh save - it holds gold for
 1-01, 1-02 and 1-32, two of them from step 113's automated runs. *Wave 1*: step 123's three cutscene captures ran
