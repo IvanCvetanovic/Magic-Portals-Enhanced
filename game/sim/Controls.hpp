@@ -264,9 +264,11 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 // A file name as controls.json may name a picture: ONE file in the folder of its tier, which the layer joins to that folder
 // (Magic Rampage's, the original's sprites, the scratch directory the generated pictures are written to). Not empty, not "." or
-// "..", no separator of either kind, no colon (a drive, or an NTFS stream), no control character, no ".." anywhere, and not ending
-// in a dot or a space (Windows would read it as another name). LoadRules refuses an `art` entry that is not one, naming it, so that
-// a name from the data can never climb out of the folder it is joined to - the generated tier WRITES there.
+// "..", no separator of either kind, no colon (a drive, or an NTFS stream), no control character (DEL included), none of the
+// characters Windows refuses in a name (< > " | ? *), no ".." anywhere, not ending in a dot or a space (Windows would read it as another
+// name), and not one of Windows' device names (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9, with or without an extension, in any case).
+// LoadRules refuses an `art` entry that is not one, naming it, so that a name from the data can never climb out of the folder it is
+// joined to - the generated tier WRITES there. LoadRules also refuses a data file in which two controls name one generated file.
 bool IsBareFileName(const std::string& name);
 
 // The sizes, in pixels, that the Magic Rampage tool recorded for its pictures in the manifest.json beside them
@@ -299,8 +301,13 @@ const char* NameOf(const ArtSource& source);
 std::string ArtLine(const ArtSources& sources);
 
 // True when the five do not all come from one tier: a mixed look (Magic Rampage's grey faces beside the original's white
-// corner buttons, or the drawn glyphs beside either). Said as a WARN, once, with the line above.
+// corner buttons, or the drawn glyphs beside either).
 bool ArtMixed(const ArtSources& sources);
+
+// A mixed look with a Magic Rampage picture IN it: a folder that is half there, or one with a file the loader had to refuse. That is
+// worth a WARN (planning step 185, the owner's question 2 of step 184 taken as recommended). A mixed look WITHOUT one is the ordinary
+// no-Magic-Rampage machine - the arrows drawn beside the original's own corner sprites - and is an INFO, once.
+bool ArtHalfDressed(const ArtSources& sources);
 
 // ---- the tuning ---------------------------------------------------------------------------------
 
@@ -391,6 +398,63 @@ struct Tuning {
 
 // The flag's usage, for the message that goes with a refusal.
 const char* FlagUsage();
+
+// ---- the saved choice (planning step 185) --------------------------------------------------------------------
+
+// The file, inside whichever directory the game was handed: its own file and its own store, beside scores.json, audio.json and
+// achievements.json, not a third key of audio.json (which Switches::Store rewrites from the two members it knows).
+inline constexpr const char* kStoreFileName = "controls.json";
+
+// The style a player chose in Options, and the tuning they made, kept between runs:
+//
+//   {"version":1,"controls":{"mode":"modern","layout":1}}
+//
+// `mode` is written once a player has chosen (and only then: a file of a player who never did has none, so the shipped default
+// reaches them); `layout` is always kLayoutVersion, the arrangement a saved move was made against; and the tuning's own members
+// (size, opacity, move) follow, DELTAS ONLY - Tuning::ToJsonMembers writes nothing that equals the default. CTL-9 reads the tuning
+// and writes it back unchanged; only the mode is edited by it.
+//
+// Free of the engine, like Switches::Store, so a test can exercise all of it with a temporary directory and no window.
+class Store {
+public:
+    // Reads `directory`/controls.json if there is one. An EMPTY directory is memory-only, as Scores::Store's and Switches::Store's are
+    // (every suite builds the layer bare, and none of them may write a file) - and so is the directory the layer passes empty when
+    // the policy forbids saving (`--controls modern` is a capture's flag: it writes nothing and ignores the file).
+    //
+    // The tolerant reading of design 2.4: a field that is missing or the wrong type is the default (Tuning::ReadFrom), a `mode` that is
+    // not classic or modern is none. False, with `error`, only for a file that exists and is not a JSON object: the defaults are kept and
+    // the file is written over at the next Save, as audio.json is.
+    bool Open(const std::string& directory, const Rules& rules, std::string& error);
+
+    // The style the player chose, or none: no file, a file without one, or a file that would not read.
+    std::optional<Style> Mode() const { return m_mode; }
+    // What the file held for the tuning (the default where it held none), kept and written back unchanged.
+    const Tuning& SavedTuning() const { return m_tuning; }
+
+    // The choice, in memory. A memory-only store keeps it for the run and writes nothing.
+    void SetMode(Style style) { m_mode = style; }
+
+    // The bytes Save writes for what the store holds now: one line, no trailing newline.
+    std::string Text() const;
+
+    // Writes controls.json by a temporary and a rename, as Switches::Store::Save does and for its reason (a crash cannot leave half a file
+    // where the choice was). Nothing is written when these bytes are the ones this store wrote last: a gesture repeated is one write.
+    // A memory-only store writes nothing and succeeds.
+    bool Save(std::string& error);
+
+    // Whether this store has somewhere to write, and whether Open read a file.
+    bool Persists() const { return !m_path.empty(); }
+    bool FromFile() const { return m_fromFile; }
+    const std::string& Path() const { return m_path; }
+
+private:
+    Rules m_rules;
+    std::optional<Style> m_mode;
+    Tuning m_tuning;
+    std::string m_path;
+    bool m_fromFile = false;
+    std::string m_written; // the bytes this store last wrote, empty before the first Save
+};
 
 // ---- the layout ----------------------------------------------------------------------------------
 

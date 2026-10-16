@@ -26004,7 +26004,8 @@ void TheArrowsFallToTheDrawnGlyphWithNoFile() {
         }
         CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=generated walk_right=generated restart=original pause=original clear_portals=original",
                   layer.ModernArtLine());
-        CHECK_MSG(layer.ModernArtWarnings().size() == 1u && ArtWarningsWith(layer, kArtMixedWarning) == 1, "the only WARN is the mixed look");
+        CHECK_MSG(layer.ModernArtWarnings().empty() && layer.ModernArtNotice().find(kArtMixedWarning) != std::string::npos,
+                  "the ordinary mix (no Magic Rampage picture in it) is an INFO, once, and no WARN: " + std::to_string(layer.ModernArtWarnings().size()) + " warnings");
     }
     {
         // The original's tier is off (a machine without the original's art): five glyphs, one set, no WARN.
@@ -26079,7 +26080,7 @@ void TheLastTierIsAFlatQuadWithNoPrisms() {
         CHECK_MSG(run.layer.ModernImage(Controls::Id::Left).empty() && !run.layer.ModernSource(Controls::Id::Right) &&
                       run.layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original) && !run.layer.ModernImage(Controls::Id::Reset).empty(),
                   "flat arrows, the original's corners");
-        CHECK_MSG(run.layer.ModernArtWarnings().size() == 1u && ArtWarningsWith(run.layer, kArtMixedWarning) == 1, "a mixed look");
+        CHECK_MSG(run.layer.ModernArtWarnings().empty() && run.layer.ModernArtNotice().find(kArtMixedWarning) != std::string::npos, "a mixed look with no Magic Rampage picture in it: an INFO");
     }
     {
         // Magic Rampage's five need no scratch directory either.
@@ -27138,6 +27139,1465 @@ void AModernCornerActsOnThePressWhenTheDataSaysPress() {
     }
 }
 
+
+// ---- the setting and the Options screen (planning step 185, CTL-9) ------------------------------------------------------------------------------------------
+//
+// A player's run (Controls::ResolvePolicy with no flag and no developer's flag) shows a button in the main menu's top-right corner that opens Options, where
+// the player chooses Modern or Classic; the choice is kept in controls.json in Paths::saveDir and read at the next start. A run in which the feature does
+// not exist (a bare layer, a developer's run, --controls classic) has no button, no store and no screen, and its main menu is the original's. These cases
+// drive the real path: the pointer, the menu's ticks, the files. They need the original's art only to reach the menu and to look at what it draws.
+
+namespace OptionsUi = MagicPortals::Options;
+namespace CreditsUi = MagicPortals::Credits;
+namespace MainMenuUi = MagicPortals::MainMenu;
+
+constexpr double kOsPxPerUnit = 2.8125; // 720 px over 256 units
+const std::string kOsModernFile = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}";
+const std::string kOsClassicFile = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1}}";
+const std::string kOsGear = "options_gear.png";
+
+// A directory of the case's own, removed with the others when the case ends.
+std::string OsDir(const std::string& name) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("supersonic-test-mp-layer-options-" + name);
+    ControlsScratchDirs().push_back(dir);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    return dir.string();
+}
+
+// The paths of a run as main builds them for the flags given (Controls::ResolvePolicy over the flag and the kind of run), a save directory and a scratch
+// directory for what the layer generates of the case's own, so that "nothing was written" is a statement about this run alone. The original's own corner
+// sprites are off, as MdPaths has them: the cases are about the setting, and the pictures are the drawn glyphs.
+MagicPortalsLayer::Paths OsPaths(const std::string& saves, const std::string& prisms, const std::optional<std::string>& flag = std::nullopt,
+                                 bool fixedStep = false, bool route = false, bool visitLevels = false) {
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.saveDir = saves;
+    paths.prisms = prisms;
+    paths.controls = Controls::ResolvePolicy(flag, fixedStep, route, visitLevels);
+    CHECK_MSG(paths.controls.valid, "the flag resolves: " + paths.controls.error);
+    paths.controls.withoutOriginalArt = true;
+    paths.fixedStep = fixedStep;
+    return paths;
+}
+
+glm::vec2 OsPx(const glm::dvec2& onView) {
+    return glm::vec2(static_cast<float>(onView.x * kOsPxPerUnit), static_cast<float>(onView.y * kOsPxPerUnit));
+}
+
+// A layer with no level named, ticked to its main menu and 60 ticks on, when every button's entrance is over.
+struct OsRun {
+    entt::registry registry;
+    MagicPortalsLayer layer;
+    bool ok = false;
+
+    OsRun(const MagicPortalsLayer::Paths& paths, const std::string& what) : layer(paths, "") {
+        publishViewport(registry);
+        layer.OnAttach(registry);
+        ok = layer.LoadError().empty() && TickToTheMainMenu(layer, registry);
+        CHECK_MSG(ok, what + " reaches its main menu: " + layer.LoadError());
+        if (ok) PtrRest(layer, registry, 60);
+    }
+    ~OsRun() { layer.OnDetach(registry); }
+    OsRun(const OsRun&) = delete;
+    OsRun& operator=(const OsRun&) = delete;
+};
+
+// A click: down on one tick, up on the next, and the tick on which the state it asked for opens.
+void OsClick(OsRun& run, const glm::dvec2& onView) {
+    const glm::vec2 px = OsPx(onView);
+    tickWith(run.layer, run.registry, px, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    releaseWith(run.layer, run.registry, px);
+    tickWith(run.layer, run.registry, kRest, {}, {});
+}
+
+glm::dvec2 OsEntryCentre(const MagicPortalsLayer& layer) {
+    return OptionsUi::EntryAt(layer.OptionsRules(), layer.MainMenuRules().layer, layer.MainMenuRules().state, layer.ViewPx(), 1.0e9, false).rect.Centre();
+}
+
+glm::dvec2 OsTileCentre(const MagicPortalsLayer& layer, Controls::Style style) {
+    return OptionsUi::TileRect(layer.OptionsRules(), style, layer.ViewPx()).Centre();
+}
+
+glm::dvec2 OsBackCentre(const MagicPortalsLayer& layer) {
+    return CreditsUi::BackHitRect(layer.CreditsRules(), layer.ViewPx(), 1.0e9).Centre();
+}
+
+bool OsOpenOptions(OsRun& run, const std::string& what) {
+    OsClick(run, OsEntryCentre(run.layer));
+    PtrRest(run.layer, run.registry, 60);
+    const bool there = run.layer.MenuScreen() == MagicPortalsLayer::Screen::Options;
+    CHECK_MSG(there, what + ": the entry opens Options");
+    return there;
+}
+
+int OsSounds(const MagicPortalsLayer& layer, const std::string& sound) {
+    const std::vector<std::string> sounds = layer.LatchedSounds();
+    return static_cast<int>(std::count(sounds.begin(), sounds.end(), sound));
+}
+
+std::string OsSavedFile(const std::string& saves) {
+    return ReadWholeFile(std::filesystem::path(saves) / "controls.json");
+}
+
+void OsWrite(const std::string& saves, const std::string& name, const std::string& text) {
+    std::ofstream out(std::filesystem::path(saves) / name, std::ios::binary | std::ios::trunc);
+    out << text;
+}
+
+std::vector<std::string> OsEntries(const std::string& dir) {
+    std::vector<std::string> names;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) names.push_back(entry.path().filename().string());
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+// The textures of the quads a frame holds, in order (a flat quad has none).
+std::vector<std::string> OsTextures(const std::vector<ScreenOverlay::Quad>& frame) {
+    std::vector<std::string> names;
+    for (const ScreenOverlay::Quad& quad : frame) names.push_back(quad.texture);
+    return names;
+}
+
+// ---- the entry exists where the feature does, and nowhere else ---------------------------------------------------------------------------------------------
+
+void ABareLayerHasNoEntryAndNoStore() {
+    if (!OriginalArtIsThere("ABareLayerHasNoEntryAndNoStore")) return;
+    const ControlsScratchGuard scratch;
+    const char* names[5] = {"a bare layer", "--controls classic", "a developer's run", "--controls modern", "a player's run"};
+    // Rows 0 to 2: the feature does not exist. Row 3: forced modern (it exists, and keeps nothing). Row 4: a player's run (it exists and keeps its choice).
+    std::vector<std::string> base;
+    std::size_t baseSize = 0;
+    for (int row = 0; row < 5; ++row) {
+        const std::string what = std::string("ABareLayerHasNoEntryAndNoStore: ") + names[row];
+        const std::string saves = OsDir("bare-saves-" + std::to_string(row));
+        const std::string prisms = OsDir("bare-prisms-" + std::to_string(row));
+        MagicPortalsLayer::Paths paths = TestPaths();
+        paths.saveDir = saves;
+        paths.prisms = prisms;
+        if (row == 1) paths = OsPaths(saves, prisms, std::string("classic"));
+        if (row == 2) paths = OsPaths(saves, prisms, std::nullopt, true);
+        if (row == 3) paths = OsPaths(saves, prisms, std::string("modern"));
+        if (row == 4) paths = OsPaths(saves, prisms);
+        const bool exists = row >= 3;
+        const bool persists = row == 4;
+        OsRun run(paths, what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.OptionsAvailable() == exists, what + ": the entry is available exactly where the feature exists");
+        CHECK_MSG(layer.ModernReady() == exists, what + ": and so is the table");
+        CHECK_MSG(layer.OptionsEntryImage().empty() == !exists, what + ": the gear is drawn exactly there: '" + layer.OptionsEntryImage() + "'");
+        CHECK_MSG(layer.ControlsStore().Persists() == persists, what + ": the choice is kept only in a player's run");
+        CHECK_MSG(!layer.ControlsStore().Mode() && !layer.ControlsStore().FromFile(), what + ": nothing was chosen or read");
+        std::error_code ec;
+        CHECK_MSG(std::filesystem::exists(std::filesystem::path(prisms) / kOsGear, ec) == exists, what + ": the gear is written only where the feature exists");
+        CHECK_MSG(!ControlsFileExistsIn(saves), what + ": starting writes no controls.json");
+        // The line the run said about its controls.
+        const char* line[5] = {"", "controls: classic (--controls classic)", "", "controls: modern (--controls modern)", "controls: classic (the shipped default)"};
+        CHECK_MSG(layer.ControlsLine() == line[row], what + ": its attach line is '" + line[row] + "': '" + layer.ControlsLine() + "'");
+        // What the menu draws: the original's, with one more quad (the gear) where the feature exists.
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(run.registry, layer);
+        const std::vector<std::string> textures = OsTextures(frame);
+        const auto gears = std::count(textures.begin(), textures.end(), layer.OptionsEntryImage());
+        if (!exists) {
+            if (row == 0) {
+                base = textures;
+                baseSize = frame.size();
+            }
+            CHECK_MSG(frame.size() == baseSize && textures == base, what + ": the main menu draws the same quads as a bare layer's: " + std::to_string(frame.size()));
+        } else {
+            CHECK_MSG(gears == 1 && frame.size() == baseSize + 1, what + ": one gear more than a bare layer's menu: " + std::to_string(frame.size()) + " quads");
+            std::vector<std::string> without;
+            for (const std::string& texture : textures) {
+                if (texture != layer.OptionsEntryImage()) without.push_back(texture);
+            }
+            CHECK_MSG(without == base, what + ": and nothing else differs");
+            // (The state's black has faded to nothing 60 ticks in and is not added: a quad with no alpha is skipped.)
+            CHECK_MSG(!frame.empty() && frame.back().texture == layer.OptionsEntryImage(), what + ": and the gear is the last quad, over every button");
+        }
+        // A press in the entry's slot.
+        const int before = OsSounds(layer, "level_button");
+        OsClick(run, glm::dvec2(1235.0 / kOsPxPerUnit, 45.0 / kOsPxPerUnit));
+        CHECK_MSG((layer.MenuScreen() == MagicPortalsLayer::Screen::Options) == exists, what + ": a press in the top-right corner opens Options exactly where it exists");
+        CHECK_MSG((OsSounds(layer, "level_button") - before) == (exists ? 1 : 0), what + ": and makes the noise only then");
+        CHECK_MSG(!ControlsFileExistsIn(saves), what + ": and opening it writes no controls.json");
+    }
+}
+
+void TheOptionsEntryOpensOptionsAndItsPressIsSpent() {
+    if (!OriginalArtIsThere("TheOptionsEntryOpensOptionsAndItsPressIsSpent")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    const glm::dvec2 world(1200.0 / kOsPxPerUnit, 360.0 / kOsPxPerUnit); // a point of the main menu that no button is on
+    glm::dvec2 entryCentre(0.0);
+    {
+    const std::string saves = OsDir("entry-saves");
+    const std::string prisms = OsDir("entry-prisms");
+    OsRun run(OsPaths(saves, prisms), "TheOptionsEntryOpensOptionsAndItsPressIsSpent");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.OptionsAvailable() && layer.ControlsStyle() == Controls::Style::Classic, "a player's run, on the shipped default (classic)");
+    CHECK_MSG(!layer.ModernArtResolved() && layer.ModernArtLine().empty(), "which has resolved no modern pictures");
+    std::error_code ec;
+    CHECK_MSG(std::filesystem::exists(std::filesystem::path(prisms) / kOsGear, ec) && ArtIsAPng(layer.OptionsEntryImage()), "but has the gear it draws");
+    CHECK_MSG(layer.ModernArtFilesWritten() == 1, "the one file the run made: " + std::to_string(layer.ModernArtFilesWritten()));
+    int glyphs = 0;
+    for (const std::string& name : OsEntries(prisms)) glyphs += name.rfind("modern_", 0) == 0 ? 1 : 0;
+    CHECK_MSG(glyphs == 0, "and not one of the five modern glyphs: " + std::to_string(glyphs));
+
+    // It is drawn in the slot: the gear's picture is the box with its transparent margin, whole and untinted.
+    const OptionsUi::Entry entry = OptionsUi::EntryAt(layer.OptionsRules(), layer.MainMenuRules().layer, layer.MainMenuRules().state, layer.ViewPx(), 1.0e9, false);
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int at = MdQuadOf(frame, layer.OptionsEntryImage());
+        CHECK_MSG(at >= 0, "the gear is drawn");
+        if (at >= 0) {
+            const ScreenOverlay::Quad& quad = frame[static_cast<std::size_t>(at)];
+            CHECK_MSG(SameRect(OnView(layer, quad), entry.picture, 1e-3), "in the entry's place: " + ShowRect(OnView(layer, quad)) + " against " + ShowRect(entry.picture));
+            CHECK_MSG(NearD(quad.color.r, 1.0, 1e-6) && NearD(quad.color.a, 1.0, 1e-6), "whole and untinted");
+        }
+    }
+    // Held, it is tinted; the press acts on the release.
+    const glm::vec2 px = OsPx(entry.rect.Centre());
+    const int soundBefore = OsSounds(layer, "level_button");
+    tickWith(layer, registry, px, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    CHECK_MSG(layer.OptionsEntryHeld() && layer.MenuScreen() == Screen::Main, "pressed: held, and the menu has not moved");
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const int at = MdQuadOf(frame, layer.OptionsEntryImage());
+        CHECK_MSG(at >= 0 && NearD(frame[static_cast<std::size_t>(at < 0 ? 0 : at)].color.r, 204.0 / 255.0, 1e-6), "and drawn at the press tint, 204 of 255");
+    }
+    tickWith(layer, registry, px, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.OptionsEntryHeld() && layer.MenuScreen() == Screen::Main, "held on: still held");
+    releaseWith(layer, registry, px);
+    CHECK_MSG(!layer.OptionsEntryHeld(), "let go: not held");
+    CHECK_MSG(layer.MenuScreen() == Screen::Main && OsSounds(layer, "level_button") - soundBefore == 1, "the release asks for the screen, and makes the noise");
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Options, "and Options opens on the next tick");
+    CHECK_MSG(OsSounds(layer, "level_button") - soundBefore == 1 && OsSounds(layer, "menu_button") == 0, "it was the credits' entry's noise, once, and not the back button's");
+    // THE PRESS IS SPENT: nothing else of the main menu moved with it.
+    CHECK_MSG(layer.SoundOn() && layer.MusicOn(), "the sound and music switches are as they were");
+    CHECK_MSG(!ControlsFileExistsIn(saves), "and nothing was written");
+    entryCentre = entry.rect.Centre();
+    }
+
+    // The same entry, with presses that are not presses (each on a fresh layer; Main must still be the screen after them).
+    struct Row {
+        const char* what;
+        glm::dvec2 down;
+        glm::dvec2 up;
+    };
+    const std::vector<Row> rows = {{"down in the world, up on the entry", world, entryCentre},
+                                   {"down on the entry, up in the world", entryCentre, world},
+                                   {"down on the title, up on the entry", glm::dvec2(227.0, 120.0), entryCentre},
+                                   {"down on the entry, up on the title", entryCentre, glm::dvec2(227.0, 120.0)}};
+    for (const Row& row : rows) {
+        OsRun other(OsPaths(OsDir("entry-saves-b"), OsDir("entry-prisms-b")), std::string("TheOptionsEntryOpensOptionsAndItsPressIsSpent: ") + row.what);
+        if (!other.ok) return;
+        const glm::vec2 down = OsPx(row.down);
+        const glm::vec2 up = OsPx(row.up);
+        tickWith(other.layer, other.registry, down, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        tickWith(other.layer, other.registry, up, {MagicPortalsLayer::kTap}, {});
+        releaseWith(other.layer, other.registry, up);
+        tickWith(other.layer, other.registry, kRest, {}, {});
+        PtrRest(other.layer, other.registry, 3);
+        const bool opened = other.layer.MenuScreen() == Screen::Options;
+        // The title's press opens chapter select by its own rule (down and up on it); a slid press opens nothing at all.
+        CHECK_MSG(!opened, std::string(row.what) + ": does not open Options");
+        CHECK_MSG(other.layer.MenuScreen() == Screen::Main, std::string(row.what) + ": and the main menu is where it was: " + std::to_string(static_cast<int>(other.layer.MenuScreen())));
+    }
+    // The corner of the screen is the entry's too: a click on the pixel at the very corner.
+    {
+        OsRun corner(OsPaths(OsDir("entry-saves-c"), OsDir("entry-prisms-c")), "TheOptionsEntryOpensOptionsAndItsPressIsSpent: the corner");
+        if (!corner.ok) return;
+        const glm::vec2 px2(1279.0f, 1.0f);
+        tickWith(corner.layer, corner.registry, px2, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        releaseWith(corner.layer, corner.registry, px2);
+        PtrRest(corner.layer, corner.registry, 2);
+        CHECK_MSG(corner.layer.MenuScreen() == Screen::Options, "the pixel in the very corner of the window is the entry's");
+    }
+}
+
+// ---- Options: the back button and the back key --------------------------------------------------------------------------------------------------------------
+
+void BackLeavesOptionsAndTheMainMenuTakesNothingFromThePress() {
+    if (!OriginalArtIsThere("BackLeavesOptionsAndTheMainMenuTakesNothingFromThePress")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    for (const bool byKey : {false, true}) {
+        const std::string what = std::string("BackLeavesOptionsAndTheMainMenuTakesNothingFromThePress: ") + (byKey ? "the back key" : "the back button");
+        const std::string saves = OsDir("back-saves");
+        OsRun run(OsPaths(saves, OsDir("back-prisms")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        if (!OsOpenOptions(run, what)) return;
+        // The place the back button is on is a place no main-menu button occupies: its press cannot also press one.
+        const glm::dvec2 back = OsBackCentre(layer);
+        CHECK_MSG(MainMenuUi::ButtonsAt(layer.MainMenuRules(), layer.MainMenuSwitches(), layer.ViewPx(), 1.0e9, back) == 0u,
+                  what + ": no main-menu button is under the back button's centre " + Point(back));
+        const int menuBefore = OsSounds(layer, "menu_button");
+        const int levelBefore = OsSounds(layer, "level_button");
+        if (byKey) {
+            pressBack(layer, run.registry);
+        } else {
+            const glm::vec2 px = OsPx(back);
+            tickWith(layer, run.registry, px, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+            CHECK_MSG(layer.OptionsHeld() == OptionsUi::Widget::Back && layer.MenuScreen() == Screen::Options, what + ": pressed, the button is held and the screen is still Options");
+            releaseWith(layer, run.registry, px);
+            CHECK_MSG(layer.OptionsHeld() == OptionsUi::Widget::None, what + ": let go, it is not held");
+        }
+        tickWith(layer, run.registry, kRest, {}, {});
+        CHECK_MSG(layer.MenuScreen() == Screen::Main, what + ": the next tick is the main menu");
+        // The main menu takes nothing from the press: no switch, no screen, no entry's noise; the touch it starts with is fresh.
+        PtrRest(layer, run.registry, 3);
+        CHECK_MSG(layer.MenuScreen() == Screen::Main && layer.SoundOn() && layer.MusicOn() && layer.MainMenuHeld() == 0u && !layer.OptionsEntryHeld(),
+                  what + ": and stays the main menu, with nothing held");
+        CHECK_MSG(OsSounds(layer, "level_button") == levelBefore, what + ": and no main-menu button made its noise");
+        CHECK_MSG(OsSounds(layer, "menu_button") - menuBefore == (byKey ? 0 : 1), what + ": the back button's own noise, the key's none (as the credits' are)");
+        CHECK_MSG(!ControlsFileExistsIn(saves), what + ": and the walk there and back wrote nothing");
+    }
+}
+
+// ---- the choice: tiles, the file, the next run -----------------------------------------------------------------------------------------------------------------
+
+// The flat quad on a tile's rectangle, when there is one: its colour.
+bool OsTileColour(const MagicPortalsLayer& layer, const std::vector<ScreenOverlay::Quad>& frame, Controls::Style style, glm::vec4& colour) {
+    const Hud::Rect tile = OptionsUi::TileRect(layer.OptionsRules(), style, layer.ViewPx());
+    for (const ScreenOverlay::Quad& quad : frame) {
+        if (quad.texture.empty() && SameRect(OnView(layer, quad), tile, 1e-3)) {
+            colour = quad.color;
+            return true;
+        }
+    }
+    return false;
+}
+
+glm::vec4 OsColour(const OptionsUi::Colour& colour) {
+    return glm::vec4(static_cast<float>(colour[0]) / 255.0f, static_cast<float>(colour[1]) / 255.0f, static_cast<float>(colour[2]) / 255.0f,
+                     static_cast<float>(colour[3]) / 255.0f);
+}
+
+bool OsSameColour(const glm::vec4& a, const glm::vec4& b) {
+    return NearD(a.r, b.r, 1e-6) && NearD(a.g, b.g, 1e-6) && NearD(a.b, b.b, 1e-6) && NearD(a.a, b.a, 1e-6);
+}
+
+// Which tile is lit in what the layer draws.
+std::string OsLitTile(const MagicPortalsLayer& layer, entt::registry& registry) {
+    const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+    glm::vec4 modern(0.0f);
+    glm::vec4 classic(0.0f);
+    if (!OsTileColour(layer, frame, Controls::Style::Modern, modern) || !OsTileColour(layer, frame, Controls::Style::Classic, classic)) return "a tile is not drawn";
+    const glm::vec4 lit = OsColour(layer.OptionsRules().chosenFrame);
+    const glm::vec4 idle = OsColour(layer.OptionsRules().idleFrame);
+    if (OsSameColour(modern, lit) && OsSameColour(classic, idle)) return "modern";
+    if (OsSameColour(classic, lit) && OsSameColour(modern, idle)) return "classic";
+    return "neither (or both)";
+}
+
+void TappingAModernTileSavesAndTheNextLayerStartsModern() {
+    if (!OriginalArtIsThere("TappingAModernTileSavesAndTheNextLayerStartsModern")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string saves = OsDir("save-saves");
+    // A switches file the toggle must leave alone, written by the store that owns it.
+    {
+        MagicPortals::Switches::Store switches;
+        std::string error;
+        CHECK(switches.Open(saves, MagicPortals::Switches::Defaults{}, error));
+        switches.SetSound(false);
+        CHECK_MSG(switches.Save(error), "audio.json is written first: " + error);
+    }
+    const std::string audio = ReadWholeFile(std::filesystem::path(saves) / "audio.json");
+    CHECK_MSG(!audio.empty(), "and has bytes");
+    {
+        OsRun run(OsPaths(saves, OsDir("save-prisms-1")), "TappingAModernTileSavesAndTheNextLayerStartsModern: the first run");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        if (!OsOpenOptions(run, "the first run")) return;
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic && OsLitTile(layer, run.registry) == "classic", "the shipped default is classic and its tile is the lit one: " + OsLitTile(layer, run.registry));
+        CHECK_MSG(!ControlsFileExistsIn(saves), "nothing is saved by looking");
+        const int before = OsSounds(layer, "menu_button");
+        // A press that begins on the Modern tile and slides onto the Classic one chooses neither.
+        {
+            const glm::vec2 down = OsPx(OsTileCentre(layer, Style::Modern));
+            const glm::vec2 up = OsPx(OsTileCentre(layer, Style::Classic));
+            tickWith(layer, run.registry, down, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+            CHECK_MSG(layer.OptionsHeld() == OptionsUi::Widget::ModernTile, "pressed on the Modern tile, it is held");
+            tickWith(layer, run.registry, up, {MagicPortalsLayer::kTap}, {});
+            CHECK_MSG(layer.OptionsHeld() == OptionsUi::Widget::None, "slid onto the Classic tile, neither is held");
+            releaseWith(layer, run.registry, up);
+            PtrRest(layer, run.registry, 2);
+            CHECK_MSG(layer.ControlsStyle() == Style::Classic && !ControlsFileExistsIn(saves) && OsSounds(layer, "menu_button") == before, "and nothing is chosen, saved or heard");
+        }
+        // Down and up on the Modern tile: chosen, saved, the noise, the tile lit, at once.
+        OsClick(run, OsTileCentre(layer, Style::Modern));
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern, "the Modern tile chooses Modern");
+        CHECK_MSG(layer.ControlsLine() == "controls: modern (chosen in Options)", "and the line says where it was chosen: " + layer.ControlsLine());
+        CHECK_MSG(OsSavedFile(saves) == kOsModernFile, "the file reads back byte for byte: " + OsSavedFile(saves));
+        CHECK_MSG(OsSounds(layer, "menu_button") - before == 1, "it makes the menu button's noise once");
+        CHECK_MSG(OsLitTile(layer, run.registry) == "modern", "the Modern tile is the lit one in what is drawn: " + OsLitTile(layer, run.registry));
+        CHECK_MSG(ReadWholeFile(std::filesystem::path(saves) / "audio.json") == audio, "audio.json is untouched");
+        CHECK_MSG(OsEntries(saves) == (std::vector<std::string>{"audio.json", "controls.json"}), "two files in the saves, side by side, and no temporary");
+        CHECK_MSG(layer.ControlsStore().Mode() == std::optional<Style>(Style::Modern) && layer.ControlsStore().Persists(), "the store holds the mode");
+        CHECK_MSG(layer.ModernArtResolved() && !layer.ModernImage(Controls::Id::Left).empty(), "and the pictures are resolved, at this first switch to modern");
+    }
+    // A new layer on the same saves starts Modern, and says it was saved.
+    {
+        OsRun run(OsPaths(saves, OsDir("save-prisms-2")), "TappingAModernTileSavesAndTheNextLayerStartsModern: the second run");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern && layer.ModernReady(), "the next run plays Modern");
+        CHECK_MSG(layer.ControlsLine() == "controls: modern (saved)", "and says it read it: '" + layer.ControlsLine() + "'");
+        CHECK_MSG(layer.ControlsStore().FromFile() && layer.ControlsStore().Mode() == std::optional<Style>(Style::Modern), "from the file");
+        CHECK_MSG(layer.ModernArtResolved() && layer.ModernArtLine() == "modern controls art: walk_left=generated walk_right=generated restart=generated pause=generated clear_portals=generated",
+                  "its pictures are resolved at attach: " + layer.ModernArtLine());
+        if (!OsOpenOptions(run, "the second run")) return;
+        CHECK_MSG(OsLitTile(layer, run.registry) == "modern", "the Modern tile is the lit one when Options opens");
+        // Pressing the lit tile again is a choice too and leaves the same file; then Classic.
+        OsClick(run, OsTileCentre(layer, Style::Modern));
+        CHECK_MSG(OsSavedFile(saves) == kOsModernFile && layer.ControlsStyle() == Style::Modern, "the lit tile pressed again: the same file, the same style");
+        OsClick(run, OsTileCentre(layer, Style::Classic));
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic && OsSavedFile(saves) == kOsClassicFile, "the Classic tile: Classic, saved as classic: " + OsSavedFile(saves));
+        CHECK_MSG(OsLitTile(layer, run.registry) == "classic" && layer.ControlsLine() == "controls: classic (chosen in Options)", "lit, and said");
+    }
+    {
+        OsRun run(OsPaths(saves, OsDir("save-prisms-3")), "TappingAModernTileSavesAndTheNextLayerStartsModern: the third run");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ControlsStyle() == Style::Classic && run.layer.ControlsLine() == "controls: classic (saved)", "the third run plays Classic, saved: '" + run.layer.ControlsLine() + "'");
+        CHECK_MSG(!run.layer.ModernArtResolved(), "and, started classic, resolved no modern pictures");
+    }
+    // A choice of Classic made where nothing was saved IS kept, though Classic is the shipped default: it must survive the default changing.
+    {
+        const std::string fresh = OsDir("save-fresh");
+        OsRun run(OsPaths(fresh, OsDir("save-prisms-4")), "TappingAModernTileSavesAndTheNextLayerStartsModern: classic on a fresh install");
+        if (!run.ok) return;
+        if (!OsOpenOptions(run, "a fresh install")) return;
+        CHECK_MSG(OsLitTile(run.layer, run.registry) == "classic" && !ControlsFileExistsIn(fresh), "Classic is lit and nothing is saved");
+        OsClick(run, OsTileCentre(run.layer, Style::Classic));
+        CHECK_MSG(OsSavedFile(fresh) == kOsClassicFile, "pressing the lit Classic tile saves the choice: " + OsSavedFile(fresh));
+    }
+    // A file that will not read is defaulted, said, and written over at the next choice.
+    {
+        const std::string broken = OsDir("save-broken");
+        OsWrite(broken, "controls.json", "{this is not json");
+        OsRun run(OsPaths(broken, OsDir("save-prisms-5")), "TappingAModernTileSavesAndTheNextLayerStartsModern: a broken file");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ControlsStyle() == Style::Classic && run.layer.ControlsLine() == "controls: classic (the shipped default)", "a file that will not read: the shipped default");
+        CHECK_MSG(run.layer.ControlsStore().Persists() && !run.layer.ControlsStore().FromFile(), "kept to be written over");
+        CHECK_MSG(OsSavedFile(broken) == "{this is not json", "and not touched by starting");
+        if (!OsOpenOptions(run, "a broken file")) return;
+        OsClick(run, OsTileCentre(run.layer, Style::Modern));
+        CHECK_MSG(OsSavedFile(broken) == kOsModernFile, "the next choice writes it over: " + OsSavedFile(broken));
+    }
+}
+
+void TheFlagBeatsTheSavedValueAndWritesNothing() {
+    if (!OriginalArtIsThere("TheFlagBeatsTheSavedValueAndWritesNothing")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    struct Row {
+        const char* what;
+        std::string flag;
+        std::string saved;
+        Style style;
+        const char* line;
+        bool entry;
+    };
+    const std::vector<Row> rows = {
+        {"--controls modern over a saved classic", "modern", kOsClassicFile, Style::Modern, "controls: modern (--controls modern)", true},
+        {"--controls modern over a saved modern", "modern", kOsModernFile, Style::Modern, "controls: modern (--controls modern)", true},
+        {"--controls classic over a saved modern", "classic", kOsModernFile, Style::Classic, "controls: classic (--controls classic)", false},
+        {"--controls modern over a file that will not read", "modern", "{broken", Style::Modern, "controls: modern (--controls modern)", true},
+    };
+    for (const Row& row : rows) {
+        const std::string what = std::string("TheFlagBeatsTheSavedValueAndWritesNothing: ") + row.what;
+        const std::string saves = OsDir("flag-saves");
+        OsWrite(saves, "controls.json", row.saved);
+        OsRun run(OsPaths(saves, OsDir("flag-prisms"), row.flag), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ControlsStyle() == row.style, what + ": the run plays the flag's style");
+        CHECK_MSG(layer.ControlsLine() == row.line, what + ": and says so: '" + layer.ControlsLine() + "'");
+        CHECK_MSG(layer.OptionsAvailable() == row.entry, what + ": the entry is there exactly for modern");
+        CHECK_MSG(!layer.ControlsStore().Persists() && !layer.ControlsStore().FromFile() && !layer.ControlsStore().Mode(), what + ": the store is memory-only and read nothing");
+        if (row.entry) {
+            if (!OsOpenOptions(run, what)) return;
+            OsClick(run, OsTileCentre(layer, Style::Classic));
+            OsClick(run, OsTileCentre(layer, Style::Modern));
+        }
+        CHECK_MSG(OsSavedFile(saves) == row.saved, what + ": the file is as it was, byte for byte: " + OsSavedFile(saves));
+        CHECK_MSG(OsEntries(saves) == (std::vector<std::string>{"controls.json"}), what + ": and nothing else was made beside it");
+    }
+}
+
+void UnderAForcedStyleATileChangesTheRunNotTheFile() {
+    if (!OriginalArtIsThere("UnderAForcedStyleATileChangesTheRunNotTheFile")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string saves = OsDir("forced-saves");
+    OsWrite(saves, "controls.json", kOsClassicFile);
+    OsRun run(OsPaths(saves, OsDir("forced-prisms"), std::string("modern")), "UnderAForcedStyleATileChangesTheRunNotTheFile");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    if (!OsOpenOptions(run, "a forced run")) return;
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern && OsLitTile(layer, run.registry) == "modern", "the flag's style is the run's starting one, and its tile is lit");
+    OsClick(run, OsTileCentre(layer, Style::Classic));
+    CHECK_MSG(layer.ControlsStyle() == Style::Classic && OsLitTile(layer, run.registry) == "classic", "the Classic tile changes the run");
+    CHECK_MSG(layer.ControlsStore().Mode() == std::optional<Style>(Style::Classic) && !layer.ControlsStore().Persists(), "in the store's memory, which has nowhere to write");
+    CHECK_MSG(OsSavedFile(saves) == kOsClassicFile && OsEntries(saves) == (std::vector<std::string>{"controls.json"}), "and the file is untouched, with no temporary beside it");
+    OsClick(run, OsTileCentre(layer, Style::Modern));
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern && OsSavedFile(saves) == kOsClassicFile, "and back: the run plays Modern, the file still says classic");
+    CHECK_MSG(layer.ControlsLine() == "controls: modern (chosen in Options)", "the line says where it was chosen");
+}
+
+void AFixedStepRunIsClassicWhateverIsSaved() {
+    if (!OriginalArtIsThere("AFixedStepRunIsClassicWhateverIsSaved")) return;
+    const ControlsScratchGuard scratch;
+    const char* names[3] = {"a fixed-step run", "a route", "a visit-levels run"};
+    for (int row = 0; row < 3; ++row) {
+        const std::string what = std::string("AFixedStepRunIsClassicWhateverIsSaved: ") + names[row];
+        const std::string saves = OsDir("dev-saves");
+        OsWrite(saves, "controls.json", kOsModernFile);
+        const std::string prisms = OsDir("dev-prisms");
+        OsRun run(OsPaths(saves, prisms, std::nullopt, row == 0, row == 1, row == 2), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(!layer.ControlsPolicy().available, what + ": the feature does not exist in a developer's run");
+        CHECK_MSG(layer.ControlsStyle() == Controls::Style::Classic && !layer.ModernReady() && !layer.OptionsAvailable(), what + ": the run is classic, with no entry");
+        CHECK_MSG(layer.ControlsLine().empty() && layer.ControlsError().empty(), what + ": and says nothing about its controls");
+        CHECK_MSG(!layer.ControlsStore().Persists() && !layer.ControlsStore().FromFile(), what + ": the saved file was never opened");
+        CHECK_MSG(OsSavedFile(saves) == kOsModernFile && OsEntries(saves) == (std::vector<std::string>{"controls.json"}), what + ": and is as it was");
+        std::error_code ec;
+        CHECK_MSG(!std::filesystem::exists(std::filesystem::path(prisms) / kOsGear, ec), what + ": and no gear was made");
+        OsClick(run, glm::dvec2(1235.0 / kOsPxPerUnit, 45.0 / kOsPxPerUnit));
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main, what + ": a press in the corner opens nothing");
+    }
+}
+
+void AnOptionsBlockThatWillNotReadMakesModernUnavailableAndHidesTheEntry() {
+    if (!OriginalArtIsThere("AnOptionsBlockThatWillNotReadMakesModernUnavailableAndHidesTheEntry")) return;
+    const ControlsScratchGuard scratch;
+    // The block removed from a copy of the data, and then one of its numbers made out of range: the run plays classic with one error line, shows no
+    // entry, and a classic menu it always was.
+    const std::vector<std::pair<const char*, std::function<std::string(const std::string&)>>> edits = {
+        {"the block is gone",
+         [](const std::string& text) {
+             const std::size_t at = text.find("\"options\": {");
+             CHECK_MSG(at != std::string::npos, "controls.json has an options block");
+             return at == std::string::npos ? text : text.substr(0, at) + "\"unused\": {},\n  " + text.substr(text.find("\"default_mode\""));
+         }},
+        {"a tile of no size", [](const std::string& text) {
+             std::string edited = text;
+             const std::string from = "\"size_units\": [160, 48]";
+             const std::size_t at = edited.find(from);
+             CHECK_MSG(at != std::string::npos, "controls.json has the tiles' size");
+             if (at != std::string::npos) edited.replace(at, from.size(), "\"size_units\": [0, 48]");
+             return edited;
+         }}};
+    int number = 0;
+    for (const auto& [name, edit] : edits) {
+        const std::string what = std::string("AnOptionsBlockThatWillNotReadMakesModernUnavailableAndHidesTheEntry: ") + name;
+        const std::string data = ControlsScratchData("op-broken-" + std::to_string(number++), [&](const std::string& text) { return std::optional<std::string>(edit(text)); });
+        const std::string saves = OsDir("broken-saves");
+        MagicPortalsLayer::Paths paths = OsPaths(saves, OsDir("broken-prisms"));
+        paths.portData = data;
+        OsRun run(paths, what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(!layer.ModernReady() && !layer.OptionsAvailable() && layer.ControlsStyle() == Controls::Style::Classic, what + ": modern is unavailable and the entry is hidden");
+        CHECK_MSG(layer.ControlsError().find("options") != std::string::npos && layer.ControlsError().find("modern controls are unavailable") != std::string::npos,
+                  what + ": with one error that names the block: " + layer.ControlsError());
+        CHECK_MSG(layer.ControlsLine() == "controls: classic (modern is unavailable: see the error above)", what + ": and the line says so");
+        CHECK_MSG(!layer.ControlsStore().Persists() && layer.OptionsEntryImage().empty(), what + ": no store was opened and no gear made");
+        OsClick(run, glm::dvec2(1235.0 / kOsPxPerUnit, 45.0 / kOsPxPerUnit));
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main && !ControlsFileExistsIn(saves), what + ": the corner opens nothing, and nothing is written");
+    }
+}
+
+// ---- Options: the style is played at the next level, and the way there ------------------------------------------------------------------------------
+
+// The centre of the cells of the view on which the pause answers `button`, from the layer's own pause (Pause::ButtonAt scanned over the view). A pause
+// must be open and past its entrance.
+glm::dvec2 OsPausePoint(const MagicPortalsLayer& layer, MagicPortals::Pause::Button button) {
+    const glm::dvec2 view = layer.ViewPx();
+    glm::dvec2 sum(0.0);
+    int cells = 0;
+    for (double y = 0.5; y < view.y; y += 1.0) {
+        for (double x = 0.5; x < view.x; x += 1.0) {
+            const std::optional<MagicPortals::Pause::Button> found = MagicPortals::Pause::ButtonAt(
+                layer.PauseRules(), layer.PausedLevel(), layer.PauseSwitches(), view, layer.PauseClockMs(), glm::dvec2(x, y));
+            if (found && *found == button) {
+                sum += glm::dvec2(x, y);
+                ++cells;
+            }
+        }
+    }
+    CHECK_MSG(cells > 100, "the pause's button covers " + std::to_string(cells) + " unit cells");
+    return cells > 0 ? sum / static_cast<double>(cells) : glm::dvec2(0.0);
+}
+
+// The settled centre of the menu button of this kind that the screen has, in menu units.
+bool OsMenuButtonCentre(const MagicPortalsLayer& layer, MagicPortalsLayer::MenuButton::Kind kind, glm::dvec2& centre) {
+    for (const MagicPortalsLayer::MenuButton& button : layer.MenuButtons()) {
+        if (button.kind != kind) continue;
+        centre = button.centrePx;
+        return true;
+    }
+    return false;
+}
+
+// A click on a menu, down on one tick, up on the next and a tick after: on a layer and registry any case holds.
+void OsClickAt(MagicPortalsLayer& layer, entt::registry& registry, const glm::dvec2& onView) {
+    const glm::vec2 px = OsPx(onView);
+    tickWith(layer, registry, px, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    releaseWith(layer, registry, px);
+    tickWith(layer, registry, kRest, {}, {});
+}
+
+// The five modern pictures and the line they were resolved with, as a run holds them.
+struct OsPictures {
+    std::array<std::string, 5> images;
+    std::array<Controls::ArtSource, 5> sources;
+    std::string line;
+    std::vector<std::string> warnings;
+    int written = 0;
+};
+
+OsPictures OsPicturesOf(const MagicPortalsLayer& layer) {
+    OsPictures out;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        out.images[ArtAt(id)] = layer.ModernImage(id);
+        out.sources[ArtAt(id)] = layer.ModernSource(id);
+    }
+    out.line = layer.ModernArtLine();
+    out.warnings = layer.ModernArtWarnings();
+    out.written = layer.ModernArtFilesWritten();
+    return out;
+}
+
+const char* kOsGeneratedLine = "modern controls art: walk_left=generated walk_right=generated restart=generated pause=generated clear_portals=generated";
+
+void TheStyleChosenInOptionsIsPlayedAtTheNextLevel() {
+    if (!OriginalArtIsThere("TheStyleChosenInOptionsIsPlayedAtTheNextLevel")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string saves = OsDir("style-saves");
+    const std::string prisms = OsDir("style-prisms");
+    OsPictures resolved;
+    // A run that STARTS classic (a player's run on the shipped default), toggled to modern in Options, and then into a level.
+    {
+        OsRun run(OsPaths(saves, prisms), "TheStyleChosenInOptionsIsPlayedAtTheNextLevel");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        // The premise (the pictures are resolved inside `if (modern)` of the attach): a classic start has resolved none, and has made only the gear.
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic && layer.ModernReady() && layer.OptionsAvailable(), "an available run that starts classic");
+        CHECK_MSG(!layer.ModernArtResolved() && layer.ModernArtLine().empty() && layer.ModernArtWarnings().empty() && layer.ModernArtNotice().empty(),
+                  "which has resolved no pictures and said nothing of them");
+        CHECK_MSG(layer.ModernArtFilesWritten() == 1, "and made one file, the gear: " + std::to_string(layer.ModernArtFilesWritten()));
+        for (const Controls::Id id : Controls::kClaimOrder) CHECK_MSG(layer.ModernImage(id).empty() && !layer.ModernSource(id), std::string(Controls::KeyOf(id)) + ": no picture yet");
+        int glyphs = 0;
+        for (const std::string& name : OsEntries(prisms)) glyphs += name.rfind("modern_", 0) == 0 ? 1 : 0;
+        CHECK_MSG(glyphs == 0, "and not one glyph file: " + std::to_string(glyphs));
+
+        // The first switch to modern resolves them, once, as a run that starts modern does.
+        if (!OsOpenOptions(run, "a classic start")) return;
+        OsClick(run, OsTileCentre(layer, Style::Modern));
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern, "the Modern tile makes the run modern");
+        CHECK_MSG(layer.ModernArtResolved() && layer.ModernArtLine() == kOsGeneratedLine, "the pictures are resolved at that switch: " + layer.ModernArtLine());
+        CHECK_MSG(layer.ModernArtWarnings().empty() && layer.ModernArtNotice().empty(), "all of one set, and nothing said");
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            CHECK_MSG(layer.ModernSource(id) == Controls::ArtSource(Controls::ArtTier::Generated) && ArtIsAPng(layer.ModernImage(id)),
+                      std::string(Controls::KeyOf(id)) + ": a picture that is a PNG, from the generated tier");
+        }
+        CHECK_MSG(layer.ModernArtFilesWritten() == 6, "six files made in all, the gear and five glyphs: " + std::to_string(layer.ModernArtFilesWritten()));
+        resolved = OsPicturesOf(layer);
+
+        // Away and back, and away: nothing is resolved again and nothing is said twice.
+        OsClick(run, OsTileCentre(layer, Style::Classic));
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic, "Classic again");
+        OsClick(run, OsTileCentre(layer, Style::Modern));
+        const OsPictures again = OsPicturesOf(layer);
+        CHECK_MSG(again.images == resolved.images && again.sources == resolved.sources && again.line == resolved.line, "the pictures, tiers and line are what the first switch resolved");
+        CHECK_MSG(again.warnings == resolved.warnings && again.warnings.empty() && again.written == 6, "and no warning is said twice and no file is made again");
+
+        // Into a level: by chapter select's own button, which is what a tile on the grid does.
+        OsClick(run, OsBackCentre(layer));
+        PtrRest(layer, registry, 60);
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main, "back to the main menu");
+        MagicPortalsLayer::MenuButton button;
+        button.kind = Kind::Level;
+        button.world = 0;
+        button.level = layer.ChapterTable().Find("level0");
+        CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), "1-01 loads");
+        PtrRest(layer, registry, 60);
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::None && layer.SimLevel() != nullptr, "and is played");
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern, "the level plays what Options chose");
+        CHECK_MSG(layer.ControlsRectsLine().rfind("controls: modern, walk_left", 0) == 0, "its controls line is the modern one: " + layer.ControlsRectsLine());
+        Hud::Rect left;
+        CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && MdRectIs(left, kMdTable[0].box, 1e-3), "and the left arrow stands in table 1.2's box: " + ShowRect(left));
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        for (const Controls::Id id : {Controls::Id::Left, Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu}) {
+            CHECK_MSG(MdQuadOf(frame, layer.ModernImage(id)) >= 0, std::string(Controls::KeyOf(id)) + ": drawn with the picture the first switch resolved");
+        }
+        // A toggle never reached a level, and a level never touched what the toggle resolved.
+        const OsPictures inLevel = OsPicturesOf(layer);
+        CHECK_MSG(inLevel.images == resolved.images && inLevel.sources == resolved.sources && inLevel.line == resolved.line && inLevel.warnings == resolved.warnings &&
+                      inLevel.written == resolved.written,
+                  "the level load left the pictures, the tiers, the line, the warnings and the files made as they were");
+    }
+    // A run that starts modern resolves the same pictures: the toggle's are the attach's.
+    {
+        OsRun forced(OsPaths(OsDir("style-saves-f"), prisms, std::string("modern")), "TheStyleChosenInOptionsIsPlayedAtTheNextLevel: a modern start");
+        if (!forced.ok) return;
+        const OsPictures start = OsPicturesOf(forced.layer);
+        CHECK_MSG(start.images == resolved.images && start.sources == resolved.sources && start.line == resolved.line && start.warnings == resolved.warnings,
+                  "a run that starts modern resolves exactly what the toggle did");
+        CHECK_MSG(start.written == 0, "(the files were there already, so it made none of the glyphs: " + std::to_string(start.written) + ")");
+    }
+    // And Classic, chosen from a saved modern, is played at the next level: the original's pads, no modern line.
+    {
+        OsRun run(OsPaths(saves, OsDir("style-prisms-2")), "TheStyleChosenInOptionsIsPlayedAtTheNextLevel: back to classic");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern && layer.ControlsLine() == "controls: modern (saved)", "the saved choice is played: modern");
+        if (!OsOpenOptions(run, "a saved modern")) return;
+        OsClick(run, OsTileCentre(layer, Style::Classic));
+        OsClick(run, OsBackCentre(layer));
+        PtrRest(layer, registry, 60);
+        MagicPortalsLayer::MenuButton button;
+        button.kind = Kind::Level;
+        button.world = 0;
+        button.level = layer.ChapterTable().Find("level0");
+        CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), "1-01 loads");
+        PtrRest(layer, registry, 60);
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic && layer.ControlsRectsLine().empty(), "the level plays classic: no modern line");
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(IndexOfImage(frame, layer.HudRules().pads.leftSprite) >= 0 && MdQuadOf(frame, layer.ModernImage(Controls::Id::Left)) < 0, "and the original's pad is drawn, not the glyph");
+        CHECK_MSG(OsSavedFile(saves) == kOsClassicFile, "and the choice is kept: " + OsSavedFile(saves));
+    }
+}
+
+// The way from a level to Options, by the pointer and by the keys: pause, Levels, back, back, the entry. Every step is a press the layer takes;
+// the count is the number a player makes, recorded in the step (review 2 F14).
+void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
+    if (!OriginalArtIsThere("TheNumberOfTapsFromALevelToOptionsIsRecorded")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    for (const bool byKey : {false, true}) {
+        const std::string what = std::string("TheNumberOfTapsFromALevelToOptionsIsRecorded: ") + (byKey ? "with the back key" : "with the pointer");
+        MdRun run(OsPaths(OsDir("taps-saves"), OsDir("taps-prisms")), "level0", what, glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(layer.OptionsAvailable(), what + ": a player's run, in 1-01");
+        int taps = 0;
+        // 1. The pause: the corner button, or the back key.
+        if (byKey) {
+            press(layer, registry, MagicPortalsLayer::kBack);
+        } else {
+            const glm::vec2 pause = PtrPixel(layer, Hud::Place(layer.HudRules().pause, layer.ViewPx()).Centre());
+            tap(layer, registry, pause);
+            lift(layer, registry, pause);
+        }
+        ++taps;
+        CHECK_MSG(layer.Paused(), what + ": 1. the pause is open");
+        PtrRest(layer, registry, 80);
+        // 2. The pause's Levels button.
+        const glm::vec2 levels = PtrPixel(layer, OsPausePoint(layer, MagicPortals::Pause::Button::Levels));
+        tap(layer, registry, levels);
+        lift(layer, registry, levels);
+        ++taps;
+        CHECK_MSG(layer.MenuScreen() == Screen::Levels && !layer.Paused(), what + ": 2. the level grid of 1-01's chapter");
+        PtrRest(layer, registry, 80);
+        CHECK_MSG(layer.SelectorState().page == 0, what + ": on its first page, so back leaves it and does not turn a page");
+        // 3. Back: from the grid to chapter select.
+        if (byKey) {
+            pressBack(layer, registry);
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            glm::dvec2 back(0.0);
+            CHECK_MSG(OsMenuButtonCentre(layer, Kind::Back, back), what + ": the grid has a back button");
+            OsClickAt(layer, registry, back);
+        }
+        ++taps;
+        CHECK_MSG(layer.MenuScreen() == Screen::Worlds, what + ": 3. chapter select");
+        PtrRest(layer, registry, 80);
+        CHECK_MSG(layer.SelectorState().page == 0, what + ": on its first page");
+        // 4. Back: from chapter select to the main menu.
+        if (byKey) {
+            pressBack(layer, registry);
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            glm::dvec2 back(0.0);
+            CHECK_MSG(OsMenuButtonCentre(layer, Kind::Back, back), what + ": chapter select has a back button");
+            OsClickAt(layer, registry, back);
+        }
+        ++taps;
+        CHECK_MSG(layer.MenuScreen() == Screen::Main, what + ": 4. the main menu");
+        PtrRest(layer, registry, 80);
+        // 5. The entry.
+        OsClickAt(layer, registry, OsEntryCentre(layer));
+        ++taps;
+        PtrRest(layer, registry, 5);
+        CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": 5. Options");
+        CHECK_EQ(taps, 5);
+        std::printf("  from a level to Options takes %d presses (%s): the pause, Levels, back, back, the entry\n", taps, byKey ? "keys for the pause and the two backs" : "the pointer throughout");
+    }
+}
+
+// ---- Options, as drawn ------------------------------------------------------------------------------------------------------------------------------
+
+void TheOptionsScreenIsDrawn() {
+    if (!OriginalArtIsThere("TheOptionsScreenIsDrawn")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    OsRun run(OsPaths(OsDir("drawn-saves"), OsDir("drawn-prisms")), "TheOptionsScreenIsDrawn");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    if (!OsOpenOptions(run, "TheOptionsScreenIsDrawn")) return;
+    const OptionsUi::Rules& rules = layer.OptionsRules();
+    const glm::dvec2 view = layer.ViewPx();
+    const std::vector<ScreenOverlay::Quad> frame = MenuFrame(run.registry, layer);
+    CHECK_MSG(frame.size() > 30, "the screen draws quads: " + std::to_string(frame.size()));
+    // The credits' background first, then the back button, and the state's black last.
+    if (frame.size() > 3) {
+        const Hud::Rect background = OnView(layer, frame[0]);
+        CHECK_MSG(!frame[0].texture.empty() && NearD(background.size.x, 512.0, 1e-3) && NearD(background.size.y, 256.0, 1e-3), "the first quad is the credits' background, 512 x 256");
+        const Hud::Rect back = OnView(layer, frame[1]);
+        CHECK_MSG(!frame[1].texture.empty() && back.size.x > 60.0 && back.size.x < 68.0 && back.size.y > 60.0 && back.size.y < 68.0, "the second is the back button, about 64 units");
+        CHECK_MSG(!frame.back().texture.empty(), "and the last is the Classic tile's last letter (the state's black has faded and is not added)");
+    }
+    // The words: every letter of the title and the two tiles is a quad of the original's font.
+    std::vector<Hud::Rect> glyphs;
+    for (const ScreenOverlay::Quad& quad : frame) {
+        if (quad.texture.find("Matura84_shadow") != std::string::npos) glyphs.push_back(OnView(layer, quad));
+    }
+    CHECK_MSG(glyphs.size() == 8u + 6u + 7u, "Controls, Modern and Classic: 21 letters in the original's font: " + std::to_string(glyphs.size()));
+    std::size_t titleGlyphs = 0;
+    glm::dvec2 titleLo(1e9), titleHi(-1e9);
+    for (const Style style : OptionsUi::kTileStyles) {
+        const Hud::Rect tile = OptionsUi::TileRect(rules, style, view);
+        const double thumbRight = tile.min.x + rules.thumbnail.atUnits.x + rules.thumbnail.sizeUnits.x;
+        std::size_t inside = 0;
+        glm::dvec2 lo(1e9), hi(-1e9);
+        for (const Hud::Rect& glyph : glyphs) {
+            if (!tile.Contains(glyph.Centre())) continue;
+            ++inside;
+            lo = glm::min(lo, glyph.min);
+            hi = glm::max(hi, glyph.Max());
+        }
+        const std::size_t want = style == Style::Modern ? 6u : 7u;
+        CHECK_MSG(inside == want, std::string(Controls::NameOf(style)) + " tile: its word has " + std::to_string(want) + " letters: " + std::to_string(inside));
+        CHECK_MSG(lo.x >= thumbRight && hi.x <= tile.Max().x && lo.y >= tile.min.y && hi.y <= tile.Max().y,
+                  std::string(Controls::NameOf(style)) + " tile: the word stands in the tile, right of the thumbnail: " + Point(lo) + " to " + Point(hi) + " of " + ShowRect(tile));
+        CHECK_MSG(NearD((lo.x + hi.x) * 0.5, tile.min.x + rules.wordAtUnits.x, 4.0), std::string(Controls::NameOf(style)) + " tile: and about the centre it is laid out on");
+    }
+    for (const Hud::Rect& glyph : glyphs) {
+        if (OptionsUi::TileRect(rules, Style::Modern, view).Contains(glyph.Centre()) || OptionsUi::TileRect(rules, Style::Classic, view).Contains(glyph.Centre())) continue;
+        ++titleGlyphs;
+        titleLo = glm::min(titleLo, glyph.min);
+        titleHi = glm::max(titleHi, glyph.Max());
+    }
+    CHECK_MSG(titleGlyphs == 8u, "the title: eight letters: " + std::to_string(titleGlyphs));
+    CHECK_MSG(NearD((titleLo.x + titleHi.x) * 0.5, view.x * 0.5, 3.0) && titleLo.y > 0.0 && titleHi.y < OptionsUi::TileRect(rules, Style::Modern, view).min.y,
+              "centred across, above the first tile: " + Point(titleLo) + " to " + Point(titleHi));
+    // The flat quads: two plates, two thumbnail grounds and ten controls.
+    int flat = 0;
+    for (std::size_t i = 2; i < frame.size(); ++i) flat += frame[i].texture.empty() ? 1 : 0;
+    CHECK_MSG(flat == 14, "fourteen flat quads after the back button: " + std::to_string(flat));
+    // The thumbnails: each style's five controls where the pure layout puts them, in the walk and corner lights.
+    const Controls::Tuning& tuning = layer.ControlsApplied();
+    for (const Style style : OptionsUi::kTileStyles) {
+        const Hud::Rect tile = OptionsUi::TileRect(rules, style, view);
+        const std::array<Hud::Rect, 5> rects = OptionsUi::ThumbnailRects(rules, layer.ControlsRules(), layer.HudRules(), tuning, style, tile);
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            const OptionsUi::Colour& colour = Controls::IsWalk(id) ? rules.thumbnail.walk : rules.thumbnail.corner;
+            int found = 0;
+            for (const ScreenOverlay::Quad& quad : frame) {
+                if (quad.texture.empty() && SameRect(OnView(layer, quad), rects[ArtAt(id)], 1e-3) && OsSameColour(quad.color, OsColour(colour))) ++found;
+            }
+            CHECK_MSG(found >= 1, std::string(Controls::NameOf(style)) + " thumbnail: " + Controls::KeyOf(id) + " is drawn at " + ShowRect(rects[ArtAt(id)]) + " in its light");
+        }
+    }
+    // The lit tile, now and after a choice.
+    CHECK_MSG(OsLitTile(layer, run.registry) == "classic", "the shipped default's tile is lit");
+    OsClick(run, OsTileCentre(layer, Style::Modern));
+    CHECK_MSG(OsLitTile(layer, run.registry) == "modern", "the chosen tile is lit");
+    // The tile held at the press tint while a press is on it.
+    {
+        const glm::vec2 px = OsPx(OsTileCentre(layer, Style::Classic));
+        tickWith(layer, run.registry, px, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        glm::vec4 colour(0.0f);
+        const std::vector<ScreenOverlay::Quad> held = MenuFrame(run.registry, layer);
+        const OptionsUi::Colour idle = rules.idleFrame;
+        CHECK_MSG(OsTileColour(layer, held, Style::Classic, colour) &&
+                      OsSameColour(colour, OsColour({idle[0] * 204 / 255, idle[1] * 204 / 255, idle[2] * 204 / 255, idle[3]})),
+                  "the tile pressed is drawn at the press tint");
+        releaseWith(layer, run.registry, kRest);
+        PtrRest(layer, run.registry, 2);
+    }
+}
+
+// ---- the swallow, the hint and the lit look: the gaps step 183 left (planning step 185) --------------------------------------------------------------------
+//
+// Step 183's verifier listed what its cases did not pin: a held arrow through a door and an end screen's button pressed inside the next level's arrow;
+// Esc and Esc again with the touch held on an arrow; the pointer leaving the game; the hint at the first ticks and under the pause; a world press slid onto
+// a corner button; the byte's cap. Each is a case here, with a classic twin or a control where the behaviour is modern's alone.
+
+// A held touch on the right arrow carries him to the door without ever being swallowed (the level saw the press go down); at the medal screen the
+// restart button is pressed where the NEXT level's left arrow will be (the pair moved there by a safe-area inset, the way a device's notch would), and the
+// touch, still down across the load, claims the arrow and does not walk him until it is lifted; a fresh press walks.
+void AHeldArrowThroughADoorIsNotSwallowedAndAnEndScreensButtonIsAtTheNextLevel() {
+    if (!OriginalArtIsThere("AHeldArrowThroughADoorIsNotSwallowedAndAnEndScreensButtonIsAtTheNextLevel")) return;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "AHeldArrowThroughADoorIsNotSwallowedAndAnEndScreensButtonIsAtTheNextLevel";
+    const auto retryOf = [](const MagicPortalsLayer& layer, glm::dvec2& at) {
+        for (const MagicPortalsLayer::MenuButton& button : layer.MenuButtons()) {
+            if (button.kind != Kind::Retry) continue;
+            at = button.centrePx - (layer.CameraCentrePx() - layer.ViewPx() * 0.5);
+            return true;
+        }
+        return false;
+    };
+    // The probe: where 1-01's medal screen has its restart button, in view units, with the controls where they ordinarily are.
+    glm::dvec2 retry(0.0);
+    {
+        MdRun probe(MdPaths(), "level0", what + ": probe");
+        if (!probe.ok) return;
+        CHECK_MSG(WalkLevel0IntoItsDoor(probe.layer, probe.registry) > 0, what + ": the door is reached");
+        for (int tick = 0; tick < 300 && probe.layer.MenuScreen() != Screen::Finished; ++tick) tickWith(probe.layer, probe.registry, kRest, {}, {});
+        CHECK_MSG(probe.layer.MenuScreen() == Screen::Finished, what + ": and the medal screen comes up");
+        PtrRest(probe.layer, probe.registry, 120);
+        CHECK_MSG(retryOf(probe.layer, retry), what + ": it has a restart button");
+    }
+    if (retry == glm::dvec2(0.0)) return;
+    // The pair moved so that the left arrow's hit rectangle holds that point: its left edge reaches the view's edge, its box is 31.86 wide and 15.64 in from
+    // the inset, and the bottom inset puts the box's vertical middle on the point.
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.controls.testInsets = Controls::Insets{retry.x - 20.0, 0.0, 0.0, std::max(0.0, 224.4 - retry.y)};
+    MdRun run(paths, "level0", what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    const Hud::Rect& leftHit = g.hit[MdAt(PtrControl::Left)];
+    CHECK_MSG(retry.x >= leftHit.min.x && retry.x < leftHit.Max().x && retry.y >= leftHit.min.y && retry.y < leftHit.Max().y,
+              what + ": the restart button's centre " + Point(retry) + " is inside the left arrow's hit rectangle " + MdShow(leftHit));
+    // A held touch on the right arrow, from the press to the door: the level saw it go down, so it is never swallowed, and it walks him right.
+    const glm::vec2 right = PtrPixel(layer, g.hit[MdAt(PtrControl::Right)].Centre());
+    const double x0 = playerPx(registry, layer).x;
+    bool swallowedEver = false;
+    int held = 0;
+    for (; held < 700 && !layer.Finishing(); ++held) {
+        PtrHold(layer, registry, right, held == 0);
+        swallowedEver = swallowedEver || layer.TouchSwallowed();
+    }
+    CHECK_MSG(layer.Finishing(), what + ": the held touch walks him into the door");
+    CHECK_MSG(!swallowedEver, what + ": and was never swallowed on the way");
+    CHECK_MSG(playerPx(registry, layer).x - x0 > 100.0, what + ": he walked right: " + PtrNum(playerPx(registry, layer).x - x0));
+    lift(layer, registry, right);
+    for (int tick = 0; tick < 300 && layer.MenuScreen() != Screen::Finished; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Finished, what + ": the medal screen comes up");
+    PtrRest(layer, registry, 120);
+    glm::dvec2 button(0.0);
+    CHECK_MSG(retryOf(layer, button) && glm::length(button - retry) < 1.0, what + ": its restart button is where the probe found it: " + Point(button));
+    // The press on it reloads the level; the touch stays down.
+    const glm::vec2 pixel = PtrPixel(layer, button);
+    tap(layer, registry, pixel);
+    CHECK_MSG(layer.MenuScreen() == Screen::None && layer.LevelAgeMs() == 0.0 && PtrLatched(layer, "level_button"), what + ": the press on restart loads 1-01 again");
+    for (int tick = 0; tick < 20; ++tick) PtrHold(layer, registry, pixel, false);
+    const double landed = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 60; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.ControlAt(button) == PtrClaim(PtrControl::Left), what + ": the pair has slid in under the held touch, which claims the left arrow: " + PtrName(layer.ControlAt(button)));
+    CHECK_MSG(layer.TouchSwallowed(), what + ": the touch is swallowed: its press was the end screen's");
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - landed) < 0.5, what + ": and he does not walk: " + PtrNum(playerPx(registry, layer).x - landed));
+    {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        // 1-01 is the tutorial level: its pads pulse with the tutorial's variation (Hud::PadAlphaByte's third argument), which MiPadByte, written for the other
+        // levels, does not know. A lit arrow would be 38 bytes above this.
+        const double pulse = static_cast<double>(Controls::ClassicWalkAlphaByte(layer.HudRules(), layer.LevelAgeMs(), true)) / 255.0;
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Left), pulse, 1e-6),
+                  what + ": and the arrow is not lit: " + PtrNum(MdPadAlpha(frame, layer, PtrControl::Left) * 255.0) + " of the pulse's " + PtrNum(pulse * 255.0));
+    }
+    lift(layer, registry, pixel);
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(!layer.TouchSwallowed(), what + ": let go, nothing is swallowed");
+    const double x1 = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+    CHECK_MSG(x1 - playerPx(registry, layer).x > 8.0, what + ": a fresh press on the same point walks him left: " + PtrNum(x1 - playerPx(registry, layer).x));
+}
+
+// Esc opens the pause and Esc closes it, with the touch held on an arrow the whole time: the level saw that press go down, but not the one that resumed it,
+// so the modern arrow is swallowed until a lift and a fresh press. The classic pad walks on, as it always did.
+void EscThenEscWithTheTouchHeldOnAnArrowSwallowsItInModernAndNotInClassic() {
+    if (!OriginalArtIsThere("EscThenEscWithTheTouchHeldOnAnArrowSwallowsItInModernAndNotInClassic")) return;
+    for (const bool modern : {true, false}) {
+        const std::string what = std::string("EscThenEscWithTheTouchHeldOnAnArrowSwallowsItInModernAndNotInClassic: ") + (modern ? "modern" : "classic");
+        MdRun run(modern ? MdPaths() : TestPaths(), "level30", what, glm::vec2(1280.0f, 720.0f), true, modern ? Controls::Style::Modern : Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const glm::dvec2 point = modern ? MdGeometry(layer).hit[MdAt(PtrControl::Left)].Centre() : glm::dvec2(30.0, layer.ViewPx().y - 30.0);
+        const glm::vec2 pixel = PtrPixel(layer, point);
+        CHECK_MSG(layer.ControlAt(point) == PtrClaim(PtrControl::Left), what + ": the point is the left arrow's");
+        const double start = playerPx(registry, layer).x;
+        for (int tick = 0; tick < 12; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+        CHECK_MSG(start - playerPx(registry, layer).x > 8.0 && !layer.TouchSwallowed(), what + ": the held touch walks him left, unswallowed");
+        // Esc, the touch still down.
+        tickWith(layer, registry, pixel, {MagicPortalsLayer::kTap, MagicPortalsLayer::kBack}, {MagicPortalsLayer::kBack});
+        CHECK_MSG(layer.Paused(), what + ": Esc opens the pause");
+        for (int tick = 0; tick < 6; ++tick) PtrHold(layer, registry, pixel, false);
+        CHECK_MSG(layer.Paused(), what + ": which stays open under the held touch (the point is on none of its buttons)");
+        // Esc again, the touch still down.
+        tickWith(layer, registry, pixel, {MagicPortalsLayer::kTap, MagicPortalsLayer::kBack}, {MagicPortalsLayer::kBack});
+        CHECK_MSG(!layer.Paused(), what + ": Esc again resumes");
+        for (int tick = 0; tick < 12; ++tick) PtrHold(layer, registry, pixel, false);
+        const double settled = playerPx(registry, layer).x;
+        for (int tick = 0; tick < 30; ++tick) PtrHold(layer, registry, pixel, false);
+        const double moved = settled - playerPx(registry, layer).x;
+        if (modern) {
+            CHECK_MSG(layer.TouchSwallowed(), what + ": the touch is swallowed: its press was before the pause");
+            CHECK_MSG(std::fabs(moved) < 0.5, what + ": and he does not walk while it is held: " + PtrNum(moved));
+            lift(layer, registry, pixel);
+            PtrRest(layer, registry, 2);
+            CHECK_MSG(!layer.TouchSwallowed(), what + ": let go, it is over");
+            const double x1 = playerPx(registry, layer).x;
+            for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+            CHECK_MSG(x1 - playerPx(registry, layer).x > 8.0, what + ": and a fresh press walks him: " + PtrNum(x1 - playerPx(registry, layer).x));
+        } else {
+            CHECK_MSG(!layer.TouchSwallowed() && moved > 8.0, what + ": the held classic pad walks him on: " + PtrNum(moved));
+        }
+    }
+}
+
+// The swallow is cleared while the pointer is off the game, and a pointer that comes back with the button still down is swallowed again (its press was
+// never the level's to see).
+void APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain() {
+    if (!OriginalArtIsThere("APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain")) return;
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 110.0}; // the pair under the pause's Resume button, as TheSwallowHoldsAClaimUntilTheTouchIsUp has it
+    MdRun run(paths, "level30", "APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), "Escape pauses");
+    PtrRest(layer, registry, 120);
+    const glm::dvec2 resume = MiResumePoint(layer);
+    const glm::vec2 pixel = PtrPixel(layer, resume);
+    PtrHold(layer, registry, pixel, true);
+    CHECK_MSG(!layer.Paused(), "the press on Resume resumes the level");
+    for (int tick = 0; tick < 10; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.TouchSwallowed(), "the held touch is swallowed");
+    // The pointer leaves the game with the button still down (a panel, another window).
+    registry.ctx().get<ViewportInfo>().pointerOverGame = false;
+    PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(!layer.TouchSwallowed(), "off the game, the swallow is cleared");
+    PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(!layer.TouchSwallowed(), "and stays cleared while it is away");
+    // And back over the game, the button still down: not a press the level saw, so swallowed again - and it works nothing.
+    registry.ctx().get<ViewportInfo>().pointerOverGame = true;
+    const double x0 = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 20; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.TouchSwallowed(), "the return with the button still down is swallowed again");
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0) < 0.5, "and works nothing: " + PtrNum(playerPx(registry, layer).x - x0));
+    lift(layer, registry, pixel);
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(!layer.TouchSwallowed(), "up, it is over");
+}
+
+// 1-21's line stands where it stood at the first ticks, at the 30th, at 3.5 s and under the pause: it neither moves while the pair slides in (the layout it
+// is placed by is the settled one) nor jumps when the pause hides the pair (the pair counts as there for a level that has arrows).
+void TheHintStandsStillForTheFirstSecondAndUnderThePause() {
+    if (!OriginalArtIsThere("TheHintStandsStillForTheFirstSecondAndUnderThePause")) return;
+    struct Sample {
+        int glyphs = 0;
+        double left = 1e9;
+    };
+    for (const bool modern : {true, false}) {
+        const std::string what = std::string("TheHintStandsStillForTheFirstSecondAndUnderThePause: ") + (modern ? "modern" : "classic");
+        MdRun run(modern ? MdPaths() : TestPaths(), "level20", what, glm::vec2(1280.0f, 720.0f), false, modern ? Controls::Style::Modern : Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        // The line's quads: the font's, on the hint's own row. The caption "Part 21" is in the same font and is drawn at 0.8 of the view's height (ui.json
+        // caption, centre_of_view) for its first 3 s, so it is told apart by its place: the hint's text starts 32 units above the view's bottom
+        // (camera.json hint.above_bottom_units), and its glyphs lie below that line; the caption's end above it.
+        const auto sample = [&]() {
+            Sample out;
+            for (const ScreenOverlay::Quad& quad : HudFrame(registry, layer)) {
+                if (quad.texture.find("Matura84_shadow") == std::string::npos) continue;
+                const Hud::Rect rect = OnView(layer, quad);
+                if (rect.min.y < layer.ViewPx().y - 32.0 - 1e-6) continue;
+                ++out.glyphs;
+                out.left = std::min(out.left, rect.min.x);
+            }
+            return out;
+        };
+        std::vector<Sample> samples;
+        for (int tick = 0; tick < 5; ++tick) tickWith(layer, registry, kRest, {}, {});
+        samples.push_back(sample());
+        for (int tick = 5; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+        samples.push_back(sample());
+        for (int tick = 30; tick < TicksOf(3500.0); ++tick) tickWith(layer, registry, kRest, {}, {});
+        samples.push_back(sample());
+        press(layer, registry, MagicPortalsLayer::kBack);
+        CHECK_MSG(layer.Paused(), what + ": Escape pauses");
+        PtrRest(layer, registry, 3);
+        samples.push_back(sample());
+        const char* when[4] = {"the 5th tick", "the 30th", "3.5 s", "under the pause"};
+        for (std::size_t i = 0; i < samples.size(); ++i) {
+            CHECK_MSG(samples[i].glyphs >= 15, what + ": the line is drawn at " + when[i] + ": " + std::to_string(samples[i].glyphs) + " letters");
+            CHECK_MSG(NearD(samples[i].left, samples[2].left, 1e-9) && samples[i].glyphs == samples[2].glyphs,
+                      what + ": and starts where it starts at 3.5 s: " + PtrNum(samples[i].left) + " against " + PtrNum(samples[2].left) + " at " + when[i]);
+        }
+        if (modern) {
+            CHECK_MSG(samples[0].left >= 90.7378 - 1e-3, what + ": clear of the pair from the first tick: " + PtrNum(samples[0].left));
+        } else {
+            CHECK_MSG(samples[0].left >= 49.0 && samples[0].left < 55.0, what + ": classic's is at 50 throughout: " + PtrNum(samples[0].left));
+        }
+    }
+}
+
+// A press that begins in the world and slides onto a corner button is not that button's: it is not lit and it does not act.
+void AWorldPressSlidOntoACornerButtonDoesNotLightItOrAct() {
+    if (!OriginalArtIsThere("AWorldPressSlidOntoACornerButtonDoesNotLightItOrAct")) return;
+    for (const PtrControl control : {PtrControl::Reset, PtrControl::Menu}) {
+        const std::string what = std::string("AWorldPressSlidOntoACornerButtonDoesNotLightItOrAct: ") + PtrName(control);
+        MdRun run(MdPaths(), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const MdGeom g = MdGeometry(layer);
+        const glm::dvec2 away(250.0, 150.0);
+        const glm::dvec2 on = g.box[MdAt(control)].Centre();
+        CHECK_MSG(!layer.ControlAt(away) && layer.ControlAt(on) == PtrClaim(control), what + ": the world point is nobody's and the other is the button's");
+        const double age = layer.LevelAgeMs();
+        PtrHold(layer, registry, PtrPixel(layer, away), true);
+        PtrHold(layer, registry, PtrPixel(layer, away), false);
+        for (int tick = 0; tick < 5; ++tick) {
+            PtrHold(layer, registry, PtrPixel(layer, on), false);
+            const double alpha = MdPadAlpha(HudFrame(registry, layer), layer, control);
+            CHECK_MSG(NearD(alpha, 120.0 / 255.0, 1e-6), what + ": slid on (tick " + std::to_string(tick) + "), it is the flat 120, not lit: " + PtrNum(alpha * 255.0));
+        }
+        CHECK_MSG(layer.LevelAgeMs() > age && !layer.Paused() && !PtrLatched(layer, "level_button"), what + ": and nothing acted while the touch was on it");
+        lift(layer, registry, PtrPixel(layer, on));
+        PtrRest(layer, registry, 3);
+        CHECK_MSG(layer.LevelAgeMs() > age && !layer.Paused() && !PtrLatched(layer, "level_button"), what + ": nor at the release");
+    }
+}
+
+// The lit look is capped at a whole byte: a data copy with a boost of 200 on top of the 120 a corner button rests at (and the arrows' pulse) is 255, not 320.
+void TheLitLookIsCappedAtAWholeByte() {
+    if (!OriginalArtIsThere("TheLitLookIsCappedAtAWholeByte")) return;
+    const ControlsScratchGuard scratch;
+    const std::string data = ControlsScratchData("boost-200", [](const std::string& text) {
+        std::string edited = text;
+        const std::string from = "\"boost_byte\": 38";
+        const std::size_t at = edited.find(from);
+        CHECK_MSG(at != std::string::npos, "controls.json has the boost");
+        if (at != std::string::npos) edited.replace(at, from.size(), "\"boost_byte\": 200");
+        return std::optional<std::string>(edited);
+    });
+    MagicPortalsLayer::Paths paths = MdPaths();
+    paths.portData = data;
+    MdRun run(paths, "level30", "TheLitLookIsCappedAtAWholeByte");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsRules().pressedBoostByte == 200, "the layer read a boost of 200 from its copy of the data");
+    const MdGeom g = MdGeometry(layer);
+    // An arrow held: the pulse's byte (about 160) plus 200 is capped at 255.
+    const glm::vec2 arrow = PtrPixel(layer, g.hit[MdAt(PtrControl::Left)].Centre());
+    for (int tick = 0; tick < 3; ++tick) PtrHold(layer, registry, arrow, tick == 0);
+    {
+        const double alpha = MdPadAlpha(HudFrame(registry, layer), layer, PtrControl::Left);
+        CHECK_MSG(NearD(alpha, 1.0, 1e-6), "a held arrow is a whole 255, not the sum: " + PtrNum(alpha * 255.0));
+    }
+    lift(layer, registry, arrow);
+    PtrRest(layer, registry, 30);
+    // A corner button held: 120 + 200 is capped too, and an unlit one is still 120.
+    const glm::vec2 corner = PtrPixel(layer, g.box[MdAt(PtrControl::Menu)].Centre());
+    PtrHold(layer, registry, corner, true);
+    PtrHold(layer, registry, corner, false);
+    {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Menu), 1.0, 1e-6), "a held corner button is a whole 255: " + PtrNum(MdPadAlpha(frame, layer, PtrControl::Menu) * 255.0));
+        CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Reset), 120.0 / 255.0, 1e-6), "and its neighbour is still the flat 120");
+    }
+}
+
+// ---- the pictures, folds of step 184 (planning step 185) ------------------------------------------------------------------------------------------------
+
+// A noisy PNG (deterministic bytes that do not compress), so that a cut through the middle of its data loses pixels for certain.
+bool ArtWriteNoisePng(const std::filesystem::path& file, int w, int h) {
+    std::error_code ec;
+    std::filesystem::create_directories(file.parent_path(), ec);
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u);
+    std::uint32_t state = 12345u;
+    for (std::size_t i = 0; i < rgba.size(); ++i) {
+        state = state * 1664525u + 1013904223u;
+        rgba[i] = static_cast<std::uint8_t>(state >> 24);
+    }
+    for (std::size_t i = 3; i < rgba.size(); i += 4) rgba[i] = 255;
+    return stbi_write_png(file.string().c_str(), w, h, 4, rgba.data(), w * 4) != 0;
+}
+
+// The file cut to `percent` of its bytes: a PNG signature and header that read, and data that does not.
+bool ArtCutPng(const std::filesystem::path& file, int percent) {
+    const std::string whole = ReadWholeFile(file);
+    if (whole.size() < 200) return false;
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    out.write(whole.data(), static_cast<std::streamsize>(whole.size() * static_cast<std::size_t>(percent) / 100u));
+    return static_cast<bool>(out);
+}
+
+// A picture whose header reads and whose size is right but whose data is cut short would win its tier and be drawn by the engine as a flat dark square (it
+// says "Corrupt PNG - using the caller's fallback texture" and carries on). It is decoded once at attach, and falls to the next tier with a WARN.
+void ATruncatedPictureFallsToTheNextTierWithAWarning() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("truncated");
+    // Magic Rampage's: left cut (an arrow has no sprite of the original's, so the glyph), right whole, restart cut (the original's sprite beside it is whole), pause
+    // whole, clear-portals not there at all and the original's sprite for it cut too (the glyph).
+    CHECK(ArtWriteNoisePng(art.mr / "walk_left.png", 128, 128) && ArtCutPng(art.mr / "walk_left.png", 40));
+    CHECK(ArtWritePng(art.mr / "walk_right.png", 128, 128));
+    CHECK(ArtWriteNoisePng(art.mr / "restart.png", 128, 128) && ArtCutPng(art.mr / "restart.png", 40));
+    CHECK(ArtWritePng(art.mr / "pause.png", 128, 128));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Reset)], 64, 64));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Menu)], 64, 64));
+    CHECK(ArtWriteNoisePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Clear)], 64, 64) &&
+          ArtCutPng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Clear)], 40));
+    // The premise: the header of the cut file reads, and its size is the right one, which is all the old test of "readable" asked.
+    int w = 0;
+    int h = 0;
+    std::string why;
+    CHECK_MSG(MagicPortals::Sprites::ImageSize((art.mr / "walk_left.png").string(), w, h, why) && w == 128 && h == 128, "the cut file's header reads, 128 x 128: " + why);
+    CHECK_MSG(!ArtIsAPng((art.mr / "walk_left.png").string()), "and its data does not decode");
+    {
+    ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "ATruncatedPictureFallsToTheNextTierWithAWarning");
+    if (!run.ok) return;
+    const MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::Generated) && ArtIsAPng(layer.ModernImage(Controls::Id::Left)), "walk_left: cut, so the drawn glyph");
+    CHECK_MSG(layer.ModernSource(Controls::Id::Right) == Controls::ArtSource(Tier::MagicRampage), "walk_right: whole, so Magic Rampage's");
+    CHECK_MSG(layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original) && ArtIsAPng(layer.ModernImage(Controls::Id::Reset)), "restart: cut, so the original's sprite beside it");
+    CHECK_MSG(layer.ModernSource(Controls::Id::Menu) == Controls::ArtSource(Tier::MagicRampage), "pause: whole, so Magic Rampage's");
+    CHECK_MSG(layer.ModernSource(Controls::Id::Clear) == Controls::ArtSource(Tier::Generated), "clear-portals: no file of Magic Rampage's and a cut sprite of the original's, so the glyph");
+    CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=generated walk_right=mr restart=original pause=mr clear_portals=generated", layer.ModernArtLine());
+    CHECK_MSG(ArtWarningsWith(layer, "walk_left: Magic Rampage's picture has a readable header and its data cannot be decoded") == 1, "walk_left's is said, naming the control");
+    CHECK_MSG(ArtWarningsWith(layer, "restart: Magic Rampage's picture has a readable header and its data cannot be decoded") == 1, "and restart's");
+    CHECK_MSG(ArtWarningsWith(layer, "clear_portals: the original's sprite has a readable header and its data cannot be decoded") == 1, "and the original's cut sprite");
+    CHECK_MSG(ArtWarningsWith(layer, "cannot be decoded") == 3 && ArtWarningsWith(layer, kArtMixedWarning) == 1 && layer.ModernArtWarnings().size() == 4u,
+              "three of them and the mixed look (there is a Magic Rampage picture in it): " + std::to_string(layer.ModernArtWarnings().size()));
+    }
+    // The control: the whole file of the same size is used.
+    CHECK(ArtWriteNoisePng(art.mr / "walk_left.png", 128, 128));
+    ArtAttached whole(ArtPaths(art, true, ArtOriginal::StandIn), "ATruncatedPictureFallsToTheNextTierWithAWarning: whole");
+    if (whole.ok) CHECK_MSG(whole.layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::MagicRampage), "walk_left whole: Magic Rampage's again");
+}
+
+// A mixed look is a WARN only where a Magic Rampage picture is part of it. The ordinary machine without the owner's folder (the arrows drawn, the corners the
+// original's) is an INFO, once, and no warning: the run's log stays a log of things that are wrong.
+void TheOrdinaryMixIsAnInfoAndAHalfDressedFolderIsAWarning() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("mix");
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(corner)], 64, 64));
+    }
+    {
+        ArtAttached run(ArtPaths(art, false, ArtOriginal::StandIn), "TheOrdinaryMixIsAnInfoAndAHalfDressedFolderIsAWarning: no folder");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=generated walk_right=generated restart=original pause=original clear_portals=original", layer.ModernArtLine());
+        CHECK_MSG(layer.ModernArtWarnings().empty(), "no warning for the ordinary mix: " + std::to_string(layer.ModernArtWarnings().size()));
+        CHECK_MSG(layer.ModernArtNotice().find(kArtMixedWarning) != std::string::npos, "but it is said once, as information: '" + layer.ModernArtNotice() + "'");
+    }
+    {
+        // A Magic Rampage folder that holds the arrows alone: the mix has Magic Rampage's own pictures in it, and is worth a warning.
+        ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right});
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "TheOrdinaryMixIsAnInfoAndAHalfDressedFolderIsAWarning: a half-dressed folder");
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::MagicRampage), "the arrows are Magic Rampage's");
+        CHECK_MSG(layer.ModernArtWarnings().size() == 1u && ArtWarningsWith(layer, kArtMixedWarning) == 1, "and the mix is a WARN, once");
+        CHECK_MSG(layer.ModernArtNotice().empty(), "and not also information");
+    }
+    {
+        // Five of one set: neither.
+        ArtWriteMr(art, {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear});
+        ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "TheOrdinaryMixIsAnInfoAndAHalfDressedFolderIsAWarning: a whole folder");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ModernArtWarnings().empty() && run.layer.ModernArtNotice().empty(), "five of one set is neither");
+    }
+}
+
+// Magic Rampage's file wins over the original's sprite for the three corners on a machine without the original's art: the original's sprites are stand-ins
+// in a scratch folder, valid, and Magic Rampage's five are there. (The row the real original made untestable where it is absent.)
+void TheMagicRampageFileBeatsTheOriginalForTheThreeCornersWithoutTheOriginalsArt() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("mr-beats-original");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear});
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        CHECK(ArtWritePng(art.original / "sprites" / "hd" / kArtOriginalFile[ArtAt(corner)], 128, 128));
+        CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(corner)], 64, 64));
+    }
+    {
+    ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "TheMagicRampageFileBeatsTheOriginalForTheThreeCornersWithoutTheOriginalsArt");
+    if (!run.ok) return;
+    const MagicPortalsLayer& layer = run.layer;
+    for (const Controls::Id corner : {Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        const std::string key = Controls::KeyOf(corner);
+        CHECK_MSG(layer.ModernSource(corner) == Controls::ArtSource(Tier::MagicRampage), key + ": Magic Rampage's file, though the original's sprite is there too");
+        CHECK_MSG(layer.ModernImage(corner) == (art.mr / kArtMrFile[ArtAt(corner)]).string(), key + ": the folder's own file: " + layer.ModernImage(corner));
+    }
+    CHECK_MSG(layer.ModernArtLine() == "modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr", layer.ModernArtLine());
+    CHECK_MSG(layer.ModernArtWarnings().empty() && layer.ModernArtNotice().empty(), "and the look is one set, with nothing said");
+    }
+    // The control, which is the order itself: take Magic Rampage's restart away, and the original's sprite is used.
+    std::error_code ec;
+    std::filesystem::remove(art.mr / "restart.png", ec);
+    ArtAttached without(ArtPaths(art, true, ArtOriginal::StandIn), "TheMagicRampageFileBeatsTheOriginalForTheThreeCornersWithoutTheOriginalsArt: control");
+    if (!without.ok) return;
+    CHECK_MSG(without.layer.ModernSource(Controls::Id::Reset) == Controls::ArtSource(Tier::Original), "without Magic Rampage's restart, the original's sprite is used: the order is what picked");
+}
+
+// The picture is drawn into a rectangle that depends on the margin of the tier it came from, never on the picture's own size: a picture with no transparent
+// margin (the original's sprites, whatever their size) fills the box's face, 0.78125 of it; one with Magic Rampage's margin fills the box. Pinned from the margins
+// the layer resolved for stand-in sprites of two sizes, and the module's rectangle on a box of the case's own - a level cannot be played on stand-ins, so the
+// level's drawn rectangle is TheDrawRectUsesTheTiersMargin's, on the real sprites.
+void TheDrawRectUsesTheTiersMarginOnStandInSprites() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("drawrect-standin");
+    ArtWriteMr(art, {Controls::Id::Left, Controls::Id::Right});
+    // The plain sprite is 64 px; the hd twin is 128 px: the same shape twice the size. Reset has both, pause only the plain one.
+    CHECK(ArtWritePng(art.original / "sprites" / "hd" / kArtOriginalFile[ArtAt(Controls::Id::Reset)], 128, 128));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Reset)], 64, 64));
+    CHECK(ArtWritePng(art.original / "sprites" / kArtOriginalFile[ArtAt(Controls::Id::Menu)], 64, 64));
+    CHECK(ArtWritePng(art.original / "sprites" / "hd" / kArtOriginalFile[ArtAt(Controls::Id::Clear)], 96, 96));
+    ArtAttached run(ArtPaths(art, true, ArtOriginal::StandIn), "TheDrawRectUsesTheTiersMarginOnStandInSprites");
+    if (!run.ok) return;
+    const MagicPortalsLayer& layer = run.layer;
+    const Hud::Rect box{glm::dvec2(100.0, 50.0), glm::dvec2(40.0, 40.0)};
+    const double faceInset = layer.ControlsRules().faceInset;
+    CHECK_MSG(NearD(faceInset, 0.109375, 1e-12), "the face is the box shrunk by 14 / 128 on every side");
+    const Hud::Rect face{box.min + box.size * faceInset, box.size * (1.0 - 2.0 * faceInset)};
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::string key = Controls::KeyOf(id);
+        const bool original = id == Controls::Id::Reset || id == Controls::Id::Menu || id == Controls::Id::Clear;
+        CHECK_MSG(layer.ModernSource(id) == Controls::ArtSource(original ? Tier::Original : Tier::MagicRampage), key + ": from the tier the stand-ins make it");
+        const Hud::Rect drawn = Controls::DrawRect(box, faceInset, layer.ModernBodyInset(id));
+        CHECK_MSG(SameRect(drawn, original ? face : box, 1e-9), key + ": drawn " + ShowRect(drawn) + ", the " + (original ? "face " + ShowRect(face) : "box " + ShowRect(box)));
+        if (original) {
+            CHECK_MSG(NearD(drawn.size.x / box.size.x, 0.78125, 1e-9), key + ": 22 percent smaller than its box, whatever size the sprite is");
+            CHECK_MSG(NearD(drawn.Centre().x, box.Centre().x, 1e-9) && NearD(drawn.Centre().y, box.Centre().y, 1e-9), key + ": on the box's own centre");
+        }
+    }
+}
+
+// The atomic replace, with the target held open by another handle (another window's read, an antivirus scan). On Windows the rename over an open file is
+// refused, and the control is left a flat quad with a WARN, the old bytes whole; where it is allowed (POSIX) the new bytes land whole. Either way the file is
+// wholly one or wholly the other, no half-written copy is left, and the layer says what it did. Which branch this machine took is printed.
+void TheAtomicReplaceHoldsWhileAnotherHandleHasTheTargetOpen() {
+    const ControlsScratchGuard scratch;
+    using Tier = Controls::ArtTier;
+    ArtCase art("held-open");
+    const MagicPortalsLayer::Paths paths = ArtPaths(art, false, ArtOriginal::Off); // all five reach the drawn glyph
+    const auto file = [&](Controls::Id id) { return art.prisms / (std::string("modern_") + Controls::KeyOf(id) + ".png"); };
+    // A first attach makes the files; then the left arrow's is damaged (another picture's bytes of the same length would do; a cut is the plain case).
+    std::string good;
+    {
+        ArtAttached first(paths, "TheAtomicReplaceHoldsWhileAnotherHandleHasTheTargetOpen: first");
+        if (!first.ok) return;
+        good = ReadWholeFile(file(Controls::Id::Left));
+        CHECK_MSG(good.size() > 100, "the glyph is written");
+    }
+    const std::string damaged = good.substr(0, good.size() / 2);
+    {
+        std::ofstream out(file(Controls::Id::Left), std::ios::binary | std::ios::trunc);
+        out.write(damaged.data(), static_cast<std::streamsize>(damaged.size()));
+    }
+    std::ifstream holder(file(Controls::Id::Left), std::ios::binary); // the other handle
+    CHECK_MSG(holder.is_open(), "another handle holds the damaged target open");
+    {
+    ArtAttached second(paths, "TheAtomicReplaceHoldsWhileAnotherHandleHasTheTargetOpen: second");
+    if (!second.ok) return;
+    const MagicPortalsLayer& layer = second.layer;
+    const std::string now = ReadWholeFile(file(Controls::Id::Left));
+    const bool replaced = now == good;
+    const bool untouched = now == damaged;
+    CHECK_MSG(replaced || untouched, "the file is wholly the new bytes or wholly the old ones, never a mixture: " + std::to_string(now.size()) + " bytes");
+    CHECK_MSG(ArtCountTemporaries(art.prisms) == 0, "and no half-written copy is left beside it");
+    if (replaced) {
+        CHECK_MSG(layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::Generated) && ArtWarningsWith(layer, "could not be written") == 0,
+                  "replaced: the picture is the glyph, and nothing is warned of");
+    } else {
+        CHECK_MSG(!layer.ModernSource(Controls::Id::Left) && layer.ModernImage(Controls::Id::Left).empty() && ArtWarningsWith(layer, "could not be written") == 1,
+                  "refused by the open handle: a flat quad, and a warning that names it");
+    }
+    std::printf("  an open handle on the target: the replace was %s on this machine\n", replaced ? "allowed (the new bytes landed whole)" : "refused (the old bytes stayed whole, a flat quad and a WARN)");
+    // The other four were not touched by it.
+    for (const Controls::Id id : {Controls::Id::Right, Controls::Id::Reset, Controls::Id::Menu, Controls::Id::Clear}) {
+        CHECK_MSG(layer.ModernSource(id) == Controls::ArtSource(Tier::Generated) && ArtIsAPng(layer.ModernImage(id)), std::string(Controls::KeyOf(id)) + ": its glyph is whole");
+    }
+    }
+    holder.close();
+    // With the handle closed, the next attach makes it whole.
+    ArtAttached third(paths, "TheAtomicReplaceHoldsWhileAnotherHandleHasTheTargetOpen: third");
+    if (third.ok) CHECK_MSG(ReadWholeFile(file(Controls::Id::Left)) == good && third.layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Tier::Generated), "the handle closed, it is made whole");
+}
+
+// A path joined to an empty folder name is read against the working directory. `artDir` empty is nowhere to look, and must not find a picture that stands in
+// the working directory. A decoy `walk_left.png` is put in a scratch directory that is made the working directory for the length of the case.
+void AnEmptyArtDirIsNowhereToLookEvenWhereTheWorkingDirectoryHoldsAPicture() {
+    const ControlsScratchGuard scratch;
+    namespace fs = std::filesystem;
+    ArtCase art("empty-dir");
+    struct Cwd {
+        fs::path was;
+        explicit Cwd(const fs::path& to) {
+            std::error_code ec;
+            was = fs::current_path(ec);
+            fs::create_directories(to, ec);
+            fs::current_path(to, ec);
+        }
+        ~Cwd() {
+            std::error_code ec;
+            fs::current_path(was, ec);
+        }
+    };
+    const fs::path decoys = art.root / "cwd";
+    {
+        Cwd cwd(decoys);
+        for (const char* file : kArtMrFile) CHECK(ArtWritePng(fs::path(file), 128, 128));
+        CHECK_MSG(fs::exists(decoys / "walk_left.png"), "the decoy is in the working directory");
+        MagicPortalsLayer::Paths paths = ArtPaths(art, false, ArtOriginal::Off);
+        paths.controls.artDir.clear();
+        {
+            ArtAttached run(paths, "AnEmptyArtDirIsNowhereToLookEvenWhereTheWorkingDirectoryHoldsAPicture: empty");
+            if (!run.ok) return;
+            for (const Controls::Id id : Controls::kClaimOrder) {
+                CHECK_MSG(run.layer.ModernSource(id) == Controls::ArtSource(Controls::ArtTier::Generated), std::string(Controls::KeyOf(id)) + ": the glyph, not the decoy in the working directory");
+            }
+            CHECK_MSG(run.layer.ModernArtWarnings().empty(), "and nothing is said of a folder that is not asked for");
+        }
+        // The control: the same decoys, named as the folder, ARE used.
+        MagicPortalsLayer::Paths named = ArtPaths(art, false, ArtOriginal::Off);
+        named.controls.artDir = decoys.string();
+        ArtAttached found(named, "AnEmptyArtDirIsNowhereToLookEvenWhereTheWorkingDirectoryHoldsAPicture: named");
+        if (found.ok) CHECK_MSG(found.layer.ModernSource(Controls::Id::Left) == Controls::ArtSource(Controls::ArtTier::MagicRampage), "the decoy folder, named, is Magic Rampage's: the case can fail");
+    }
+}
+
 // The modern controls' cases, in one list so that a developer can run them alone (`test_mp test_mp_layer --modern-only`) and the whole suite runs
 // them last. AClassicLayerIgnoresEverythingModern is the longest (it runs CTL-2's pins again) and goes at the end.
 void runModernTests() {
@@ -27196,6 +28656,31 @@ void runModernTests() {
     SafeInsetsReachTheLayoutOnlyInModern();
     AControlOnTheRightHalfSlidesInFromTheRight();
     AModernCornerActsOnThePressWhenTheDataSaysPress();
+    // The setting and the Options screen (planning step 185).
+    ABareLayerHasNoEntryAndNoStore();
+    TheOptionsEntryOpensOptionsAndItsPressIsSpent();
+    BackLeavesOptionsAndTheMainMenuTakesNothingFromThePress();
+    TappingAModernTileSavesAndTheNextLayerStartsModern();
+    TheFlagBeatsTheSavedValueAndWritesNothing();
+    UnderAForcedStyleATileChangesTheRunNotTheFile();
+    AFixedStepRunIsClassicWhateverIsSaved();
+    AnOptionsBlockThatWillNotReadMakesModernUnavailableAndHidesTheEntry();
+    TheStyleChosenInOptionsIsPlayedAtTheNextLevel();
+    TheNumberOfTapsFromALevelToOptionsIsRecorded();
+    TheOptionsScreenIsDrawn();
+    // The gaps step 183 left, and the folds of step 184 (planning step 185).
+    AHeldArrowThroughADoorIsNotSwallowedAndAnEndScreensButtonIsAtTheNextLevel();
+    EscThenEscWithTheTouchHeldOnAnArrowSwallowsItInModernAndNotInClassic();
+    APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain();
+    TheHintStandsStillForTheFirstSecondAndUnderThePause();
+    AWorldPressSlidOntoACornerButtonDoesNotLightItOrAct();
+    TheLitLookIsCappedAtAWholeByte();
+    ATruncatedPictureFallsToTheNextTierWithAWarning();
+    TheOrdinaryMixIsAnInfoAndAHalfDressedFolderIsAWarning();
+    TheMagicRampageFileBeatsTheOriginalForTheThreeCornersWithoutTheOriginalsArt();
+    TheDrawRectUsesTheTiersMarginOnStandInSprites();
+    TheAtomicReplaceHoldsWhileAnotherHandleHasTheTargetOpen();
+    AnEmptyArtDirIsNowhereToLookEvenWhereTheWorkingDirectoryHoldsAPicture();
     AClassicLayerIgnoresEverythingModern();
 }
 

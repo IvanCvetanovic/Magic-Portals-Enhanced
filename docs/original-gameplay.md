@@ -39,6 +39,15 @@ through direct taps on the world rather than through the pad.
 by `anti_portal_agent` (whose custom data includes `direction: horizontal`) — it is not
 evidence of four-way player movement.
 
+**ENHANCEMENT (planning step 185).** The pads above are the **original's**, and **classic is the
+original**: two 64-unit pads flush in the bottom corners, restart and pause flush in the top-right
+corner, clear-portals in the top-left. Everything the port adds on top of them — Magic Rampage's inset,
+larger controls, the Options screen that chooses between the two, the lit look of a held control — is
+an enhancement of this port's, not a decoded behaviour, and is off for every developer's run and for
+`--controls classic`, whose pictures and claims are held byte-for-byte to the original's
+(`docs/planning/2026-10-15-modern-controls.md`, planning steps 178 to 185). Where this document says
+what the pads do, it says what **Classic** does.
+
 **IDENTIFIER.** `ScreenPad` (`assets/ScreenPad.angelscript`), `setDirection`,
 `MainCharacter` (`assets/MainCharacter.angelscript`), `getMainCharacter`,
 `killMainCharacter`, `isCharacterDead`.

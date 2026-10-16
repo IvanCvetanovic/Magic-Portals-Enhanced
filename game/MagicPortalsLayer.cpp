@@ -78,6 +78,12 @@ constexpr const char* kControlsClassicFlag = "controls: classic (--controls clas
 constexpr const char* kControlsModernFlag = "controls: modern (--controls modern)";
 constexpr const char* kControlsClassicDefault = "controls: classic (the shipped default)";
 constexpr const char* kControlsModernDefault = "controls: modern (the shipped default)";
+// A player's run reads what Options kept (planning step 185), and says so: the second launch of a capture that chose Modern in Options
+// is greped for `controls: modern (saved)`. A tile tapped in Options changes the line to say it was chosen there.
+constexpr const char* kControlsClassicSaved = "controls: classic (saved)";
+constexpr const char* kControlsModernSaved = "controls: modern (saved)";
+constexpr const char* kControlsClassicChosen = "controls: classic (chosen in Options)";
+constexpr const char* kControlsModernChosen = "controls: modern (chosen in Options)";
 constexpr const char* kControlsClassicUnavailable = "controls: classic (modern is unavailable: see the error above)";
 constexpr const char* kControlsModernRectsPrefix = "controls: modern, ";
 // What the flag's size, opacity and move keys cost until CTL-10 applies them: said once at attach, so a capture
@@ -523,6 +529,13 @@ void MagicPortalsLayer::resolveControls() {
     m_modernArt.fill(ModernArt{});
     m_modernArtLine.clear();
     m_modernArtWarnings.clear();
+    m_modernArtNotice.clear();
+    m_modernArtResolved = false;
+    m_modernArtFilesWritten = 0;
+    m_controlsStore = Controls::Store{};
+    m_optionsRules = Options::Rules{};
+    m_optionsReady = false;
+    m_optionsEntryImage.clear();
 
     // The feature does not exist in this run (design 2.1): a bare layer, a developer's run, --controls
     // classic. Nothing is read, so a table that will not read cannot touch such a run. Only the flag
@@ -546,10 +559,15 @@ void MagicPortalsLayer::resolveControls() {
     } else if (!Controls::Tuning::FromFlag(policy.flag, m_controlsRules, m_controlsTuning, why)) {
         m_controlsTuning = Controls::Tuning{};
         m_controlsError = "modern controls are unavailable: --controls is refused: " + why;
+    } else if (!Options::LoadRules(file, m_controlsRules, m_optionsRules, why)) {
+        // The Options screen's block (planning step 185) is part of the feature: without it there is no way to choose, and a table that is
+        // half there is not played.
+        m_controlsError = "modern controls are unavailable: " + why;
     }
     if (!m_controlsError.empty()) {
         // Not ready means no table at all, never half of one.
         m_controlsRules = Controls::Rules{};
+        m_optionsRules = Options::Rules{};
         SUPERSONIC_LOG_ERROR("Magic Portals") << m_controlsError << std::endl;
         m_controlsLine = kControlsClassicUnavailable;
         SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
@@ -557,8 +575,19 @@ void MagicPortalsLayer::resolveControls() {
     }
 
     m_modernReady = true;
-    // Nothing is saved yet (the store is CTL-9's), so a player's run takes the shipped default.
-    m_controlsStyle = Controls::ResolveStyle(policy, std::nullopt, m_controlsRules.defaultMode);
+    m_optionsReady = true;
+    // What the player chose in Options and kept: opened beside the switches' store (OnAttach), from the same save directory - and in
+    // memory only where the policy forbids saving (a forced style: `--controls modern` is a capture's flag, it writes nothing and ignores
+    // the file) or the run has no directory. A file that will not read is said once and the defaults kept; it is written over at the next
+    // choice, as audio.json is.
+    {
+        const std::string directory = policy.saveAllowed ? m_paths.saveDir : std::string();
+        if (std::string opened; !m_controlsStore.Open(directory, m_controlsRules, opened)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "controls not read, the defaults kept: " << opened << std::endl;
+        }
+    }
+    const std::optional<Controls::Style> saved = m_controlsStore.Mode();
+    m_controlsStyle = Controls::ResolveStyle(policy, saved, m_controlsRules.defaultMode);
     // THE LAYOUT APPLIES THE LOOK AND NOTHING ELSE until CTL-10: the flag's size, opacity and moves are on
     // m_controlsTuning (read, on the table's grids, held), and the plan applies them there. `preset=` is the
     // one key a capture needs now (the owner's comparison of the three looks).
@@ -568,6 +597,8 @@ void MagicPortalsLayer::resolveControls() {
     const bool modern = m_controlsStyle == Controls::Style::Modern;
     if (policy.forced) {
         m_controlsLine = modern ? kControlsModernFlag : kControlsClassicFlag;
+    } else if (saved) {
+        m_controlsLine = modern ? kControlsModernSaved : kControlsClassicSaved;
     } else {
         m_controlsLine = modern ? kControlsModernDefault : kControlsClassicDefault;
     }
@@ -578,8 +609,29 @@ void MagicPortalsLayer::resolveControls() {
                               std::any_of(flag.move.begin(), flag.move.end(),
                                           [](const std::optional<glm::dvec2>& move) { return move.has_value(); });
         if (keysHeld) SUPERSONIC_LOG_INFO("Magic Portals") << kControlsKeysHeld << std::endl;
-        // The pictures the five controls are drawn with, once for the run.
+        // The pictures the five controls are drawn with, once for the run. A run that starts classic has none yet: it resolves them at the
+        // first switch to modern in Options (chooseControlsStyle), or never.
         resolveModernImages();
+    }
+    // The Options entry's gear: written only in a run in which the feature exists.
+    resolveOptionsEntry();
+}
+
+void MagicPortalsLayer::chooseControlsStyle(Controls::Style style) {
+    m_controlsStyle = style;
+    // A run that began classic has resolved no pictures. They are resolved once, here, the first time it plays modern, and never again:
+    // switching back and forth costs nothing and says nothing twice. unloadControls is not called - no level is loaded while Options is up,
+    // and the pictures belong to the run, not to a level (planning step 184).
+    if (style == Controls::Style::Modern && !m_modernArtResolved) resolveModernImages();
+    m_controlsLine = style == Controls::Style::Modern ? kControlsModernChosen : kControlsClassicChosen;
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
+    saveControls();
+}
+
+void MagicPortalsLayer::saveControls() {
+    m_controlsStore.SetMode(m_controlsStyle);
+    if (std::string why; !m_controlsStore.Save(why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "controls not saved: " << why << std::endl;
     }
 }
 
@@ -617,7 +669,19 @@ std::string UniqueSuffix() {
     return std::to_string(device()) + "-" + std::to_string(counter.fetch_add(1));
 }
 
-enum class Wrote { AlreadyThere, Written, Failed };
+// Whether `path` is a PNG that DECODES, not one whose header merely reads. Sprites::ImageSize reads 26 bytes, so a file with a good
+// header of the right size and its data cut short passes it, wins its tier, and is then drawn by the engine as a flat dark square
+// (the engine says "Corrupt PNG - using the caller's fallback texture" and carries on). Decoded once per picture, at attach, with the
+// stb the layer already uses (stbi_load, below) and the engine's own loader uses: a picture that decodes here decodes there.
+bool DecodesAsAPicture(const std::string& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (pixels == nullptr) return false;
+    stbi_image_free(pixels);
+    return width > 0 && height > 0;
+}
 
 // Puts `bytes` at `target` without ever showing anyone a half-written file. The generated pictures live in a directory every modern
 // window shares, and a window reads them as it draws: writing them in place (as stb's own file writer does, truncating first) lets a
@@ -625,8 +689,13 @@ enum class Wrote { AlreadyThere, Written, Failed };
 // case, since every run of one build draws the same pixels - and otherwise the bytes go to a name of their own and are renamed over
 // the target in one step. Windows refuses that rename while another window holds the target open; if the target then holds the bytes,
 // that other window put them there and nothing is lost.
-Wrote WriteWhole(const std::filesystem::path& target, const std::string& bytes) {
-    if (FileHolds(target, bytes)) return Wrote::AlreadyThere;
+//
+// True when `target` holds `bytes` afterwards, by whoever put them there. `wrote` is whether THIS call put them there (the rename went
+// through): false for a file that was already exactly these bytes and for one a rival window finished first, so a caller can say how many
+// files it made and a test can pin that a second attach makes none.
+bool WriteWhole(const std::filesystem::path& target, const std::string& bytes, bool& wrote) {
+    wrote = false;
+    if (FileHolds(target, bytes)) return true;
     std::filesystem::path temporary = target;
     temporary += "." + UniqueSuffix() + ".tmp";
     {
@@ -637,14 +706,17 @@ Wrote WriteWhole(const std::filesystem::path& target, const std::string& bytes) 
             out.close();
             std::error_code ec;
             std::filesystem::remove(temporary, ec);
-            return Wrote::Failed;
+            return false;
         }
     }
     std::error_code ec;
     std::filesystem::rename(temporary, target, ec);
-    if (!ec) return Wrote::Written;
+    if (!ec) {
+        wrote = true;
+        return true;
+    }
     std::filesystem::remove(temporary, ec);
-    return FileHolds(target, bytes) ? Wrote::AlreadyThere : Wrote::Failed;
+    return FileHolds(target, bytes);
 }
 
 } // namespace
@@ -659,6 +731,12 @@ void MagicPortalsLayer::resolveModernImages() {
     // adjustment screen can draw them with no level loaded and unloadControls never touches them: Magic Rampage's own picture from
     // Paths::controls.artDir; the original's own sprite (the three corner buttons only: it has none for an arrow); the glyph the game
     // draws and writes into Paths::prisms; and last a flat quad, which is a control with no file.
+    //
+    // CALLABLE MORE THAN ONCE (planning step 185): a run that starts classic resolves them at its first switch to modern, and whatever is
+    // asked of it again must not say it twice - the line, the notice and the warnings are the LAST resolution's, not the sum of all.
+    m_modernArtLine.clear();
+    m_modernArtNotice.clear();
+    m_modernArtWarnings.clear();
     const int boxPx = static_cast<int>(std::lround(m_controlsRules.boxPx));
     Controls::ArtManifest manifest;
     if (!m_paths.controls.artDir.empty()) {
@@ -679,9 +757,15 @@ void MagicPortalsLayer::resolveModernImages() {
     }
     m_modernArtLine = Controls::ArtLine(sources);
     SUPERSONIC_LOG_INFO("Magic Portals") << m_modernArtLine << std::endl;
-    if (Controls::ArtMixed(sources)) {
+    if (Controls::ArtHalfDressed(sources)) {
+        // A Magic Rampage picture is part of a mix: a folder that is half there, or has a file the loader refused. Worth a WARN.
         warnModernArt("the modern controls are drawn from more than one set of pictures (" + m_modernArtLine + "): their looks differ");
+    } else if (Controls::ArtMixed(sources)) {
+        // The ordinary machine without the owner's folder: the arrows drawn, beside the original's own corner sprites. Said once, as INFO.
+        m_modernArtNotice = "the modern controls are drawn from more than one set of pictures (" + m_modernArtLine + "): their looks differ";
+        SUPERSONIC_LOG_INFO("Magic Portals") << m_modernArtNotice << std::endl;
     }
+    m_modernArtResolved = true;
 }
 
 bool MagicPortalsLayer::pickMagicRampagePicture(Control control, const Controls::ArtManifest& manifest, ModernArt& out) {
@@ -709,6 +793,12 @@ bool MagicPortalsLayer::pickMagicRampagePicture(Control control, const Controls:
                       " is what the manifest and the layout say, so the next tier is used: " + file.string());
         return false;
     }
+    // A header that reads and a size that is right say nothing of the data: a cut file would win this tier and be drawn as a dark square.
+    if (!DecodesAsAPicture(file.string())) {
+        warnModernArt(name + ": Magic Rampage's picture has a readable header and its data cannot be decoded, so the next tier is used: " +
+                      file.string());
+        return false;
+    }
     out.image = file.string();
     out.source = Controls::ArtTier::MagicRampage;
     out.bodyInset = entry->bodyInset;
@@ -729,6 +819,11 @@ bool MagicPortalsLayer::pickOriginalPicture(Control control, ModernArt& out) {
         if (std::filesystem::is_regular_file(path, ec)) {
             warnModernArt(std::string(Controls::KeyOf(control)) + ": the original's sprite exists and cannot be read, so the next tier is used: " + path);
         }
+        return false;
+    }
+    if (!DecodesAsAPicture(path)) {
+        warnModernArt(std::string(Controls::KeyOf(control)) +
+                      ": the original's sprite has a readable header and its data cannot be decoded, so the next tier is used: " + path);
         return false;
     }
     out.image = path;
@@ -758,14 +853,44 @@ bool MagicPortalsLayer::pickGeneratedPicture(Control control, ModernArt& out) {
     std::filesystem::create_directories(m_paths.prisms, ec);
     // entry->file is a bare file name (Controls::LoadRules refused any other), so this stays inside prisms.
     const std::filesystem::path target = m_paths.prisms / entry->file;
-    if (WriteWhole(target, bytes) == Wrote::Failed) {
+    bool wrote = false;
+    if (!WriteWhole(target, bytes, wrote)) {
         warnModernArt("a modern control's picture could not be written: " + target.string() + " - it is a flat quad");
         return false;
     }
+    if (wrote) ++m_modernArtFilesWritten;
     out.image = target.string();
     out.source = Controls::ArtTier::Generated;
     out.bodyInset = entry->bodyInset;
     return true;
+}
+
+void MagicPortalsLayer::resolveOptionsEntry() {
+    // THE GEAR on the main menu's entry (planning step 185): a glyph the game draws itself (sim/PadArt) and writes, as the generated tier's five,
+    // into the directory the layer is given for what it generates - never into a tracked path, and never next to the saves. It is written
+    // only in a run in which the feature exists (this is called once the table and the Options block have read), so a classic run in which the
+    // feature does not exist makes no file. With nowhere to write it, the entry is a flat quad.
+    m_optionsEntryImage.clear();
+    if (!m_optionsReady || m_paths.prisms.empty()) return;
+    const int px = static_cast<int>(std::lround(m_controlsRules.boxPx));
+    const PadArt::Bitmap bitmap = PadArt::Draw(PadArt::Glyph::Gear, px, m_optionsRules.entryBodyInset);
+    std::string bytes;
+    if (bitmap.Empty() || !EncodePng(bitmap, bytes)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "the Options entry's gear could not be drawn at " << px << " px: it is a flat quad" << std::endl;
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(m_paths.prisms, ec);
+    // entry.sprite is a bare file name (Options::LoadRules refused any other), so this stays inside prisms.
+    const std::filesystem::path target = m_paths.prisms / m_optionsRules.entry.sprite;
+    bool wrote = false;
+    if (!WriteWhole(target, bytes, wrote)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "the Options entry's gear could not be written: " << target.string() << " - it is a flat quad"
+                                             << std::endl;
+        return;
+    }
+    if (wrote) ++m_modernArtFilesWritten;
+    m_optionsEntryImage = target.string();
 }
 
 void MagicPortalsLayer::OnDetach(entt::registry& registry) {
@@ -3211,9 +3336,12 @@ void MagicPortalsLayer::layOutMenu() {
         return glm::dvec2(height * aspect, height);
     };
 
-    // The loading screen has no button; credits and the dashboard say what a touch
-    // is on themselves (sim/Credits.hpp, sim/Dashboard.hpp).
-    if (m_screen == Screen::Loading || m_screen == Screen::Credits || m_screen == Screen::Achievements) return;
+    // The loading screen has no button; credits, the dashboard and Options say what a touch
+    // is on themselves (sim/Credits.hpp, sim/Dashboard.hpp, sim/Options.hpp).
+    if (m_screen == Screen::Loading || m_screen == Screen::Credits || m_screen == Screen::Achievements ||
+        m_screen == Screen::Options) {
+        return;
+    }
     if (m_screen == Screen::Main) {
         // DRAWN THROUGH THE OVERLAY by EmitMenu from sim/MainMenu, which also says
         // what a touch is on. This is TAP START as it sits once its entrance is
@@ -3324,7 +3452,7 @@ void MagicPortalsLayer::buildMenu(entt::registry& registry) {
     // menu, credits and the dashboard, which EmitMenu draws, backgrounds and all,
     // in display values.
     if (m_screen == Screen::Finished || m_screen == Screen::Dead || m_screen == Screen::Main ||
-        m_screen == Screen::Credits || m_screen == Screen::Achievements) {
+        m_screen == Screen::Credits || m_screen == Screen::Achievements || m_screen == Screen::Options) {
         return;
     }
     if (m_screen == Screen::Loading) {
@@ -3439,6 +3567,8 @@ void MagicPortalsLayer::openDead(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
+    // Options exists only in a run in which the feature does (OptionsAvailable): anywhere else it is not a screen there is.
+    if (screen == Screen::Options && !OptionsAvailable()) return;
     // A level and a menu are never both in the registry.
     unloadLevel(registry);
     m_loaded = false;
@@ -3474,6 +3604,12 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         // CreditsScreenLayer's constructor: the strip's top on the bottom edge.
         m_credits = Credits::Start(MenuBoxPx());
         m_creditsTouch = CreditsTouch{};
+    }
+    if (changed && screen == Screen::Options) {
+        // The screen's words are the original's font: loaded once for the run, as the dashboard's are.
+        m_optionsTouch = Options::Touch{};
+        loadUiFont(m_optionsRules.title.font);
+        loadUiFont(m_optionsRules.wordFont);
     }
     if (changed && screen == Screen::Achievements) {
         // ScoreDashboard::preLoop: a fresh list at the top, and what the save has
@@ -3662,6 +3798,10 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, const ScriptClock::St
     }
     if (m_screen == Screen::Credits) {
         creditsInput(registry, step);
+        return;
+    }
+    if (m_screen == Screen::Options) {
+        optionsInput(registry);
         return;
     }
     if (m_screen == Screen::Achievements) {
@@ -3871,17 +4011,37 @@ void MagicPortalsLayer::mainMenuInput(entt::registry& registry) {
     const Touch touch = touchThisTick(registry);
     const glm::dvec2 view = MenuBoxPx();
     const Pause::Switches switches = MainMenuSwitches();
+    // THE OPTIONS ENTRY (planning step 185), where the feature exists in the run: claimed BEFORE the main menu's own buttons, so a press on
+    // it is not also a press on the title or the sound switch, and acted on the way every main-menu button is - a release inside it after
+    // a press inside it. Where the feature does not exist nothing below differs from the original's menu.
+    const bool entryOn = OptionsAvailable();
+    Hud::Rect entry;
+    if (entryOn) {
+        entry = Options::EntryAt(m_optionsRules, m_mainMenuRules.layer, m_mainMenuRules.state, view, m_menuClock.ms, false).rect;
+    }
     if (touch.pressed) {
         MenuState::TouchDown(m_menuTouch.touch, touch.atView);
-        m_menuTouch.mainDown =
-            MainMenu::ButtonsAt(m_mainMenuRules, switches, view, m_menuClock.ms, touch.atView);
+        m_menuTouch.optionsDown = entryOn && entry.Contains(touch.atView);
+        m_menuTouch.mainDown = m_menuTouch.optionsDown
+                                   ? 0u
+                                   : MainMenu::ButtonsAt(m_mainMenuRules, switches, view, m_menuClock.ms, touch.atView);
     }
+    const bool insideEntry = entryOn && touch.over && entry.Contains(touch.atView);
+    m_menuTouch.optionsHeld = m_menuTouch.optionsDown && touch.held && !touch.released && insideEntry;
     const unsigned inside =
         touch.over ? MainMenu::ButtonsAt(m_mainMenuRules, switches, view, m_menuClock.ms, touch.atView) : 0u;
     m_menuTouch.mainHeld = touch.held && !touch.released ? (m_menuTouch.mainDown & inside) : 0u;
     if (!touch.released) return;
+    const bool entryPressed = m_menuTouch.optionsDown && insideEntry;
     const unsigned pressed = m_menuTouch.mainDown & inside;
     m_menuTouch = MenuTouch{};
+    if (entryPressed) {
+        // The same noise the credits' entry makes (getItemSelectButtonSoundName, sounds.json), and the screen on the next tick.
+        latch("level_button");
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = Screen::Options;
+        return;
+    }
     const std::optional<MainMenu::Button> first = MainMenu::FirstActed(pressed);
     if (!first) return;
     if (*first == MainMenu::Button::Sound || *first == MainMenu::Button::Music) {
@@ -4016,6 +4176,36 @@ void MagicPortalsLayer::creditsInput(entt::registry& registry, const ScriptClock
     m_pendingMenu.screen = Screen::Main;
 }
 
+void MagicPortalsLayer::optionsInput(entt::registry& registry) {
+    using Supersonic::Input;
+    // The credits' back key and back button (BackButtonLayer): the main menu, on the next tick.
+    if (Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) {
+        m_optionsTouch = Options::Touch{};
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = Screen::Main;
+        return;
+    }
+    const Touch touch = touchThisTick(registry);
+    const glm::dvec2 view = MenuBoxPx();
+    const Options::Widget on =
+        touch.over ? Options::WidgetAt(m_optionsRules, m_creditsRules, view, m_menuClock.ms, touch.atView) : Options::Widget::None;
+    // Button::update's rule, as the menus follow it (Options::Follow): the touch that went down on a widget works it only while it is inside
+    // it, and it acts on the release inside the widget it went down on. A press that begins elsewhere and slides onto a tile does nothing.
+    const bool touching = touch.pressed || (touch.held && !touch.released);
+    const Options::Press press = Options::Follow(m_optionsTouch, touch.pressed, touch.released, touching, on);
+    if (!press.happened) return;
+    // getButtonSoundName: the credits' back button's own noise, for the tiles too.
+    latch("menu_button");
+    if (press.widget == Options::Widget::Back) {
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = Screen::Main;
+        return;
+    }
+    // A tile: the run plays that style from the next level load, and the choice is kept. Pressing the lit one is a choice too, and is kept -
+    // a player who chose Classic keeps it when the shipped default changes.
+    if (const std::optional<Controls::Style> style = Options::StyleOf(press.widget)) chooseControlsStyle(*style);
+}
+
 void MagicPortalsLayer::dashboardInput(entt::registry& registry) {
     using Supersonic::Input;
     // DashboardLayer::update: the back key goes where the back button goes.
@@ -4093,6 +4283,7 @@ bool MagicPortalsLayer::menuStateUp() const {
     case Screen::Levels:
     case Screen::Credits:
     case Screen::Achievements:
+    case Screen::Options:
         return true;
     case Screen::None:
     case Screen::Finished:
@@ -4237,6 +4428,22 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             const float grey = static_cast<float>(piece.rgbByte) / 255.0f;
             add(piece.rect, image, glm::vec4(grey, grey, grey, static_cast<float>(piece.alphaByte) / 255.0f));
         }
+        // THE OPTIONS ENTRY (planning step 185), where the feature exists: the layer's last button, at its entrance. The gear the game drew
+        // and wrote, or - with nowhere to write it - a flat quad on the button's box.
+        if (OptionsAvailable()) {
+            const Options::Entry entry = Options::EntryAt(m_optionsRules, m_mainMenuRules.layer, m_mainMenuRules.state, view,
+                                                          m_menuClock.ms, m_menuTouch.optionsHeld);
+            const float grey = static_cast<float>(entry.rgbByte) / 255.0f;
+            const float alpha = static_cast<float>(entry.alphaByte) / 255.0f;
+            if (!m_optionsEntryImage.empty()) {
+                add(entry.picture, m_optionsEntryImage, glm::vec4(grey, grey, grey, alpha));
+            } else {
+                const PadArt::Rgb rim = PadArt::kPlateRim;
+                add(entry.rect, std::string(),
+                    glm::vec4(static_cast<float>(rim.r) / 255.0f * grey, static_cast<float>(rim.g) / 255.0f * grey,
+                              static_cast<float>(rim.b) / 255.0f * grey, alpha));
+            }
+        }
         // The state's black, drawn after the layer manager: over all of it.
         add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
         return;
@@ -4250,6 +4457,45 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             if (image.empty()) continue;
             const float grey = static_cast<float>(piece.rgbByte) / 255.0f;
             add(piece.rect, image, glm::vec4(grey, grey, grey, static_cast<float>(piece.alphaByte) / 255.0f));
+        }
+        add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
+        return;
+    }
+    if (m_screen == Screen::Options) {
+        // The credits' background and back button, the title, then each tile with its thumbnail and its word (sim/Options.hpp), and the
+        // state's black over all of it.
+        if (OptionsAvailable()) {
+            for (const Options::Piece& piece :
+                 Options::Pieces(m_optionsRules, m_creditsRules, m_controlsRules, m_hudRules, m_controlsApplied, view, m_menuClock.ms,
+                                 m_controlsStyle, m_optionsTouch.held)) {
+                const glm::vec4 colour(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
+                                       static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
+                switch (piece.element) {
+                case Options::Element::Background:
+                case Options::Element::Back: {
+                    const std::string& image = menuPicture(piece.file);
+                    if (!image.empty()) add(piece.rect, image, colour);
+                    break;
+                }
+                case Options::Element::Title:
+                case Options::Element::Word: {
+                    const Supersonic::BitmapFont* font = uiFont(piece.font);
+                    if (font == nullptr) break;
+                    const auto& pages = font->Pages();
+                    for (const Hud::Glyph& glyph : Hud::LayOutText(*font, piece.words, piece.rect.min, piece.unitsPerFontPx)) {
+                        if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+                        add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset,
+                            glyph.uvOffset + glyph.uvScale);
+                    }
+                    break;
+                }
+                case Options::Element::TileFrame:
+                case Options::Element::ThumbnailBase:
+                case Options::Element::ThumbnailControl:
+                    add(piece.rect, std::string(), colour);
+                    break;
+                }
+            }
         }
         add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
         return;

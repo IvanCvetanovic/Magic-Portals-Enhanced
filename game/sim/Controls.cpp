@@ -1,6 +1,7 @@
 #include "sim/Controls.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <filesystem>
@@ -135,6 +136,12 @@ bool Finite(double v) {
     return std::isfinite(v);
 }
 
+// ASCII lower case, for the file names Windows compares without regard to it.
+std::string LowerAscii(std::string text) {
+    for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
 // The largest margin, as a fraction of a picture or of a box on each side, that leaves anything of it: a half leaves nothing.
 constexpr double kMaxInset = 0.499;
 
@@ -259,6 +266,20 @@ bool ReadArt(const Json::Value& art, Rules& read, std::string& why) {
                 return false;
             }
             read.art[static_cast<std::size_t>(tier)][Index(id)] = read_entry;
+        }
+    }
+    // The generated tier WRITES its five files into one folder: two controls that named the same file would overwrite each other's picture
+    // there, each run drawing the later glyph on both, with nothing said. (Windows folds case, so "A.png" and "a.png" are one file.)
+    for (const Id later : kClaimOrder) {
+        for (const Id earlier : kClaimOrder) {
+            if (earlier == later) break;
+            const ArtEntry& a = *read.art[static_cast<std::size_t>(ArtTier::Generated)][Index(earlier)];
+            const ArtEntry& b = *read.art[static_cast<std::size_t>(ArtTier::Generated)][Index(later)];
+            if (LowerAscii(a.file) == LowerAscii(b.file)) {
+                why = std::string("art.generated.") + KeyOf(later) + ".file names the same file as art.generated." + KeyOf(earlier) +
+                      ".file (\"" + b.file + "\"): each control's generated picture is a file of its own";
+                return false;
+            }
         }
     }
     return true;
@@ -627,14 +648,36 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
 
 // ---- the pictures a modern run draws -----------------------------------------------------------------------
 
+namespace {
+
+// The names Windows keeps for devices: a file called any of them, with or without an extension ("CON", "con.png"), is the device and not
+// a file, in whatever folder it is asked for. Compared without regard to case, on the part before the first dot.
+bool IsDeviceName(const std::string& name) {
+    std::string stem = name.substr(0, name.find('.'));
+    while (!stem.empty() && stem.back() == ' ') stem.pop_back();
+    for (char& c : stem) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    for (const char* device : {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}) {
+        if (stem == device) return true;
+    }
+    return stem.size() == 4 && (stem.compare(0, 3, "COM") == 0 || stem.compare(0, 3, "LPT") == 0) && stem[3] >= '1' && stem[3] <= '9';
+}
+
+} // namespace
+
 bool IsBareFileName(const std::string& name) {
     if (name.empty() || name == "." || name == "..") return false;
     // Windows reads "name." and "name " as "name", so a name that ends in either is another file than it says.
     if (name.back() == '.' || name.back() == ' ') return false;
     for (const char c : name) {
         const unsigned char u = static_cast<unsigned char>(c);
-        if (u < 0x20 || c == '/' || c == '\\' || c == ':') return false;
+        // A control character (DEL among them) and every character Windows refuses in a name: a separator of either kind, a colon (a
+        // drive, or an NTFS stream) and the five that are wildcards or redirections.
+        if (u < 0x20 || u == 0x7F || c == '/' || c == '\\' || c == ':' || c == '<' || c == '>' || c == '"' || c == '|' || c == '?' ||
+            c == '*') {
+            return false;
+        }
     }
+    if (IsDeviceName(name)) return false;
     return name.find("..") == std::string::npos;
 }
 
@@ -700,6 +743,14 @@ std::string ArtLine(const ArtSources& sources) {
 bool ArtMixed(const ArtSources& sources) {
     for (const ArtSource& source : sources) {
         if (source != sources[0]) return true;
+    }
+    return false;
+}
+
+bool ArtHalfDressed(const ArtSources& sources) {
+    if (!ArtMixed(sources)) return false;
+    for (const ArtSource& source : sources) {
+        if (source == ArtSource(ArtTier::MagicRampage)) return true;
     }
     return false;
 }
@@ -911,6 +962,106 @@ bool Tuning::FromFlag(const FlagItems& items, const Rules& rules, Tuning& out, s
         if (items.move[Index(id)]) tuning.move[Index(id)] = *items.move[Index(id)];
     }
     out = tuning.Clamped(rules);
+    return true;
+}
+
+// ---- the saved choice -----------------------------------------------------------------------------------
+
+bool Store::Open(const std::string& directory, const Rules& rules, std::string& error) {
+    m_rules = rules;
+    m_mode.reset();
+    m_tuning = Tuning{};
+    m_path.clear();
+    m_fromFile = false;
+    m_written.clear();
+    error.clear();
+
+    if (directory.empty()) return true;
+    m_path = (std::filesystem::path(directory) / kStoreFileName).string();
+
+    std::error_code ec;
+    if (!std::filesystem::exists(m_path, ec) || ec) return true; // never chosen: the shipped default
+
+    std::ifstream file(m_path, std::ios::binary);
+    if (!file) {
+        error = m_path + ": cannot open";
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string text = buffer.str();
+    Json::Parser parser(text);
+    Json::Value root;
+    if (!parser.Parse(root)) {
+        error = m_path + ": " + parser.Error();
+        return false;
+    }
+    if (!root.IsObject()) {
+        error = m_path + ": the document is not an object";
+        return false;
+    }
+    // Field by field, as the original's loadValue gives its default for a value the file lacks.
+    const Json::Value& controls = root[TuningKey::kControls];
+    if (controls.IsObject()) {
+        if (controls[TuningKey::kMode].IsString()) m_mode = StyleOfName(controls[TuningKey::kMode].AsString());
+        m_tuning = Tuning::ReadFrom(controls, m_rules);
+    }
+    m_fromFile = true;
+    return true;
+}
+
+std::string Store::Text() const {
+    std::string text = std::string("{\"") + TuningKey::kVersion + "\":1,\"" + TuningKey::kControls + "\":{";
+    if (m_mode) text += std::string("\"") + TuningKey::kMode + "\":\"" + NameOf(*m_mode) + "\",";
+    text += std::string("\"") + TuningKey::kLayout + "\":" + std::to_string(kLayoutVersion);
+    const std::string members = m_tuning.ToJsonMembers(m_rules);
+    if (!members.empty()) text += "," + members;
+    return text + "}}";
+}
+
+bool Store::Save(std::string& error) {
+    error.clear();
+    if (m_path.empty()) return true;
+    const std::string text = Text();
+    if (text == m_written) return true;
+
+    const std::filesystem::path path(m_path);
+    std::error_code ec;
+    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
+
+    const std::filesystem::path temp = path.string() + ".tmp";
+    {
+        std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+        if (!file) {
+            error = temp.string() + ": cannot open for writing";
+            return false;
+        }
+        file << text;
+        file.flush();
+        if (!file.good()) {
+            file.close();
+            std::filesystem::remove(temp, ec);
+            error = temp.string() + ": write failed";
+            return false;
+        }
+    }
+
+    ec.clear();
+    std::filesystem::rename(temp, path, ec);
+    if (ec) {
+        // Some filesystems refuse a rename onto an existing file.
+        ec.clear();
+        std::filesystem::remove(path, ec);
+        ec.clear();
+        std::filesystem::rename(temp, path, ec);
+    }
+    if (ec) {
+        error = m_path + ": " + ec.message();
+        std::error_code ignored;
+        std::filesystem::remove(temp, ignored);
+        return false;
+    }
+    m_written = text;
     return true;
 }
 

@@ -48,6 +48,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/MenuState.hpp"
 #include "sim/Motion.hpp"
 #include "sim/Notificator.hpp"
+#include "sim/Options.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Pause.hpp"
 #include "sim/Pictures.hpp"
@@ -237,7 +238,7 @@ public:
     // (Enhanced's ui2 spec, D7) - and both are drawn through the screen
     // overlay on the view, as the pause is (sim/LevelEnd.hpp). Everything that
     // treats a screen as "the level is gone" has to name both.
-    enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Finished, Dead };
+    enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Options, Finished, Dead };
 
     // A button the menu drew, in the menu's pixel box (MenuBoxPx). Kept as
     // data so a click is tested against exactly what was drawn, and so a test
@@ -1286,6 +1287,33 @@ public:
     // Every WARN the resolution said, in order: a Magic Rampage file that exists and cannot be used, a picture that could not be written,
     // a mixed look. A test reads them here because it cannot read the log.
     const std::vector<std::string>& ModernArtWarnings() const { return m_modernArtWarnings; }
+    // The INFO the resolution said instead of a WARN when the look is mixed and holds no Magic Rampage picture (the arrows drawn beside the
+    // original's own corner sprites: the ordinary machine without the owner's folder), or empty: a test cannot read the log.
+    const std::string& ModernArtNotice() const { return m_modernArtNotice; }
+    // Whether the pictures have been resolved this run: at attach in a run that starts modern, else at the first switch to modern in
+    // Options (planning step 185). A run that is available but starts classic has resolved none, and has written none.
+    bool ModernArtResolved() const { return m_modernArtResolved; }
+    // How many picture files this run made (the generated glyphs and the Options gear): a second window on the same scratch directory, or a
+    // second attach, finds them already there and makes none.
+    int ModernArtFilesWritten() const { return m_modernArtFilesWritten; }
+
+    // ---- the setting and the Options screen (planning step 185, CTL-9) ---------------------------------------
+    //
+    // A run in which the feature EXISTS (Paths::controls.available, and controls.json with its `options` block read) shows a button in the
+    // main menu's top-right corner that opens Options, where the player chooses Modern or Classic; the choice is kept in controls.json in
+    // Paths::saveDir (Controls::Store), takes effect at the next level load, and is read at the next start. A run in which it does not exist
+    // (a bare layer, a developer's run, --controls classic) has no entry, no store and no screen: its main menu is the original's, byte for byte.
+    //
+    // THE ONE PREDICATE: the entry is drawn, claimed and the screen reachable only when this is true.
+    bool OptionsAvailable() const { return m_paths.controls.available && m_modernReady && m_optionsReady && m_hudReady; }
+    const Options::Rules& OptionsRules() const { return m_optionsRules; }
+    // The gear on the entry: the glyph file the game wrote, or empty (a flat quad is drawn).
+    const std::string& OptionsEntryImage() const { return m_optionsEntryImage; }
+    // The saved choice as the layer holds it: memory-only under a forced style (`--controls modern`) and in a run with nowhere to save.
+    const Controls::Store& ControlsStore() const { return m_controlsStore; }
+    // The widget the held touch went down on and is still inside (the press tint), on the main menu (the entry) and on Options.
+    bool OptionsEntryHeld() const { return m_menuTouch.optionsHeld; }
+    Options::Widget OptionsHeld() const { return m_optionsTouch.held; }
 
     // The no-portal sign's rectangle on the view as the last tick left it, in
     // design units; false in a level that places none.
@@ -1764,6 +1792,9 @@ private:
     void menuPopupTick(entt::registry& registry, const ScriptClock::Step& step);
     // The credits' touch and the strip's tick (CreditsScreenLayer::update).
     void creditsInput(entt::registry& registry, const ScriptClock::Step& step);
+    // The Options screen's touch: a tile acts on a release inside it after a press inside it, the back button and the back key go to the
+    // main menu on the next tick (planning step 185).
+    void optionsInput(entt::registry& registry);
     // The dashboard's touch, wheel and tick (ScoreDashboard::loop, DashboardLayer).
     void dashboardInput(entt::registry& registry);
     // openState(world, level), from the dashboard's start button.
@@ -3012,6 +3043,9 @@ private:
         unsigned mainHeld{0u};
         std::optional<MenuButton> downOn;
         bool heldInside{false};
+        // The main menu's Options entry (planning step 185): the touch went down on it, and is still inside it (the press tint).
+        bool optionsDown{false};
+        bool optionsHeld{false};
     };
     MenuTouch m_menuTouch;
     // What a release - or the loading screen's hold, or the back key - asked for,
@@ -3044,6 +3078,8 @@ private:
         bool backHeld{false};
     };
     CreditsTouch m_creditsTouch;
+    // Options (planning step 185): the one touch the screen follows, as the credits follow theirs (Options::Follow).
+    Options::Touch m_optionsTouch;
     // The dashboard: its rules, the rows it opened with, and its scroll and buttons.
     Dashboard::Rules m_dashboardRules;
     Dashboard::Board m_dashboardBoard;
@@ -3299,6 +3335,18 @@ private:
     // read OUTSIDE the chain of loaders above: a table that will not read costs the modern controls and
     // never a classic run, the parity rig or a suite.
     void resolveControls();
+    // The player's choice (planning step 185). Open in resolveControls beside the switches in OnAttach; in memory only where the policy forbids
+    // saving (a forced style) or the run has nowhere to save.
+    Controls::Store m_controlsStore;
+    // controls.json's `options` block (sim/Options), read after and outside the chain like the rest of the file; the gear on the entry.
+    Options::Rules m_optionsRules;
+    bool m_optionsReady{false};
+    std::string m_optionsEntryImage;
+    void resolveOptionsEntry();
+    // The style a tile chose: the run plays it from the next level load on, the pictures of the modern tiers are resolved if this is the
+    // first time the run is modern, and the choice is kept (saveControls). Never touches a level: none is loaded while Options is up.
+    void chooseControlsStyle(Controls::Style style);
+    void saveControls();
     Controls::Rules m_controlsRules;
     Controls::Tuning m_controlsTuning;
     // The part of the tuning the layout applies until CTL-10: the look, nothing else (see ControlsApplied).
@@ -3329,6 +3377,10 @@ private:
     std::array<ModernArt, 5> m_modernArt;
     std::string m_modernArtLine;
     std::vector<std::string> m_modernArtWarnings;
+    std::string m_modernArtNotice;
+    bool m_modernArtResolved{false};
+    // How many picture files this run MADE (a file already holding its bytes is not made): the generated tier's, and the Options gear.
+    int m_modernArtFilesWritten{0};
     // The four tiers, in order (design 4.2): resolveModernImages tries each for each control, and says what it found once.
     void resolveModernImages();
     bool pickMagicRampagePicture(Control control, const Controls::ArtManifest& manifest, ModernArt& out);

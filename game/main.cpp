@@ -152,6 +152,7 @@ int main(int argc, char** argv) {
     // instead of the one the build was told. An empty folder is the way to see the next tiers (the original's own corner
     // sprites, then the drawn glyphs).
     std::string padArtDir = MAGICPORTALS_PADART_DIR;
+    bool padArtGiven = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--light-masks-off") {
@@ -170,6 +171,13 @@ int main(int argc, char** argv) {
                 std::cerr << "--padart needs an absolute directory, got '" << value << "'\n";
                 return EXIT_FAILURE;
             }
+            // Twice is a mistake, not an override, as it is for --controls: a capture that meant one folder and ran the other
+            // would say nothing about either.
+            if (padArtGiven) {
+                std::cerr << "--padart is given twice; it takes one absolute directory\n";
+                return EXIT_FAILURE;
+            }
+            padArtGiven = true;
             padArtDir = value;
             continue;
         }
@@ -470,16 +478,23 @@ int main(int argc, char** argv) {
                   << "                    own where --padart's folder holds them, then the original's own\n"
                   << "                    corner sprites, then ones the game draws); of its keys only\n"
                   << "                    preset= is applied so far: size, opacity and the moves are read,\n"
-                  << "                    checked and held. A developer's run (--fixed-step, --route,\n"
-                  << "                    --visit-levels) is classic unless the flag says otherwise. Writes\n"
-                  << "                    nothing\n"
+                  << "                    checked and held. A player's run (none of the developer's flags\n"
+                  << "                    below) has an Options button in the main menu's top-right corner,\n"
+                  << "                    where the choice is made; it is kept in controls.json beside the\n"
+                  << "                    other saves and read at the next start (shipped default: classic).\n"
+                  << "                    With this flag the run STARTS in that style, ignores the saved\n"
+                  << "                    choice and writes nothing: Options then chooses for the run only.\n"
+                  << "                    `classic` is the original's controls with no Options button. A\n"
+                  << "                    developer's run (--fixed-step, --route, --visit-levels) is classic\n"
+                  << "                    and has no Options button, unless the flag says otherwise\n"
                   << "  --padart <dir>    the folder of Magic Rampage's five control pictures a modern run\n"
                   << "                    tries first, an absolute path (default " << padArtDir << ")\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
                   << "  --data <dir>      Enhanced's data directory (default " << paths.data << ")\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json), the sound and music\n"
-                  << "                    switches (audio.json) and the unlocked achievements\n"
-                  << "                    (achievements.json) here instead of the user's data\n"
+                  << "                    switches (audio.json), the unlocked achievements\n"
+                  << "                    (achievements.json) and the controls chosen in Options\n"
+                  << "                    (controls.json) here instead of the user's data\n"
                   << "                    directory - for a capture that needs a medal recorded, that\n"
                   << "                    presses a switch or that unlocks an achievement, without\n"
                   << "                    changing the player's own save. A named --level's start unlocks\n"

@@ -161,19 +161,24 @@ bundles the folder is the owner's call and no packaging script knows about it.
 * **Where.** `Paths::controls.artDir`, set by `game/main.cpp` from the compile definition `MAGICPORTALS_PADART_DIR` (cache variable
   `SUPERSONIC_MAGICPORTALS_PADART`, default `reference/magic-rampage/controls` of this repository, absolute; a definition of `main.cpp` alone, so the suites are
   not rebuilt for it) or from `--padart <absolute dir>`. A `--controls modern` run reads it; a classic run, a bare layer and every suite do not.
-* **The tiers**, tried in this order for each of the five controls, once at attach and never again (a level's load does not touch them):
+* **The tiers**, tried in this order for each of the five controls, once per run (a level's load does not touch them): at attach for a run that starts modern, else
+  at the first switch to modern in Options (planning step 185; a run that starts classic has resolved none until then):
   1. Magic Rampage's file in that folder (`walk_left.png`, `walk_right.png`, `restart.png`, `pause.png`, `clear_portals.png`: the names `controls.json`'s `art.mr`
-     gives), if it is there, can be read, and measures what `manifest.json` records for it (`outputs.<file>.size`), else `layout.box_px` square (128 x 128). One that
-     is there and cannot be read, or measures otherwise (a 406 x 406 canvas dropped in by hand would be drawn mis-scaled and say nothing), is skipped with a WARN that
-     gives both sizes. A file that is not there says nothing. A manifest that cannot be read is one WARN and holds every picture to 128 x 128.
+     gives), if it is there, can be read **and decoded**, and measures what `manifest.json` records for it (`outputs.<file>.size`), else `layout.box_px` square (128 x 128).
+     One that is there and cannot be read, or measures otherwise (a 406 x 406 canvas dropped in by hand would be drawn mis-scaled and say nothing), is skipped with a
+     WARN that gives both sizes. One whose header reads and whose data does not (cut short, say) is decoded once at attach with the same stb the engine loads pictures
+     with, and skipped with a WARN too (planning step 185): it would otherwise win its tier and be drawn as a flat dark square. A file that is not there says nothing. A
+     manifest that cannot be read is one WARN and holds every picture to 128 x 128.
   2. For restart, pause and clear-portals only: the original's own sprite (`art.original`: `restart_level_button.png`, `main_menu_shortcut.png`,
-     `clear_portals_button.png`), found as the classic buttons find it (the hd twin first). It is opaque to its edges, so it is drawn into the box's face
-     (22 percent smaller than the box), not into the box.
+     `clear_portals_button.png`), found as the classic buttons find it (the hd twin first), and decoded as above. It is opaque to its edges, so it is drawn into the box's
+     face (22 percent smaller than the box), not into the box.
   3. The glyph the game draws (`sim/PadArt`), written as a PNG into `Paths::prisms` (a temporary directory) - only for a control that reaches this tier, only when the
      file there is not already exactly those bytes, and through a name of its own renamed over the target, so a second window never loads a half-written file.
   4. A flat quad on the box's face.
 * **The log.** `modern controls art: walk_left=mr walk_right=mr restart=mr pause=mr clear_portals=mr` once per run (`generated`, `original` and `flat` as the case
-  may be), and a WARN when the five do not all come from one tier (Magic Rampage's grey faces beside the original's white corner buttons, say).
+  may be). When the five do not all come from one tier the look is mixed (Magic Rampage's grey faces beside the original's white corner buttons, say), and the log says
+  so: **a WARN where a Magic Rampage picture is part of the mix** (a folder that is half there, or has a file that had to be refused), **an INFO otherwise** - the arrows
+  drawn beside the original's own corner sprites, which is every machine without the owner's folder (planning step 185; step 184 made it a WARN for both).
 * **File names in the data are bare.** `controls.json` names each picture's file; `LoadRules` refuses a name that is not one file in the folder of its tier (a
   separator, `..`, a drive), because the generated tier writes there. A refusal makes modern unavailable with one error line, as any other typo in the file does.
 

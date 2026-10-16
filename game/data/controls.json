@@ -290,6 +290,98 @@
     "character_row_units": 206
   },
 
+  "options": {
+    "_about": [
+      "THE OPTIONS SCREEN and the main menu's entry to it (planning step 185; design 2.3), read by sim/Options.LoadRules, STRICTLY and apart",
+      "from the rest of this file: sim/Controls.LoadRules does not read this block, and a typo in it makes the modern controls unavailable",
+      "with one error line (design D9), never a classic run. An ENHANCEMENT: the original has no options screen, so the screen is the",
+      "credits' own background and back button (ui.json credits, read by sim/Credits) and flat quads and words in the original's font.",
+      "Places are fractions of the screen as ui.json's main_menu is; sizes are units (2.8125 px a unit at 1280x720); a colour is r, g, b, a",
+      "bytes. Every number here is the port's own decision, so each object says so: the owner's eyes, not a measurement, settle the look."
+    ],
+
+    "entry": {
+      "_source": [
+        "at_screen [1, 0], origin [1, 0]: PORT. The slot the original's omitted Facebook button had on the main menu (ui.json main_menu note,",
+        "OWNER RULING ui3 spec 9: it is omitted), flush in the top-right corner; checked that no main-menu button occupies it. size_units",
+        "[32, 32]: PORT, the credits button's size (90 px at 720p).",
+        "file: the NAME of the glyph the game draws itself (sim/PadArt, the gear) and writes into its scratch directory, only in a run that can play",
+        "modern; a bare file name that is none of art.generated's five.",
+        "body_inset 0.109375: PORT, the generated glyphs' margin (art.generated), so the gear's plate fills the button's box."
+      ],
+      "_guess": true,
+      "file": "options_gear.png",
+      "at_screen": [1, 0],
+      "origin": [1, 0],
+      "size_units": [32, 32],
+      "body_inset": 0.109375
+    },
+
+    "title": {
+      "_source": [
+        "words Controls: PORT, the screen's heading, in the original's own font (Matura84_shadow, as the level plaque and the dashboard use it).",
+        "units_per_font_px 0.5: PORT, the plaque's half a unit a font px (ui.json); the word is 123 units wide, which clears the back button",
+        "(its rectangle ends at x 76.8 at 5:4) at every supported aspect.",
+        "at_screen [0.5, 0.14]: PORT, centred, high. alpha_byte 255: PORT."
+      ],
+      "_guess": true,
+      "words": "Controls",
+      "font": "Matura84_shadow.fnt",
+      "units_per_font_px": 0.5,
+      "at_screen": [0.5, 0.14],
+      "alpha_byte": 255
+    },
+
+    "tile": {
+      "_source": [
+        "size_units [160, 48]: PORT, two tiles stacked in the middle that no other widget meets at any supported aspect: at 5:4 a tile starts",
+        "at x 80 and the back button ends at 76.8 (design 2.3, held by a test).",
+        "modern.at_screen [0.5, 0.38] and classic.at_screen [0.5, 0.62]: PORT, one above the other with the title over both.",
+        "word_at_units [116, 24]: PORT, the word's centre from the tile's top-left, in the 88 units right of the thumbnail.",
+        "units_per_font_px 0.3: PORT, so that the longest word (Modern, 236 font px) is 71 units wide and clears the thumbnail and the edge.",
+        "idle_frame_rgba and chosen_frame_rgba, the word alphas: PORT, a dark plate and a lit one; the chosen tile is the one lit."
+      ],
+      "_guess": true,
+      "size_units": [160, 48],
+      "font": "Matura84_shadow.fnt",
+      "units_per_font_px": 0.3,
+      "word_at_units": [116, 24],
+      "idle_frame_rgba": [34, 30, 52, 190],
+      "chosen_frame_rgba": [96, 78, 156, 240],
+      "idle_word_alpha_byte": 170,
+      "chosen_word_alpha_byte": 255,
+
+      "modern": {
+        "_source": [ "at_screen [0.5, 0.38]: PORT. word Modern: PORT." ],
+        "_guess": true,
+        "at_screen": [0.5, 0.38],
+        "word": "Modern"
+      },
+      "classic": {
+        "_source": [ "at_screen [0.5, 0.62]: PORT. word Classic: PORT." ],
+        "_guess": true,
+        "at_screen": [0.5, 0.62],
+        "word": "Classic"
+      },
+
+      "thumbnail": {
+        "_source": [
+          "size_units [64, 36]: PORT, a 16:9 picture of the layout. at_units [8, 6]: PORT, from the tile's top-left (8 in, centred in the 48 tall tile).",
+          "reference_height_units 256: DECODED, view.json height_px, the view the layout is laid out on; the layout is the pure LayOut of that",
+          "style on a 16:9 view of that height, scaled into the thumbnail (its shape and 256 give the width, 455.11).",
+          "background_rgba, walk_rgba, corner_rgba: PORT, flat colours (a thumbnail is flat quads, not pictures)."
+        ],
+        "_guess": true,
+        "size_units": [64, 36],
+        "at_units": [8, 6],
+        "reference_height_units": 256,
+        "background_rgba": [16, 14, 26, 255],
+        "walk_rgba": [205, 212, 232, 255],
+        "corner_rgba": [244, 247, 255, 255]
+      }
+    }
+  },
+
   "default_mode": "classic",
   "_default_mode": "PORT, design 2.1: the style a player's run plays when nothing is saved. classic until CTL-13 flips it to modern (the owner's, Q4)."
 }

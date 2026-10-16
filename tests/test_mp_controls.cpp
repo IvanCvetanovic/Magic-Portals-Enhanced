@@ -24,9 +24,11 @@
 #include "sim/Hint.hpp"
 #include "sim/Hud.hpp"
 #include "sim/LevelEnd.hpp"
+#include "sim/Switches.hpp"
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
@@ -2053,7 +2055,10 @@ void WhatIsRefused() {
     std::vector<Path> paths;
     Path prefix;
     Collect(root, prefix, paths);
-    CHECK_MSG(paths.size() > 100, "the file has " + std::to_string(paths.size()) + " keys");
+    // The `options` block is the Options screen's, read by Options::LoadRules and refused key by key in test_mp_options; this table is
+    // Controls::LoadRules', which leaves that block to it (a key it does not know is ignored), so it is not in this table.
+    paths.erase(std::remove_if(paths.begin(), paths.end(), [](const Path& path) { return path.front() == "options"; }), paths.end());
+    CHECK_MSG(paths.size() > 100, "the file has " + std::to_string(paths.size()) + " keys of the table");
 
     // The shipped file loads, and so does its own rewrite through the writer used below (so a refusal is the edit's, not the writer's).
     Controls::Rules rules;
@@ -2657,6 +2662,10 @@ void ABareFileNameIsOneFileInOneFolder() {
         {std::string("x\0y.png", 7), "a NUL"},
         {"x\ty.png", "a control character"},
         {"x\ny.png", "a line break"},
+        {std::string("x\x7f.png"), "DEL"},
+        {"x<y.png", "a character Windows refuses"},
+        {"CON", "a Windows device name"},
+        {"nul.txt", "a Windows device name with an extension"},
     };
     for (const Refused& row : refused) CHECK_MSG(!Controls::IsBareFileName(row.name), std::string("a name that is ") + row.why + " is refused");
     // The shipped names are bare in every tier (LoadRules would have refused the file), and the generated ones are the layer's write targets.
@@ -2838,6 +2847,369 @@ void TheSafeAreaInPixelsBecomesInsetsInUnitsByThePointersFactor() {
     CHECK_MSG(std::fabs(moved[reset].min.x - flat[reset].min.x) < 1e-9, "restart, at the right, stays where it was");
 }
 
+// ---- the names a picture may carry, hardened (planning step 185) -------------------------------------------------------------------------------
+
+// Windows' own device names and the characters it refuses in a name are not bare file names either: a file called CON is the console, and
+// the generated tier WRITES to the name it is given. The names below are the ones Windows documents as reserved (CON, PRN, AUX, NUL, COM1 to
+// COM9, LPT1 to LPT9, with or without an extension, in any case); nothing is asserted of names it leaves open (COM0, COM10).
+void TheNamesWindowsKeepAreNotBare() {
+    const std::vector<std::string> refused = {
+        std::string("x\x7f.png"), std::string("\x7f"),  "a<b.png", "a>b.png", "a\"b.png", "a|b.png", "a?b.png", "a*b.png", "*.png", "x.png?",
+        "CON", "con", "Con.png", "con.png", "PRN", "prn.txt", "AUX", "aux.dat", "NUL", "nul", "NUL.txt", "COM1", "com1.png", "COM9", "com9.x.y",
+        "LPT1", "lpt1.png", "LPT9", "Lpt9.PNG", "CONIN$", "conout$.txt",
+    };
+    for (const std::string& name : refused) CHECK_MSG(!Controls::IsBareFileName(name), "'" + name + "' is refused (a character Windows refuses, or one of its device names)");
+    // The look-alikes are plain names: a device name is the WHOLE stem, and the data's own are never among them.
+    const std::vector<std::string> bare = {"console.png", "communism.png", "com.png", "lpt.png", "nulls.png", "prn_x.png", "auxiliary.png",
+                                           "icon.png",    "context.png",   "co.png",  "modern_gear.png", "options_gear.png"};
+    for (const std::string& name : bare) CHECK_MSG(Controls::IsBareFileName(name), "'" + name + "' is a bare file name");
+}
+
+// The generated tier writes its five files into ONE folder: two controls that name one file would overwrite each other, and each run would
+// draw the later glyph on both with nothing said. Windows folds case, so "A.png" and "a.png" are one file.
+void TheFiveGeneratedNamesDiffer() {
+    namespace Json = Supersonic::Json;
+    const Controls::Rules rules = LoadModern();
+    std::vector<std::string> names;
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const auto& entry = rules.art[static_cast<std::size_t>(Controls::ArtTier::Generated)][static_cast<std::size_t>(id)];
+        CHECK(entry.has_value());
+        if (!entry) continue;
+        std::string lower = entry->file;
+        for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        names.push_back(lower);
+    }
+    CHECK_EQ(names.size(), 5u);
+    std::sort(names.begin(), names.end());
+    CHECK_MSG(std::adjacent_find(names.begin(), names.end()) == names.end(), "the shipped five generated files differ, with case folded");
+
+    const Json::Value root = ReadControls();
+    struct Row {
+        const char* second;
+        const char* name;
+    };
+    // Each later control given the file of an earlier one, spelt as it is and in another case: refused, naming both controls.
+    for (const Row& row : {Row{"walk_right", "modern_walk_left.png"}, Row{"pause", "modern_restart.png"}, Row{"clear_portals", "MODERN_WALK_LEFT.PNG"},
+                           Row{"restart", "Modern_Pause.png"}}) {
+        const Json::Value edited = Edit(root, Path{"art", "generated", row.second, "file"}, 0, Json::Value(std::string(row.name)));
+        Controls::Rules r;
+        std::string why;
+        const bool loaded = LoadScratch("same_name.json", Write(edited), r, why);
+        CHECK_MSG(!loaded && why.find(row.second) != std::string::npos && why.find("same file") != std::string::npos,
+                  std::string(row.second) + " given " + row.name + " is refused, naming it and the other: " + why);
+    }
+    // The other tiers may share a name between controls (they only READ): Magic Rampage's two arrows given one file load.
+    {
+        Controls::Rules r;
+        std::string why;
+        const Json::Value edited = Edit(root, Path{"art", "mr", "walk_right", "file"}, 0, Json::Value(std::string("walk_left.png")));
+        CHECK_MSG(LoadScratch("mr_same.json", Write(edited), r, why), "two controls reading one Magic Rampage file load (it is only read): " + why);
+    }
+}
+
+// A mix of pictures is a WARN only where a Magic Rampage picture is part of it (a folder that is half there); the ordinary mix of a machine
+// without the folder - the arrows drawn beside the original's corner sprites - is an INFO (the owner's question 2 of step 184, as recommended).
+void ArtHalfDressedNeedsAMagicRampagePictureInAMix() {
+    using Tier = Controls::ArtTier;
+    Controls::ArtSources all;
+    for (const Tier tier : {Tier::MagicRampage, Tier::Original, Tier::Generated}) {
+        all.fill(tier);
+        CHECK_MSG(!Controls::ArtHalfDressed(all), std::string("five of ") + Controls::NameOf(tier) + " is not a mix");
+    }
+    all.fill(Controls::ArtSource{});
+    CHECK(!Controls::ArtHalfDressed(all));
+
+    // The no-folder machine: the arrows drawn, the corners the original's: mixed, and no Magic Rampage in it.
+    Controls::ArtSources ordinary;
+    ordinary.fill(Tier::Original);
+    ordinary[static_cast<std::size_t>(Controls::Id::Left)] = Tier::Generated;
+    ordinary[static_cast<std::size_t>(Controls::Id::Right)] = Tier::Generated;
+    CHECK(Controls::ArtMixed(ordinary) && !Controls::ArtHalfDressed(ordinary));
+    // Or with nothing to write: the arrows flat beside the original's corners.
+    ordinary[static_cast<std::size_t>(Controls::Id::Left)] = Controls::ArtSource{};
+    CHECK(Controls::ArtMixed(ordinary) && !Controls::ArtHalfDressed(ordinary));
+
+    // A Magic Rampage picture IN a mix, whichever it is and whatever it is mixed with.
+    for (const Controls::Id odd : Controls::kClaimOrder) {
+        for (const Tier other : {Tier::Original, Tier::Generated}) {
+            Controls::ArtSources half;
+            half.fill(other);
+            half[static_cast<std::size_t>(odd)] = Tier::MagicRampage;
+            CHECK_MSG(Controls::ArtHalfDressed(half), std::string(Controls::KeyOf(odd)) + " from Magic Rampage among five of " + Controls::NameOf(other) + " is a half-dressed folder");
+        }
+        Controls::ArtSources missing;
+        missing.fill(Tier::MagicRampage);
+        missing[static_cast<std::size_t>(odd)] = Tier::Generated;
+        CHECK_MSG(Controls::ArtHalfDressed(missing), std::string(Controls::KeyOf(odd)) + " refused out of five Magic Rampage pictures is a half-dressed folder");
+    }
+}
+
+// ---- the saved choice (planning step 185) ----------------------------------------------------------------------------------------------------------
+
+// A fresh directory under the suite's scratch for each case, emptied first.
+std::filesystem::path StoreDir(const char* name) {
+    const std::filesystem::path dir = ScratchDir() / "store" / name;
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    return dir;
+}
+
+std::string StoreRead(const std::filesystem::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    return buffer.str();
+}
+
+void StoreWrite(const std::filesystem::path& file, const std::string& text) {
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    out << text;
+}
+
+// The directory's entries, by name, sorted: what a store left behind.
+std::vector<std::string> StoreEntries(const std::filesystem::path& dir) {
+    std::vector<std::string> names;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) names.push_back(entry.path().filename().string());
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+void ControlsStoreRoundTrips() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("round");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    CHECK_MSG(std::string(Controls::kStoreFileName) == "controls.json", "its own file, beside the other saves");
+
+    Controls::Store store;
+    std::string error;
+    CHECK_MSG(store.Open(dir.string(), rules, error) && error.empty(), "a directory with no file opens: " + error);
+    CHECK_MSG(!store.Mode() && !store.FromFile() && store.Persists(), "nothing chosen, nothing read, somewhere to write");
+    CHECK_MSG(store.Path() == file.string(), "the path is the directory's controls.json: " + store.Path());
+    CHECK_MSG(!std::filesystem::exists(file), "opening writes nothing");
+
+    // The first choice: Modern. The bytes the design names (2.4, G3): one line, the version, the mode and the layout, and no newline.
+    store.SetMode(Controls::Style::Modern);
+    CHECK_MSG(store.Save(error) && error.empty(), "a choice is saved: " + error);
+    const std::string modern = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}";
+    CHECK_MSG(StoreRead(file) == modern, "the file reads back byte for byte: " + StoreRead(file));
+    CHECK_MSG(store.Text() == modern, "and Text says what Save wrote");
+    CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "no temporary is left beside it");
+
+    Controls::Store again;
+    CHECK_MSG(again.Open(dir.string(), rules, error), "and it opens again: " + error);
+    CHECK_MSG(again.Mode() == std::optional<Controls::Style>(Controls::Style::Modern) && again.FromFile(), "Modern, read from the file");
+    CHECK_MSG(again.SavedTuning().IsDefault(rules), "with no tuning in it, the default tuning");
+
+    // Changed back, Classic is a choice too and is written: it is not the absence of one.
+    again.SetMode(Controls::Style::Classic);
+    CHECK_MSG(again.Save(error), "Classic is saved: " + error);
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1}}", "as classic: " + StoreRead(file));
+    Controls::Store third;
+    CHECK(third.Open(dir.string(), rules, error) && third.Mode() == std::optional<Controls::Style>(Controls::Style::Classic));
+
+    // A size, an opacity and a move already in the file are KEPT and written back unchanged beside the new mode (CTL-10 edits them, not this).
+    const std::string tuned = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
+    StoreWrite(file, tuned);
+    Controls::Store keep;
+    CHECK_MSG(keep.Open(dir.string(), rules, error) && keep.FromFile(), "a tuned file opens: " + error);
+    CHECK(keep.SavedTuning().sizeSteps && *keep.SavedTuning().sizeSteps == 12 && keep.SavedTuning().opacitySteps && *keep.SavedTuning().opacitySteps == 3);
+    CHECK(keep.SavedTuning().move[0].x == 2.0 && keep.SavedTuning().move[0].y == -3.5 && keep.SavedTuning().move[3].x == -10.0);
+    keep.SetMode(Controls::Style::Classic);
+    CHECK_MSG(keep.Save(error), "saved: " + error);
+    const std::string kept = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
+    CHECK_MSG(StoreRead(file) == kept, "only the mode changed: " + StoreRead(file));
+
+    // A gesture repeated is one write: the same bytes again are not written (Penumbra L9). The first press of a tile IS written even when that
+    // tile is already the mode in force, because nothing of this store's was ever on disk: Classic chosen on a fresh install is kept.
+    Controls::Store repeat;
+    const std::filesystem::path dir2 = StoreDir("repeat");
+    CHECK(repeat.Open(dir2.string(), rules, error));
+    repeat.SetMode(Controls::Style::Classic);
+    CHECK(repeat.Save(error) && std::filesystem::exists(dir2 / Controls::kStoreFileName));
+    std::filesystem::remove(dir2 / Controls::kStoreFileName);
+    CHECK_MSG(repeat.Save(error) && !std::filesystem::exists(dir2 / Controls::kStoreFileName), "the same bytes are not written twice");
+    repeat.SetMode(Controls::Style::Modern);
+    CHECK_MSG(repeat.Save(error) && std::filesystem::exists(dir2 / Controls::kStoreFileName), "a different choice is");
+}
+
+void TheFileHoldsDeltasOnly() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("deltas");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    // The defaults written out in full - the look's own size (0.7 at the default preset), the default opacity (1), no move - are not kept: a
+    // later change of the shipped default then reaches this player. A move that snaps to nothing is no move.
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":0.7,\"opacity\":1.0,\"move\":{\"walk_left\":[0,0],\"pause\":[0.04,-0.03]}}}");
+    Controls::Store store;
+    CHECK_MSG(store.Open(dir.string(), rules, error) && store.FromFile(), "opens: " + error);
+    CHECK_MSG(!store.SavedTuning().sizeSteps && !store.SavedTuning().opacitySteps, "a size and an opacity equal to the default are not kept");
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        CHECK_MSG(store.SavedTuning().move[static_cast<std::size_t>(id)] == glm::dvec2(0.0), std::string(Controls::KeyOf(id)) + ": a move that snaps to nothing is none");
+    }
+    store.SetMode(Controls::Style::Modern);
+    CHECK_MSG(store.Save(error), "saved: " + error);
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}", "the file is the bare choice: " + StoreRead(file));
+    for (const char* key : {"size", "opacity", "move"}) {
+        CHECK_MSG(StoreRead(file).find(std::string("\"") + key + "\"") == std::string::npos, std::string("no ") + key + " key is written for a default");
+    }
+    // A player who never chose has no mode in the file either: the shipped default reaches them.
+    Controls::Store never;
+    const std::filesystem::path dir2 = StoreDir("deltas_never");
+    CHECK(never.Open(dir2.string(), rules, error));
+    CHECK_MSG(never.Text() == "{\"version\":1,\"controls\":{\"layout\":1}}", "a store nobody chose in says no mode: " + never.Text());
+    // One that differs is written, and only it.
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":1,\"size\":1.4}}");
+    Controls::Store big;
+    CHECK(big.Open(dir.string(), rules, error));
+    big.SetMode(Controls::Style::Classic);
+    CHECK(big.Save(error));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1,\"size\":1.4}}", "a size that differs is the one key kept: " + StoreRead(file));
+}
+
+void AMissingFileIsTheShippedDefault() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("missing");
+    Controls::Store store;
+    std::string error;
+    CHECK_MSG(store.Open(dir.string(), rules, error) && error.empty(), "no file is not an error: " + error);
+    CHECK_MSG(!store.Mode() && !store.FromFile() && store.SavedTuning().IsDefault(rules), "no mode, no file read, the default tuning");
+    // A directory that is not there yet is no file either, and opening it makes nothing.
+    const std::filesystem::path later = dir / "not" / "yet";
+    Controls::Store elsewhere;
+    CHECK_MSG(elsewhere.Open(later.string(), rules, error) && !elsewhere.Mode() && !std::filesystem::exists(later), "a directory that is not there: nothing, and none made");
+    // The style is then the data's default: the policy's chain (ResolveStyle) takes nothing saved.
+    Controls::Policy player = Controls::ResolvePolicy(std::nullopt, false, false, false);
+    CHECK(player.available && player.saveAllowed);
+    CHECK_MSG(Controls::ResolveStyle(player, store.Mode(), rules.defaultMode) == Controls::Style::Classic, "a player's run with nothing saved plays the shipped default (classic)");
+    CHECK_MSG(Controls::ResolveStyle(player, std::optional<Controls::Style>(Controls::Style::Modern), rules.defaultMode) == Controls::Style::Modern, "and the saved choice when there is one");
+    // Saving makes the directory, as the other stores do.
+    elsewhere.SetMode(Controls::Style::Modern);
+    CHECK_MSG(elsewhere.Save(error) && std::filesystem::exists(later / Controls::kStoreFileName), "a save makes the directory it needs: " + error);
+}
+
+void AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("unreadable");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    // Text that is not JSON, JSON that is not an object, nothing at all: the defaults, one error that names the file, kept to be written over.
+    for (const char* text : {"{not json", "[]", "5", "\"x\"", "", "{\"version\":1,"}) {
+        StoreWrite(file, text);
+        Controls::Store store;
+        const bool opened = store.Open(dir.string(), rules, error);
+        CHECK_MSG(!opened && error.find("controls.json") != std::string::npos, std::string("'") + text + "' does not read, and the error names the file: " + error);
+        CHECK_MSG(!store.Mode() && !store.FromFile() && store.Persists() && store.SavedTuning().IsDefault(rules), std::string("'") + text + "': the defaults are kept, with somewhere to write");
+        store.SetMode(Controls::Style::Modern);
+        CHECK_MSG(store.Save(error), std::string("'") + text + "': the next save writes: " + error);
+        CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}", std::string("'") + text + "': and overwrote it: " + StoreRead(file));
+    }
+    // A file that parses but says little is not unreadable: field by field, the defaults for what it lacks, a mode that is none.
+    for (const char* text : {"{}", "{\"controls\":5}", "{\"controls\":{\"mode\":\"retro\"}}", "{\"controls\":{\"mode\":3}}", "{\"controls\":{\"mode\":null}}",
+                             "{\"controls\":{\"size\":\"big\",\"opacity\":[1],\"move\":\"no\"}}"}) {
+        StoreWrite(file, text);
+        Controls::Store store;
+        CHECK_MSG(store.Open(dir.string(), rules, error) && error.empty() && store.FromFile(), std::string("'") + text + "' reads: " + error);
+        CHECK_MSG(!store.Mode() && store.SavedTuning().IsDefault(rules), std::string("'") + text + "': no mode, the default tuning");
+    }
+    // A mode of its own in a file that says nothing else.
+    StoreWrite(file, "{\"controls\":{\"mode\":\"classic\"}}");
+    Controls::Store classic;
+    CHECK(classic.Open(dir.string(), rules, error) && classic.Mode() == std::optional<Controls::Style>(Controls::Style::Classic));
+}
+
+void AMemoryOnlyStoreWritesNothing() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("memory");
+    std::string error;
+    // An empty directory is memory-only, which is how the layer opens it when the policy forbids saving (a forced style) and when the run has no
+    // save directory.
+    Controls::Store store;
+    CHECK_MSG(store.Open("", rules, error) && error.empty(), "an empty directory opens");
+    CHECK_MSG(!store.Persists() && !store.FromFile() && store.Path().empty() && !store.Mode(), "memory-only: nowhere to write, nothing read");
+    store.SetMode(Controls::Style::Modern);
+    CHECK_MSG(store.Mode() == std::optional<Controls::Style>(Controls::Style::Modern), "the choice is kept for the run");
+    CHECK_MSG(store.Save(error) && error.empty(), "saving succeeds");
+    CHECK_MSG(StoreEntries(dir).empty() && !std::filesystem::exists(std::filesystem::current_path() / Controls::kStoreFileName),
+              "and no file was written, here or in the working directory");
+    // Opening memory-only again forgets the run's choice: the store is built afresh each time.
+    CHECK(store.Open("", rules, error) && !store.Mode());
+}
+
+void ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("layout");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    for (const char* layout : {"2", "0", "1.5", "\"1\"", "null"}) {
+        StoreWrite(file, std::string("{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":") + layout +
+                             ",\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"restart\":[4,4]}}}");
+        Controls::Store store;
+        CHECK_MSG(store.Open(dir.string(), rules, error) && store.FromFile(), std::string("layout ") + layout + " reads: " + error);
+        CHECK_MSG(store.Mode() == std::optional<Controls::Style>(Controls::Style::Modern), std::string("layout ") + layout + ": the mode is kept");
+        CHECK_MSG(store.SavedTuning().sizeSteps && *store.SavedTuning().sizeSteps == 12 && store.SavedTuning().opacitySteps && *store.SavedTuning().opacitySteps == 3,
+                  std::string("layout ") + layout + ": the size and the opacity are kept");
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            CHECK_MSG(store.SavedTuning().move[static_cast<std::size_t>(id)] == glm::dvec2(0.0), std::string("layout ") + layout + ": " + Controls::KeyOf(id) + "'s move was made against another arrangement and is dropped");
+        }
+        store.SetMode(Controls::Style::Modern);
+        CHECK(store.Save(error));
+        CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":1.2,\"opacity\":0.6}}",
+                  std::string("layout ") + layout + ": the next save carries this layout's number and no move: " + StoreRead(file));
+    }
+    // The current number keeps the moves.
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":1,\"move\":{\"restart\":[4,4]}}}");
+    Controls::Store same;
+    CHECK(same.Open(dir.string(), rules, error));
+    CHECK_MSG(same.SavedTuning().move[static_cast<std::size_t>(Controls::Id::Reset)] == glm::dvec2(4.0, 4.0), "the current layout number keeps its moves");
+}
+
+void ASaveThatCannotBeMadeSaysSoAndLeavesNothingHalfWritten() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("blocked");
+    std::string error;
+    Controls::Store store;
+    CHECK(store.Open(dir.string(), rules, error));
+    store.SetMode(Controls::Style::Modern);
+    // The temporary's own name taken by a directory: the write cannot open it.
+    std::error_code ec;
+    std::filesystem::create_directories(dir / "controls.json.tmp", ec);
+    CHECK_MSG(!store.Save(error) && error.find("controls.json") != std::string::npos, "a save that cannot open its temporary says so, naming it: " + error);
+    CHECK_MSG(!std::filesystem::exists(dir / Controls::kStoreFileName), "and wrote no controls.json");
+    std::filesystem::remove_all(dir / "controls.json.tmp", ec);
+    CHECK_MSG(store.Save(error) && std::filesystem::exists(dir / Controls::kStoreFileName), "the next save, with the way clear, writes (a failure is not remembered as a write): " + error);
+}
+
+// The other stores are not this one's business: audio.json is Switches::Store's, and a save of either leaves the other's bytes alone.
+void TheSwitchesStoreIsNotTouched() {
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("switches");
+    std::string error;
+    Switches::Defaults defaults;
+    Switches::Store switches;
+    CHECK(switches.Open(dir.string(), defaults, error));
+    switches.SetSound(false);
+    switches.SetMusic(false);
+    CHECK_MSG(switches.Save(error), "audio.json is written: " + error);
+    const std::string audio = StoreRead(dir / Switches::kFileName);
+    CHECK_MSG(!audio.empty(), "and has bytes");
+
+    Controls::Store store;
+    CHECK(store.Open(dir.string(), rules, error));
+    store.SetMode(Controls::Style::Modern);
+    CHECK(store.Save(error));
+    CHECK_MSG(StoreRead(dir / Switches::kFileName) == audio, "a toggle of the controls leaves audio.json's bytes as they were");
+    CHECK_MSG(StoreEntries(dir) == (std::vector<std::string>{"audio.json", "controls.json"}), "two files, side by side");
+
+    const std::string controls = StoreRead(dir / Controls::kStoreFileName);
+    switches.SetSound(true);
+    CHECK(switches.Save(error));
+    CHECK_MSG(StoreRead(dir / Controls::kStoreFileName) == controls, "and a switch leaves controls.json's");
+    // Neither reads the other's: audio.json holds no controls key, controls.json no audio one.
+    CHECK_MSG(audio.find("controls") == std::string::npos && controls.find("audio") == std::string::npos, "no key of one is in the other");
+}
+
 void runTests() {
     ClassicHitEqualsTheHudFunctionsEverywhere();
     ClassicFramesAreTheHudsRectsExactly();
@@ -2896,6 +3268,19 @@ void runTests() {
     ABareFileNameIsOneFileInOneFolder();
     TheArtManifestGivesTheSizesAPictureMustHave();
     TheArtLineSaysWhereEachPictureCameFrom();
+
+    // The names hardened, the mix of pictures, and the saved choice (planning step 185).
+    TheNamesWindowsKeepAreNotBare();
+    TheFiveGeneratedNamesDiffer();
+    ArtHalfDressedNeedsAMagicRampagePictureInAMix();
+    ControlsStoreRoundTrips();
+    TheFileHoldsDeltasOnly();
+    AMissingFileIsTheShippedDefault();
+    AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave();
+    AMemoryOnlyStoreWritesNothing();
+    ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity();
+    ASaveThatCannotBeMadeSaysSoAndLeavesNothingHalfWritten();
+    TheSwitchesStoreIsNotTouched();
 }
 
 } // namespace

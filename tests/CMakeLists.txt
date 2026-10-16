@@ -242,6 +242,12 @@ add_mp_test(test_mp_controls)
 # MP_TEST_PORTDATA when a mutation test sets it), so it never skips.
 add_mp_test(test_mp_padart)
 
+# The Options screen and the main menu's entry to it (planning step 185): sim/Options and the `options` block of controls.json - the entry in the
+# slot of the original's omitted Facebook button, the two tiles and the credits' back button at every window shape, the press, the lit tile, the
+# thumbnails (the pure layout of each style, scaled), and the strict reading of the block. Pure; it reads only the port's own ui.json and
+# controls.json (from MP_TEST_PORTDATA when a mutation test sets it), so it never skips.
+add_mp_test(test_mp_options)
+
 # How a level ends: the finished and lost screens and the HUD going - ui.json's
 # level_end and sim/LevelEnd's arithmetic, pinned against Enhanced's ui2 spec.
 # Pure, reading only the port's own committed data, so it never skips.
