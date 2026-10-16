@@ -2721,7 +2721,7 @@ top-right and clear-portals flush top-left (`game/data/ui.json` `hud`, `game/sim
 every frame**, which is why the classic HUD was measured first (this re-take) and why **the classic mode is kept, as the mode of the parity rig**, every suite and every
 route. Its own steps from planning step 177 (each takes the next free number when it lands): the design is `out/parity/program/CTL/design.md` (a read-only design
 workflow, second pass after two reviews): 14 steps CTL-1 to CTL-14, natural stops after CTL-3, CTL-6, CTL-9 and CTL-13, decided with the owner on 2026-10-15: both walk
-arrows grouped bottom-left, inset from the corner (the right thumb stays free to fire), restart / pause / clear-portals inset by the same margin, a toggle between modern
+arrows grouped bottom-left, inset from the corner (the right thumb stays free to fire; **overridden by the owner on 2026-10-16 after he saw it: the arrows are split, one inset in each bottom corner, planning step 186**), restart / pause / clear-portals inset by the same margin, a toggle between modern
 and classic in an Options screen (not a developer flag), Magic Rampage's own button art, and its adjustment screen (size 0.4-1.4, opacity, lock and drag, restore) as a
 later step. Defaults: `--controls classic|modern` (a developer run, a route and every suite are classic; modern becomes the default for a player only at CTL-13), the
 `uniform` preset (size 0.7, a 44 px margin on every edge). **The gate that holds the rest: classic reproduces `R4d/CMP/port_f420` and `WALL/after/sweep` byte for byte at
@@ -2729,7 +2729,7 @@ every step.** The art is read at run time from a gitignored folder, made by a co
 Rampage is another Asantee game that `docs/permission.md` (still the placeholder) does not record, so shipping its art is the owner's question (design Q2). CTL-1 (the art
 tool: Python and docs only) was staged under `out/parity/program/CTL/CTL1/stage/` during the re-take and is NOT committed; CTL-2 onward relinks `MagicPortals.exe` and
 `test_mp.exe` under Smart App Control. The census of the 128 routes against the modern hit rectangles names five levels whose recorded shots fall inside them (1-20 and
-3-27 for the pair, 2-06 for restart, 1-09 and 3-14 for clear-portals), accepted as data (CTL-4). The owner's open questions Q0 to Q16 are in `design.md` section 6 with
+3-27 for the pair, 2-06 for restart, 1-09 and 3-14 for clear-portals), accepted as data (CTL-4); with the split arrows the pair's two leave the list and no arrow costs a level (step 186). The owner's open questions Q0 to Q16 are in `design.md` section 6 with
 recommendations (Q0 touch device or desktop, Q2 the art's rights, Q3 the default look, Q4 when to flip the default). GAMEPLAY: none (no gameplay number, one pointer
 path). (5) **The ship preparation**: the grant in `docs/permission.md` (still its "INCOMPLETE - PASTE THE ACTUAL GRANT HERE" placeholder, so the record of the scope is
 incomplete: the owner's to fill), the play build (`tools\parity\play_build.bat` exists; no play build has been made), the README and LICENSE, the release zip, and **the

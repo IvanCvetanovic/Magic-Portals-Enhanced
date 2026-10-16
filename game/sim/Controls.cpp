@@ -322,9 +322,10 @@ glm::dvec2 BoxSize(const Rules& rules, const Tuning& tuning, const glm::dvec2& v
 }
 
 // Where a control's box is with nothing moved: the margin in from the safe rectangle's edges, the gap
-// between neighbours, the pair left then right at the bottom-left, restart then pause at the top-right
-// (pause on the corner), clear-portals at the top-left. Written in the order the design's arithmetic
-// (CTL/arith2/final_layout.py) writes it.
+// between neighbours, walk_left at the bottom-left and walk_right at the bottom-right (Split, the owner's
+// decision of 2026-10-16) or right beside it (Grouped, the arrangement of planning step 180), restart then
+// pause at the top-right (pause on the corner), clear-portals at the top-left. Written in the order the
+// design's arithmetic (CTL/arith2/final_layout.py, CTL6b/work/arrows_model.py) writes it.
 glm::dvec2 DefaultMin(const Rules& rules, const Tuning& tuning, Id id, const glm::dvec2& viewUnits, const Insets& insets) {
     const Safe safe = SafeRect(viewUnits, insets);
     const double side = UnitsOf(rules, viewUnits, rules.marginSidePx);
@@ -337,6 +338,8 @@ glm::dvec2 DefaultMin(const Rules& rules, const Tuning& tuning, Id id, const glm
     case Id::Left:
         return glm::dvec2(safe.min.x + side, safe.max.y - bottom - arrow);
     case Id::Right:
+        // Split: inset from the bottom-RIGHT corner by the same margins as the left arrow is from its corner.
+        if (tuning.ArrowsIn(rules) == Arrows::Split) return glm::dvec2(safe.max.x - side - arrow, safe.max.y - bottom - arrow);
         return glm::dvec2(safe.min.x + side + arrow + gap, safe.max.y - bottom - arrow);
     case Id::Menu:
         return glm::dvec2(safe.max.x - side - corner, safe.min.y + top);
@@ -488,6 +491,17 @@ std::optional<Preset> PresetOfName(const std::string& name) {
     return std::nullopt;
 }
 
+const char* NameOf(Arrows arrows) {
+    return arrows == Arrows::Grouped ? "grouped" : "split";
+}
+
+std::optional<Arrows> ArrowsOfName(const std::string& name) {
+    for (const Arrows arrows : {Arrows::Split, Arrows::Grouped}) {
+        if (name == NameOf(arrows)) return arrows;
+    }
+    return std::nullopt;
+}
+
 const char* NameOf(ActOn actOn) {
     return actOn == ActOn::Press ? "press" : "release";
 }
@@ -595,6 +609,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         read.defaultPreset = *preset;
     } else {
         why = "layout.default_preset is not uniform, balanced or mr";
+        return fail();
+    }
+    std::string defaultArrows;
+    if (!Text(layout, "default_arrows", defaultArrows, why, "layout")) return fail();
+    if (const auto arrows = ArrowsOfName(defaultArrows)) {
+        read.defaultArrows = *arrows;
+    } else {
+        why = "layout.default_arrows is not split or grouped";
         return fail();
     }
 
@@ -758,7 +780,7 @@ bool ArtHalfDressed(const ArtSources& sources) {
 // ---- the tuning ------------------------------------------------------------------------------------------
 
 bool FlagItems::Any() const {
-    if (preset || size || opacity) return true;
+    if (preset || arrows || size || opacity) return true;
     for (const auto& item : move) {
         if (item) return true;
     }
@@ -767,6 +789,10 @@ bool FlagItems::Any() const {
 
 Preset Tuning::PresetIn(const Rules& rules) const {
     return preset.value_or(rules.defaultPreset);
+}
+
+Arrows Tuning::ArrowsIn(const Rules& rules) const {
+    return arrows.value_or(rules.defaultArrows);
 }
 
 int Tuning::SizeStepsIn(const Rules& rules) const {
@@ -882,6 +908,7 @@ const char* FlagUsage() {
     static const std::string usage = [] {
         std::string text = std::string("--controls <classic|modern>[,key=value...]  keys: ") + TuningKey::kPreset + "=";
         for (const Preset preset : kPresets) text += std::string(preset == kPresets.front() ? "" : "|") + NameOf(preset);
+        text += std::string(", ") + TuningKey::kArrows + "=" + NameOf(Arrows::Split) + "|" + NameOf(Arrows::Grouped);
         text += std::string(", ") + TuningKey::kSize + "=<n>, " + TuningKey::kOpacity + "=<n>, and a move as <key>=<dx>:<dy> for ";
         for (const Id id : kClaimOrder) text += std::string(id == kClaimOrder.front() ? "" : ", ") + KeyOf(id);
         return text;
@@ -911,6 +938,11 @@ bool Tuning::ParseFlag(const std::string& items, FlagItems& out, std::string& er
             const auto preset = PresetOfName(value);
             if (!preset) return refuse("'" + value + "' is not a preset");
             read.preset = preset;
+        } else if (key == TuningKey::kArrows) {
+            if (read.arrows) return refuse("arrows is given twice");
+            const auto arrows = ArrowsOfName(value);
+            if (!arrows) return refuse("'" + value + "' is not an arrangement");
+            read.arrows = arrows;
         } else if (key == TuningKey::kSize || key == TuningKey::kOpacity) {
             std::optional<double>& slot = key == TuningKey::kSize ? read.size : read.opacity;
             if (slot) return refuse(key + " is given twice");
@@ -940,6 +972,7 @@ bool Tuning::ParseFlag(const std::string& items, FlagItems& out, std::string& er
 bool Tuning::FromFlag(const FlagItems& items, const Rules& rules, Tuning& out, std::string& error) {
     Tuning tuning;
     tuning.preset = items.preset;
+    tuning.arrows = items.arrows;
     if (items.size) {
         int steps = 0;
         if (!StepOf(rules.size, *items.size, steps)) {
@@ -1252,18 +1285,22 @@ double HintLeft(Style style, const Rules& rules, const Layout& layout, const Hin
                 const std::array<bool, 5>& shown) {
     if (style == Style::Classic) return row.classicLeft;
     bool meets = false;
-    double pairRight = row.classicLeft;
+    double clear = row.classicLeft;
     for (const Id id : kClaimOrder) {
         if (!IsWalk(id) || !shown[Index(id)]) continue;
+        // Only an arrow in the LEFT half of the view (the slide's own nearer-edge test) is one the text can be started clear of: an arrow in
+        // the right half (split: the bottom-right corner) is crossed by the text, as the classic text crosses its disc, when the free span
+        // between the two is narrower than the text - starting further right would only carry the text off the view.
+        if (layout.At(id).rect.Centre().x > viewUnits.x * 0.5) continue;
         const Hud::Rect& hit = layout.At(id).hit.rect;
         const glm::dvec2 max = hit.Max();
         if (hit.min.y < row.top + row.height && max.y > row.top) {
             meets = true;
-            pairRight = std::max(pairRight, max.x);
+            clear = std::max(clear, max.x);
         }
     }
     if (!meets) return row.classicLeft;
-    return std::min(pairRight, viewUnits.x - row.extent - rules.hintMarginUnits);
+    return std::min(clear, viewUnits.x - row.extent - rules.hintMarginUnits);
 }
 
 // ---- which style a run plays --------------------------------------------------------------------------------

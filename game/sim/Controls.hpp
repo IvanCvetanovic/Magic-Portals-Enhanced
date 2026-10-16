@@ -136,13 +136,22 @@ enum class Style { Classic, Modern };
 
 // What the layout is built on: the layout's version, which every saved move is stamped with. Whoever
 // changes a default place bumps it, here and in controls.json, and TheDefaultPlacesArePinned... fails
-// until they do.
-inline constexpr int kLayoutVersion = 1;
+// until they do. 1 was the pair grouped at the bottom left (planning step 180); 2 (planning step 186, the
+// owner's decision of 2026-10-16 after he saw it on his screen) puts walk_right in the bottom-right corner.
+inline constexpr int kLayoutVersion = 2;
 
 // The three looks (design 1.1): a size and a bottom margin each, chosen from the census.
 enum class Preset { Uniform, Balanced, Mr };
 inline constexpr std::size_t kPresetCount = 3;
 inline constexpr std::array<Preset, kPresetCount> kPresets = {Preset::Uniform, Preset::Balanced, Preset::Mr};
+
+// How the two walk arrows stand (the owner's decision of 2026-10-16, planning step 186): `Split` is walk_left in the
+// bottom-left corner and walk_right in the bottom-right one, each inset by the margin, as the classic pair stands but
+// inset; `Grouped` is the arrangement of planning step 180, both at the bottom left. Split ships. Grouped stays as an
+// alternative a capture or a test can ask for (`--controls modern,arrows=grouped`), never saved, so every pin written
+// for the grouped pair is kept and aimed at it.
+enum class Arrows { Split, Grouped };
+inline constexpr std::size_t kArrowsCount = 2;
 
 // What restart, pause and clear-portals act on in the modern style: the press (as the classic style
 // does, a recorded deviation) or the release inside the hit rectangle after a press inside it.
@@ -160,6 +169,8 @@ const char* NameOf(Style style);                       // classic, modern
 std::optional<Style> StyleOfName(const std::string& name);
 const char* NameOf(Preset preset);                     // uniform, balanced, mr
 std::optional<Preset> PresetOfName(const std::string& name);
+const char* NameOf(Arrows arrows);                     // split, grouped
+std::optional<Arrows> ArrowsOfName(const std::string& name);
 const char* NameOf(ActOn actOn);                       // release, press
 const char* NameOf(ArtTier tier);                      // mr, original, generated
 
@@ -223,6 +234,7 @@ struct Rules {
     };
     std::array<PresetRule, kPresetCount> presets;
     Preset defaultPreset = Preset::Uniform;
+    Arrows defaultArrows = Arrows::Split; // layout.default_arrows: how the walk arrows stand when nothing asks otherwise
 
     struct Hit {
         std::array<double, 5> growPx{}; // by Id: growth toward the world, px
@@ -318,6 +330,7 @@ bool ArtHalfDressed(const ArtSources& sources);
 // which has its own objects of the same names.
 namespace TuningKey {
 inline constexpr const char* kPreset = "preset";
+inline constexpr const char* kArrows = "arrows";
 inline constexpr const char* kSize = "size";
 inline constexpr const char* kOpacity = "opacity";
 inline constexpr const char* kMove = "move";
@@ -331,6 +344,7 @@ inline constexpr const char* kControls = "controls";
 // it is parsed (before the data is read, so a typo exits at once), the grids when it is applied.
 struct FlagItems {
     std::optional<Preset> preset;
+    std::optional<Arrows> arrows;
     std::optional<double> size;
     std::optional<double> opacity;
     std::array<std::optional<glm::dvec2>, 5> move; // by Id
@@ -344,6 +358,9 @@ struct FlagItems {
 struct Tuning {
     // The look: a capture's (`preset=` of the flag), never saved. Unset is the data's default_preset.
     std::optional<Preset> preset;
+    // How the walk arrows stand: a capture's or a test's (`arrows=` of the flag), never saved, so a saved file cannot strand a player on
+    // an arrangement. Unset is the data's default_arrows.
+    std::optional<Arrows> arrows;
     std::optional<int> sizeSteps;
     std::optional<int> opacitySteps;
     // Design units, screen direction (+x right, +y down), from the control's default place, NOT scaled by
@@ -355,6 +372,7 @@ struct Tuning {
 
     // The look in force, and the size and opacity in force: the player's, or the look's and the data's.
     Preset PresetIn(const Rules& rules) const;
+    Arrows ArrowsIn(const Rules& rules) const;
     int SizeStepsIn(const Rules& rules) const;
     int OpacityStepsIn(const Rules& rules) const;
     double Size(const Rules& rules) const;
@@ -533,9 +551,15 @@ struct RingPlace {
 };
 RingPlace RingFor(const Rules& rules, const Hud::Rules& hud, const Hud::Ring& ring, const Frame& pad);
 
-// Where 1-21's hint text starts. The classic style leaves it where it is. The modern one moves it right
-// of the pair's hit rectangles when the text's row meets a shown walk control, and keeps it
-// `hint.margin_units` inside the view's right edge: min(max(classicLeft, pairRight), W - extent - margin).
+// Where 1-21's hint text starts. The classic style leaves it where it is. The modern one moves it right of
+// the hit rectangle of every shown walk arrow that stands in the LEFT half of the view (the same nearer-edge
+// test the slide uses) when the text's row meets one, and keeps it `hint.margin_units` inside the view's right
+// edge: min(max(classicLeft, leftRight), W - extent - margin). An arrow in the right half is not one the text
+// can be moved clear of by starting further right, so it is not asked (split: the right arrow stands in the
+// bottom-right corner, and a text that cannot clear both is drawn over it as the classic text crosses its
+// disc); grouped has both arrows in the left half, so it answers exactly as it did. Where the view's edge and
+// the arrow's right edge disagree the view wins (the text stays on the screen and crosses the arrow); the rule
+// only ever shifts the text right.
 struct HintRow {
     double classicLeft = 0.0;
     double extent = 0.0; // the text's width in units, measured from the font

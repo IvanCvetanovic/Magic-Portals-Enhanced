@@ -35,8 +35,12 @@
 
   "layout": {
     "_source": [
-      "version 1: PORT. The number of the default arrangement (design 2.4). Whoever changes a default place bumps kLayoutVersion in",
+      "version 2: PORT. The number of the default arrangement (design 2.4). Whoever changes a default place bumps kLayoutVersion in",
       "sim/Controls.hpp and this number together, so a saved move that was made against another arrangement is dropped, not misapplied.",
+      "1 was the walk arrows grouped at the bottom left (planning step 180); 2 is walk_left in the bottom-left and walk_right in the",
+      "bottom-right corner (planning step 186: the OWNER's decision of 2026-10-16, after he saw the layout on his screen: 'moving stick should",
+      "not be only on the left side. you should put one button to the left and one to the right like the classic ones'). A controls.json",
+      "saved at layout 1 keeps its size and opacity and drops its moves.",
       "gap_px 32: DECODED spec 42 l.78: 32 px between neighbours (the two arrows; restart and pause).",
       "box_px 128: DECODED spec 42 l.77-78: the sprites are 128 px; the sprite box is the layout unit, flush at its edge.",
       "corner_box_factor 0.9: the VALUE is DECODED spec 42 l.77 (the pause is 0.9 x the pad scale); the APPLICATION to restart and",
@@ -47,7 +51,7 @@
       "box shrunk by this fraction of the box on every side. The art's own transparent margin is art.<tier>.<id>.body_inset."
     ],
     "_guess_version": true,
-    "version": 1,
+    "version": 2,
     "gap_px": 32,
     "box_px": 128,
     "face_inset": 0.109375,
@@ -97,7 +101,9 @@
       }
     },
     "default_preset": "uniform",
-    "_default_preset": "PORT, design D1/Q3: the look the owner is shown first. One data line to change."
+    "_default_preset": "PORT, design D1/Q3: the look the owner is shown first. One data line to change.",
+    "default_arrows": "split",
+    "_default_arrows": "OWNER 2026-10-16 (planning step 186): `split` is walk_left in the bottom-left corner and walk_right in the bottom-right corner, each inset by margin_px.side and the look's bottom margin, as the classic pair stands but inset; `grouped` is the arrangement of planning step 180 (both at the bottom left, 32 px apart), kept as an alternative that a capture or a test asks for with `--controls modern,arrows=grouped`: it is never saved. The looks (presets) are orthogonal to it."
   },
 
   "hit": {

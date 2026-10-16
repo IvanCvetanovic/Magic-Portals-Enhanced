@@ -582,8 +582,11 @@ void TheThumbnailsAreTheTwoLayoutsScaled() {
         Controls::Id id;
         double box[4];
     };
+    // The default arrangement is the SPLIT one (planning step 186): walk_right stands in the bottom-right corner, so the thumbnail shows one arrow in each
+    // bottom corner, as the classic thumbnail does but inset. The grouped table (both arrows at the bottom left, planning step 180) is kept: the thumbnail of
+    // a run asked for `arrows=grouped` shows it.
     const Row table[5] = {{Controls::Id::Left, {15.6444, 208.4978, 47.5022, 240.3556}},
-                          {Controls::Id::Right, {58.8800, 208.4978, 90.7378, 240.3556}},
+                          {Controls::Id::Right, {407.6089, 208.4978, 439.4667, 240.3556}},
                           {Controls::Id::Reset, {346.1689, 15.6444, 387.1289, 56.6044}},
                           {Controls::Id::Menu, {398.5067, 15.6444, 439.4667, 56.6044}},
                           {Controls::Id::Clear, {15.6444, 15.6444, 56.6044, 56.6044}}};
@@ -593,7 +596,26 @@ void TheThumbnailsAreTheTwoLayoutsScaled() {
         const glm::dvec2 max = got.Max() - modernTile.min;
         CHECK_MSG(Near(min.x, 8.0 + row.box[0] * scale, 2e-4) && Near(min.y, 6.0 + row.box[1] * scale, 2e-4) && Near(max.x, 8.0 + row.box[2] * scale, 2e-4) &&
                       Near(max.y, 6.0 + row.box[3] * scale, 2e-4),
-                  std::string("modern ") + Controls::KeyOf(row.id) + " is table 1.2's box scaled: " + Show(got));
+                  std::string("modern ") + Controls::KeyOf(row.id) + " is the split table's box scaled: " + Show(got));
+    }
+    {
+        Controls::Tuning grouped;
+        grouped.arrows = Controls::Arrows::Grouped;
+        const std::array<Hud::Rect, 5> groupedRects = Options::ThumbnailRects(d.options, d.controls, d.hud, grouped, Controls::Style::Modern, modernTile);
+        const Row groupedTable[2] = {{Controls::Id::Left, {15.6444, 208.4978, 47.5022, 240.3556}}, {Controls::Id::Right, {58.8800, 208.4978, 90.7378, 240.3556}}};
+        for (const Row& row : groupedTable) {
+            const Hud::Rect& got = groupedRects[static_cast<std::size_t>(row.id)];
+            const glm::dvec2 min = got.min - modernTile.min;
+            const glm::dvec2 max = got.Max() - modernTile.min;
+            CHECK_MSG(Near(min.x, 8.0 + row.box[0] * scale, 2e-4) && Near(min.y, 6.0 + row.box[1] * scale, 2e-4) && Near(max.x, 8.0 + row.box[2] * scale, 2e-4) &&
+                          Near(max.y, 6.0 + row.box[3] * scale, 2e-4),
+                      std::string("grouped ") + Controls::KeyOf(row.id) + " is planning step 180's box scaled: " + Show(got));
+        }
+        // The two arrangements differ in the right arrow alone, and the split thumbnail has the arrows in opposite corners of the picture.
+        CHECK_MSG(!NearPoint(groupedRects[1].min, modern[1].min) && NearPoint(groupedRects[0].min, modern[0].min) && NearPoint(groupedRects[3].min, modern[3].min),
+                  "the arrangements differ in the right arrow's place alone");
+        const double mid = modernTile.min.x + 8.0 + 32.0;
+        CHECK_MSG(modern[0].Max().x < mid && modern[1].min.x > mid, "split: the left arrow is in the thumbnail's left half and the right arrow in its right half");
     }
     // The CLASSIC thumbnail from the classic functions themselves: the 64-unit pads flush in the bottom corners, the 32-unit buttons where
     // ui.json puts them.

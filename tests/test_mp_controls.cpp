@@ -44,6 +44,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -484,7 +485,27 @@ const std::string kControls = kData + "/controls.json";
 constexpr double kRefHeightPx = 720.0;       // Magic Rampage's reference, in which the data is written
 constexpr double kPxPerUnit = 2.8125;        // 720 / 256: the capture's px to a design unit
 const Controls::Insets kNoInsets;
+// The shipped default: the walk arrows SPLIT, walk_left in the bottom-left corner and walk_right in the bottom-right one (planning step 186, the
+// owner's decision of 2026-10-16). Every pin written for the grouped pair of planning step 180 is aimed at kGrouped, the arrangement that
+// `--controls modern,arrows=grouped` asks for, and kept.
 const Controls::Tuning kNoTuning;
+const Controls::Tuning kGrouped = [] {
+    Controls::Tuning tuning;
+    tuning.arrows = Controls::Arrows::Grouped;
+    return tuning;
+}();
+// A tuning for one arrangement, a size and a look, nothing else.
+Controls::Tuning TunedFor(Controls::Arrows arrows, std::optional<int> sizeSteps = std::nullopt, std::optional<Controls::Preset> preset = std::nullopt) {
+    Controls::Tuning tuning;
+    tuning.arrows = arrows;
+    tuning.sizeSteps = sizeSteps;
+    tuning.preset = preset;
+    return tuning;
+}
+const std::array<Controls::Arrows, 2> kArrangements = {Controls::Arrows::Split, Controls::Arrows::Grouped};
+const char* ArrangementName(Controls::Arrows arrows) {
+    return arrows == Controls::Arrows::Split ? "split" : "grouped";
+}
 
 struct Aspect {
     const char* name;
@@ -553,29 +574,74 @@ double Overlap(const Hud::Rect& a, const Hud::Rect& b) {
 }
 
 // ---- 1.2's table, 16:9, size 0.7, 44 px on every edge. By Id: Left, Right, Reset (restart), Menu (pause), Clear. ----
+//
+// The GROUPED arrangement's (planning step 180: both arrows at the bottom left) and the SPLIT one's (planning step 186: walk_right in the bottom-right
+// corner). The corner buttons are the same in both. The split numbers are worked by out/parity/program/CTL/CTL6b/work/split_numbers.py from the
+// design's formulas and the owner's decision, not from the module.
 
-const std::array<Edges, 5> kBox169 = {{{15.6444, 208.4978, 47.5022, 240.3556},
-                                       {58.8800, 208.4978, 90.7378, 240.3556},
-                                       {346.1689, 15.6444, 387.1289, 56.6044},
-                                       {398.5067, 15.6444, 439.4667, 56.6044},
-                                       {15.6444, 15.6444, 56.6044, 56.6044}}};
-const std::array<Edges, 5> kHit169 = {{{0.0, 208.4978, 53.1911, 256.0},
-                                       {53.1911, 208.4978, 90.7378, 256.0},
-                                       {346.1689, 0.0, 392.8178, 56.6044},
-                                       {392.8178, 0.0, 455.1111, 56.6044},
-                                       {0.0, 0.0, 56.6044, 56.6044}}};
-const std::array<Edges, 5> kBoxPx = {{{44.0, 586.4, 133.6, 676.0},
-                                      {165.6, 586.4, 255.2, 676.0},
-                                      {973.6, 44.0, 1088.8, 159.2},
-                                      {1120.8, 44.0, 1236.0, 159.2},
-                                      {44.0, 44.0, 159.2, 159.2}}};
-const std::array<Edges, 5> kHitPx = {{{0.0, 586.4, 149.6, 720.0},
-                                      {149.6, 586.4, 255.2, 720.0},
-                                      {973.6, 0.0, 1104.8, 159.2},
-                                      {1104.8, 0.0, 1280.0, 159.2},
-                                      {0.0, 0.0, 159.2, 159.2}}};
-const std::array<glm::dvec2, 5> kCentrePx = {{{88.8, 631.2}, {210.4, 631.2}, {1031.2, 101.6}, {1178.4, 101.6}, {101.6, 101.6}}};
-const std::array<double, 5> kHitArea = {2526.7, 1783.6, 2640.5, 3526.1, 3204.1};
+struct Table {
+    std::array<Edges, 5> box;
+    std::array<Edges, 5> hit;
+    std::array<Edges, 5> boxPx;
+    std::array<Edges, 5> hitPx;
+    std::array<glm::dvec2, 5> centrePx;
+    std::array<double, 5> hitArea;
+    double total; // the five hit areas together
+};
+
+const Table kGroupedTable = {
+    {{{15.6444, 208.4978, 47.5022, 240.3556},
+      {58.8800, 208.4978, 90.7378, 240.3556},
+      {346.1689, 15.6444, 387.1289, 56.6044},
+      {398.5067, 15.6444, 439.4667, 56.6044},
+      {15.6444, 15.6444, 56.6044, 56.6044}}},
+    {{{0.0, 208.4978, 53.1911, 256.0},
+      {53.1911, 208.4978, 90.7378, 256.0},
+      {346.1689, 0.0, 392.8178, 56.6044},
+      {392.8178, 0.0, 455.1111, 56.6044},
+      {0.0, 0.0, 56.6044, 56.6044}}},
+    {{{44.0, 586.4, 133.6, 676.0},
+      {165.6, 586.4, 255.2, 676.0},
+      {973.6, 44.0, 1088.8, 159.2},
+      {1120.8, 44.0, 1236.0, 159.2},
+      {44.0, 44.0, 159.2, 159.2}}},
+    {{{0.0, 586.4, 149.6, 720.0},
+      {149.6, 586.4, 255.2, 720.0},
+      {973.6, 0.0, 1104.8, 159.2},
+      {1104.8, 0.0, 1280.0, 159.2},
+      {0.0, 0.0, 159.2, 159.2}}},
+    {{{88.8, 631.2}, {210.4, 631.2}, {1031.2, 101.6}, {1178.4, 101.6}, {101.6, 101.6}}},
+    {2526.7, 1783.6, 2640.5, 3526.1, 3204.1},
+    13680.9};
+
+const Table kSplitTable = {
+    {{{15.6444, 208.4978, 47.5022, 240.3556},
+      {407.6089, 208.4978, 439.4667, 240.3556},
+      {346.1689, 15.6444, 387.1289, 56.6044},
+      {398.5067, 15.6444, 439.4667, 56.6044},
+      {15.6444, 15.6444, 56.6044, 56.6044}}},
+    {{{0.0, 208.4978, 47.5022, 256.0},
+      {407.6089, 208.4978, 455.1111, 256.0},
+      {346.1689, 0.0, 392.8178, 56.6044},
+      {392.8178, 0.0, 455.1111, 56.6044},
+      {0.0, 0.0, 56.6044, 56.6044}}},
+    {{{44.0, 586.4, 133.6, 676.0},
+      {1146.4, 586.4, 1236.0, 676.0},
+      {973.6, 44.0, 1088.8, 159.2},
+      {1120.8, 44.0, 1236.0, 159.2},
+      {44.0, 44.0, 159.2, 159.2}}},
+    {{{0.0, 586.4, 133.6, 720.0},
+      {1146.4, 586.4, 1280.0, 720.0},
+      {973.6, 0.0, 1104.8, 159.2},
+      {1104.8, 0.0, 1280.0, 159.2},
+      {0.0, 0.0, 159.2, 159.2}}},
+    {{{88.8, 631.2}, {1191.2, 631.2}, {1031.2, 101.6}, {1178.4, 101.6}, {101.6, 101.6}}},
+    {2256.5, 2256.5, 2640.5, 3526.1, 3204.1},
+    13883.6};
+
+const Table& TableFor(Controls::Arrows arrows) {
+    return arrows == Controls::Arrows::Split ? kSplitTable : kGroupedTable;
+}
 
 constexpr double kTable = 6e-5; // the table is written to four decimals
 
@@ -589,8 +655,10 @@ void TheModernRulesAreTheFilesNumbers() {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
 
-    CHECK_EQ(Controls::kLayoutVersion, 1);
-    CHECK_EQ(rules.layoutVersion, 1);
+    // 1 was the pair grouped at the bottom left (planning step 180); 2 is the arrows split, one in each bottom corner (planning step 186).
+    CHECK_EQ(Controls::kLayoutVersion, 2);
+    CHECK_EQ(rules.layoutVersion, 2);
+    CHECK_MSG(rules.defaultArrows == Controls::Arrows::Split, "the arrows ship split, one in each bottom corner (the owner, 2026-10-16)");
     CHECK(rules.referenceHeightPx == 720.0);
     CHECK(rules.clearancePx == 16.0);
     CHECK(rules.marginSidePx == 44.0 && rules.marginTopPx == 44.0 && rules.marginBottomPx == 44.0);
@@ -690,6 +758,9 @@ void TheNamesAreOnePlaceAndRoundTrip() {
         CHECK(Controls::PresetOfName(presets[i]) == Controls::kPresets[i]);
     }
     CHECK(!Controls::PresetOfName("").has_value() && !Controls::PresetOfName("Uniform").has_value() && !Controls::PresetOfName("big").has_value());
+    CHECK(std::string(Controls::NameOf(Controls::Arrows::Split)) == "split" && std::string(Controls::NameOf(Controls::Arrows::Grouped)) == "grouped");
+    CHECK(Controls::ArrowsOfName("split") == Controls::Arrows::Split && Controls::ArrowsOfName("grouped") == Controls::Arrows::Grouped);
+    CHECK(!Controls::ArrowsOfName("").has_value() && !Controls::ArrowsOfName("Split").has_value() && !Controls::ArrowsOfName("together").has_value());
     CHECK(std::string(Controls::NameOf(Controls::ActOn::Release)) == "release" && std::string(Controls::NameOf(Controls::ActOn::Press)) == "press");
     CHECK(std::string(Controls::NameOf(Controls::ArtTier::MagicRampage)) == "mr" && std::string(Controls::NameOf(Controls::ArtTier::Original)) == "original" &&
           std::string(Controls::NameOf(Controls::ArtTier::Generated)) == "generated");
@@ -697,39 +768,40 @@ void TheNamesAreOnePlaceAndRoundTrip() {
 
 // ---- the default places ---------------------------------------------------------------------------------
 
-void TheDefaultPlacesArePinnedBesideTheLayoutNumber() {
+// One arrangement's places against its table: the boxes, the hit rectangles, the px of a 1280 x 720 capture, the centres and the areas.
+void CheckDefaultPlaces(Controls::Arrows arrows) {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
-    // Whoever changes a default place bumps this number and the file's together; a saved move made against another
-    // arrangement is then dropped, not misapplied (design 2.4). This case is what makes them do it.
-    CHECK_EQ(Controls::kLayoutVersion, 1);
+    const Controls::Tuning tuning = TunedFor(arrows);
+    const Table& table = TableFor(arrows);
+    const std::string which = std::string(ArrangementName(arrows)) + ": ";
 
-    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
+    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, kView169, kNoInsets, 5000.0);
     CHECK(layout.style == Controls::Style::Modern);
-    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, kNoTuning, kView169, kNoInsets);
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
     const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
     double total = 0.0;
     for (const Controls::Id id : Controls::kClaimOrder) {
         const std::size_t i = static_cast<std::size_t>(id);
-        const std::string name = Controls::KeyOf(id);
+        const std::string name = which + Controls::KeyOf(id);
         const Controls::Frame& frame = layout.At(id);
         // The box and the hit rectangle, in units, against the design's table; and the same through every way of asking.
-        CHECK_MSG(RectIs(frame.rect, kBox169[i], kTable), name + " box " + EdgesOf(frame.rect));
+        CHECK_MSG(RectIs(frame.rect, table.box[i], kTable), name + " box " + EdgesOf(frame.rect));
         CHECK_MSG(SameBits(frame.rect, boxes[i]), name + ": the layout's box is Boxes'");
         CHECK_MSG(frame.hit.kind == Controls::HitShape::Kind::Rect && frame.hit.halfOpen, name + ": the hit is a half-open rectangle");
-        CHECK_MSG(RectIs(frame.hit.rect, kHit169[i], kTable), name + " hit " + EdgesOf(frame.hit.rect));
+        CHECK_MSG(RectIs(frame.hit.rect, table.hit[i], kTable), name + " hit " + EdgesOf(frame.hit.rect));
         CHECK_MSG(SameBits(frame.hit.rect, hits[i]), name + ": the layout's hit is HitRects'");
         // And in the px of a 1280 x 720 capture, where the design's table also states them.
         const Hud::Rect px{frame.rect.min * kPxPerUnit, frame.rect.size * kPxPerUnit};
-        CHECK_MSG(RectIs(px, kBoxPx[i], 0.06), name + " box in px " + EdgesOf(px));
+        CHECK_MSG(RectIs(px, table.boxPx[i], 0.06), name + " box in px " + EdgesOf(px));
         const Hud::Rect hitPx{frame.hit.rect.min * kPxPerUnit, frame.hit.rect.size * kPxPerUnit};
-        CHECK_MSG(RectIs(hitPx, kHitPx[i], 0.06), name + " hit in px " + EdgesOf(hitPx));
+        CHECK_MSG(RectIs(hitPx, table.hitPx[i], 0.06), name + " hit in px " + EdgesOf(hitPx));
         const glm::dvec2 centre = frame.rect.Centre() * kPxPerUnit;
-        CHECK_MSG(Near(centre.x, kCentrePx[i].x, 0.06) && Near(centre.y, kCentrePx[i].y, 0.06), name + " centre in px (" + Num(centre.x) + ", " + Num(centre.y) + ")");
-        CHECK_MSG(Near(AreaOf(frame.hit.rect), kHitArea[i], 0.06), name + " hit area " + Num(AreaOf(frame.hit.rect)));
+        CHECK_MSG(Near(centre.x, table.centrePx[i].x, 0.06) && Near(centre.y, table.centrePx[i].y, 0.06), name + " centre in px (" + Num(centre.x) + ", " + Num(centre.y) + ")");
+        CHECK_MSG(Near(AreaOf(frame.hit.rect), table.hitArea[i], 0.06), name + " hit area " + Num(AreaOf(frame.hit.rect)));
         total += AreaOf(frame.hit.rect);
     }
-    CHECK_MSG(Near(total, 13680.9, 0.1), "the five hit areas total " + Num(total));
+    CHECK_MSG(Near(total, table.total, 0.1), which + "the five hit areas total " + Num(total));
 
     // The same places worked from the data's own numbers, to a billionth: the margin 44 px, the gap 32, the box 128, the
     // size 0.7 and the corner box 0.9 x 128 (a corner button never under 1.0), all in px of the 720 reference.
@@ -740,12 +812,43 @@ void TheDefaultPlacesArePinnedBesideTheLayoutNumber() {
     const double corner = 0.9 * 128.0 * u * 1.0;
     const double W = kView169.x;
     CHECK(Near(boxes[0].min.x, margin, 1e-9) && Near(boxes[0].min.y, kHeight - margin - arrow, 1e-9) && Near(boxes[0].size.x, arrow, 1e-9));
-    CHECK(Near(boxes[1].min.x, margin + arrow + gap, 1e-9) && Near(boxes[1].min.y, kHeight - margin - arrow, 1e-9));
+    CHECK(Near(boxes[1].min.y, kHeight - margin - arrow, 1e-9) && Near(boxes[1].size.x, arrow, 1e-9));
     CHECK(Near(boxes[3].min.x, W - margin - corner, 1e-9) && Near(boxes[3].min.y, margin, 1e-9) && Near(boxes[3].size.x, corner, 1e-9));
     CHECK(Near(boxes[2].min.x, W - margin - corner - gap - corner, 1e-9) && Near(boxes[2].min.y, margin, 1e-9));
     CHECK(Near(boxes[4].min.x, margin, 1e-9) && Near(boxes[4].min.y, margin, 1e-9) && Near(boxes[4].size.y, corner, 1e-9));
-    // The arrows sit side by side and the corner buttons in a row: nothing is placed but by those four numbers.
-    CHECK(Near(boxes[1].min.x - boxes[0].Max().x, gap, 1e-9) && Near(boxes[3].min.x - boxes[2].Max().x, gap, 1e-9));
+    if (arrows == Controls::Arrows::Grouped) {
+        // The arrows sit side by side and the corner buttons in a row: nothing is placed but by those four numbers.
+        CHECK(Near(boxes[1].min.x, margin + arrow + gap, 1e-9));
+        CHECK(Near(boxes[1].min.x - boxes[0].Max().x, gap, 1e-9) && Near(boxes[3].min.x - boxes[2].Max().x, gap, 1e-9));
+    } else {
+        // Split: walk_right is inset from the bottom-RIGHT corner by the margin on both edges, as walk_left is from the bottom-left, and the
+        // two arrows are a view apart (no gap between them, no seam).
+        CHECK_MSG(Near(boxes[1].Max().x, W - margin, 1e-9) && Near(kHeight - boxes[1].Max().y, margin, 1e-9), "walk_right is 44 px (15.64 units) from the view's right and bottom edges");
+        CHECK_MSG(Near(boxes[0].min.x, margin, 1e-9) && Near(kHeight - boxes[0].Max().y, margin, 1e-9), "and walk_left the same from the left and the bottom");
+        CHECK_MSG(Near(boxes[1].min.x - boxes[0].Max().x, W - 2.0 * margin - 2.0 * arrow, 1e-9) && boxes[1].min.x - boxes[0].Max().x > 300.0, "the arrows stand the width of the view apart");
+        CHECK(Near(boxes[3].min.x - boxes[2].Max().x, gap, 1e-9));
+        // The mirror: the right arrow is the left arrow reflected in the view's middle line.
+        CHECK_MSG(Near(boxes[0].min.x + boxes[1].Max().x, W, 1e-9) && Near(boxes[0].Max().x + boxes[1].min.x, W, 1e-9) && boxes[0].min.y == boxes[1].min.y,
+                  "walk_right is walk_left mirrored about the view's middle");
+    }
+}
+
+void TheDefaultPlacesArePinnedBesideTheLayoutNumber() {
+    // Whoever changes a default place bumps this number and the file's together; a saved move made against another
+    // arrangement is then dropped, not misapplied (design 2.4). This case is what makes them do it. 2 since planning step 186: the right arrow
+    // stands in the bottom-right corner (it was 1 with both at the bottom left).
+    CHECK_EQ(Controls::kLayoutVersion, 2);
+    // The shipped default is the split arrangement, and the bare Tuning asks for it...
+    const Controls::Rules rules = LoadModern();
+    CHECK_MSG(kNoTuning.ArrowsIn(rules) == Controls::Arrows::Split && !kNoTuning.arrows, "a tuning that says nothing is the data's default, split");
+    CHECK_MSG(kGrouped.ArrowsIn(rules) == Controls::Arrows::Grouped, "and `arrows=grouped` asks for the other");
+    {
+        const std::array<Hud::Rect, 5> bare = Controls::Boxes(rules, kNoTuning, kView169, kNoInsets);
+        const std::array<Hud::Rect, 5> split = Controls::Boxes(rules, TunedFor(Controls::Arrows::Split), kView169, kNoInsets);
+        for (std::size_t i = 0; i < 5; ++i) CHECK_MSG(SameBits(bare[i], split[i]), "the default tuning lays out split, bit for bit: control " + std::to_string(i));
+    }
+    // ...and each arrangement against its own table.
+    for (const Controls::Arrows arrows : kArrangements) CheckDefaultPlaces(arrows);
 }
 
 void ThePresetsKeepThePairTopAtOrBelowTheCharacterRow() {
@@ -871,14 +974,19 @@ void MarginsAndGapsDoNotGrowWithSize() {
     const Controls::Rules rules = LoadModern();
     const double margin = 44.0 * kHeight / kRefHeightPx;
     const double gap = 32.0 * kHeight / kRefHeightPx;
-    for (int steps = 4; steps <= 14; ++steps) {
-        Controls::Tuning tuning;
-        tuning.sizeSteps = steps;
+    for (const Controls::Arrows arrows : kArrangements) for (int steps = 4; steps <= 14; ++steps) {
+        const Controls::Tuning tuning = TunedFor(arrows, steps);
         const std::array<Hud::Rect, 5> b = Controls::Boxes(rules, tuning, kView169, kNoInsets);
-        const std::string at = "size " + Num(static_cast<double>(steps) / 10.0) + ": ";
+        const std::string at = std::string(ArrangementName(arrows)) + " size " + Num(static_cast<double>(steps) / 10.0) + ": ";
         // Every control is the same distance from its two corner edges at every size, and the neighbours the same gap apart.
-        CHECK_MSG(Near(b[0].min.x, margin, 1e-9) && Near(kHeight - b[0].Max().y, margin, 1e-9), at + "the pair keeps its margins from the bottom-left");
-        CHECK_MSG(Near(b[1].min.x - b[0].Max().x, gap, 1e-9) && Near(b[0].min.y, b[1].min.y, 1e-12), at + "the arrows keep their gap");
+        CHECK_MSG(Near(b[0].min.x, margin, 1e-9) && Near(kHeight - b[0].Max().y, margin, 1e-9), at + "walk_left keeps its margins from the bottom-left");
+        CHECK_MSG(Near(b[0].min.y, b[1].min.y, 1e-12), at + "the arrows share a top");
+        if (arrows == Controls::Arrows::Grouped) {
+            CHECK_MSG(Near(b[1].min.x - b[0].Max().x, gap, 1e-9), at + "the grouped arrows keep their gap");
+        } else {
+            // Split: walk_right keeps the same margins from the bottom-RIGHT corner, whatever the size.
+            CHECK_MSG(Near(kView169.x - b[1].Max().x, margin, 1e-9) && Near(kHeight - b[1].Max().y, margin, 1e-9), at + "walk_right keeps its margins from the bottom-right");
+        }
         CHECK_MSG(Near(kView169.x - b[3].Max().x, margin, 1e-9) && Near(b[3].min.y, margin, 1e-9), at + "pause keeps its margins from the top-right");
         CHECK_MSG(Near(b[3].min.x - b[2].Max().x, gap, 1e-9) && Near(b[2].min.y, margin, 1e-9), at + "restart keeps its gap to pause");
         CHECK_MSG(Near(b[4].min.x, margin, 1e-9) && Near(b[4].min.y, margin, 1e-9), at + "clear-portals keeps its margins from the top-left");
@@ -930,9 +1038,9 @@ void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
                                             {10, 45.5111, 40.96, 118.0444, 194.8444, 7219.1, 1.12},
                                             {12, 54.6133, 49.152, 136.2489, 185.7422, 9572.5, 1.49},
                                             {14, 63.7156, 57.344, 154.4533, 176.6400, 12257.4, 1.91}}};
+    // The plan's table is the GROUPED pair's (planning step 180); the split arrows' own columns follow it.
     for (const Column& c : columns) {
-        Controls::Tuning tuning;
-        tuning.sizeSteps = c.steps;
+        const Controls::Tuning tuning = TunedFor(Controls::Arrows::Grouped, c.steps);
         const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
         const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
         const std::string at = "size " + Num(static_cast<double>(c.steps) / 10.0) + ": ";
@@ -962,8 +1070,7 @@ void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
     };
     const std::array<Narrow, 2> narrow = {{{"5:4 (W 320)", 1.25, 247.0116, 247.012, 178.2898, 178.290, 72.9884, 72.99},
                                            {"4:3 (W 341.333)", 4.0 / 3.0, 268.3449, 268.345, 199.6231, 199.623, 72.9884, 72.99}}};
-    Controls::Tuning largest;
-    largest.sizeSteps = 14;
+    const Controls::Tuning largest = TunedFor(Controls::Arrows::Grouped, 14);
     for (const Narrow& n : narrow) {
         const glm::dvec2 view = ViewOf(n.ratio);
         const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, largest, view, kNoInsets);
@@ -977,6 +1084,47 @@ void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
         CHECK_MSG(Near(view.x - boxes[3].Max().x, 44.0 / kPxPerUnit, 1e-9) && boxes[2].Max().x < boxes[3].min.x && boxes[4].Max().x < boxes[2].min.x,
                   at + "the corner row is in order and pause keeps its margin from the right edge");
     }
+
+    // The SPLIT arrows' own columns (planning step 186), the same five sizes, worked by CTL6b/work/split_numbers.py from the design's formula: each
+    // arrow's hit is a square from the view's edge to the far side of its box, so its area is (15.6444 + the box)^2, and the pair of them is 0.70 of the
+    // classic discs at the default (against the grouped pair's 0.67) and passes the classic total at size 1.0.
+    struct SplitColumn {
+        int steps;
+        double leftHitRight;  // the left arrow's hit right edge (= its box's)
+        double rightBoxLeft;  // the right arrow's box left edge (= its hit's)
+        double top;
+        double oneArea;       // one arrow's hit
+        double twoArea;       // both
+        double ofClassic;     // both against the classic discs' 6,434.0, to two decimals
+    };
+    const std::array<SplitColumn, 5> splitColumns = {{{4, 33.8489, 421.2622, 222.1511, 1145.7, 2291.5, 0.36},
+                                                      {7, 47.5022, 407.6089, 208.4978, 2256.5, 4512.9, 0.70},
+                                                      {10, 61.1556, 393.9556, 194.8444, 3740.0, 7480.0, 1.16},
+                                                      {12, 70.2578, 384.8533, 185.7422, 4936.2, 9872.3, 1.53},
+                                                      {14, 79.3600, 375.7511, 176.6400, 6298.0, 12596.0, 1.96}}};
+    for (const SplitColumn& c : splitColumns) {
+        const Controls::Tuning tuning = TunedFor(Controls::Arrows::Split, c.steps);
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
+        const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
+        const std::string at = "split size " + Num(static_cast<double>(c.steps) / 10.0) + ": ";
+        CHECK_MSG(Near(boxes[0].Max().x, c.leftHitRight, kTable) && Near(hits[0].Max().x, c.leftHitRight, kTable) && hits[0].min.x == 0.0, at + "the left arrow's hit runs from the view's edge to " + Num(hits[0].Max().x));
+        CHECK_MSG(Near(boxes[1].min.x, c.rightBoxLeft, kTable) && Near(hits[1].min.x, c.rightBoxLeft, kTable) && hits[1].Max().x == kView169.x, at + "the right arrow's hit runs from " + Num(hits[1].min.x) + " to the view's edge");
+        CHECK_MSG(Near(boxes[0].min.y, c.top, kTable) && Near(boxes[1].min.y, c.top, kTable) && hits[0].Max().y == kHeight && hits[1].Max().y == kHeight, at + "both reach the view's bottom from " + Num(boxes[0].min.y));
+        CHECK_MSG(Near(AreaOf(hits[0]), c.oneArea, 0.06) && Near(AreaOf(hits[1]), c.oneArea, 0.06), at + "each arrow's hit area is " + Num(AreaOf(hits[0])) + ", the model's " + Num(c.oneArea));
+        const double area = AreaOf(hits[0]) + AreaOf(hits[1]);
+        CHECK_MSG(Near(area, c.twoArea, 0.1) && Near(area / kClassicPair, c.ofClassic, 0.0051), at + "the two together are " + Num(area) + ", " + Num(area / kClassicPair) + " of the classic discs'");
+    }
+    // At the narrowest windows and the largest arrows the two arrows are still far apart: 5:4 and 4:3 at size 1.4 (the right arrow's box begins at
+    // W - 15.6444 - 63.7156, the left one's hit ends at 79.36).
+    for (const Narrow& n : narrow) {
+        const glm::dvec2 view = ViewOf(n.ratio);
+        const Controls::Tuning tuning = TunedFor(Controls::Arrows::Split, 14);
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, view, kNoInsets);
+        const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, view, kNoInsets);
+        const std::string at = std::string("split ") + n.name + " size 1.4: ";
+        CHECK_MSG(Near(hits[1].min.x, view.x - 15.6444 - 63.7156, kTable) && Near(hits[0].Max().x, 79.36, kTable), at + "the arrows' hits end " + Num(hits[0].Max().x) + " and begin " + Num(hits[1].min.x));
+        CHECK_MSG(hits[1].min.x - hits[0].Max().x > 150.0, at + "and are " + Num(hits[1].min.x - hits[0].Max().x) + " apart");
+    }
 }
 
 // ---- the hit rule ---------------------------------------------------------------------------------------------
@@ -986,13 +1134,12 @@ void NoTwoDefaultBoxesOverlapAtAnyAspectOrSize() {
     const Controls::Rules rules = LoadModern();
     long boxPairs = 0;
     long hitPairs = 0;
-    for (const Aspect& aspect : kAspects) {
+    for (const Controls::Arrows arrows : kArrangements) for (const Aspect& aspect : kAspects) {
         const glm::dvec2 view = ViewOf(aspect.ratio);
         for (int steps = 4; steps <= 14; ++steps) {
-            Controls::Tuning tuning;
-            tuning.sizeSteps = steps;
+            const Controls::Tuning tuning = TunedFor(arrows, steps);
             const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
-            const std::string at = std::string(aspect.name) + " size " + Num(static_cast<double>(steps) / 10.0) + ": ";
+            const std::string at = std::string(ArrangementName(arrows)) + " " + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": ";
             for (std::size_t i = 0; i < 5; ++i) {
                 const Hud::Rect& box = layout.frames[i].rect;
                 const glm::dvec2 max = box.Max();
@@ -1009,42 +1156,58 @@ void NoTwoDefaultBoxesOverlapAtAnyAspectOrSize() {
             }
         }
     }
-    CHECK_EQ(static_cast<int>(boxPairs), 9 * 11 * 10);
-    CHECK_EQ(static_cast<int>(hitPairs), 9 * 11 * 10);
+    CHECK_EQ(static_cast<int>(boxPairs), 2 * 9 * 11 * 10); // two arrangements
+    CHECK_EQ(static_cast<int>(hitPairs), 2 * 9 * 11 * 10);
 }
 
-void TheSeamIsSplitAtItsMiddleAndNothingOverlaps() {
+void CheckSeams(Controls::Arrows arrows) {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
-    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
+    const Controls::Tuning tuning = TunedFor(arrows);
+    const bool grouped = arrows == Controls::Arrows::Grouped;
+    const std::string which = std::string(ArrangementName(arrows)) + ": ";
+    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, kView169, kNoInsets, 5000.0);
     const Controls::Frame& left = layout.At(Controls::Id::Left);
     const Controls::Frame& right = layout.At(Controls::Id::Right);
     const Controls::Frame& restart = layout.At(Controls::Id::Reset);
     const Controls::Frame& pause = layout.At(Controls::Id::Menu);
 
-    // The arrows' gap is 11.3778 and is split at its middle, 53.1911: the left arrow's hit ends there, the right one's starts there.
-    const double mid = (left.rect.Max().x + right.rect.min.x) * 0.5;
-    CHECK_MSG(Near(mid, 53.1911, kTable), "the arrows' seam is at " + Num(mid));
-    CHECK_MSG(left.hit.rect.Max().x == mid && right.hit.rect.min.x == mid, "both hit rectangles meet on the very same double");
-    const glm::dvec2 onSeam(mid, 224.0);
-    CHECK_MSG(!left.hit.Contains(onSeam) && right.hit.Contains(onSeam), "a point on the shared edge belongs to the later control, the right arrow");
-    CHECK(left.hit.Contains(glm::dvec2(mid - 1e-6, 224.0)) && !right.hit.Contains(glm::dvec2(mid - 1e-6, 224.0)));
-    CHECK(!left.hit.Contains(glm::dvec2(mid + 1e-6, 224.0)) && right.hit.Contains(glm::dvec2(mid + 1e-6, 224.0)));
+    if (grouped) {
+        // The arrows' gap is 11.3778 and is split at its middle, 53.1911: the left arrow's hit ends there, the right one's starts there.
+        const double mid = (left.rect.Max().x + right.rect.min.x) * 0.5;
+        CHECK_MSG(Near(mid, 53.1911, kTable), which + "the arrows' seam is at " + Num(mid));
+        CHECK_MSG(left.hit.rect.Max().x == mid && right.hit.rect.min.x == mid, which + "both hit rectangles meet on the very same double");
+        const glm::dvec2 onSeam(mid, 224.0);
+        CHECK_MSG(!left.hit.Contains(onSeam) && right.hit.Contains(onSeam), which + "a point on the shared edge belongs to the later control, the right arrow");
+        CHECK(left.hit.Contains(glm::dvec2(mid - 1e-6, 224.0)) && !right.hit.Contains(glm::dvec2(mid - 1e-6, 224.0)));
+        CHECK(!left.hit.Contains(glm::dvec2(mid + 1e-6, 224.0)) && right.hit.Contains(glm::dvec2(mid + 1e-6, 224.0)));
+    } else {
+        // Split: the arrows stand the width of the view apart, so there is NO seam between them (planning step 186): each keeps the side of its
+        // box that faces the middle of the view, and what lies between them is the world, where a tap fires a portal.
+        CHECK_MSG(left.hit.rect.Max().x == left.rect.Max().x && right.hit.rect.min.x == right.rect.min.x, which + "each arrow's hit ends where its box does, toward the middle of the view");
+        for (const double x : {kView169.x * 0.5, left.rect.Max().x + 0.01, right.rect.min.x - 0.01, left.rect.Max().x + 100.0}) {
+            CHECK_MSG(!left.hit.Contains(glm::dvec2(x, 230.0)) && !right.hit.Contains(glm::dvec2(x, 230.0)), which + "between the arrows (x " + Num(x) + ") is the world");
+        }
+        // And the arrows' own far sides are the view's edges: a point on the left edge is the left arrow's, one 0.01 inside the right edge the right's.
+        CHECK(left.hit.Contains(glm::dvec2(0.0, 230.0)) && right.hit.Contains(glm::dvec2(kView169.x - 0.01, 230.0)));
+    }
     // The same for restart and pause, 11.3778 apart, split at 392.8178.
     const double mid2 = (restart.rect.Max().x + pause.rect.min.x) * 0.5;
-    CHECK_MSG(Near(mid2, 392.8178, kTable), "restart and pause's seam is at " + Num(mid2));
-    CHECK_MSG(restart.hit.rect.Max().x == mid2 && pause.hit.rect.min.x == mid2, "restart's hit ends where pause's begins, on the same double");
+    CHECK_MSG(Near(mid2, 392.8178, kTable), which + "restart and pause's seam is at " + Num(mid2));
+    CHECK_MSG(restart.hit.rect.Max().x == mid2 && pause.hit.rect.min.x == mid2, which + "restart's hit ends where pause's begins, on the same double");
     CHECK(!restart.hit.Contains(glm::dvec2(mid2, 30.0)) && pause.hit.Contains(glm::dvec2(mid2, 30.0)));
     CHECK(restart.hit.Contains(glm::dvec2(mid2 - 1e-6, 30.0)) && !pause.hit.Contains(glm::dvec2(mid2 - 1e-6, 30.0)));
 
-    // On every quarter unit of the view at 16:9 and 4:3, a point is claimed by at most one control, and every point
-    // between the arrows' boxes, in the seam, is claimed by one of the pair: no dead ground in a seam.
+    // On every quarter unit of the view at 16:9 and 4:3, a point is claimed by at most one control; grouped: every point between the arrows'
+    // boxes, in the seam, is claimed by one of the pair (no dead ground in a seam); split: every point between the arrows is the world's.
     for (const glm::dvec2 view : {kView169, kView43}) {
-        const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, view, kNoInsets, 5000.0);
+        const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
         long twice = 0;
         long claimed = 0;
         long seamPoints = 0;
         long seamDead = 0;
+        long betweenClaimed = 0;
+        long betweenPoints = 0;
         Grid(view, [&](const glm::dvec2& p) {
             int claims = 0;
             for (const Controls::Frame& frame : laid.frames) claims += frame.hit.Contains(p) ? 1 : 0;
@@ -1055,11 +1218,18 @@ void TheSeamIsSplitAtItsMiddleAndNothingOverlaps() {
             if (p.x > a.Max().x && p.x < b.min.x && p.y >= a.min.y && p.y < a.Max().y) {
                 ++seamPoints;
                 if (!laid.At(Controls::Id::Left).hit.Contains(p) && !laid.At(Controls::Id::Right).hit.Contains(p)) ++seamDead;
+                ++betweenPoints;
+                if (laid.At(Controls::Id::Left).hit.Contains(p) || laid.At(Controls::Id::Right).hit.Contains(p)) ++betweenClaimed;
             }
         });
-        CHECK_MSG(twice == 0, std::string(ShapeOf(view)) + ": " + std::to_string(twice) + " points are claimed twice");
-        CHECK_MSG(claimed > 20000, std::string(ShapeOf(view)) + ": the lattice met " + std::to_string(claimed) + " claimed points");
-        CHECK_MSG(seamPoints > 100 && seamDead == 0, std::string(ShapeOf(view)) + ": " + std::to_string(seamDead) + " of " + std::to_string(seamPoints) + " seam points are dead");
+        const std::string at = which + ShapeOf(view) + ": ";
+        CHECK_MSG(twice == 0, at + std::to_string(twice) + " points are claimed twice");
+        CHECK_MSG(claimed > 20000, at + "the lattice met " + std::to_string(claimed) + " claimed points");
+        if (grouped) {
+            CHECK_MSG(seamPoints > 100 && seamDead == 0, at + std::to_string(seamDead) + " of " + std::to_string(seamPoints) + " seam points are dead");
+        } else {
+            CHECK_MSG(betweenPoints > 10000 && betweenClaimed == 0, at + std::to_string(betweenClaimed) + " of " + std::to_string(betweenPoints) + " points between the arrows are claimed");
+        }
     }
 
     // The seam is on one double at every aspect and size, because the rectangles are made so that min + size is the edge.
@@ -1067,35 +1237,38 @@ void TheSeamIsSplitAtItsMiddleAndNothingOverlaps() {
     for (const Aspect& aspect : kAspects) {
         const glm::dvec2 view = ViewOf(aspect.ratio);
         for (int steps = 4; steps <= 14; ++steps) {
-            Controls::Tuning tuning;
-            tuning.sizeSteps = steps;
-            const Controls::Layout l = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
-            if (l.At(Controls::Id::Left).hit.rect.Max().x != l.At(Controls::Id::Right).hit.rect.min.x) ++apart;
+            const Controls::Layout l = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(arrows, steps), view, kNoInsets, 5000.0);
+            if (grouped && l.At(Controls::Id::Left).hit.rect.Max().x != l.At(Controls::Id::Right).hit.rect.min.x) ++apart;
             if (l.At(Controls::Id::Reset).hit.rect.Max().x != l.At(Controls::Id::Menu).hit.rect.min.x) ++apart;
         }
     }
-    CHECK_MSG(apart == 0, std::to_string(apart) + " seams are not on one double");
+    CHECK_MSG(apart == 0, which + std::to_string(apart) + " seams are not on one double");
 
     // With more than one neighbour on a side (a moved control), the nearest decides: a synthetic row of boxes.
-    std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, kNoTuning, kView169, kNoInsets);
+    std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
     boxes[0] = Hud::Rect{glm::dvec2(100.0, 100.0), glm::dvec2(20.0, 20.0)};
     boxes[1] = Hud::Rect{glm::dvec2(130.0, 100.0), glm::dvec2(20.0, 20.0)}; // 10 away on the right
     boxes[4] = Hud::Rect{glm::dvec2(70.0, 100.0), glm::dvec2(20.0, 20.0)};  // 10 away on the left
     boxes[2] = Hud::Rect{glm::dvec2(300.0, 0.0), glm::dvec2(20.0, 20.0)};
     boxes[3] = Hud::Rect{glm::dvec2(330.0, 0.0), glm::dvec2(20.0, 20.0)};
     const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
-    CHECK_MSG(Near(hits[0].min.x, 95.0, 1e-9) && Near(hits[0].Max().x, 125.0, 1e-9), "a box between two neighbours 10 away on each side is cut at both middles");
-    CHECK_MSG(Near(hits[1].min.x, 125.0, 1e-9) && Near(hits[4].Max().x, 95.0, 1e-9), "and each neighbour is cut at the same middle");
+    CHECK_MSG(Near(hits[0].min.x, 95.0, 1e-9) && Near(hits[0].Max().x, 125.0, 1e-9), which + "a box between two neighbours 10 away on each side is cut at both middles");
+    CHECK_MSG(Near(hits[1].min.x, 125.0, 1e-9) && Near(hits[4].Max().x, 95.0, 1e-9), which + "and each neighbour is cut at the same middle");
     // A gap wider than the seam is not split: 40 px = 14.2 units is more than 32 px.
     boxes[1] = Hud::Rect{glm::dvec2(160.0, 100.0), glm::dvec2(20.0, 20.0)};
     const std::array<Hud::Rect, 5> apartHits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
-    CHECK_MSG(Near(apartHits[0].Max().x, 120.0, 1e-9) && Near(apartHits[1].min.x, 160.0, 1e-9), "a gap of 40 units is wider than the seam and is left alone");
+    CHECK_MSG(Near(apartHits[0].Max().x, 120.0, 1e-9) && Near(apartHits[1].min.x, 160.0, 1e-9), which + "a gap of 40 units is wider than the seam and is left alone");
+}
+
+void TheSeamIsSplitAtItsMiddleAndNothingOverlaps() {
+    for (const Controls::Arrows arrows : kArrangements) CheckSeams(arrows);
 }
 
 void TheEdgeReachGoesToTheViewEdgeOnlyWithinTheReach() {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
-    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
+    // The GROUPED arrows first (planning step 180's cases), then the split ones.
+    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kGrouped, kView169, kNoInsets, 5000.0);
     const auto box = [&](Controls::Id id) { return layout.At(id).rect; };
     const auto hit = [&](Controls::Id id) { return layout.At(id).hit.rect; };
 
@@ -1118,6 +1291,24 @@ void TheEdgeReachGoesToTheViewEdgeOnlyWithinTheReach() {
     // And just above the left arrow's box, toward the world, a tap fires.
     CHECK(!layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, box(Controls::Id::Left).min.y - 0.01)));
 
+    // SPLIT (planning step 186): walk_right is in the bottom-right corner and reaches the view's right edge and bottom, as walk_left reaches the
+    // left edge and the bottom; each keeps its box's own top and the side of its box that faces the middle of the view.
+    {
+        const Controls::Layout split = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
+        const Hud::Rect& l = split.At(Controls::Id::Left).hit.rect;
+        const Hud::Rect& r = split.At(Controls::Id::Right).hit.rect;
+        const Hud::Rect& lb = split.At(Controls::Id::Left).rect;
+        const Hud::Rect& rb = split.At(Controls::Id::Right).rect;
+        CHECK_MSG(l.min.x == 0.0 && l.Max().y == kHeight && l.min.y == lb.min.y && l.Max().x == lb.Max().x, "split: the left arrow reaches the left edge and the bottom, and keeps its top and its inner side");
+        CHECK_MSG(r.Max().x == kView169.x && r.Max().y == kHeight && r.min.y == rb.min.y && r.min.x == rb.min.x, "split: the right arrow reaches the right edge and the bottom, and keeps its top and its inner side");
+        // A tap in the strip between the right arrow's box and the view's bottom-right corner is the arrow's, not a portal.
+        CHECK(split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 3.0, 252.0)));
+        CHECK(split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 0.01, kHeight - 0.01)));
+        // And just above the right arrow's box, and just left of it, toward the world, a tap fires.
+        CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 20.0, rb.min.y - 0.01)));
+        CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(rb.min.x - 0.01, 232.0)));
+    }
+
     // The reach is the data's: at 43.99 px a margin of 44 px is out of it, at exactly 44 px (the equality is in) and
     // above it is in, and at 0 nothing reaches. The px are the reference's, and the boxes sit 44 px from the edges.
     const double u = kHeight / kRefHeightPx;
@@ -1129,6 +1320,13 @@ void TheEdgeReachGoesToTheViewEdgeOnlyWithinTheReach() {
         Controls::Rules edited = rules;
         edited.hit.edgeReachPx = probe.reachPx;
         const std::array<Hud::Rect, 5> boxes = Controls::Boxes(edited, kNoTuning, kView169, kNoInsets);
+        {
+            // Split: the right arrow's right side and bottom reach the view's edge exactly when the reach does.
+            const std::array<Hud::Rect, 5> splitHits = Controls::HitRects(edited, boxes, kView169, kNoInsets);
+            CHECK_MSG((splitHits[1].Max().x == kView169.x) == probe.reaches && (splitHits[1].Max().y == kHeight) == probe.reaches,
+                      "split, reach " + Num(probe.reachPx) + " px: the right arrow's right side and bottom");
+            CHECK_MSG(splitHits[1].Max().x == boxes[1].Max().x || probe.reaches, "split, reach " + Num(probe.reachPx) + " px: with no reach the right arrow's right side is its box's");
+        }
         const std::array<Hud::Rect, 5> hits = Controls::HitRects(edited, boxes, kView169, kNoInsets);
         const std::string at = "reach " + Num(probe.reachPx) + " px: ";
         CHECK_MSG((hits[0].min.x == 0.0) == probe.reaches && (hits[0].min.x == boxes[0].min.x) == !probe.reaches, at + "the left arrow's left side");
@@ -1146,11 +1344,16 @@ void TheEdgeReachGoesToTheViewEdgeOnlyWithinTheReach() {
     CHECK_MSG(hits[0].Max().y == kHeight && Near(boxes[0].Max().y, kHeight - 40.0 - 44.0 * u, 1e-9), "and its bottom to the view's bottom");
     CHECK_MSG(hits[3].Max().x == kView169.x && Near(boxes[3].Max().x, kView169.x - 30.0 - 44.0 * u, 1e-9), "pause's right goes to the view's right edge");
     CHECK_MSG(hits[4].min.y == 0.0 && Near(boxes[4].min.y, 20.0 + 44.0 * u, 1e-9), "clear-portals' top goes to the view's top");
+    // Split: the right arrow's box is in the notch's margin from the right (30) and the bottom (40), and its hit goes to the view's right edge and bottom.
+    CHECK_MSG(Near(boxes[1].Max().x, kView169.x - 30.0 - 44.0 * u, 1e-9) && Near(boxes[1].Max().y, kHeight - 40.0 - 44.0 * u, 1e-9), "the right arrow's box is in the notch's margin");
+    CHECK_MSG(hits[1].Max().x == kView169.x && hits[1].Max().y == kHeight, "and its hit goes to the view's right edge and bottom");
 }
 
-void ThereIsNoGrowthTowardTheWorldByDefault() {
+void CheckNoGrowth(Controls::Arrows arrows) {
     const Controls::Rules rules = LoadModern();
-    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, kNoTuning, kView169, kNoInsets);
+    const Controls::Tuning tuning = TunedFor(arrows);
+    const std::string which = std::string(ArrangementName(arrows)) + ": ";
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
     const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
     // Every side of every hit rectangle is the box's own, the middle of a seam or the view's edge: nothing is a margin added.
     for (const Controls::Id id : Controls::kClaimOrder) {
@@ -1162,10 +1365,11 @@ void ThereIsNoGrowthTowardTheWorldByDefault() {
         const auto owns = [&](double edge, double boxEdge, double viewEdge, bool seamSide, double seamEdge) {
             return edge == boxEdge || edge == viewEdge || (seamSide && Near(edge, seamEdge, 1e-9));
         };
-        const std::string name = Controls::KeyOf(id);
-        // The seams: restart|pause at the middle of their gap and the pair's; the other sides have none.
-        const bool pairLeft = id == Controls::Id::Left;
-        const bool pairRight = id == Controls::Id::Right;
+        const std::string name = which + Controls::KeyOf(id);
+        // The seams: restart|pause at the middle of their gap and, GROUPED, the pair's; the other sides have none (split has no seam between the arrows).
+        const bool grouped = arrows == Controls::Arrows::Grouped;
+        const bool pairLeft = grouped && id == Controls::Id::Left;
+        const bool pairRight = grouped && id == Controls::Id::Right;
         const bool restart = id == Controls::Id::Reset;
         const bool pause = id == Controls::Id::Menu;
         CHECK_MSG(owns(hit.min.x, box.min.x, 0.0, pairRight || pause, (boxes[pairRight ? 0 : 2].Max().x + box.min.x) * 0.5), name + ": the hit's left side");
@@ -1179,34 +1383,44 @@ void ThereIsNoGrowthTowardTheWorldByDefault() {
     Controls::Rules edited = rules;
     edited.hit.growPx[static_cast<std::size_t>(Controls::Id::Right)] = 16.0;
     const std::array<Hud::Rect, 5> grown = Controls::HitRects(edited, boxes, kView169, kNoInsets);
-    CHECK_MSG(Near(grown[1].min.y, boxes[1].min.y - grow, 1e-9), "16 px of growth lifts the right arrow's top by 5.69 units");
-    CHECK_MSG(Near(grown[1].Max().x, boxes[1].Max().x + grow, 1e-9), "and pushes its right side out by 5.69 units");
+    CHECK_MSG(Near(grown[1].min.y, boxes[1].min.y - grow, 1e-9), which + "16 px of growth lifts the right arrow's top by 5.69 units");
+    if (arrows == Controls::Arrows::Grouped) {
+        CHECK_MSG(Near(grown[1].Max().x, boxes[1].Max().x + grow, 1e-9), which + "and pushes its right side out by 5.69 units");
+        // The seam and the edge still win over it: the seam stays at the middle of the gap, the bottom at the view's.
+        CHECK_MSG(grown[1].min.x == hits[1].min.x && grown[1].Max().y == kHeight, which + "the right arrow's seam and bottom are what they were");
+    } else {
+        // Split: the right arrow's side toward the world is its LEFT one, which is pushed out by 5.69 units; its right side is the view's edge,
+        // which the growth cannot pass, and its bottom stays on the view's bottom.
+        CHECK_MSG(Near(grown[1].min.x, boxes[1].min.x - grow, 1e-9), which + "and pushes its left side out by 5.69 units");
+        CHECK_MSG(grown[1].Max().x == kView169.x && grown[1].Max().y == kHeight, which + "its right side and bottom stay on the view's edges");
+    }
     CHECK_MSG(SameBits(grown[0], hits[0]) && SameBits(grown[2], hits[2]) && SameBits(grown[3], hits[3]) && SameBits(grown[4], hits[4]),
-              "and only the one control's");
-    // The seam and the edge still win over it: the seam stays at the middle of the gap, the bottom at the view's.
-    CHECK_MSG(grown[1].min.x == hits[1].min.x && grown[1].Max().y == kHeight, "the right arrow's seam and bottom are what they were");
+              which + "and only the one control's");
     edited.hit.growPx[static_cast<std::size_t>(Controls::Id::Left)] = 16.0;
     const std::array<Hud::Rect, 5> bothGrown = Controls::HitRects(edited, boxes, kView169, kNoInsets);
-    CHECK_MSG(Near(bothGrown[0].min.y, boxes[0].min.y - grow, 1e-9), "16 px on walk_left lifts its top: this is the change a mutation of the data makes");
-    CHECK_MSG(!SameBits(bothGrown[0], hits[0]), "and it is seen");
+    CHECK_MSG(Near(bothGrown[0].min.y, boxes[0].min.y - grow, 1e-9), which + "16 px on walk_left lifts its top: this is the change a mutation of the data makes");
+    CHECK_MSG(!SameBits(bothGrown[0], hits[0]), which + "and it is seen");
+}
+
+void ThereIsNoGrowthTowardTheWorldByDefault() {
+    for (const Controls::Arrows arrows : kArrangements) CheckNoGrowth(arrows);
 }
 
 void AHitRectNeverLeavesTheView() {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
     long checked = 0;
-    for (const Aspect& aspect : kAspects) {
+    for (const Controls::Arrows arrows : kArrangements) for (const Aspect& aspect : kAspects) {
         const glm::dvec2 view = ViewOf(aspect.ratio);
         for (int steps = 4; steps <= 14; ++steps) {
-            Controls::Tuning tuning;
-            tuning.sizeSteps = steps;
+            const Controls::Tuning tuning = TunedFor(arrows, steps);
             const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
             for (std::size_t i = 0; i < 5; ++i) {
                 const Hud::Rect& hit = layout.frames[i].hit.rect;
                 const glm::dvec2 max = hit.Max();
                 ++checked;
                 CHECK_MSG(hit.min.x >= 0.0 && hit.min.y >= 0.0 && max.x <= view.x && max.y <= view.y && hit.size.x > 0.0 && hit.size.y > 0.0,
-                          std::string(aspect.name) + " size " + Num(static_cast<double>(steps) / 10.0) + " control " + std::to_string(i) + ": " + EdgesOf(hit));
+                          std::string(ArrangementName(arrows)) + " " + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + " control " + std::to_string(i) + ": " + EdgesOf(hit));
                 // And a hit holds its box: it is a growth of it.
                 const Hud::Rect& box = layout.frames[i].rect;
                 const glm::dvec2 bmax = box.Max();
@@ -1215,14 +1429,17 @@ void AHitRectNeverLeavesTheView() {
             }
         }
     }
-    CHECK_EQ(static_cast<int>(checked), 9 * 11 * 5);
+    CHECK_EQ(static_cast<int>(checked), 2 * 9 * 11 * 5); // two arrangements
     // Whatever the growth: 1,000 px of it is held to the view.
     Controls::Rules edited = rules;
     for (double& grow : edited.hit.growPx) grow = 1000.0;
-    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(edited, kNoTuning, kView169, kNoInsets);
-    for (const Hud::Rect& hit : Controls::HitRects(edited, boxes, kView169, kNoInsets)) {
-        const glm::dvec2 max = hit.Max();
-        CHECK_MSG(hit.min.x >= 0.0 && hit.min.y >= 0.0 && max.x <= kView169.x && max.y <= kHeight, "1,000 px of growth is held to the view: " + EdgesOf(hit));
+    for (const Controls::Arrows arrows : kArrangements) {
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(edited, TunedFor(arrows), kView169, kNoInsets);
+        for (const Hud::Rect& hit : Controls::HitRects(edited, boxes, kView169, kNoInsets)) {
+            const glm::dvec2 max = hit.Max();
+            CHECK_MSG(hit.min.x >= 0.0 && hit.min.y >= 0.0 && max.x <= kView169.x && max.y <= kHeight,
+                      std::string(ArrangementName(arrows)) + ": 1,000 px of growth is held to the view: " + EdgesOf(hit));
+        }
     }
 }
 
@@ -1230,39 +1447,57 @@ void TheModernHudIsNoMoreThanOneAndAHalfTimesTheClassicsAtDefaultSize() {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
     CHECK_MSG(Near(kClassicTotal, 9505.98, 0.01), "the classic dead zone is " + Num(kClassicTotal));
-    // Per aspect, in total (clear shown, so all five) and for the pair alone.
-    const std::array<std::pair<const char*, double>, 3> shapes = {{{"16:9", 16.0 / 9.0}, {"4:3", 4.0 / 3.0}, {"5:4", 1.25}}};
-    const std::array<double, 3> percent = {11.7, 15.7, 16.7};
-    std::size_t at = 0;
-    for (const auto& [name, ratio] : shapes) {
-        const glm::dvec2 view = ViewOf(ratio);
-        const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, view, kNoInsets, 5000.0);
-        double total = 0.0;
-        for (const Controls::Frame& frame : layout.frames) total += AreaOf(frame.hit.rect);
-        const double pair = AreaOf(layout.At(Controls::Id::Left).hit.rect) + AreaOf(layout.At(Controls::Id::Right).hit.rect);
-        const double ratioTotal = total / kClassicTotal;
-        CHECK_MSG(ratioTotal <= 1.5, std::string(name) + ": the modern HUD is " + Num(ratioTotal) + " times the classic's, over the budget of 1.5");
-        CHECK_MSG(pair / kClassicPair <= 1.0, std::string(name) + ": the pair alone is " + Num(pair / kClassicPair) + " times the classic discs, over 1.0");
-        CHECK_MSG(Near(total, 13680.9, 0.1) && Near(ratioTotal, 1.44, 0.005), std::string(name) + ": the total is " + Num(total) + ", " + Num(ratioTotal) + " times");
-        CHECK_MSG(Near(pair, 4310.2, 0.1) && Near(pair / kClassicPair, 0.67, 0.005), std::string(name) + ": the pair is " + Num(pair));
-        CHECK_MSG(Near(100.0 * total / (view.x * view.y), percent[at], 0.05), std::string(name) + ": " + Num(100.0 * total / (view.x * view.y)) + " percent of the view");
-        ++at;
-    }
-    // The two other looks, pinned as the numbers the owner decides on (Appendix A); only the default is held to the budget.
-    struct Look {
-        Controls::Preset preset;
-        double total;
-        double pairShare;
+    // Per arrangement, per aspect, in total (clear shown, so all five) and for the arrows alone. GROUPED is planning step 180's (1.44 times the
+    // classic, the pair 0.67); SPLIT is planning step 186's: each arrow's hit is a square of 47.50 units, so the two are 4,512.9 (0.70 of the classic
+    // discs) and the whole HUD 13,883.6, 1.46 times the classic and under the budget of 1.5 at every aspect (the areas do not depend on the width).
+    struct Budget {
+        Controls::Arrows arrows;
+        double total;     // u^2
+        double times;     // of the classic total, to two decimals
+        double pair;      // the two arrows' hit areas together, u^2
+        double pairTimes; // of the classic discs', to two decimals
+        std::array<double, 3> percent; // of the view at 16:9, 4:3 and 5:4
+        double balancedTotal;
+        double balancedPairShare;
+        double mrTotal;
+        double mrPairShare;
     };
-    for (const Look& look : {Look{Controls::Preset::Balanced, 14212.7, 0.75}, Look{Controls::Preset::Mr, 15204.7, 0.91}}) {
-        Controls::Tuning tuning;
-        tuning.preset = look.preset;
-        const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, kView169, kNoInsets, 5000.0);
-        double total = 0.0;
-        for (const Controls::Frame& frame : layout.frames) total += AreaOf(frame.hit.rect);
-        const double pair = AreaOf(layout.At(Controls::Id::Left).hit.rect) + AreaOf(layout.At(Controls::Id::Right).hit.rect);
-        CHECK_MSG(Near(total, look.total, 0.1) && Near(pair / kClassicPair, look.pairShare, 0.005),
-                  std::string(Controls::NameOf(look.preset)) + ": total " + Num(total) + ", the pair " + Num(pair / kClassicPair));
+    const std::array<Budget, 2> budgets = {{{Controls::Arrows::Split, 13883.6, 1.46, 4512.9, 0.70, {11.92, 15.89, 16.95}, 14419.6, 0.785, 15415.6, 0.94},
+                                            {Controls::Arrows::Grouped, 13680.9, 1.44, 4310.2, 0.67, {11.7, 15.7, 16.7}, 14212.7, 0.75, 15204.7, 0.91}}};
+    const std::array<std::pair<const char*, double>, 3> shapes = {{{"16:9", 16.0 / 9.0}, {"4:3", 4.0 / 3.0}, {"5:4", 1.25}}};
+    for (const Budget& budget : budgets) {
+        const Controls::Tuning tuning = TunedFor(budget.arrows);
+        std::size_t at = 0;
+        for (const auto& [name, ratio] : shapes) {
+            const glm::dvec2 view = ViewOf(ratio);
+            const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
+            double total = 0.0;
+            for (const Controls::Frame& frame : layout.frames) total += AreaOf(frame.hit.rect);
+            const double pair = AreaOf(layout.At(Controls::Id::Left).hit.rect) + AreaOf(layout.At(Controls::Id::Right).hit.rect);
+            const double ratioTotal = total / kClassicTotal;
+            const std::string where = std::string(ArrangementName(budget.arrows)) + " " + name + ": ";
+            CHECK_MSG(ratioTotal <= 1.5, where + "the modern HUD is " + Num(ratioTotal) + " times the classic's, over the budget of 1.5");
+            CHECK_MSG(pair / kClassicPair <= 1.0, where + "the arrows alone are " + Num(pair / kClassicPair) + " times the classic discs, over 1.0");
+            CHECK_MSG(Near(total, budget.total, 0.1) && Near(ratioTotal, budget.times, 0.005), where + "the total is " + Num(total) + ", " + Num(ratioTotal) + " times");
+            CHECK_MSG(Near(pair, budget.pair, 0.1) && Near(pair / kClassicPair, budget.pairTimes, 0.005), where + "the arrows are " + Num(pair));
+            CHECK_MSG(Near(100.0 * total / (view.x * view.y), budget.percent[at], 0.05), where + Num(100.0 * total / (view.x * view.y)) + " percent of the view");
+            ++at;
+        }
+        // The two other looks, pinned as the numbers the owner decides on (Appendix A); only the default is held to the budget.
+        struct Look {
+            Controls::Preset preset;
+            double total;
+            double pairShare;
+        };
+        for (const Look& look : {Look{Controls::Preset::Balanced, budget.balancedTotal, budget.balancedPairShare}, Look{Controls::Preset::Mr, budget.mrTotal, budget.mrPairShare}}) {
+            const Controls::Tuning tuned = TunedFor(budget.arrows, std::nullopt, look.preset);
+            const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuned, kView169, kNoInsets, 5000.0);
+            double total = 0.0;
+            for (const Controls::Frame& frame : layout.frames) total += AreaOf(frame.hit.rect);
+            const double pair = AreaOf(layout.At(Controls::Id::Left).hit.rect) + AreaOf(layout.At(Controls::Id::Right).hit.rect);
+            CHECK_MSG(Near(total, look.total, 0.1) && Near(pair / kClassicPair, look.pairShare, 0.005),
+                      std::string(ArrangementName(budget.arrows)) + " " + Controls::NameOf(look.preset) + ": total " + Num(total) + ", the arrows " + Num(pair / kClassicPair));
+        }
     }
     // The classic style's own areas, from the same function: 3,217 a disc quarter and 1,024 a button (a literal check of the baseline).
     const Controls::Layout classic = Controls::LayOut(Controls::Style::Classic, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
@@ -1277,43 +1512,62 @@ void TheModernHudIsNoMoreThanOneAndAHalfTimesTheClassicsAtDefaultSize() {
 void TheSlideMovesEachArrowFromItsNearerEdgeAndTheHitFollows() {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
-    const Controls::Layout rest = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
-    // The classic pads' own slide: 128 units out at the start, in by 700 ms, smoothEnd between (ui.json).
-    const std::array<std::pair<double, double>, 5> ages = {{{0.0, 128.0}, {350.0, 128.0 * (1.0 - std::sqrt(0.5))}, {699.0, -1.0}, {700.0, 0.0}, {701.0, 0.0}}};
-    for (const auto& [age, slide] : ages) {
-        const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, age);
-        const double want = slide < 0.0 ? Hud::PadSlideUnits(hud, age) : slide;
-        for (const Controls::Id id : kWalks) {
-            const std::string at = std::string(Controls::KeyOf(id)) + " at " + Num(age) + " ms: ";
-            const Controls::Frame& frame = laid.At(id);
-            const Controls::Frame& settled = rest.At(id);
-            // Both arrows rest in the left half of the view, so both come in from the left: the box and the hit move the same way.
-            CHECK_MSG(Near(settled.rect.min.x - frame.rect.min.x, want, 1e-9) && frame.rect.min.y == settled.rect.min.y, at + "the box is " + Num(want) + " out");
-            CHECK_MSG(Near(settled.hit.rect.min.x - frame.hit.rect.min.x, want, 1e-9) && frame.hit.rect.min.y == settled.hit.rect.min.y, at + "and the hit goes with it");
-            CHECK_MSG(frame.rect.size == settled.rect.size && frame.hit.rect.size == settled.hit.rect.size, at + "neither changes size");
-            if (want == 0.0) CHECK_MSG(SameBits(frame.rect, settled.rect) && SameBits(frame.hit, settled.hit), at + "once in, the frame is the settled one, bit for bit");
+    for (const Controls::Arrows arrows : kArrangements) {
+        const Controls::Tuning tuning = TunedFor(arrows);
+        const std::string which = std::string(ArrangementName(arrows)) + ": ";
+        const Controls::Layout rest = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, kView169, kNoInsets, 5000.0);
+        // The classic pads' own slide: 128 units out at the start, in by 700 ms, smoothEnd between (ui.json).
+        const std::array<std::pair<double, double>, 5> ages = {{{0.0, 128.0}, {350.0, 128.0 * (1.0 - std::sqrt(0.5))}, {699.0, -1.0}, {700.0, 0.0}, {701.0, 0.0}}};
+        for (const auto& [age, slide] : ages) {
+            const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, kView169, kNoInsets, age);
+            const double want = slide < 0.0 ? Hud::PadSlideUnits(hud, age) : slide;
+            for (const Controls::Id id : kWalks) {
+                const std::string at = which + Controls::KeyOf(id) + " at " + Num(age) + " ms: ";
+                const Controls::Frame& frame = laid.At(id);
+                const Controls::Frame& settled = rest.At(id);
+                // Each arrow comes in from the NEARER of the view's side edges, judged where it rests: grouped, both rest in the left half and come
+                // in from the left; split, walk_right rests in the right half and comes in from the right. The box and the hit move the same way.
+                const double toward = settled.rect.Centre().x > kView169.x * 0.5 ? -1.0 : 1.0; // settled - frame: + from the left, - from the right
+                CHECK_MSG(Near(settled.rect.min.x - frame.rect.min.x, toward * want, 1e-9) && frame.rect.min.y == settled.rect.min.y, at + "the box is " + Num(want) + " out");
+                CHECK_MSG(Near(settled.hit.rect.min.x - frame.hit.rect.min.x, toward * want, 1e-9) && frame.hit.rect.min.y == settled.hit.rect.min.y, at + "and the hit goes with it");
+                CHECK_MSG(frame.rect.size == settled.rect.size && frame.hit.rect.size == settled.hit.rect.size, at + "neither changes size");
+                if (want == 0.0) CHECK_MSG(SameBits(frame.rect, settled.rect) && SameBits(frame.hit, settled.hit), at + "once in, the frame is the settled one, bit for bit");
+            }
+            // The corner buttons do not slide: their entrance is a Placement (the next case).
+            for (const Controls::Id id : kCorners) {
+                CHECK_MSG(SameBits(laid.At(id).rect, rest.At(id).rect) && SameBits(laid.At(id).hit, rest.At(id).hit), which + Controls::KeyOf(id) + " at " + Num(age) + " ms is not slid");
+            }
         }
-        // The corner buttons do not slide: their entrance is a Placement (the next case).
-        for (const Controls::Id id : kCorners) {
-            CHECK_MSG(SameBits(laid.At(id).rect, rest.At(id).rect) && SameBits(laid.At(id).hit, rest.At(id).hit), std::string(Controls::KeyOf(id)) + " at " + Num(age) + " ms is not slid");
+        CHECK_MSG(Controls::ClassicSlideUnits(hud, 0.0) == 128.0 && Controls::ClassicSlideUnits(hud, 700.0) == 0.0, "the slide is the classic's: 128 units over 700 ms");
+        // At the very start every arrow is wholly off the screen at the side it comes from (as the classic pads are), so nothing in the view is claimed.
+        const Controls::Layout start = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, kView169, kNoInsets, 0.0);
+        CHECK(start.At(Controls::Id::Left).rect.Max().x < 0.0);
+        if (arrows == Controls::Arrows::Grouped) {
+            CHECK(start.At(Controls::Id::Right).rect.Max().x < 0.0);
+        } else {
+            CHECK_MSG(start.At(Controls::Id::Right).rect.min.x > kView169.x, which + "walk_right starts wholly off the view's right edge");
         }
-    }
-    CHECK_MSG(Controls::ClassicSlideUnits(hud, 0.0) == 128.0 && Controls::ClassicSlideUnits(hud, 700.0) == 0.0, "the slide is the classic's: 128 units over 700 ms");
-    // At the very start both arrows are wholly off the screen to the left (as the classic pads are), so nothing in the view is claimed.
-    const Controls::Layout start = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 0.0);
-    CHECK(start.At(Controls::Id::Left).rect.Max().x < 0.0);
-    CHECK(!start.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, 230.0)) && !start.At(Controls::Id::Right).hit.Contains(glm::dvec2(10.0, 230.0)));
-    CHECK(rest.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, 230.0)));
+        for (const double x : {10.0, kView169.x - 10.0, 80.0, kView169.x - 80.0}) {
+            CHECK(!start.At(Controls::Id::Left).hit.Contains(glm::dvec2(x, 230.0)) && !start.At(Controls::Id::Right).hit.Contains(glm::dvec2(x, 230.0)));
+        }
+        CHECK(rest.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, 230.0)));
+        if (arrows == Controls::Arrows::Split) CHECK(rest.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 10.0, 230.0)));
 
-    // An arrow moved into the right half comes in from the right: the nearer edge is judged where it rests.
-    Controls::Tuning moved;
-    moved.move[static_cast<std::size_t>(Controls::Id::Left)] = glm::dvec2(300.0, 0.0);
-    const Controls::Layout settled = Controls::LayOut(Controls::Style::Modern, rules, hud, moved, kView169, kNoInsets, 5000.0);
-    const Controls::Layout early = Controls::LayOut(Controls::Style::Modern, rules, hud, moved, kView169, kNoInsets, 0.0);
-    CHECK_MSG(settled.At(Controls::Id::Left).rect.Centre().x > kView169.x * 0.5, "the moved arrow rests in the right half");
-    CHECK_MSG(Near(early.At(Controls::Id::Left).rect.min.x - settled.At(Controls::Id::Left).rect.min.x, 128.0, 1e-9), "and comes in from the right");
-    CHECK_MSG(Near(early.At(Controls::Id::Left).hit.rect.min.x - settled.At(Controls::Id::Left).hit.rect.min.x, 128.0, 1e-9), "its hit with it");
-    CHECK_MSG(Near(early.At(Controls::Id::Right).rect.min.x - settled.At(Controls::Id::Right).rect.min.x, -128.0, 1e-9), "while the other arrow still comes from the left");
+        // An arrow moved into the other half comes in from the other edge: the nearer edge is judged where it rests. (Grouped: walk_left moved right;
+        // split: walk_right moved left, 300 units, which fits.)
+        const Controls::Id mover = arrows == Controls::Arrows::Grouped ? Controls::Id::Left : Controls::Id::Right;
+        const Controls::Id other = arrows == Controls::Arrows::Grouped ? Controls::Id::Right : Controls::Id::Left;
+        Controls::Tuning moved = tuning;
+        moved.move[static_cast<std::size_t>(mover)] = glm::dvec2(arrows == Controls::Arrows::Grouped ? 300.0 : -300.0, 0.0);
+        const Controls::Layout settled = Controls::LayOut(Controls::Style::Modern, rules, hud, moved, kView169, kNoInsets, 5000.0);
+        const Controls::Layout early = Controls::LayOut(Controls::Style::Modern, rules, hud, moved, kView169, kNoInsets, 0.0);
+        const bool movedToTheRight = arrows == Controls::Arrows::Grouped;
+        CHECK_MSG((settled.At(mover).rect.Centre().x > kView169.x * 0.5) == movedToTheRight, which + "the moved arrow rests in the " + (movedToTheRight ? "right" : "left") + " half");
+        CHECK_MSG(Near(early.At(mover).rect.min.x - settled.At(mover).rect.min.x, movedToTheRight ? 128.0 : -128.0, 1e-9), which + "and comes in from the " + (movedToTheRight ? "right" : "left"));
+        CHECK_MSG(Near(early.At(mover).hit.rect.min.x - settled.At(mover).hit.rect.min.x, movedToTheRight ? 128.0 : -128.0, 1e-9), which + "its hit with it");
+        // The other arrow comes from its own side: grouped, from the left (-128); split, walk_left from the left (-128) as before.
+        CHECK_MSG(Near(early.At(other).rect.min.x - settled.At(other).rect.min.x, -128.0, 1e-9), which + "while the other arrow still comes from the left");
+    }
 }
 
 void TheCornerPlacementsGiveTheOriginalsEntranceAtTheInsetCorners() {
@@ -1388,24 +1642,33 @@ void DefaultTuningIsTheBaseBitForBit() {
     CHECK(kNoTuning.IsDefault(rules) && explicitDefault.IsDefault(rules));
     CHECK_MSG(!explicitDefault.Clamped(rules).sizeSteps && !explicitDefault.Clamped(rules).opacitySteps, "a size and an opacity equal to the default are stored as unset");
     CHECK(explicitDefault.Size(rules) == kNoTuning.Size(rules) && explicitDefault.Opacity(rules) == kNoTuning.Opacity(rules));
+    // The arrangement is a capture's, not a player's: it changes where a default control stands but it is not a change a player made, so a tuning that
+    // only asks for one is still the default (IsDefault) and writes nothing (ToJson).
+    CHECK_MSG(kGrouped.IsDefault(rules) && kGrouped.ToJson(rules) == "{}" && kGrouped.ToJsonMembers(rules).empty(), "`arrows=grouped` is not saved");
+    CHECK_MSG(kGrouped.Clamped(rules).arrows == Controls::Arrows::Grouped, "and clamping the tuning keeps it");
 
-    long differ = 0;
-    for (const glm::dvec2& view : {kView169, kView43, kView21, ViewOf(1.25), ViewOf(32.0 / 9.0)}) {
-        for (const double age : kAges) {
-            const Controls::Layout a = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, view, kNoInsets, age);
-            const Controls::Layout b = Controls::LayOut(Controls::Style::Modern, rules, hud, explicitDefault, view, kNoInsets, age);
-            const Controls::Layout c = Controls::LayOut(Controls::Style::Modern, rules, hud, explicitDefault.Clamped(rules), view, kNoInsets, age);
-            for (std::size_t i = 0; i < 5; ++i) {
-                if (!SameBits(a.frames[i].rect, b.frames[i].rect) || !SameBits(a.frames[i].hit, b.frames[i].hit)) ++differ;
-                if (!SameBits(a.frames[i].rect, c.frames[i].rect) || !SameBits(a.frames[i].hit, c.frames[i].hit)) ++differ;
+    for (const Controls::Arrows arrows : kArrangements) {
+        Controls::Tuning base = TunedFor(arrows);
+        Controls::Tuning written = explicitDefault;
+        written.arrows = arrows;
+        long differ = 0;
+        for (const glm::dvec2& view : {kView169, kView43, kView21, ViewOf(1.25), ViewOf(32.0 / 9.0)}) {
+            for (const double age : kAges) {
+                const Controls::Layout a = Controls::LayOut(Controls::Style::Modern, rules, hud, base, view, kNoInsets, age);
+                const Controls::Layout b = Controls::LayOut(Controls::Style::Modern, rules, hud, written, view, kNoInsets, age);
+                const Controls::Layout c = Controls::LayOut(Controls::Style::Modern, rules, hud, written.Clamped(rules), view, kNoInsets, age);
+                for (std::size_t i = 0; i < 5; ++i) {
+                    if (!SameBits(a.frames[i].rect, b.frames[i].rect) || !SameBits(a.frames[i].hit, b.frames[i].hit)) ++differ;
+                    if (!SameBits(a.frames[i].rect, c.frames[i].rect) || !SameBits(a.frames[i].hit, c.frames[i].hit)) ++differ;
+                }
             }
         }
+        CHECK_MSG(differ == 0, std::string(ArrangementName(arrows)) + ": a default tuning written out differs from none in " + std::to_string(differ) + " frames");
     }
-    CHECK_MSG(differ == 0, "a default tuning written out differs from none in " + std::to_string(differ) + " frames");
 
     // The layout against the design's own formula, in its own order of operations, compared by the doubles' bits: the
     // tuning adds nothing (a size n / 10, a move of 0 added, a clamp that does not move a box inside the view).
-    for (const glm::dvec2& view : {kView169, kView43, kView21}) {
+    for (const Controls::Arrows arrows : kArrangements) for (const glm::dvec2& view : {kView169, kView43, kView21}) {
         const auto px = [&view](double n) { return n * view.y / 720.0; };
         const double side = px(44.0);
         const double top = px(44.0);
@@ -1414,11 +1677,14 @@ void DefaultTuningIsTheBaseBitForBit() {
         const double box = px(128.0);
         const double arrow = box * 0.7;
         const double corner = box * 0.9 * std::max(0.7, 1.0);
-        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, kNoTuning, view, kNoInsets);
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, TunedFor(arrows), view, kNoInsets);
+        const std::string where = std::string(ArrangementName(arrows)) + " " + ShapeOf(view) + ": ";
         const Hud::Rect left{glm::dvec2(0.0 + side, (view.y - 0.0) - bottom - arrow), glm::dvec2(arrow)};
-        const Hud::Rect right{glm::dvec2(0.0 + side + arrow + gap, (view.y - 0.0) - bottom - arrow), glm::dvec2(arrow)};
-        CHECK_MSG(SameBits(boxes[0], left), std::string(ShapeOf(view)) + ": the left arrow's box, bit for bit: " + EdgesOf(boxes[0]));
-        CHECK_MSG(SameBits(boxes[1], right), std::string(ShapeOf(view)) + ": the right arrow's box, bit for bit: " + EdgesOf(boxes[1]));
+        const Hud::Rect right = arrows == Controls::Arrows::Grouped
+                                    ? Hud::Rect{glm::dvec2(0.0 + side + arrow + gap, (view.y - 0.0) - bottom - arrow), glm::dvec2(arrow)}
+                                    : Hud::Rect{glm::dvec2((view.x - 0.0) - side - arrow, (view.y - 0.0) - bottom - arrow), glm::dvec2(arrow)};
+        CHECK_MSG(SameBits(boxes[0], left), where + "the left arrow's box, bit for bit: " + EdgesOf(boxes[0]));
+        CHECK_MSG(SameBits(boxes[1], right), where + "the right arrow's box, bit for bit: " + EdgesOf(boxes[1]));
         // A corner button at rest is its Placement's rectangle (the entrance's end), measured from the view's corner.
         const auto place = [&view, corner](Hud::Anchor anchor, const glm::dvec2& min) {
             Hud::Placement p;
@@ -1429,22 +1695,29 @@ void DefaultTuningIsTheBaseBitForBit() {
         };
         const double pauseX = (view.x - 0.0) - side - corner;
         const double restartX = (view.x - 0.0) - side - corner - gap - corner;
-        CHECK_MSG(SameBits(boxes[3], place(Hud::Anchor::TopRight, glm::dvec2(pauseX, 0.0 + top))), std::string(ShapeOf(view)) + ": pause, bit for bit");
-        CHECK_MSG(SameBits(boxes[2], place(Hud::Anchor::TopRight, glm::dvec2(restartX, 0.0 + top))), std::string(ShapeOf(view)) + ": restart, bit for bit");
-        CHECK_MSG(SameBits(boxes[4], place(Hud::Anchor::TopLeft, glm::dvec2(0.0 + side, 0.0 + top))), std::string(ShapeOf(view)) + ": clear-portals, bit for bit");
+        CHECK_MSG(SameBits(boxes[3], place(Hud::Anchor::TopRight, glm::dvec2(pauseX, 0.0 + top))), where + "pause, bit for bit");
+        CHECK_MSG(SameBits(boxes[2], place(Hud::Anchor::TopRight, glm::dvec2(restartX, 0.0 + top))), where + "restart, bit for bit");
+        CHECK_MSG(SameBits(boxes[4], place(Hud::Anchor::TopLeft, glm::dvec2(0.0 + side, 0.0 + top))), where + "clear-portals, bit for bit");
     }
     // And the hit rectangles from the same formula to a billionth, whatever the aspect: the seam, the reach, nothing else.
-    for (const Aspect& aspect : kAspects) {
+    for (const Controls::Arrows arrows : kArrangements) for (const Aspect& aspect : kAspects) {
         const glm::dvec2 view = ViewOf(aspect.ratio);
-        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, kNoTuning, view, kNoInsets);
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, TunedFor(arrows), view, kNoInsets);
         const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, view, kNoInsets);
         const double seamArrows = (boxes[0].Max().x + boxes[1].min.x) * 0.5;
         const double seamButtons = (boxes[2].Max().x + boxes[3].min.x) * 0.5;
-        CHECK_MSG(RectIs(hits[0], {0.0, boxes[0].min.y, seamArrows, view.y}, 1e-9), std::string(aspect.name) + ": the left arrow's hit " + EdgesOf(hits[0]));
-        CHECK_MSG(RectIs(hits[1], {seamArrows, boxes[1].min.y, boxes[1].Max().x, view.y}, 1e-9), std::string(aspect.name) + ": the right arrow's hit " + EdgesOf(hits[1]));
-        CHECK_MSG(RectIs(hits[2], {boxes[2].min.x, 0.0, seamButtons, boxes[2].Max().y}, 1e-9), std::string(aspect.name) + ": restart's hit " + EdgesOf(hits[2]));
-        CHECK_MSG(RectIs(hits[3], {seamButtons, 0.0, view.x, boxes[3].Max().y}, 1e-9), std::string(aspect.name) + ": pause's hit " + EdgesOf(hits[3]));
-        CHECK_MSG(RectIs(hits[4], {0.0, 0.0, boxes[4].Max().x, boxes[4].Max().y}, 1e-9), std::string(aspect.name) + ": clear-portals' hit " + EdgesOf(hits[4]));
+        const std::string where = std::string(ArrangementName(arrows)) + " " + aspect.name + ": ";
+        if (arrows == Controls::Arrows::Grouped) {
+            CHECK_MSG(RectIs(hits[0], {0.0, boxes[0].min.y, seamArrows, view.y}, 1e-9), where + "the left arrow's hit " + EdgesOf(hits[0]));
+            CHECK_MSG(RectIs(hits[1], {seamArrows, boxes[1].min.y, boxes[1].Max().x, view.y}, 1e-9), where + "the right arrow's hit " + EdgesOf(hits[1]));
+        } else {
+            // Split: no seam; each arrow is its box plus the strips to its own two view edges.
+            CHECK_MSG(RectIs(hits[0], {0.0, boxes[0].min.y, boxes[0].Max().x, view.y}, 1e-9), where + "the left arrow's hit " + EdgesOf(hits[0]));
+            CHECK_MSG(RectIs(hits[1], {boxes[1].min.x, boxes[1].min.y, view.x, view.y}, 1e-9), where + "the right arrow's hit " + EdgesOf(hits[1]));
+        }
+        CHECK_MSG(RectIs(hits[2], {boxes[2].min.x, 0.0, seamButtons, boxes[2].Max().y}, 1e-9), where + "restart's hit " + EdgesOf(hits[2]));
+        CHECK_MSG(RectIs(hits[3], {seamButtons, 0.0, view.x, boxes[3].Max().y}, 1e-9), where + "pause's hit " + EdgesOf(hits[3]));
+        CHECK_MSG(RectIs(hits[4], {0.0, 0.0, boxes[4].Max().x, boxes[4].Max().y}, 1e-9), where + "clear-portals' hit " + EdgesOf(hits[4]));
     }
 }
 
@@ -1621,9 +1894,16 @@ void SafeInsetsMoveTheDefaultsInward() {
     const Controls::Insets notch{10.0, 20.0, 30.0, 40.0};
     const std::array<Hud::Rect, 5> flat = Controls::Boxes(rules, kNoTuning, kView169, kNoInsets);
     const std::array<Hud::Rect, 5> inset = Controls::Boxes(rules, kNoTuning, kView169, notch);
-    // The pair moves in from the left and the bottom, restart and pause from the right and the top, clear-portals from the left and the top.
+    // The left arrow moves in from the left and the bottom, restart and pause from the right and the top, clear-portals from the left and the top.
+    // SPLIT (the default): the right arrow moves in from the RIGHT and the bottom; GROUPED, it moves in from the left with the left arrow.
     CHECK_MSG(Near(inset[0].min.x - flat[0].min.x, 10.0, 1e-9) && Near(inset[0].min.y - flat[0].min.y, -40.0, 1e-9), "the left arrow is 10 in from the left and 40 up from the bottom");
-    CHECK_MSG(Near(inset[1].min.x - flat[1].min.x, 10.0, 1e-9) && Near(inset[1].min.y - flat[1].min.y, -40.0, 1e-9), "and the right one");
+    CHECK_MSG(Near(inset[1].min.x - flat[1].min.x, -30.0, 1e-9) && Near(inset[1].min.y - flat[1].min.y, -40.0, 1e-9), "and the split right arrow is 30 in from the right and 40 up from the bottom");
+    {
+        const std::array<Hud::Rect, 5> groupedFlat = Controls::Boxes(rules, kGrouped, kView169, kNoInsets);
+        const std::array<Hud::Rect, 5> groupedInset = Controls::Boxes(rules, kGrouped, kView169, notch);
+        CHECK_MSG(Near(groupedInset[1].min.x - groupedFlat[1].min.x, 10.0, 1e-9) && Near(groupedInset[1].min.y - groupedFlat[1].min.y, -40.0, 1e-9), "the grouped right arrow is 10 in from the left and 40 up from the bottom");
+        CHECK(groupedInset[0].size == groupedFlat[0].size && Near(groupedInset[1].min.x - groupedInset[0].Max().x, groupedFlat[1].min.x - groupedFlat[0].Max().x, 1e-9));
+    }
     CHECK_MSG(Near(inset[3].min.x - flat[3].min.x, -30.0, 1e-9) && Near(inset[3].min.y - flat[3].min.y, 20.0, 1e-9), "pause is 30 in from the right and 20 down from the top");
     CHECK_MSG(Near(inset[2].min.x - flat[2].min.x, -30.0, 1e-9) && Near(inset[2].min.y - flat[2].min.y, 20.0, 1e-9), "and restart");
     CHECK_MSG(Near(inset[4].min.x - flat[4].min.x, 10.0, 1e-9) && Near(inset[4].min.y - flat[4].min.y, 20.0, 1e-9), "clear-portals is 10 in from the left and 20 down");
@@ -1631,8 +1911,9 @@ void SafeInsetsMoveTheDefaultsInward() {
     CHECK_MSG(Near(inset[0].min.x, 10.0 + m, 1e-9) && Near(kHeight - 40.0 - inset[0].Max().y, m, 1e-9), "the pair's margin is measured from the safe rectangle");
     CHECK_MSG(Near(kView169.x - 30.0 - inset[3].Max().x, m, 1e-9) && Near(inset[3].min.y - 20.0, m, 1e-9), "and pause's");
     CHECK_MSG(Near(inset[4].min.x - 10.0, m, 1e-9) && Near(inset[4].min.y - 20.0, m, 1e-9), "and clear-portals'");
-    // The gaps and sizes are the same.
-    CHECK(inset[0].size == flat[0].size && Near(inset[1].min.x - inset[0].Max().x, flat[1].min.x - flat[0].Max().x, 1e-9));
+    // The sizes are the same, and the split right arrow's margin is measured from the safe rectangle's right and bottom edges too.
+    CHECK(inset[0].size == flat[0].size && inset[1].size == flat[1].size);
+    CHECK_MSG(Near(kView169.x - 30.0 - inset[1].Max().x, m, 1e-9) && Near(kHeight - 40.0 - inset[1].Max().y, m, 1e-9), "the split right arrow's margin is measured from the safe rectangle");
     // Zero insets are no insets, to the bit; the classic layout ignores them altogether.
     const std::array<Hud::Rect, 5> zero = Controls::Boxes(rules, kNoTuning, kView169, Controls::Insets{0.0, 0.0, 0.0, 0.0});
     for (std::size_t i = 0; i < 5; ++i) CHECK_MSG(SameBits(zero[i], flat[i]), "zero insets leave control " + std::to_string(i) + " where it was");
@@ -1643,6 +1924,7 @@ void SafeInsetsMoveTheDefaultsInward() {
     const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, notch, 5000.0);
     CHECK(laid.At(Controls::Id::Left).hit.Contains(glm::dvec2(2.0, kHeight - 2.0)));
     CHECK(laid.At(Controls::Id::Menu).hit.Contains(glm::dvec2(kView169.x - 2.0, 2.0)));
+    CHECK_MSG(laid.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 2.0, kHeight - 2.0)), "and the split right arrow's, to the view's bottom-right corner");
 }
 
 void TheDrawRectPutsEveryTiersBodyOnTheSameFace() {
@@ -1765,11 +2047,21 @@ void TheRingFollowsTheArrowsCentre() {
     CHECK(!Controls::RingFor(rules, hud, Hud::RingAt(hud, 100.0, false), laid.At(Controls::Id::Left)).shown);
     CHECK(!Controls::RingFor(rules, hud, Hud::RingAt(hud, 90000.0, true), laid.At(Controls::Id::Left)).shown);
     CHECK(Controls::RingFor(rules, hud, Hud::RingAt(hud, 100.0, false), laid.At(Controls::Id::Left)).sizeUnits == 0.0);
-    // A moved arrow takes its ring with it.
-    Controls::Tuning moved;
-    moved.move[static_cast<std::size_t>(Controls::Id::Right)] = glm::dvec2(120.0, -40.0);
-    const Controls::Frame movedPad = Controls::LayOut(Controls::Style::Modern, rules, hud, moved, kView169, kNoInsets, 5000.0).At(Controls::Id::Right);
-    CHECK(Near(Controls::RingFor(rules, hud, full, movedPad).centre.x - laid.At(Controls::Id::Right).rect.Centre().x, 120.0, 1e-9));
+    // A moved arrow takes its ring with it. Split: walk_right stands against the view's right edge, so it is moved LEFT (a move to the right would be
+    // pulled back inside); grouped: it is moved right, as it always was.
+    for (const Controls::Arrows arrows : kArrangements) {
+        const double dx = arrows == Controls::Arrows::Split ? -120.0 : 120.0;
+        Controls::Tuning moved = TunedFor(arrows);
+        moved.move[static_cast<std::size_t>(Controls::Id::Right)] = glm::dvec2(dx, -40.0);
+        const Controls::Frame home = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(arrows), kView169, kNoInsets, 5000.0).At(Controls::Id::Right);
+        const Controls::Frame movedPad = Controls::LayOut(Controls::Style::Modern, rules, hud, moved, kView169, kNoInsets, 5000.0).At(Controls::Id::Right);
+        CHECK_MSG(Near(Controls::RingFor(rules, hud, full, movedPad).centre.x - home.rect.Centre().x, dx, 1e-9),
+                  std::string(ArrangementName(arrows)) + ": a moved arrow takes its ring with it");
+    }
+    // The ring is centred on each arrow's own box: the right arrow's, split, in the bottom-right corner (407.6 + 15.9 = 423.5 across, 224.4 down).
+    const Controls::Frame splitRight = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0).At(Controls::Id::Right);
+    const Controls::RingPlace splitRing = Controls::RingFor(rules, hud, full, splitRight);
+    CHECK_MSG(Near(splitRing.centre.x, 423.5378, 1e-3) && Near(splitRing.centre.y, 224.4267, 1e-3), "split: the right arrow's ring is about its box's centre " + At(splitRing.centre));
 }
 
 void HintLeftClearsThePairAndLeavesClassicAlone() {
@@ -1791,45 +2083,112 @@ void HintLeftClearsThePairAndLeavesClassicAlone() {
         double atSeven; // size 0.7
         double atFourteen; // size 1.4
     };
-    // The design's own results (1.6): the pair's hit right edge, 90.74 and 154.45, or the right clamp 8 units inside the view.
-    const std::array<Case, 5> cases = {{{"16:9", 16.0 / 9.0, 90.74, 154.45},
-                                        {"16:10", 1.6, 90.74, 143.20},
-                                        {"3:2", 1.5, 90.74, 117.60},
-                                        {"4:3", 4.0 / 3.0, 74.93, 74.93},
-                                        {"5:4", 1.25, 53.60, 53.60}}};
-    for (const Case& c : cases) {
-        const glm::dvec2 view = ViewOf(c.ratio);
-        for (const int steps : {7, 14}) {
-            Controls::Tuning tuning;
-            tuning.sizeSteps = steps;
-            const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
-            const double left = Controls::HintLeft(Controls::Style::Modern, rules, layout, row, view, allShown);
-            const double want = steps == 7 ? c.atSeven : c.atFourteen;
-            CHECK_MSG(Near(left, want, 0.006), std::string(c.name) + " size " + Num(static_cast<double>(steps) / 10.0) + ": the hint starts at " + Num(left) + ", the design's " + Num(want));
-            // However far right the pair pushes it, its last glyph is 8 units inside the view's right edge or further in.
-            CHECK_MSG(left + extent <= view.x - 8.0 + 1e-9 || left == hint.leftUnits, std::string(c.name) + ": the hint ends inside the view");
-            // The classic style leaves it at 50, whatever the layout under it says.
-            CHECK_MSG(Controls::HintLeft(Controls::Style::Classic, rules, layout, row, view, allShown) == 50.0, std::string(c.name) + ": classic is 50");
+    // GROUPED, the design's own results (1.6): the pair's hit right edge, 90.74 and 154.45, or the right clamp 8 units inside the view.
+    const std::array<Case, 5> grouped = {{{"16:9", 16.0 / 9.0, 90.74, 154.45},
+                                          {"16:10", 1.6, 90.74, 143.20},
+                                          {"3:2", 1.5, 90.74, 117.60},
+                                          {"4:3", 4.0 / 3.0, 74.93, 74.93},
+                                          {"5:4", 1.25, 53.60, 53.60}}};
+    // SPLIT (planning step 186): only the left arrow is one the text can be started clear of. Its hit ends at 47.50 at size 0.7, under the classic 50,
+    // so the text does not move at the default at any shape; at size 1.4 it ends at 79.36, which the right clamp (W - 258.4 - 8) takes back to 74.93 at
+    // 4:3 and 53.60 at 5:4, where the view's edge wins over the arrow's.
+    const std::array<Case, 5> split = {{{"16:9", 16.0 / 9.0, 50.0, 79.36},
+                                        {"16:10", 1.6, 50.0, 79.36},
+                                        {"3:2", 1.5, 50.0, 79.36},
+                                        {"4:3", 4.0 / 3.0, 50.0, 74.93},
+                                        {"5:4", 1.25, 50.0, 53.60}}};
+    for (const Controls::Arrows arrows : kArrangements) {
+        for (const Case& c : arrows == Controls::Arrows::Split ? split : grouped) {
+            const glm::dvec2 view = ViewOf(c.ratio);
+            for (const int steps : {7, 14}) {
+                const Controls::Tuning tuning = TunedFor(arrows, steps);
+                const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, tuning, view, kNoInsets, 5000.0);
+                const double left = Controls::HintLeft(Controls::Style::Modern, rules, layout, row, view, allShown);
+                const double want = steps == 7 ? c.atSeven : c.atFourteen;
+                const std::string at = std::string(ArrangementName(arrows)) + " " + c.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": ";
+                CHECK_MSG(Near(left, want, 0.006), at + "the hint starts at " + Num(left) + ", the design's " + Num(want));
+                // However far right the arrows push it, its last glyph is 8 units inside the view's right edge or further in.
+                CHECK_MSG(left + extent <= view.x - 8.0 + 1e-9 || left == hint.leftUnits, at + "the hint ends inside the view");
+                // The classic style leaves it at 50, whatever the layout under it says.
+                CHECK_MSG(Controls::HintLeft(Controls::Style::Classic, rules, layout, row, view, allShown) == 50.0, at + "classic is 50");
+                // Only ever to the right of the classic place.
+                CHECK_MSG(left >= hint.leftUnits - 1e-9 || left == view.x - extent - 8.0, at + "the hint is never moved left of the classic 50 unless the view's edge takes it");
+            }
         }
     }
-    // The pair's hit right edge is what the text clears: 90.7378 at size 0.7, 154.4533 at 1.4.
-    const Controls::Layout seven = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
-    CHECK_MSG(Controls::HintLeft(Controls::Style::Modern, rules, seven, row, kView169, allShown) == seven.At(Controls::Id::Right).hit.rect.Max().x, "it starts on the pair's hit right edge");
-    // Nothing to clear: the pair is not shown (a weightless level), or the row is above the pair.
+
+    // The whole sweep, the shapes 5:4 to 32:9 by the eleven sizes, from the design's formula written with its own literals (the left arrow's hit ends at
+    // the margin 15.6444 plus its box 45.5111 x size; the text, 258.4 wide, ends 8 units inside the view): split moves nothing at 0.7 or below and shifts
+    // only for the left arrow; grouped keeps the old answers.
+    long sweep = 0;
+    for (const Aspect& aspect : kAspects) {
+        const glm::dvec2 view = ViewOf(aspect.ratio);
+        for (int steps = 4; steps <= 14; ++steps) {
+            const double arrowBox = 128.0 / kPxPerUnit * (static_cast<double>(steps) / 10.0);
+            const double margin = 44.0 / kPxPerUnit;
+            const double clamp = view.x - extent - 8.0;
+            const Controls::Layout splitLayout = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Split, steps), view, kNoInsets, 5000.0);
+            const double splitWant = std::min(std::max(50.0, margin + arrowBox), clamp);
+            const double splitGot = Controls::HintLeft(Controls::Style::Modern, rules, splitLayout, row, view, allShown);
+            CHECK_MSG(Near(splitGot, splitWant, 1e-9), std::string("split ") + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": " + Num(splitGot) + ", the formula's " + Num(splitWant));
+            const Controls::Layout groupedLayout = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Grouped, steps), view, kNoInsets, 5000.0);
+            const double groupedWant = std::min(std::max(50.0, margin + arrowBox + 32.0 / kPxPerUnit + arrowBox), clamp);
+            const double groupedGot = Controls::HintLeft(Controls::Style::Modern, rules, groupedLayout, row, view, allShown);
+            CHECK_MSG(Near(groupedGot, groupedWant, 1e-9), std::string("grouped ") + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": " + Num(groupedGot) + ", the formula's " + Num(groupedWant));
+            // Split: at size 0.7 and below, at every shape, nothing moves (the left arrow ends under the classic 50).
+            if (steps <= 7) CHECK_MSG(splitGot == 50.0, std::string("split ") + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": the hint stays at the classic 50");
+            ++sweep;
+        }
+    }
+    CHECK_EQ(static_cast<int>(sweep), 9 * 11);
+
+    // The arrows' hit right edge is what the text clears: grouped, the pair's (90.7378 at size 0.7); split, the LEFT arrow's alone (52.0533 at 0.8).
+    const Controls::Layout groupedSeven = Controls::LayOut(Controls::Style::Modern, rules, hud, kGrouped, kView169, kNoInsets, 5000.0);
+    CHECK_MSG(Controls::HintLeft(Controls::Style::Modern, rules, groupedSeven, row, kView169, allShown) == groupedSeven.At(Controls::Id::Right).hit.rect.Max().x, "grouped: it starts on the pair's hit right edge");
+    const Controls::Layout splitEight = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Split, 8), kView169, kNoInsets, 5000.0);
+    CHECK_MSG(Controls::HintLeft(Controls::Style::Modern, rules, splitEight, row, kView169, allShown) == splitEight.At(Controls::Id::Left).hit.rect.Max().x &&
+                  Near(splitEight.At(Controls::Id::Left).hit.rect.Max().x, 52.0533, kTable),
+              "split: at size 0.8 it starts on the left arrow's hit right edge, 52.0533");
+    // The right arrow, in the corner, is never what moves the text: not at any size, and not when it is the only arrow shown.
+    for (int steps = 4; steps <= 14; ++steps) {
+        const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Split, steps), kView169, kNoInsets, 5000.0);
+        std::array<bool, 5> rightOnly = {false, true, true, true, true};
+        CHECK_MSG(Controls::HintLeft(Controls::Style::Modern, rules, laid, row, kView169, rightOnly) == 50.0, "split: with only the right arrow shown the text stays at 50, size " + Num(static_cast<double>(steps) / 10.0));
+    }
+
+    // Nothing to clear: the arrows are not shown (a weightless level), or the row is above them.
+    const Controls::Layout seven = Controls::LayOut(Controls::Style::Modern, rules, hud, kGrouped, kView169, kNoInsets, 5000.0);
     std::array<bool, 5> none = allShown;
     none[static_cast<std::size_t>(Controls::Id::Left)] = false;
     none[static_cast<std::size_t>(Controls::Id::Right)] = false;
     CHECK(Controls::HintLeft(Controls::Style::Modern, rules, seven, row, kView169, none) == 50.0);
     CHECK(Controls::HintLeft(Controls::Style::Modern, rules, seven, Controls::HintRow{50.0, extent, 100.0, 33.6}, kView169, allShown) == 50.0);
-    // Only the right arrow shown: its edge, and only the left one: its own.
+    // Grouped, only the right arrow shown: its edge; only the left one: its own. (Both stand in the left half.)
     std::array<bool, 5> rightOnly = none;
     rightOnly[static_cast<std::size_t>(Controls::Id::Right)] = true;
     CHECK(Near(Controls::HintLeft(Controls::Style::Modern, rules, seven, row, kView169, rightOnly), 90.7378, kTable));
     std::array<bool, 5> leftOnly = none;
     leftOnly[static_cast<std::size_t>(Controls::Id::Left)] = true;
     CHECK(Near(Controls::HintLeft(Controls::Style::Modern, rules, seven, row, kView169, leftOnly), 53.1911, kTable));
-    // A hint that is already clear of the pair is not pushed: a row starting at 100 stays at 100.
+    // Split, size 1.0 (the left arrow's hit ends at 61.1556): the left arrow alone moves the text there, and both shown give the same.
+    const Controls::Layout splitTen = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Split, 10), kView169, kNoInsets, 5000.0);
+    CHECK(Near(Controls::HintLeft(Controls::Style::Modern, rules, splitTen, row, kView169, leftOnly), 61.1556, kTable));
+    CHECK(Near(Controls::HintLeft(Controls::Style::Modern, rules, splitTen, row, kView169, allShown), 61.1556, kTable));
+    // A hint that is already clear of the arrows is not pushed: a row starting at 100 stays at 100, in both.
     CHECK(Controls::HintLeft(Controls::Style::Modern, rules, seven, Controls::HintRow{100.0, extent, rowTop, 33.6}, kView169, allShown) == 100.0);
+    CHECK(Controls::HintLeft(Controls::Style::Modern, rules, splitTen, Controls::HintRow{100.0, extent, rowTop, 33.6}, kView169, allShown) == 100.0);
+
+    // Where the free span between the two split arrows is narrower than the text (4:3 and 5:4 at the default size), the text cannot clear both: it clears the
+    // left one, which the rule asks, and is drawn over the right one as the classic text crosses its disc. The numbers are the Step's.
+    for (const auto& [name, ratio, overlap] : {std::tuple<const char*, double, double>{"5:4", 1.25, 35.9}, std::tuple<const char*, double, double>{"4:3", 4.0 / 3.0, 14.6},
+                                              std::tuple<const char*, double, double>{"3:2", 1.5, 0.0}}) {
+        const glm::dvec2 view = ViewOf(ratio);
+        const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, view, kNoInsets, 5000.0);
+        const double left = Controls::HintLeft(Controls::Style::Modern, rules, laid, row, view, allShown);
+        const double crosses = std::max(0.0, left + extent - laid.At(Controls::Id::Right).hit.rect.min.x);
+        CHECK_MSG(Near(crosses, overlap, 0.05), std::string("split ") + name + " size 0.7: the text ends " + Num(crosses) + " units inside the right arrow's hit, the Step's " + Num(overlap));
+        CHECK_MSG(left >= laid.At(Controls::Id::Left).hit.rect.Max().x, std::string("split ") + name + ": and it clears the left arrow");
+    }
 }
 
 void TheHintsArrowEndsAboveThePairsHitRect() {
@@ -1838,18 +2197,37 @@ void TheHintsArrowEndsAboveThePairsHitRect() {
     // The lesson's arrow, in the view at the start of 1-21 (design 1.6): x 85 to 110 and y 64 to 197. A fixture, because its
     // picture and its place are the original's (level20's census: up_down_arrow.ent at (100, 394), its box 25 x 133).
     const Hud::Rect arrow{glm::dvec2(85.0, 64.0), glm::dvec2(25.0, 133.0)};
-    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
-    const Hud::Rect pair = layout.At(Controls::Id::Right).hit.rect;
-    CHECK_MSG(arrow.min.x < pair.Max().x && arrow.Max().x > pair.min.x, "the arrow is over the right arrow's columns, so the clearance is a vertical one");
     CHECK_MSG(arrow.Max().y == 197.0, "the arrow's end is 197");
-    CHECK_MSG(Near(pair.min.y - arrow.Max().y, 11.4978, 1e-3), "the arrow ends " + Num(pair.min.y - arrow.Max().y) + " units above the pair's hit rectangle");
-    CHECK_MSG(arrow.Max().y < pair.min.y, "a drag that followed the arrow down does not reach the right arrow");
-    CHECK_MSG(Overlap(arrow, pair) == 0.0 && Overlap(arrow, layout.At(Controls::Id::Left).hit.rect) == 0.0, "the arrow and the pair's hits do not meet");
-    // The negative control: at Magic Rampage's own size 1.0 the pair's top is 194.84 and the arrow's end is inside it.
-    Controls::Tuning big;
-    big.sizeSteps = 10;
-    const Hud::Rect bigPair = Controls::LayOut(Controls::Style::Modern, rules, hud, big, kView169, kNoInsets, 5000.0).At(Controls::Id::Right).hit.rect;
-    CHECK_MSG(Near(bigPair.min.y, 194.8444, 1e-3) && Overlap(arrow, bigPair) > 0.0, "at size 1.0 the arrow's end is under the pair: that is why the default is 0.7");
+
+    // GROUPED: the arrow is over the right arrow's columns, so the clearance is a vertical one.
+    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, rules, hud, kGrouped, kView169, kNoInsets, 5000.0);
+    const Hud::Rect pair = layout.At(Controls::Id::Right).hit.rect;
+    CHECK_MSG(arrow.min.x < pair.Max().x && arrow.Max().x > pair.min.x, "grouped: the arrow is over the right arrow's columns, so the clearance is a vertical one");
+    CHECK_MSG(Near(pair.min.y - arrow.Max().y, 11.4978, 1e-3), "grouped: the arrow ends " + Num(pair.min.y - arrow.Max().y) + " units above the pair's hit rectangle");
+    CHECK_MSG(arrow.Max().y < pair.min.y, "grouped: a drag that followed the arrow down does not reach the right arrow");
+    CHECK_MSG(Overlap(arrow, pair) == 0.0 && Overlap(arrow, layout.At(Controls::Id::Left).hit.rect) == 0.0, "grouped: the arrow and the pair's hits do not meet");
+    // The negative control: at Magic Rampage's own size 1.0 the grouped pair's top is 194.84 and the arrow's end is inside it.
+    const Hud::Rect bigPair = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Grouped, 10), kView169, kNoInsets, 5000.0).At(Controls::Id::Right).hit.rect;
+    CHECK_MSG(Near(bigPair.min.y, 194.8444, 1e-3) && Overlap(arrow, bigPair) > 0.0, "grouped: at size 1.0 the arrow's end is under the pair: that is why the default is 0.7");
+
+    // SPLIT (planning step 186): the arrows stand in the two bottom corners, so the lesson's arrow (x 85 to 110) is over neither of them at ANY size: the left
+    // arrow's hit ends at 79.36 even at size 1.4 and the right one's begins at 375.75 at 16:9. The arrow no longer limits the size.
+    long checked = 0;
+    for (const Aspect& aspect : kAspects) {
+        const glm::dvec2 view = ViewOf(aspect.ratio);
+        for (int steps = 4; steps <= 14; ++steps) {
+            const Controls::Layout split = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Split, steps), view, kNoInsets, 5000.0);
+            ++checked;
+            CHECK_MSG(Overlap(arrow, split.At(Controls::Id::Left).hit.rect) == 0.0 && Overlap(arrow, split.At(Controls::Id::Right).hit.rect) == 0.0,
+                      std::string("split ") + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": the lesson's arrow meets neither arrow's hit");
+            CHECK_MSG(split.At(Controls::Id::Left).hit.rect.Max().x <= arrow.min.x && split.At(Controls::Id::Right).hit.rect.min.x >= arrow.Max().x,
+                      std::string("split ") + aspect.name + " size " + Num(static_cast<double>(steps) / 10.0) + ": and it stands between them");
+        }
+    }
+    CHECK_EQ(static_cast<int>(checked), 9 * 11);
+    // The left arrow's hit is nearest at size 1.4: 79.36, which is 5.64 units left of the arrow's left side.
+    const Controls::Layout largest = Controls::LayOut(Controls::Style::Modern, rules, hud, TunedFor(Controls::Arrows::Split, 14), kView169, kNoInsets, 5000.0);
+    CHECK_MSG(Near(arrow.min.x - largest.At(Controls::Id::Left).hit.rect.Max().x, 5.64, 1e-3), "split: at size 1.4 the left arrow's hit ends " + Num(arrow.min.x - largest.At(Controls::Id::Left).hit.rect.Max().x) + " units left of the arrow");
 }
 
 // ---- which style a run plays ---------------------------------------------------------------------------------
@@ -1891,15 +2269,27 @@ void ResolvePolicyTruthTable() {
     CHECK_EQ(static_cast<int>(rows), 32);
     // The preset the flag carried.
     const Controls::Policy mr = Controls::ResolvePolicy(std::string("modern,preset=mr"), false, false, false);
-    CHECK(mr.flag.preset == Controls::Preset::Mr && !mr.flag.size && !mr.flag.opacity);
+    CHECK(mr.flag.preset == Controls::Preset::Mr && !mr.flag.size && !mr.flag.opacity && !mr.flag.arrows);
+    // And the arrangement of the walk arrows (planning step 186): `arrows=grouped` is a key like `preset=`, a capture's and a test's, on the policy of a
+    // forced modern run on any kind of run, never saved.
+    for (int bits : {0, 1, 7}) {
+        const Controls::Policy groupedPolicy = Controls::ResolvePolicy(std::string("modern,arrows=grouped"), (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0);
+        CHECK_MSG(groupedPolicy.valid && groupedPolicy.available && groupedPolicy.forced == Controls::Style::Modern && !groupedPolicy.saveAllowed &&
+                      groupedPolicy.flag.arrows == Controls::Arrows::Grouped && groupedPolicy.flag.Any() && !groupedPolicy.flag.preset,
+                  "arrows=grouped rides the policy of a forced modern run, rig " + std::to_string(bits));
+        const Controls::Policy splitPolicy = Controls::ResolvePolicy(std::string("modern,arrows=split,preset=balanced"), (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0);
+        CHECK_MSG(splitPolicy.valid && splitPolicy.flag.arrows == Controls::Arrows::Split && splitPolicy.flag.preset == Controls::Preset::Balanced, "arrows=split and a preset together");
+    }
+    CHECK(!Controls::ResolvePolicy(std::string("classic,arrows=grouped"), false, false, false).valid);
 
     // A bare Paths (every suite, every route) is a default Policy: classic, nothing.
     const Controls::Policy bare;
     CHECK(bare.valid && !bare.available && !bare.forced.has_value() && !bare.saveAllowed && !bare.flag.Any());
 
     // What cannot be read: the style is a word, spelt as the table spells it, and classic takes no keys.
-    const std::array<const char*, 14> bad = {"bogus", "", "Modern", "CLASSIC", "classic,size=1", "classic,", "modern,", "modern,bogus=1", "modern,size=x",
-                                             "modern,preset=big", "modern,walk_left=1", "modern,size=1,size=1", "modern,,", "modern,size=1,"};
+    const std::array<const char*, 19> bad = {"bogus", "", "Modern", "CLASSIC", "classic,size=1", "classic,", "modern,", "modern,bogus=1", "modern,size=x",
+                                             "modern,preset=big", "modern,walk_left=1", "modern,size=1,size=1", "modern,,", "modern,size=1,",
+                                             "modern,arrows=big", "modern,arrows=", "modern,arrows=Split", "modern,arrows=split,arrows=grouped", "modern,arrows=grouped,arrows=grouped"};
     for (const char* text : bad) {
         for (int bits : {0, 1, 7}) {
             const Controls::Policy policy = Controls::ResolvePolicy(std::string(text), (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0);
@@ -2112,8 +2502,10 @@ void WhatIsRefused() {
     const auto number = [](double n) { return Json::Value(n); };
     const auto text = [](const char* s) { return Json::Value(std::string(s)); };
     const std::vector<Edit1> edits = {
-        {{"layout", "version"}, number(2.0), false},
-        {{"layout", "version"}, text("1"), false},
+        // 2 is the number of the arrangement this code lays out (planning step 186); 1 was the grouped pair's (planning step 180) and is another's now.
+        {{"layout", "version"}, number(1.0), false},
+        {{"layout", "version"}, number(3.0), false},
+        {{"layout", "version"}, text("2"), false},
         {{"layout", "version"}, number(1.5), false},
         {{"reference", "height_px"}, number(0.0), false},
         {{"reference", "height_px"}, number(-720.0), false},
@@ -2137,6 +2529,12 @@ void WhatIsRefused() {
         {{"layout", "default_preset"}, text("bogus"), false},
         {{"layout", "default_preset"}, text("Uniform"), false},
         {{"layout", "default_preset"}, text("balanced"), true},
+        {{"layout", "default_arrows"}, text("bogus"), false},
+        {{"layout", "default_arrows"}, text("Split"), false},
+        {{"layout", "default_arrows"}, text(""), false},
+        {{"layout", "default_arrows"}, number(1.0), false},
+        {{"layout", "default_arrows"}, text("grouped"), true},
+        {{"layout", "default_arrows"}, text("split"), true},
         {{"hit", "seam_px"}, number(-1.0), false},
         {{"hit", "edge_reach_px"}, number(-1.0), false},
         {{"hit", "edge_reach_px"}, number(0.0), true},
@@ -2303,7 +2701,7 @@ bool SameTuning(const Controls::Tuning& a, const Controls::Tuning& b) {
 void TheDefaultsOfAnAbsentTuningFileAreTheBase() {
     const Controls::Rules rules = LoadModern();
     // Nothing, an empty object, a file with only the mode, a file of another shape altogether: the default tuning.
-    for (const char* text : {"{}", "{\"mode\":\"modern\",\"layout\":1}", "{\"size\":null}", "[]", "5", "\"x\"", "null",
+    for (const char* text : {"{}", "{\"mode\":\"modern\",\"layout\":2}", "{\"mode\":\"modern\",\"layout\":1}", "{\"size\":null}", "[]", "5", "\"x\"", "null",
                              "{\"size\":\"big\",\"opacity\":[1],\"move\":\"no\"}", "{\"move\":{\"walk_left\":5,\"pause\":[1],\"restart\":[\"a\",\"b\"]}}"}) {
         const Controls::Tuning t = Controls::Tuning::ReadFrom(ParseText(text), rules);
         CHECK_MSG(SameTuning(t, kNoTuning) && t.IsDefault(rules), std::string("'") + text + "' reads as the default");
@@ -2312,7 +2710,7 @@ void TheDefaultsOfAnAbsentTuningFileAreTheBase() {
     CHECK(SameTuning(Controls::Tuning::ReadFrom(Supersonic::Json::Value(), rules), kNoTuning));
     // A size and an opacity and two moves, as the design's example writes them.
     const Controls::Tuning t = Controls::Tuning::ReadFrom(
-        ParseText("{\"mode\":\"modern\",\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10.04,5],\"future\":[1,2]},\"later\":true}"), rules);
+        ParseText("{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10.04,5],\"future\":[1,2]},\"later\":true}"), rules);
     CHECK(t.sizeSteps && *t.sizeSteps == 12 && t.Size(rules) == 1.2);
     CHECK(t.opacitySteps && *t.opacitySteps == 3 && t.Opacity(rules) == 0.6);
     CHECK(t.move[0].x == 2.0 && t.move[0].y == -3.5 && t.move[3].x == -10.0 && t.move[3].y == 5.0);
@@ -2337,11 +2735,16 @@ void TheDefaultsOfAnAbsentTuningFileAreTheBase() {
     CHECK(sizeOf("{\"move\":{\"walk_left\":[0.04,-0.04]}}").IsDefault(rules));
 
     // Moves made against another arrangement are dropped, silently; the size and the opacity are kept. A file with no number is the current one.
-    const Controls::Tuning old = sizeOf("{\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5]}}");
+    // The number is the arrangement the moves were made against: 1 was the grouped pair's (planning step 180), 2 is the split arrows' (planning step 186).
+    // A controls.json saved at layout 1 keeps its size and its opacity and drops its moves.
+    const Controls::Tuning old = sizeOf("{\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5]}}");
     CHECK_MSG(old.sizeSteps && *old.sizeSteps == 12 && old.opacitySteps && *old.opacitySteps == 3 && old.move[0].x == 0.0 && old.move[0].y == 0.0, "another layout number drops the moves and keeps the rest");
+    const Controls::Tuning future = sizeOf("{\"layout\":3,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5]}}");
+    CHECK_MSG(future.sizeSteps && *future.sizeSteps == 12 && future.opacitySteps && *future.opacitySteps == 3 && future.move[0].x == 0.0, "so does a number from the future");
     CHECK(sizeOf("{\"layout\":0,\"move\":{\"walk_left\":[2,-3.5]}}").IsDefault(rules));
-    CHECK(sizeOf("{\"layout\":\"1\",\"move\":{\"walk_left\":[2,-3.5]}}").IsDefault(rules));
-    CHECK(sizeOf("{\"layout\":1,\"move\":{\"walk_left\":[2,-3.5]}}").move[0].x == 2.0);
+    CHECK(sizeOf("{\"layout\":\"2\",\"move\":{\"walk_left\":[2,-3.5]}}").IsDefault(rules));
+    CHECK(sizeOf("{\"layout\":2,\"move\":{\"walk_left\":[2,-3.5]}}").move[0].x == 2.0);
+    CHECK(sizeOf("{\"layout\":1,\"move\":{\"walk_left\":[2,-3.5]}}").IsDefault(rules));
     CHECK(sizeOf("{\"move\":{\"walk_left\":[2,-3.5]}}").move[0].x == 2.0);
 }
 
@@ -2399,8 +2802,14 @@ void TheFlagGrammar() {
     CHECK(Controls::Tuning::ParseFlag("clear_portals=0.5:1e1", items, error) && items.move[4] && items.move[4]->x == 0.5 && items.move[4]->y == 10.0);
     CHECK(Controls::Tuning::ParseFlag("preset=mr,size=1.4,opacity=1.8,walk_left=1:2,walk_right=3:4,restart=-5:6,pause=7:-8,clear_portals=0:0", items, error));
     CHECK(items.preset == Controls::Preset::Mr && items.size == 1.4 && items.opacity == 1.8 && items.move[2] && items.move[2]->x == -5.0 && items.move[3] && items.move[3]->y == -8.0);
+    // The arrangement of the walk arrows (planning step 186): a key like the look, either word, alone or among the rest, and nothing is a move or a size.
+    CHECK(Controls::Tuning::ParseFlag("arrows=grouped", items, error) && items.arrows == Controls::Arrows::Grouped && items.Any() && !items.preset && !items.size && !items.opacity);
+    CHECK(Controls::Tuning::ParseFlag("arrows=split", items, error) && items.arrows == Controls::Arrows::Split && items.Any());
+    CHECK(Controls::Tuning::ParseFlag("preset=mr,arrows=grouped,size=1.4", items, error) && items.arrows == Controls::Arrows::Grouped && items.preset == Controls::Preset::Mr && items.size == 1.4);
+    CHECK(Controls::Tuning::ParseFlag("size=1.4", items, error) && !items.arrows);
     // What is refused, each with a message that carries the usage.
-    const std::array<const char*, 28> bad = {"size", "=1", "size=", "size=abc", "size=1.2x", "size=1,size=2", "opacity=1,opacity=1", "preset=Mr", "preset=", "preset=big",
+    const std::array<const char*, 33> bad = {"arrows", "arrows=", "arrows=Grouped", "arrows=both", "arrows=split,arrows=split",
+                                             "size", "=1", "size=", "size=abc", "size=1.2x", "size=1,size=2", "opacity=1,opacity=1", "preset=Mr", "preset=", "preset=big",
                                              "preset=mr,preset=mr", "walk_left=10", "walk_left=1:2:3", "walk_left=a:b", "walk_left=2000:0", "walk_left=0:-2000",
                                              "walk_left=1:2,walk_left=3:4", "bogus=1", "size=1,,opacity=1", ",size=1", "size=1,", "size=inf", "size=nan", "walk_left=1:inf",
                                              // A number beyond what a double holds is not a number; one inside it, however large, parses and is the grid's to refuse (below).
@@ -2411,6 +2820,7 @@ void TheFlagGrammar() {
         CHECK_MSG(!Controls::Tuning::ParseFlag(text, refused, why) && why.find("--controls") != std::string::npos, std::string("'") + text + "' is refused with the usage: " + why);
     }
     CHECK(std::string(Controls::FlagUsage()).find("preset=uniform|balanced|mr") != std::string::npos);
+    CHECK_MSG(std::string(Controls::FlagUsage()).find("arrows=split|grouped") != std::string::npos, std::string("the usage names the arrangements: ") + Controls::FlagUsage());
     CHECK(std::string(Controls::FlagUsage()).find("walk_left") != std::string::npos && std::string(Controls::FlagUsage()).find("clear_portals") != std::string::npos);
 
     // Applied to the data's grids: a size or an opacity that is not a step is refused, one that is becomes steps; a move is snapped.
@@ -2457,13 +2867,19 @@ void TheFlagGrammar() {
     CHECK(Controls::Tuning::FromFlag(same, rules, tuning, error) && !tuning.sizeSteps && tuning.IsDefault(rules));
     same.preset = Controls::Preset::Mr;
     CHECK(Controls::Tuning::FromFlag(same, rules, tuning, error) && tuning.sizeSteps && *tuning.sizeSteps == 7 && tuning.Size(rules) == 0.7);
+    // The arrangement is carried, applies to nothing a player saves, and a tuning that only asks for one is still the default.
+    Controls::FlagItems asksGrouped;
+    asksGrouped.arrows = Controls::Arrows::Grouped;
+    CHECK(Controls::Tuning::FromFlag(asksGrouped, rules, tuning, error) && tuning.arrows == Controls::Arrows::Grouped && tuning.ArrowsIn(rules) == Controls::Arrows::Grouped &&
+          tuning.IsDefault(rules) && tuning.ToJson(rules) == "{}");
+    CHECK(Controls::Tuning::FromFlag(Controls::FlagItems{}, rules, tuning, error) && !tuning.arrows && tuning.ArrowsIn(rules) == Controls::Arrows::Split);
     // The tuning FromFlag makes carries the flag's own keys and nothing else: it takes no saved tuning to merge with. That the flag REPLACES what was
     // saved, rather than merging with it, is the caller's, and the step that opens the store (CTL-10) pins it; what is held here is that one key gives
     // exactly one key.
     Controls::FlagItems onlyOpacity;
     onlyOpacity.opacity = 0.6;
     Controls::Tuning fromFlag;
-    CHECK(Controls::Tuning::FromFlag(onlyOpacity, rules, fromFlag, error) && !fromFlag.sizeSteps && fromFlag.opacitySteps && *fromFlag.opacitySteps == 3 && !fromFlag.preset &&
+    CHECK(Controls::Tuning::FromFlag(onlyOpacity, rules, fromFlag, error) && !fromFlag.sizeSteps && fromFlag.opacitySteps && *fromFlag.opacitySteps == 3 && !fromFlag.preset && !fromFlag.arrows &&
           std::all_of(fromFlag.move.begin(), fromFlag.move.end(), [](const glm::dvec2& m) { return m == glm::dvec2(0.0); }));
 }
 
@@ -2536,13 +2952,14 @@ void TheTuningKeysAreOnePlaceAndTheMembersSpliceIntoAnObject() {
     // The eight spellings, written out once here: the flag's parser, the saved file's reader and its writer take them from the constants, so a
     // key that changes changes in all three and a test that still says the old one fails.
     CHECK(std::string(Key::kPreset) == "preset" && std::string(Key::kSize) == "size" && std::string(Key::kOpacity) == "opacity" && std::string(Key::kMove) == "move");
+    CHECK(std::string(Key::kArrows) == "arrows");
     CHECK(std::string(Key::kLayout) == "layout" && std::string(Key::kMode) == "mode" && std::string(Key::kVersion) == "version" && std::string(Key::kControls) == "controls");
     // The flag takes the keys by those spellings, and its usage text (which main prints) names them.
     Controls::FlagItems items;
     std::string error;
     CHECK(Controls::Tuning::ParseFlag(std::string(Key::kPreset) + "=mr," + Key::kSize + "=1.2," + Key::kOpacity + "=0.6", items, error) && items.preset == Controls::Preset::Mr &&
           items.size == 1.2 && items.opacity == 0.6);
-    for (const char* key : {Key::kPreset, Key::kSize, Key::kOpacity}) {
+    for (const char* key : {Key::kPreset, Key::kArrows, Key::kSize, Key::kOpacity}) {
         CHECK_MSG(std::string(Controls::FlagUsage()).find(std::string(key) + "=") != std::string::npos, std::string("the usage names ") + key);
     }
     // The saved file's reader and writer take them too: a tuning of every kind, written and read back by the constants' spellings.
@@ -2992,7 +3409,7 @@ void ControlsStoreRoundTrips() {
     // The first choice: Modern. The bytes the design names (2.4, G3): one line, the version, the mode and the layout, and no newline.
     store.SetMode(Controls::Style::Modern);
     CHECK_MSG(store.Save(error) && error.empty(), "a choice is saved: " + error);
-    const std::string modern = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}";
+    const std::string modern = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}";
     CHECK_MSG(StoreRead(file) == modern, "the file reads back byte for byte: " + StoreRead(file));
     CHECK_MSG(store.Text() == modern, "and Text says what Save wrote");
     CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "no temporary is left beside it");
@@ -3005,12 +3422,12 @@ void ControlsStoreRoundTrips() {
     // Changed back, Classic is a choice too and is written: it is not the absence of one.
     again.SetMode(Controls::Style::Classic);
     CHECK_MSG(again.Save(error), "Classic is saved: " + error);
-    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1}}", "as classic: " + StoreRead(file));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2}}", "as classic: " + StoreRead(file));
     Controls::Store third;
     CHECK(third.Open(dir.string(), rules, error) && third.Mode() == std::optional<Controls::Style>(Controls::Style::Classic));
 
     // A size, an opacity and a move already in the file are KEPT and written back unchanged beside the new mode (CTL-10 edits them, not this).
-    const std::string tuned = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
+    const std::string tuned = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
     StoreWrite(file, tuned);
     Controls::Store keep;
     CHECK_MSG(keep.Open(dir.string(), rules, error) && keep.FromFile(), "a tuned file opens: " + error);
@@ -3018,7 +3435,7 @@ void ControlsStoreRoundTrips() {
     CHECK(keep.SavedTuning().move[0].x == 2.0 && keep.SavedTuning().move[0].y == -3.5 && keep.SavedTuning().move[3].x == -10.0);
     keep.SetMode(Controls::Style::Classic);
     CHECK_MSG(keep.Save(error), "saved: " + error);
-    const std::string kept = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
+    const std::string kept = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
     CHECK_MSG(StoreRead(file) == kept, "only the mode changed: " + StoreRead(file));
 
     // A gesture repeated is one write: the same bytes again are not written (Penumbra L9). The first press of a tile IS written even when that
@@ -3041,7 +3458,7 @@ void TheFileHoldsDeltasOnly() {
     std::string error;
     // The defaults written out in full - the look's own size (0.7 at the default preset), the default opacity (1), no move - are not kept: a
     // later change of the shipped default then reaches this player. A move that snaps to nothing is no move.
-    StoreWrite(file, "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":0.7,\"opacity\":1.0,\"move\":{\"walk_left\":[0,0],\"pause\":[0.04,-0.03]}}}");
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":0.7,\"opacity\":1.0,\"move\":{\"walk_left\":[0,0],\"pause\":[0.04,-0.03]}}}");
     Controls::Store store;
     CHECK_MSG(store.Open(dir.string(), rules, error) && store.FromFile(), "opens: " + error);
     CHECK_MSG(!store.SavedTuning().sizeSteps && !store.SavedTuning().opacitySteps, "a size and an opacity equal to the default are not kept");
@@ -3050,7 +3467,7 @@ void TheFileHoldsDeltasOnly() {
     }
     store.SetMode(Controls::Style::Modern);
     CHECK_MSG(store.Save(error), "saved: " + error);
-    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}", "the file is the bare choice: " + StoreRead(file));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}", "the file is the bare choice: " + StoreRead(file));
     for (const char* key : {"size", "opacity", "move"}) {
         CHECK_MSG(StoreRead(file).find(std::string("\"") + key + "\"") == std::string::npos, std::string("no ") + key + " key is written for a default");
     }
@@ -3058,14 +3475,14 @@ void TheFileHoldsDeltasOnly() {
     Controls::Store never;
     const std::filesystem::path dir2 = StoreDir("deltas_never");
     CHECK(never.Open(dir2.string(), rules, error));
-    CHECK_MSG(never.Text() == "{\"version\":1,\"controls\":{\"layout\":1}}", "a store nobody chose in says no mode: " + never.Text());
+    CHECK_MSG(never.Text() == "{\"version\":1,\"controls\":{\"layout\":2}}", "a store nobody chose in says no mode: " + never.Text());
     // One that differs is written, and only it.
-    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":1,\"size\":1.4}}");
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":2,\"size\":1.4}}");
     Controls::Store big;
     CHECK(big.Open(dir.string(), rules, error));
     big.SetMode(Controls::Style::Classic);
     CHECK(big.Save(error));
-    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1,\"size\":1.4}}", "a size that differs is the one key kept: " + StoreRead(file));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"size\":1.4}}", "a size that differs is the one key kept: " + StoreRead(file));
 }
 
 void AMissingFileIsTheShippedDefault() {
@@ -3103,7 +3520,7 @@ void AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave() {
         CHECK_MSG(!store.Mode() && !store.FromFile() && store.Persists() && store.SavedTuning().IsDefault(rules), std::string("'") + text + "': the defaults are kept, with somewhere to write");
         store.SetMode(Controls::Style::Modern);
         CHECK_MSG(store.Save(error), std::string("'") + text + "': the next save writes: " + error);
-        CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}", std::string("'") + text + "': and overwrote it: " + StoreRead(file));
+        CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}", std::string("'") + text + "': and overwrote it: " + StoreRead(file));
     }
     // A file that parses but says little is not unreadable: field by field, the defaults for what it lacks, a mode that is none.
     for (const char* text : {"{}", "{\"controls\":5}", "{\"controls\":{\"mode\":\"retro\"}}", "{\"controls\":{\"mode\":3}}", "{\"controls\":{\"mode\":null}}",
@@ -3142,7 +3559,10 @@ void ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity() {
     const std::filesystem::path dir = StoreDir("layout");
     const std::filesystem::path file = dir / Controls::kStoreFileName;
     std::string error;
-    for (const char* layout : {"2", "0", "1.5", "\"1\"", "null"}) {
+    // The number the file was saved at is the arrangement its moves were made against: 1 was the grouped pair's (planning step 180, what the owner's own
+    // controls.json would have if he had saved one) and the code's is 2 (planning step 186, the arrows split). "1" below IS that file: it keeps its
+    // size and opacity, drops its moves, and the next save writes layout 2. The byte-for-byte pin of CTL-9 moved from layout 1 to layout 2 with it.
+    for (const char* layout : {"1", "3", "0", "1.5", "\"2\"", "null"}) {
         StoreWrite(file, std::string("{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":") + layout +
                              ",\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"restart\":[4,4]}}}");
         Controls::Store store;
@@ -3155,11 +3575,11 @@ void ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity() {
         }
         store.SetMode(Controls::Style::Modern);
         CHECK(store.Save(error));
-        CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":1.2,\"opacity\":0.6}}",
+        CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6}}",
                   std::string("layout ") + layout + ": the next save carries this layout's number and no move: " + StoreRead(file));
     }
     // The current number keeps the moves.
-    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":1,\"move\":{\"restart\":[4,4]}}}");
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":2,\"move\":{\"restart\":[4,4]}}}");
     Controls::Store same;
     CHECK(same.Open(dir.string(), rules, error));
     CHECK_MSG(same.SavedTuning().move[static_cast<std::size_t>(Controls::Id::Reset)] == glm::dvec2(4.0, 4.0), "the current layout number keeps its moves");

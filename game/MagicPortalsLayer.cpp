@@ -588,10 +588,13 @@ void MagicPortalsLayer::resolveControls() {
     }
     const std::optional<Controls::Style> saved = m_controlsStore.Mode();
     m_controlsStyle = Controls::ResolveStyle(policy, saved, m_controlsRules.defaultMode);
-    // THE LAYOUT APPLIES THE LOOK AND NOTHING ELSE until CTL-10: the flag's size, opacity and moves are on
-    // m_controlsTuning (read, on the table's grids, held), and the plan applies them there. `preset=` is the
-    // one key a capture needs now (the owner's comparison of the three looks).
+    // THE LAYOUT APPLIES THE LOOK AND THE ARRANGEMENT AND NOTHING ELSE until CTL-10: the flag's size, opacity and moves are on
+    // m_controlsTuning (read, on the table's grids, held), and the plan applies them there. `preset=` is the key a capture needs
+    // for the owner's comparison of the three looks, and `arrows=` (planning step 186) the one that asks for the grouped pair the
+    // split arrows replaced as the default: both are a capture's or a test's, never saved. A key left out here would be read,
+    // validated and then silently not played, so the arrangement is copied beside the look.
     m_controlsApplied.preset = m_controlsTuning.preset;
+    m_controlsApplied.arrows = m_controlsTuning.arrows;
     // WHY the style is what it is: the flag when there was one (it forces its style, a hand-built
     // `{available, forced = Classic}` policy included), otherwise the shipped default.
     const bool modern = m_controlsStyle == Controls::Style::Modern;

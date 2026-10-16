@@ -1258,8 +1258,9 @@ public:
     // The flag's tuning as it was read onto those rules: its size, opacity and moves are held here and
     // are NOT applied before CTL-10. What the layout applies is ControlsApplied() below.
     const Controls::Tuning& ControlsTuning() const { return m_controlsTuning; }
-    // The tuning the modern layout is laid out with: the LOOK (`preset=`) and nothing else, so the
-    // flag's size, opacity and moves are inert until CTL-10 decides how they are applied.
+    // The tuning the modern layout is laid out with: the LOOK (`preset=`) and the ARRANGEMENT of the walk arrows
+    // (`arrows=`, planning step 186) and nothing else, so the flag's size, opacity and moves are inert until CTL-10
+    // decides how they are applied.
     const Controls::Tuning& ControlsApplied() const { return m_controlsApplied; }
     // The INFO line the run logged once at attach, or empty where it logs none: a developer's or a
     // bare run is silent, so its log is the log it always was. And the one ERROR line, or empty:
@@ -3349,7 +3350,7 @@ private:
     void saveControls();
     Controls::Rules m_controlsRules;
     Controls::Tuning m_controlsTuning;
-    // The part of the tuning the layout applies until CTL-10: the look, nothing else (see ControlsApplied).
+    // The part of the tuning the layout applies until CTL-10: the look and the arrows' arrangement, nothing else (see ControlsApplied).
     Controls::Tuning m_controlsApplied;
     Controls::Style m_controlsStyle{Controls::Style::Classic};
     bool m_modernReady{false};

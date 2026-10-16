@@ -50,6 +50,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -304,11 +305,40 @@ Controls::Rules WithPairGrowth(const Controls::Rules& rules, double growPx) {
     return edited;
 }
 
-Controls::Tuning Look(Controls::Preset preset, std::optional<int> sizeSteps = std::nullopt) {
+Controls::Tuning Look(Controls::Arrows arrows, Controls::Preset preset, std::optional<int> sizeSteps = std::nullopt) {
     Controls::Tuning tuning;
+    tuning.arrows = arrows;
     tuning.preset = preset;
     tuning.sizeSteps = sizeSteps;
     return tuning;
+}
+
+// The two arrangements of the walk arrows the golden records (planning step 186): `split` ships, `grouped` is planning step 180's, kept as an alternative.
+constexpr std::array<Controls::Arrows, 2> kArrangements = {Controls::Arrows::Split, Controls::Arrows::Grouped};
+
+// What the walk arrows' hit rectangles are, as the zones the census judges: grouped, ONE (the two tile into a single rectangle, which the census
+// assumes and counts when it does not); split, TWO, far apart, each its own. The names are the golden's keys.
+struct WalkZone {
+    std::string name; // "pair", or "walk_left" / "walk_right"
+    Zone zone;
+};
+
+std::vector<WalkZone> WalkZones(const Placed& placed, Controls::Arrows arrows) {
+    if (arrows == Controls::Arrows::Grouped) return {WalkZone{"pair", PairZone(placed)}};
+    return {WalkZone{"walk_left", ZoneOf(placed.hits[Ix(Controls::Id::Left)])}, WalkZone{"walk_right", ZoneOf(placed.hits[Ix(Controls::Id::Right)])}};
+}
+
+Labels UnionOf(const std::vector<Labels>& lists) {
+    std::set<std::string> found;
+    for (const Labels& list : lists) found.insert(list.begin(), list.end());
+    return Labels(found.begin(), found.end());
+}
+
+// The levels any of the walk zones blocks: the pair's list, or the union of the two arrows'.
+Labels BlockedByWalk(const Placed& placed, Controls::Arrows arrows, const glm::dvec2& view, double em, double slack) {
+    std::vector<Labels> lists;
+    for (const WalkZone& walk : WalkZones(placed, arrows)) lists.push_back(BlockedBy(Shrink(walk.zone, slack, view), view, em, true));
+    return UnionOf(lists);
 }
 
 // ---- the golden, read strictly enough that a missing key is a failure and not a quiet default -------------------------------
@@ -316,6 +346,16 @@ Controls::Tuning Look(Controls::Preset preset, std::optional<int> sizeSteps = st
 const Json::Value& Key(const Json::Value& from, const char* key, const std::string& where) {
     CHECK_MSG(from.Has(key), "the golden has no \"" + std::string(key) + "\" in " + where);
     return from[key];
+}
+
+const char* ArrangementName(Controls::Arrows arrows) {
+    return arrows == Controls::Arrows::Split ? "split" : "grouped";
+}
+
+// The golden's block of one arrangement: `arrangements.<name>`, which holds the shapes, the 16:9 zones, the growth table, the size sweep and the spawn
+// estimate for that arrangement of the walk arrows.
+const Json::Value& Arrangement(Controls::Arrows arrows) {
+    return Key(Key(g_golden, "arrangements", "the top level"), ArrangementName(arrows), "arrangements");
 }
 
 Labels LabelsOf(const Json::Value& array) {
@@ -384,13 +424,18 @@ constexpr std::array<Controls::Preset, 3> kPresetOf = {Controls::Preset::Uniform
 using Box = std::array<double, 4>; // left, top, right, bottom
 using Boxes = std::array<Box, 5>;  // by Controls::Id: walk_left, walk_right, restart, pause, clear
 
-Boxes Places(double width, const Look& look) {
+Boxes Places(double width, const Look& look, Controls::Arrows arrows) {
     const double arrow = kBox * look.size;
     const double corner = kCorner * std::max(look.size, 1.0);
     const double bottom = look.bottomPx / kPpu;
     Boxes boxes{};
     boxes[Ix(Controls::Id::Left)] = {kMargin, kHeight - bottom - arrow, kMargin + arrow, kHeight - bottom};
-    boxes[Ix(Controls::Id::Right)] = {kMargin + arrow + kGap, kHeight - bottom - arrow, kMargin + arrow + kGap + arrow, kHeight - bottom};
+    // Split (planning step 186): walk_right in the bottom-RIGHT corner, inset by the same margins; grouped: beside walk_left, one gap away.
+    if (arrows == Controls::Arrows::Split) {
+        boxes[Ix(Controls::Id::Right)] = {width - kMargin - arrow, kHeight - bottom - arrow, width - kMargin, kHeight - bottom};
+    } else {
+        boxes[Ix(Controls::Id::Right)] = {kMargin + arrow + kGap, kHeight - bottom - arrow, kMargin + arrow + kGap + arrow, kHeight - bottom};
+    }
     boxes[Ix(Controls::Id::Menu)] = {width - kMargin - corner, kMargin, width - kMargin, kMargin + corner};
     boxes[Ix(Controls::Id::Reset)] = {width - kMargin - corner - kGap - corner, kMargin, width - kMargin - corner - kGap, kMargin + corner};
     boxes[Ix(Controls::Id::Clear)] = {kMargin, kMargin, kMargin + corner, kMargin + corner};
@@ -531,62 +576,74 @@ void TheCameraModelIsTheLayersClamp() {
 
 void TheModulesRectanglesAreTheDesignsArithmetic() {
     constexpr std::array<std::pair<int, int>, 9> shapes = {{{5, 4}, {4, 3}, {3, 2}, {16, 10}, {16, 9}, {18, 9}, {20, 9}, {21, 9}, {32, 9}}};
-    for (const auto& [a, b] : shapes) {
-        const glm::dvec2 view = ViewOf(a, b);
-        for (std::size_t look = 0; look < Design::kLooks.size(); ++look) {
-            for (const double growPx : {0.0, 16.0}) {
-                const Design::Boxes boxes = Design::Places(view.x, Design::kLooks[look]);
-                const Design::Boxes hits = Design::Hits(view.x, boxes, growPx);
-                // Growth is the module's own copy of the data, edited: the python grows both arrows by growPx.
-                const Placed placed = Place(WithPairGrowth(g_rules, growPx), Look(Design::kPresetOf[look]), view);
-                std::string wrong;
-                for (const Controls::Id id : Controls::kClaimOrder) {
-                    const Hud::Rect& box = placed.boxes[Ix(id)];
-                    const Hud::Rect& hit = placed.hits[Ix(id)];
-                    const std::array<double, 4> mineBox = {box.min.x, box.min.y, box.Max().x, box.Max().y};
-                    const std::array<double, 4> mineHit = {hit.min.x, hit.min.y, hit.Max().x, hit.Max().y};
-                    for (std::size_t edge = 0; edge < 4; ++edge) {
-                        if (std::fabs(mineBox[edge] - boxes[Ix(id)][edge]) > kTol) {
-                            wrong += std::string(" ") + Controls::KeyOf(id) + " box[" + std::to_string(edge) + "] " + Num(mineBox[edge]) + " vs " + Num(boxes[Ix(id)][edge]);
-                        }
-                        if (std::fabs(mineHit[edge] - hits[Ix(id)][edge]) > kTol) {
-                            wrong += std::string(" ") + Controls::KeyOf(id) + " hit[" + std::to_string(edge) + "] " + Num(mineHit[edge]) + " vs " + Num(hits[Ix(id)][edge]);
+    for (const Controls::Arrows arrows : kArrangements) {
+        for (const auto& [a, b] : shapes) {
+            const glm::dvec2 view = ViewOf(a, b);
+            for (std::size_t look = 0; look < Design::kLooks.size(); ++look) {
+                for (const double growPx : {0.0, 16.0}) {
+                    const Design::Boxes boxes = Design::Places(view.x, Design::kLooks[look], arrows);
+                    const Design::Boxes hits = Design::Hits(view.x, boxes, growPx);
+                    // Growth is the module's own copy of the data, edited: the python grows both arrows by growPx.
+                    const Placed placed = Place(WithPairGrowth(g_rules, growPx), Look(arrows, Design::kPresetOf[look]), view);
+                    std::string wrong;
+                    for (const Controls::Id id : Controls::kClaimOrder) {
+                        const Hud::Rect& box = placed.boxes[Ix(id)];
+                        const Hud::Rect& hit = placed.hits[Ix(id)];
+                        const std::array<double, 4> mineBox = {box.min.x, box.min.y, box.Max().x, box.Max().y};
+                        const std::array<double, 4> mineHit = {hit.min.x, hit.min.y, hit.Max().x, hit.Max().y};
+                        for (std::size_t edge = 0; edge < 4; ++edge) {
+                            if (std::fabs(mineBox[edge] - boxes[Ix(id)][edge]) > kTol) {
+                                wrong += std::string(" ") + Controls::KeyOf(id) + " box[" + std::to_string(edge) + "] " + Num(mineBox[edge]) + " vs " + Num(boxes[Ix(id)][edge]);
+                            }
+                            if (std::fabs(mineHit[edge] - hits[Ix(id)][edge]) > kTol) {
+                                wrong += std::string(" ") + Controls::KeyOf(id) + " hit[" + std::to_string(edge) + "] " + Num(mineHit[edge]) + " vs " + Num(hits[Ix(id)][edge]);
+                            }
                         }
                     }
+                    CHECK_MSG(wrong.empty(), std::string(ArrangementName(arrows)) + " " + std::to_string(a) + ":" + std::to_string(b) + " " +
+                                                 Controls::NameOf(Design::kPresetOf[look]) + " growth " + Num(growPx) + " px:" + wrong);
                 }
-                CHECK_MSG(wrong.empty(), std::to_string(a) + ":" + std::to_string(b) + " " + Controls::NameOf(Design::kPresetOf[look]) + " growth " + Num(growPx) + " px:" + wrong);
             }
         }
     }
 }
 
 void TheZonesTheCensusConsumesAreTheDesignsTableAt16x9() {
-    const Json::Value& zones = Key(g_golden, "zones_16x9", "the top level");
-    const Placed placed = Place(g_rules, Controls::Tuning{}, kView169);
-    for (const Controls::Id id : Controls::kClaimOrder) {
-        const Json::Value& entry = Key(zones, Controls::KeyOf(id), "zones_16x9");
-        const std::array<double, 4> box = FourOf(Key(entry, "box", Controls::KeyOf(id)));
-        const std::array<double, 4> hit = FourOf(Key(entry, "hit", Controls::KeyOf(id)));
-        const Zone mineBox = ZoneOf(placed.boxes[Ix(id)]);
-        const Zone mineHit = ZoneOf(placed.hits[Ix(id)]);
-        CHECK_MSG(std::fabs(mineBox.x0 - box[0]) <= kTol && std::fabs(mineBox.y0 - box[1]) <= kTol && std::fabs(mineBox.x1 - box[2]) <= kTol &&
-                      std::fabs(mineBox.y1 - box[3]) <= kTol,
-                  std::string(Controls::KeyOf(id)) + " box (" + Num(mineBox.x0) + ", " + Num(mineBox.y0) + ")-(" + Num(mineBox.x1) + ", " + Num(mineBox.y1) +
-                      ") against the design's (" + Num(box[0]) + ", " + Num(box[1]) + ")-(" + Num(box[2]) + ", " + Num(box[3]) + ")");
-        CHECK_MSG(std::fabs(mineHit.x0 - hit[0]) <= kTol && std::fabs(mineHit.y0 - hit[1]) <= kTol && std::fabs(mineHit.x1 - hit[2]) <= kTol &&
-                      std::fabs(mineHit.y1 - hit[3]) <= kTol,
-                  std::string(Controls::KeyOf(id)) + " hit (" + Num(mineHit.x0) + ", " + Num(mineHit.y0) + ")-(" + Num(mineHit.x1) + ", " + Num(mineHit.y1) +
-                      ") against the design's (" + Num(hit[0]) + ", " + Num(hit[1]) + ")-(" + Num(hit[2]) + ", " + Num(hit[3]) + ")");
+    for (const Controls::Arrows arrows : kArrangements) {
+        const std::string which = std::string(ArrangementName(arrows)) + ": ";
+        const Json::Value& zones = Key(Arrangement(arrows), "zones_16x9", ArrangementName(arrows));
+        const Placed placed = Place(g_rules, Look(arrows, g_rules.defaultPreset), kView169);
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            const Json::Value& entry = Key(zones, Controls::KeyOf(id), "zones_16x9");
+            const std::array<double, 4> box = FourOf(Key(entry, "box", Controls::KeyOf(id)));
+            const std::array<double, 4> hit = FourOf(Key(entry, "hit", Controls::KeyOf(id)));
+            const Zone mineBox = ZoneOf(placed.boxes[Ix(id)]);
+            const Zone mineHit = ZoneOf(placed.hits[Ix(id)]);
+            CHECK_MSG(std::fabs(mineBox.x0 - box[0]) <= kTol && std::fabs(mineBox.y0 - box[1]) <= kTol && std::fabs(mineBox.x1 - box[2]) <= kTol &&
+                          std::fabs(mineBox.y1 - box[3]) <= kTol,
+                      which + Controls::KeyOf(id) + " box (" + Num(mineBox.x0) + ", " + Num(mineBox.y0) + ")-(" + Num(mineBox.x1) + ", " + Num(mineBox.y1) +
+                          ") against the design's (" + Num(box[0]) + ", " + Num(box[1]) + ")-(" + Num(box[2]) + ", " + Num(box[3]) + ")");
+            CHECK_MSG(std::fabs(mineHit.x0 - hit[0]) <= kTol && std::fabs(mineHit.y0 - hit[1]) <= kTol && std::fabs(mineHit.x1 - hit[2]) <= kTol &&
+                          std::fabs(mineHit.y1 - hit[3]) <= kTol,
+                      which + Controls::KeyOf(id) + " hit (" + Num(mineHit.x0) + ", " + Num(mineHit.y0) + ")-(" + Num(mineHit.x1) + ", " + Num(mineHit.y1) +
+                          ") against the design's (" + Num(hit[0]) + ", " + Num(hit[1]) + ")-(" + Num(hit[2]) + ", " + Num(hit[3]) + ")");
+        }
+        // The headline numbers, to the four decimals the design prints: restart's and pause's meeting on x = 392.8178, clear's reaching the corner; and
+        // the arrows. Grouped (design 1.2): the pair's hit (0, 208.4978)-(90.7378, 256) split at 53.1911. Split (planning step 186): the left arrow's
+        // hit (0, 208.4978)-(47.5022, 256) and the right arrow's (407.6089, 208.4978)-(455.1111, 256).
+        const Zone left = ZoneOf(placed.hits[Ix(Controls::Id::Left)]);
+        const Zone right = ZoneOf(placed.hits[Ix(Controls::Id::Right)]);
+        if (arrows == Controls::Arrows::Grouped) {
+            CHECK(std::fabs(left.x0 - 0.0) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 53.1911) <= 1e-4 && std::fabs(left.y1 - 256.0) <= 1e-4);
+            CHECK(std::fabs(right.x0 - 53.1911) <= 1e-4 && std::fabs(right.x1 - 90.7378) <= 1e-4 && std::fabs(right.y1 - 256.0) <= 1e-4);
+        } else {
+            CHECK(std::fabs(left.x0 - 0.0) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 47.5022) <= 1e-4 && std::fabs(left.y1 - 256.0) <= 1e-4);
+            CHECK(std::fabs(right.x0 - 407.6089) <= 1e-4 && std::fabs(right.y0 - 208.4978) <= 1e-4 && std::fabs(right.x1 - kView169.x) <= kTol && std::fabs(right.y1 - 256.0) <= 1e-4);
+        }
+        const Zone restart = ZoneOf(placed.hits[Ix(Controls::Id::Reset)]);
+        const Zone pause = ZoneOf(placed.hits[Ix(Controls::Id::Menu)]);
+        CHECK(std::fabs(restart.x1 - 392.8178) <= 1e-4 && std::fabs(pause.x0 - 392.8178) <= 1e-4 && std::fabs(pause.x1 - kView169.x) <= kTol);
     }
-    // The headline numbers of design 1.2, to the four decimals it prints: the pair's hit (0, 208.4978)-(90.7378, 256), restart's and pause's
-    // meeting on x = 392.8178, clear's reaching the corner.
-    const Zone left = ZoneOf(placed.hits[Ix(Controls::Id::Left)]);
-    const Zone right = ZoneOf(placed.hits[Ix(Controls::Id::Right)]);
-    CHECK(std::fabs(left.x0 - 0.0) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 53.1911) <= 1e-4 && std::fabs(left.y1 - 256.0) <= 1e-4);
-    CHECK(std::fabs(right.x0 - 53.1911) <= 1e-4 && std::fabs(right.x1 - 90.7378) <= 1e-4 && std::fabs(right.y1 - 256.0) <= 1e-4);
-    const Zone restart = ZoneOf(placed.hits[Ix(Controls::Id::Reset)]);
-    const Zone pause = ZoneOf(placed.hits[Ix(Controls::Id::Menu)]);
-    CHECK(std::fabs(restart.x1 - 392.8178) <= 1e-4 && std::fabs(pause.x0 - 392.8178) <= 1e-4 && std::fabs(pause.x1 - kView169.x) <= kTol);
 }
 
 // ---- 3: the accepted list --------------------------------------------------------------------------------------------------
@@ -599,6 +656,11 @@ void TheGoldenIsTakenForTheDataThatShips() {
     };
     const Controls::Preset preset = g_rules.defaultPreset;
     CHECK_MSG(std::string(Controls::NameOf(preset)) == Key(valid, "preset", "valid_for").AsString(), std::string("default preset ") + Controls::NameOf(preset) + hint);
+    // The arrangement that ships, and the layout number it is (planning step 186): the golden records both arrangements, and says which one is the data's.
+    CHECK_MSG(std::string(Controls::NameOf(g_rules.defaultArrows)) == Key(valid, "default_arrows", "valid_for").AsString(),
+              std::string("default arrows ") + Controls::NameOf(g_rules.defaultArrows) + hint);
+    same("layout.version", static_cast<double>(g_rules.layoutVersion), Key(valid, "layout_version", "valid_for").AsNumber());
+    CHECK_MSG(g_rules.layoutVersion == Controls::kLayoutVersion, "the data's layout number is the code's");
     const Controls::Rules::PresetRule& look = g_rules.presets[static_cast<std::size_t>(preset)];
     same("the default preset's size", g_rules.size.ValueOf(look.sizeSteps), Key(valid, "size", "valid_for").AsNumber());
     const Json::Value& margin = Key(valid, "margin_px", "valid_for");
@@ -621,131 +683,166 @@ void TheGoldenIsTakenForTheDataThatShips() {
     const Json::Value& census = Key(valid, "census", "valid_for");
     same("census.em_units", g_rules.census.emUnits, Key(census, "em_units", "census").AsNumber());
     same("census.slack_units", g_rules.census.slackUnits, Key(census, "slack_units", "census").AsNumber());
+    // Both arrangements are in the golden, each under its own name.
+    for (const Controls::Arrows arrows : kArrangements) CHECK_MSG(Arrangement(arrows).IsObject(), std::string("the golden has the ") + ArrangementName(arrows) + " arrangement");
 }
 
 void TheCensusAtTheDefaultIsTheAcceptedList() {
-    const Json::Array& shapes = Key(g_golden, "shapes", "the top level").AsArray();
-    CHECK_EQ(shapes.size(), std::size_t{9});
-    Labels pairEverywhere;
-    Labels restartEverywhere;
-    Labels clearEverywhere;
-    Labels pauseEverywhere;
-    // The same unions of the ACCEPTED lists, from the golden: the design's words ("the pair costs 1-20 and 3-27 and no more", "pause nothing") are
-    // the golden's, so they are written once, in the file the owner signs, and not again here.
-    Labels pairAccepted;
-    Labels restartAccepted;
-    Labels clearAccepted;
-    Labels pauseAccepted;
-    const auto append = [](Labels& into, const Labels& more) { into.insert(into.end(), more.begin(), more.end()); };
-    for (const Json::Value& shape : shapes) {
-        const std::string name = Key(shape, "name", "a shape").AsString();
-        const Json::Array& aspect = Key(shape, "aspect", name).AsArray();
-        CHECK_EQ(aspect.size(), std::size_t{2});
-        if (aspect.size() != 2) continue;
-        const glm::dvec2 view = ViewOf(static_cast<int>(aspect[0].AsNumber()), static_cast<int>(aspect[1].AsNumber()));
-        const Placed placed = Place(g_rules, Controls::Tuning{}, view);
-        const double slack = g_rules.census.slackUnits;
-        const Zone pair = PairZone(placed);
-        const Zone restart = ZoneOf(placed.hits[Ix(Controls::Id::Reset)]);
-        const Zone pause = ZoneOf(placed.hits[Ix(Controls::Id::Menu)]);
-        const Zone clear = ZoneOf(placed.hits[Ix(Controls::Id::Clear)]);
-        for (const auto& [key, em] : {std::pair<const char*, double>{"blocked", g_rules.census.emUnits}, std::pair<const char*, double>{"blocked_em0", 0.0}}) {
-            const Json::Value& accepted = Key(shape, key, name);
-            const Labels p = BlockedBy(Shrink(pair, slack, view), view, em, true);
-            const Labels r = BlockedBy(Shrink(restart, slack, view), view, em, false);
-            const Labels m = BlockedBy(Shrink(pause, slack, view), view, em, false);
-            const Labels c = BlockedBy(Shrink(clear, slack, view), view, em, false);
-            CheckList(name + " " + key + " pair", p, LabelsOf(Key(accepted, "pair", name)));
-            CheckList(name + " " + key + " restart", r, LabelsOf(Key(accepted, "restart", name)));
-            CheckList(name + " " + key + " pause", m, LabelsOf(Key(accepted, "pause", name)));
-            CheckList(name + " " + key + " clear_portals", c, LabelsOf(Key(accepted, "clear_portals", name)));
-            if (std::string(key) == "blocked") {
-                append(pairEverywhere, p);
-                append(restartEverywhere, r);
-                append(pauseEverywhere, m);
-                append(clearEverywhere, c);
-                append(pairAccepted, LabelsOf(Key(accepted, "pair", name)));
-                append(restartAccepted, LabelsOf(Key(accepted, "restart", name)));
-                append(pauseAccepted, LabelsOf(Key(accepted, "pause", name)));
-                append(clearAccepted, LabelsOf(Key(accepted, "clear_portals", name)));
+    // The levels the walk arrows cost, over the nine shapes, by arrangement: the finding of planning step 186 in one place. GROUPED costs 1-20 and 3-27
+    // (the recorded taps at the very bottom-left of a level whose camera cannot scroll left of 0, which any inset pair of 0.7 or more reaches); SPLIT costs
+    // none: the left arrow ends at 47.5, under those taps' 72 and 80, and no recorded shot is forced into the bottom-right corner.
+    std::map<std::string, Labels> walkAcrossShapes[2];
+    for (const Controls::Arrows arrows : kArrangements) {
+        const std::string which = std::string(ArrangementName(arrows)) + ": ";
+        const Json::Value& block = Arrangement(arrows);
+        const Json::Array& shapes = Key(block, "shapes", ArrangementName(arrows)).AsArray();
+        CHECK_EQ(shapes.size(), std::size_t{9});
+        Labels restartEverywhere;
+        Labels clearEverywhere;
+        Labels pauseEverywhere;
+        // The same unions of the ACCEPTED lists, from the golden: the design's words ("the pair costs 1-20 and 3-27 and no more", "pause nothing") are
+        // the golden's, so they are written once, in the file the owner signs, and not again here.
+        Labels restartAccepted;
+        Labels clearAccepted;
+        Labels pauseAccepted;
+        std::map<std::string, Labels> walkEverywhere;
+        std::map<std::string, Labels> walkAccepted;
+        const auto append = [](Labels& into, const Labels& more) { into.insert(into.end(), more.begin(), more.end()); };
+        for (const Json::Value& shape : shapes) {
+            const std::string name = which + Key(shape, "name", "a shape").AsString();
+            const Json::Array& aspect = Key(shape, "aspect", name).AsArray();
+            CHECK_EQ(aspect.size(), std::size_t{2});
+            if (aspect.size() != 2) continue;
+            const glm::dvec2 view = ViewOf(static_cast<int>(aspect[0].AsNumber()), static_cast<int>(aspect[1].AsNumber()));
+            const Placed placed = Place(g_rules, Look(arrows, g_rules.defaultPreset), view);
+            const double slack = g_rules.census.slackUnits;
+            const std::vector<WalkZone> walks = WalkZones(placed, arrows);
+            const Zone restart = ZoneOf(placed.hits[Ix(Controls::Id::Reset)]);
+            const Zone pause = ZoneOf(placed.hits[Ix(Controls::Id::Menu)]);
+            const Zone clear = ZoneOf(placed.hits[Ix(Controls::Id::Clear)]);
+            for (const auto& [key, em] : {std::pair<const char*, double>{"blocked", g_rules.census.emUnits}, std::pair<const char*, double>{"blocked_em0", 0.0}}) {
+                const Json::Value& accepted = Key(shape, key, name);
+                const Labels r = BlockedBy(Shrink(restart, slack, view), view, em, false);
+                const Labels m = BlockedBy(Shrink(pause, slack, view), view, em, false);
+                const Labels c = BlockedBy(Shrink(clear, slack, view), view, em, false);
+                for (const WalkZone& walk : walks) {
+                    const Labels w = BlockedBy(Shrink(walk.zone, slack, view), view, em, true);
+                    CheckList(name + " " + key + " " + walk.name, w, LabelsOf(Key(accepted, walk.name.c_str(), name)));
+                    if (std::string(key) == "blocked") {
+                        append(walkEverywhere[walk.name], w);
+                        append(walkAccepted[walk.name], LabelsOf(Key(accepted, walk.name.c_str(), name)));
+                    }
+                }
+                CheckList(name + " " + key + " restart", r, LabelsOf(Key(accepted, "restart", name)));
+                CheckList(name + " " + key + " pause", m, LabelsOf(Key(accepted, "pause", name)));
+                CheckList(name + " " + key + " clear_portals", c, LabelsOf(Key(accepted, "clear_portals", name)));
+                if (std::string(key) == "blocked") {
+                    append(restartEverywhere, r);
+                    append(pauseEverywhere, m);
+                    append(clearEverywhere, c);
+                    append(restartAccepted, LabelsOf(Key(accepted, "restart", name)));
+                    append(pauseAccepted, LabelsOf(Key(accepted, "pause", name)));
+                    append(clearAccepted, LabelsOf(Key(accepted, "clear_portals", name)));
+                }
+            }
+            // A shot a player may aim 4 units off the recorded point: the walk arrows' lists do not change.
+            if (arrows == Controls::Arrows::Grouped) {
+                CheckList(name + " pair at slack 4", BlockedBy(Shrink(walks[0].zone, 4.0, view), view, g_rules.census.emUnits, true), LabelsOf(Key(shape, "blocked_pair_slack4", name)));
+            } else {
+                const Json::Value& slack4 = Key(shape, "blocked_walk_slack4", name);
+                for (const WalkZone& walk : walks) {
+                    CheckList(name + " " + walk.name + " at slack 4", BlockedBy(Shrink(walk.zone, 4.0, view), view, g_rules.census.emUnits, true), LabelsOf(Key(slack4, walk.name.c_str(), name)));
+                }
             }
         }
-        // A shot a player may aim 4 units off the recorded point: the pair's list does not change.
-        CheckList(name + " pair at slack 4", BlockedBy(Shrink(pair, 4.0, view), view, g_rules.census.emUnits, true), LabelsOf(Key(shape, "blocked_pair_slack4", name)));
-    }
-    // The shapes together: the levels each control costs on any of the nine, against the union of the accepted lists. (Each shape's list is held
-    // to the golden above; this is the union of the same, so a shape that gained a level another lost cannot hide in a sum.)
-    const auto unique = [](Labels labels) {
-        std::sort(labels.begin(), labels.end());
-        labels.erase(std::unique(labels.begin(), labels.end()), labels.end());
-        return labels;
-    };
-    CheckList("the pair, over the nine shapes", unique(pairEverywhere), unique(pairAccepted));
-    CheckList("restart, over the nine shapes", unique(restartEverywhere), unique(restartAccepted));
-    CheckList("clear-portals, over the nine shapes", unique(clearEverywhere), unique(clearAccepted));
-    CheckList("pause, over the nine shapes", unique(pauseEverywhere), unique(pauseAccepted));
+        // The shapes together: the levels each control costs on any of the nine, against the union of the accepted lists. (Each shape's list is held
+        // to the golden above; this is the union of the same, so a shape that gained a level another lost cannot hide in a sum.)
+        const auto unique = [](Labels labels) {
+            std::sort(labels.begin(), labels.end());
+            labels.erase(std::unique(labels.begin(), labels.end()), labels.end());
+            return labels;
+        };
+        for (const auto& [walkName, found] : walkEverywhere) CheckList(which + walkName + ", over the nine shapes", unique(found), unique(walkAccepted[walkName]));
+        CheckList(which + "restart, over the nine shapes", unique(restartEverywhere), unique(restartAccepted));
+        CheckList(which + "clear-portals, over the nine shapes", unique(clearEverywhere), unique(clearAccepted));
+        CheckList(which + "pause, over the nine shapes", unique(pauseEverywhere), unique(pauseAccepted));
+        for (const auto& [walkName, found] : walkEverywhere) walkAcrossShapes[arrows == Controls::Arrows::Split ? 0 : 1][walkName] = unique(found);
 
-    // The headline at 16:9, the shape the owner will see most, at the EM and the slack the golden was taken at WHATEVER controls.json says, from
-    // the module's rectangles: the accepted list for that shape is the golden's.
-    const Json::Value& valid = Key(g_golden, "valid_for", "the top level");
-    const double designEm = Key(Key(valid, "census", "valid_for"), "em_units", "census").AsNumber();
-    bool saw169 = false;
-    for (const Json::Value& shape : shapes) {
-        if (Key(shape, "name", "a shape").AsString() != "16:9") continue;
-        saw169 = true;
-        const Placed placed = Place(g_rules, Controls::Tuning{}, kView169);
-        const Json::Value& accepted = Key(shape, "blocked", "16:9");
-        const Labels pairList = LabelsOf(Key(accepted, "pair", "16:9"));
-        CheckList("16:9 pair", BlockedBy(PairZone(placed), kView169, designEm, true), pairList);
-        CheckList("16:9 restart", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Reset)]), kView169, designEm, false), LabelsOf(Key(accepted, "restart", "16:9")));
-        CheckList("16:9 pause", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Menu)]), kView169, designEm, false), LabelsOf(Key(accepted, "pause", "16:9")));
-        CheckList("16:9 clear-portals", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Clear)]), kView169, designEm, false), LabelsOf(Key(accepted, "clear_portals", "16:9")));
+        // The headline at 16:9, the shape the owner will see most, at the EM and the slack the golden was taken at WHATEVER controls.json says, from
+        // the module's rectangles: the accepted list for that shape is the golden's.
+        const Json::Value& valid = Key(g_golden, "valid_for", "the top level");
+        const double designEm = Key(Key(valid, "census", "valid_for"), "em_units", "census").AsNumber();
+        bool saw169 = false;
+        for (const Json::Value& shape : shapes) {
+            if (Key(shape, "name", "a shape").AsString() != "16:9") continue;
+            saw169 = true;
+            const Placed placed = Place(g_rules, Look(arrows, g_rules.defaultPreset), kView169);
+            const Json::Value& accepted = Key(shape, "blocked", "16:9");
+            Labels firstWalkList;
+            for (const WalkZone& walk : WalkZones(placed, arrows)) {
+                const Labels listed = LabelsOf(Key(accepted, walk.name.c_str(), "16:9"));
+                CheckList(which + "16:9 " + walk.name, BlockedBy(walk.zone, kView169, designEm, true), listed);
+                if (firstWalkList.empty()) firstWalkList = listed;
+            }
+            CheckList(which + "16:9 restart", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Reset)]), kView169, designEm, false), LabelsOf(Key(accepted, "restart", "16:9")));
+            CheckList(which + "16:9 pause", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Menu)]), kView169, designEm, false), LabelsOf(Key(accepted, "pause", "16:9")));
+            CheckList(which + "16:9 clear-portals", BlockedBy(ZoneOf(placed.hits[Ix(Controls::Id::Clear)]), kView169, designEm, false), LabelsOf(Key(accepted, "clear_portals", "16:9")));
 
-        // The comparison can fail both ways, and its message says which: a level added to an accepted list, and one taken out, are told apart in the
-        // words the owner reads ("joined", "left"). A level that is no level (9-99 sorts after every real one) cannot be one of the list's own.
-        Labels more = pairList;
-        more.push_back("9-99");
-        const std::string added = Difference(more, pairList);
-        CHECK_MSG(added.find("joined {9-99}") != std::string::npos && added.find("left {}") != std::string::npos, "an added level is reported as joined: " + added);
-        if (!pairList.empty()) {
-            Labels fewer = pairList;
-            const std::string gone = fewer.back();
-            fewer.pop_back();
-            const std::string removed = Difference(fewer, pairList);
-            CHECK_MSG(removed.find("left {" + gone + "}") != std::string::npos && removed.find("joined {}") != std::string::npos, "a removed level is reported as left: " + removed);
+            // The comparison can fail both ways, and its message says which: a level added to an accepted list, and one taken out, are told apart in the
+            // words the owner reads ("joined", "left"). A level that is no level (9-99 sorts after every real one) cannot be one of the list's own.
+            const Labels pairList = LabelsOf(Key(accepted, "restart", "16:9")); // a list that is non-empty at 16:9 in both arrangements (restart: 2-06)
+            Labels more = pairList;
+            more.push_back("9-99");
+            const std::string added = Difference(more, pairList);
+            CHECK_MSG(added.find("joined {9-99}") != std::string::npos && added.find("left {}") != std::string::npos, "an added level is reported as joined: " + added);
+            if (!pairList.empty()) {
+                Labels fewer = pairList;
+                const std::string gone = fewer.back();
+                fewer.pop_back();
+                const std::string removed = Difference(fewer, pairList);
+                CHECK_MSG(removed.find("left {" + gone + "}") != std::string::npos && removed.find("joined {}") != std::string::npos, "a removed level is reported as left: " + removed);
+            }
         }
+        CHECK_MSG(saw169, which + "the golden has a shape named 16:9");
     }
-    CHECK_MSG(saw169, "the golden has a shape named 16:9");
+    // THE FINDING, stated once: the grouped pair costs 1-20 and 3-27; the split arrows cost no level at any of the nine shapes.
+    const Labels groupedCost = {"1-20", "3-27"};
+    CHECK_MSG(walkAcrossShapes[1]["pair"] == groupedCost, "grouped: the pair costs 1-20 and 3-27 over the nine shapes: " + Join(walkAcrossShapes[1]["pair"]));
+    CHECK_MSG(walkAcrossShapes[0]["walk_left"].empty() && walkAcrossShapes[0]["walk_right"].empty(),
+              "split: neither arrow costs a level over the nine shapes (1-20 and 3-27 leave the list): " + Join(walkAcrossShapes[0]["walk_left"]) + " " + Join(walkAcrossShapes[0]["walk_right"]));
 }
 
 // ---- 4: the design's tables ---------------------------------------------------------------------------------------------
 
 void TheCensusAgreesWithTheDesignsTables() {
-    const Json::Value& table = Key(Key(g_golden, "growth_table", "the top level"), "counts", "growth_table");
-    const Json::Value& lists = Key(g_golden, "growth_16_lists", "the top level");
-    for (std::size_t look = 0; look < Design::kLooks.size(); ++look) {
-        const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
-        const Json::Value& byGrowth = Key(table, preset.c_str(), "growth_table");
-        for (const double growPx : {0.0, 16.0}) {
-            const Json::Value& counts = Key(byGrowth, growPx == 0.0 ? "0" : "16", preset);
-            const Placed placed = Place(WithPairGrowth(g_rules, growPx), Look(Design::kPresetOf[look]), kView169);
-            const Zone pair = PairZone(placed);
-            const Json::Array& byEm = counts.AsArray();
-            CHECK_EQ(byEm.size(), std::size_t{3});
-            const std::array<double, 3> ems = {0.0, 8.0, 16.0};
-            const std::array<double, 3> slacks = {0.0, 4.0, 8.0};
-            for (std::size_t e = 0; e < 3 && e < byEm.size(); ++e) {
-                const Json::Array& bySlack = byEm[e].AsArray();
-                CHECK_EQ(bySlack.size(), std::size_t{3});
-                for (std::size_t s = 0; s < 3 && s < bySlack.size(); ++s) {
-                    const std::size_t mine = BlockedBy(Shrink(pair, slacks[s], kView169), kView169, ems[e], true).size();
-                    CHECK_MSG(static_cast<double>(mine) == bySlack[s].AsNumber(),
-                              preset + " growth " + Num(growPx) + " px, EM " + Num(ems[e]) + ", slack " + Num(slacks[s]) + ": " + std::to_string(mine) + " levels, the design's " +
-                                  Num(bySlack[s].AsNumber()));
+    for (const Controls::Arrows arrows : kArrangements) {
+        const Json::Value& block = Arrangement(arrows);
+        const Json::Value& table = Key(Key(block, "growth_table", ArrangementName(arrows)), "counts", "growth_table");
+        const Json::Value& lists = Key(block, "growth_16_lists", ArrangementName(arrows));
+        for (std::size_t look = 0; look < Design::kLooks.size(); ++look) {
+            const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
+            const std::string which = std::string(ArrangementName(arrows)) + " " + preset;
+            const Json::Value& byGrowth = Key(table, preset.c_str(), "growth_table");
+            for (const double growPx : {0.0, 16.0}) {
+                const Json::Value& counts = Key(byGrowth, growPx == 0.0 ? "0" : "16", preset);
+                const Placed placed = Place(WithPairGrowth(g_rules, growPx), Look(arrows, Design::kPresetOf[look]), kView169);
+                const Json::Array& byEm = counts.AsArray();
+                CHECK_EQ(byEm.size(), std::size_t{3});
+                const std::array<double, 3> ems = {0.0, 8.0, 16.0};
+                const std::array<double, 3> slacks = {0.0, 4.0, 8.0};
+                for (std::size_t e = 0; e < 3 && e < byEm.size(); ++e) {
+                    const Json::Array& bySlack = byEm[e].AsArray();
+                    CHECK_EQ(bySlack.size(), std::size_t{3});
+                    for (std::size_t s = 0; s < 3 && s < bySlack.size(); ++s) {
+                        const std::size_t mine = BlockedByWalk(placed, arrows, kView169, ems[e], slacks[s]).size();
+                        CHECK_MSG(static_cast<double>(mine) == bySlack[s].AsNumber(),
+                                  which + " growth " + Num(growPx) + " px, EM " + Num(ems[e]) + ", slack " + Num(slacks[s]) + ": " + std::to_string(mine) + " levels, the design's " +
+                                      Num(bySlack[s].AsNumber()));
+                    }
                 }
-            }
-            if (growPx == 16.0) {
-                CheckList(preset + " with 16 px of growth", BlockedBy(pair, kView169, 16.0, true), LabelsOf(Key(lists, preset.c_str(), "growth_16_lists")));
+                if (growPx == 16.0) {
+                    CheckList(which + " with 16 px of growth", BlockedByWalk(placed, arrows, kView169, 16.0, 0.0), LabelsOf(Key(lists, preset.c_str(), "growth_16_lists")));
+                }
             }
         }
     }
@@ -753,33 +850,43 @@ void TheCensusAgreesWithTheDesignsTables() {
 
 void AGrowthOfSixteenPxCostsWhatQ0Says() {
     // The number the owner decides on (Q0/Q6): what 16 px of growth costs at each look against none, at EM 16 and slack 0. The design's text states
-    // it (8 levels at the uniform look, 14 at balanced, 16 at mr, against the 2 of no growth); those numbers are written once, in the golden's
-    // `growth_table`, which is read here. The shipped data has none (the golden's validity above), so none of this is in the game.
-    const Json::Value& table = Key(Key(g_golden, "growth_table", "the top level"), "counts", "growth_table");
-    std::array<std::size_t, 3> grownCosts{};
-    for (std::size_t look = 0; look < 3; ++look) {
-        const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
-        const Json::Value& byGrowth = Key(table, preset.c_str(), "growth_table");
-        // [EM 0, 8, 16][slack 0, 4, 8]: EM 16 is the third, slack 0 the first.
-        const auto cell = [&](const char* growth) { return Key(byGrowth, growth, preset).AsArray().at(2).AsArray().at(0).AsNumber(); };
-        const Placed grown = Place(WithPairGrowth(g_rules, 16.0), Look(Design::kPresetOf[look]), kView169);
-        const Placed plain = Place(WithPairGrowth(g_rules, 0.0), Look(Design::kPresetOf[look]), kView169);
-        const std::size_t withGrowth = BlockedBy(PairZone(grown), kView169, 16.0, true).size();
-        const std::size_t without = BlockedBy(PairZone(plain), kView169, 16.0, true).size();
-        CHECK_MSG(static_cast<double>(withGrowth) == cell("16"), preset + " with 16 px of growth blocks " + std::to_string(withGrowth) + " levels, the design's " + Num(cell("16")));
-        CHECK_MSG(static_cast<double>(without) == cell("0"), preset + " with no growth blocks " + std::to_string(without) + " levels, the design's " + Num(cell("0")));
-        // What the owner decides on: growth costs levels, at every look.
-        CHECK_MSG(withGrowth > without, preset + ": 16 px of growth costs " + std::to_string(withGrowth) + " levels against " + std::to_string(without) + " without");
-        grownCosts[look] = withGrowth;
+    // it for the GROUPED pair (8 levels at the uniform look, 14 at balanced, 16 at mr, against the 2 of no growth); the SPLIT arrows' numbers are the
+    // golden's too (0 at the uniform look even with 16 px of growth, 4 at balanced, 10 at mr, against none of no growth): those numbers are written once,
+    // in the golden's `growth_table`, which is read here. The shipped data has none, so none of this is in the game.
+    for (const Controls::Arrows arrows : kArrangements) {
+        const Json::Value& table = Key(Key(Arrangement(arrows), "growth_table", ArrangementName(arrows)), "counts", "growth_table");
+        std::array<std::size_t, 3> grownCosts{};
+        for (std::size_t look = 0; look < 3; ++look) {
+            const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
+            const std::string which = std::string(ArrangementName(arrows)) + " " + preset;
+            const Json::Value& byGrowth = Key(table, preset.c_str(), "growth_table");
+            // [EM 0, 8, 16][slack 0, 4, 8]: EM 16 is the third, slack 0 the first.
+            const auto cell = [&](const char* growth) { return Key(byGrowth, growth, preset).AsArray().at(2).AsArray().at(0).AsNumber(); };
+            const Placed grown = Place(WithPairGrowth(g_rules, 16.0), Look(arrows, Design::kPresetOf[look]), kView169);
+            const Placed plain = Place(WithPairGrowth(g_rules, 0.0), Look(arrows, Design::kPresetOf[look]), kView169);
+            const std::size_t withGrowth = BlockedByWalk(grown, arrows, kView169, 16.0, 0.0).size();
+            const std::size_t without = BlockedByWalk(plain, arrows, kView169, 16.0, 0.0).size();
+            CHECK_MSG(static_cast<double>(withGrowth) == cell("16"), which + " with 16 px of growth blocks " + std::to_string(withGrowth) + " levels, the design's " + Num(cell("16")));
+            CHECK_MSG(static_cast<double>(without) == cell("0"), which + " with no growth blocks " + std::to_string(without) + " levels, the design's " + Num(cell("0")));
+            // What the owner decides on: growth costs levels, at every look. For the grouped pair strictly; for the split arrows at the uniform look it
+            // costs none at all (the golden says 0 against 0), and at the others strictly.
+            if (arrows == Controls::Arrows::Grouped || look != 0) {
+                CHECK_MSG(withGrowth > without, which + ": 16 px of growth costs " + std::to_string(withGrowth) + " levels against " + std::to_string(without) + " without");
+            } else {
+                CHECK_MSG(withGrowth >= without, which + ": 16 px of growth costs " + std::to_string(withGrowth) + " levels against " + std::to_string(without) + " without");
+            }
+            grownCosts[look] = withGrowth;
+        }
+        // And the larger the look, the more it costs once any growth is asked for (the reason the look that ships is the uniform one).
+        CHECK_MSG(grownCosts[0] <= grownCosts[1] && grownCosts[1] <= grownCosts[2], std::string(ArrangementName(arrows)) + ": with 16 px of growth the looks cost " +
+                                                                                      std::to_string(grownCosts[0]) + ", " + std::to_string(grownCosts[1]) + " and " + std::to_string(grownCosts[2]) + " levels");
     }
-    // And the larger the look, the more it costs once any growth is asked for (the reason the look that ships is the uniform one).
-    CHECK_MSG(grownCosts[0] <= grownCosts[1] && grownCosts[1] <= grownCosts[2], "with 16 px of growth the looks cost " + std::to_string(grownCosts[0]) + ", " +
-                                                                                  std::to_string(grownCosts[1]) + " and " + std::to_string(grownCosts[2]) + " levels");
 }
 
 void TheFirstPassPlacementWouldHaveFailed() {
     // The NEGATIVE CONTROL of the whole census: the review's placement (size 1.0 or 1.4, margin 44 px, 32 px of growth and a 16 px snap on the
-    // pair as one rectangle) blocks 25 and 37 levels where the accepted layout blocks 2 - so the census can say no, and it said it of the first design.
+    // pair as one rectangle) blocks 25 and 37 levels where the accepted layouts block 2 (grouped) and none (split) - so the census can say no, and it said
+    // it of the first design.
     const Json::Value& pass = Key(g_golden, "first_pass", "the top level");
     const Json::Array& ems = Key(pass, "ems", "first_pass").AsArray();
     const double e32 = 32.0 / Design::kPpu;
@@ -800,7 +907,7 @@ void TheFirstPassPlacementWouldHaveFailed() {
             CHECK_MSG(static_cast<double>(boxAlone) == boxCounts[i].AsNumber(), std::string(tag) + " box alone at EM " + Num(ems[i].AsNumber()) + ": " + std::to_string(boxAlone) + ", the design's " + Num(boxCounts[i].AsNumber()));
         }
         // The headline, at the player's EM of 16 units: the design's text says 25 of 110 at size 1.0 and 37 at size 1.4, which the golden holds (its
-        // `design` row at EM 16), against what the accepted layout blocks.
+        // `design` row at EM 16), against what the accepted layouts block.
         std::size_t at16 = ems.size();
         for (std::size_t i = 0; i < ems.size(); ++i) {
             if (ems[i].AsNumber() == 16.0) at16 = i;
@@ -808,12 +915,14 @@ void TheFirstPassPlacementWouldHaveFailed() {
         const std::size_t headline = BlockedBy(design, kView169, 16.0, true).size();
         CHECK_MSG(at16 < designCounts.size(), std::string(tag) + ": the golden counts the first pass at EM 16");
         if (at16 < designCounts.size()) CHECK_EQ(static_cast<double>(headline), designCounts[at16].AsNumber());
-        const std::size_t accepted = BlockedBy(PairZone(Place(g_rules, Controls::Tuning{}, kView169)), kView169, 16.0, true).size();
-        CHECK_MSG(headline > accepted, std::string(tag) + ": the first pass blocks " + std::to_string(headline) + " levels and the accepted layout " + std::to_string(accepted));
+        const std::size_t acceptedGrouped = BlockedBy(PairZone(Place(g_rules, Look(Controls::Arrows::Grouped, g_rules.defaultPreset), kView169)), kView169, 16.0, true).size();
+        const std::size_t acceptedSplit = BlockedByWalk(Place(g_rules, Look(Controls::Arrows::Split, g_rules.defaultPreset), kView169), Controls::Arrows::Split, kView169, 16.0, 0.0).size();
+        CHECK_MSG(headline > acceptedGrouped, std::string(tag) + ": the first pass blocks " + std::to_string(headline) + " levels and the grouped layout " + std::to_string(acceptedGrouped));
+        CHECK_MSG(headline > acceptedSplit, std::string(tag) + ": the first pass blocks " + std::to_string(headline) + " levels and the split layout " + std::to_string(acceptedSplit));
 
         // The module reproduces it, with no snap of its own: the uniform look at the size, 32 px of growth on both arrows, and its edge reach (48
-        // px) doing what the snap did. The pair it lays out is the same rectangle to a billionth.
-        const Placed placed = Place(WithPairGrowth(g_rules, 32.0), Look(Controls::Preset::Uniform, steps), kView169);
+        // px) doing what the snap did. The pair it lays out (GROUPED: the first design's was a pair) is the same rectangle to a billionth.
+        const Placed placed = Place(WithPairGrowth(g_rules, 32.0), Look(Controls::Arrows::Grouped, Controls::Preset::Uniform, steps), kView169);
         const Zone mine = PairZone(placed);
         CHECK_MSG(std::fabs(mine.x0 - design.x0) <= kTol && std::fabs(mine.y0 - design.y0) <= kTol && std::fabs(mine.x1 - design.x1) <= kTol && std::fabs(mine.y1 - design.y1) <= kTol,
                   std::string(tag) + " the module's pair (" + Num(mine.x0) + ", " + Num(mine.y0) + ")-(" + Num(mine.x1) + ", " + Num(mine.y1) + ") against the review's");
@@ -843,28 +952,53 @@ void TheClassicDiscsBlockNothing() {
 }
 
 void ThePairIsBelowTheCharacterRowOrTheCensusFails() {
-    // The pair's top against the character's row (about 206: the standard waist line): at or below it costs the 2 levels whose recorded shot sits in
-    // the corner whatever the size, above it the count climbs (7 at 0.8, 17 at 0.9, 20 at 1.0): so a size that sits above the row cannot get through
-    // this suite without the golden being changed on purpose.
-    const Json::Array& rows = Key(Key(g_golden, "size_sweep", "the top level"), "rows", "size_sweep").AsArray();
-    CHECK_EQ(rows.size(), std::size_t{11});
+    // The arrows' top against the character's row (about 206: the standard waist line). GROUPED: at or below it costs the 2 levels whose recorded shot sits
+    // in the corner whatever the size, above it the count climbs (7 at 0.8, 17 at 0.9, 20 at 1.0): so a size that sits above the row cannot get through this
+    // suite without the golden being changed on purpose - the rule is a biconditional there, and it is kept. SPLIT (planning step 186): the arrows stand
+    // in two corners, where they reach fewer recorded shots, so the biconditional is NOT true of them: size 0.8 puts the top at 203.95, above the row, and
+    // still blocks no level, and 0.9 is the first size that blocks any (3). What holds, and is held here, is the implication that matters to the default:
+    // at or below the row, no more than the 2 levels of the grouped layout (in fact none); and the golden's rows say the rest.
     const double row = g_rules.census.characterRowUnits;
     CHECK_EQ(row, 206.0);
-    for (const Json::Value& entry : rows) {
-        const int steps = static_cast<int>(Key(entry, "size_steps", "a sweep row").AsNumber());
-        const Placed placed = Place(WithPairGrowth(g_rules, 0.0), Look(Controls::Preset::Uniform, steps), kView169);
-        const double top = placed.boxes[Ix(Controls::Id::Left)].min.y;
-        const Labels blocked = BlockedBy(PairZone(placed), kView169, 16.0, true);
-        const std::string where = "size " + Num(Key(entry, "size", "a sweep row").AsNumber());
-        CHECK_MSG(std::fabs(top - Key(entry, "pair_top", "a sweep row").AsNumber()) <= kTol, where + ": the pair's top " + Num(top) + ", the design's " + Num(Key(entry, "pair_top", "a sweep row").AsNumber()));
-        CheckList(where, blocked, LabelsOf(Key(entry, "blocked", "a sweep row")));
-        // The rule itself: at or below the row, no more than the 2 levels of the accepted layout; above it, more.
-        CHECK_MSG((top >= row) == (blocked.size() <= 2), where + ": the pair's top is " + Num(top) + " against the row " + Num(row) + " and it blocks " + std::to_string(blocked.size()));
+    for (const Controls::Arrows arrows : kArrangements) {
+        const Json::Array& rows = Key(Key(Arrangement(arrows), "size_sweep", ArrangementName(arrows)), "rows", "size_sweep").AsArray();
+        CHECK_EQ(rows.size(), std::size_t{11});
+        std::size_t previous = 0;
+        for (const Json::Value& entry : rows) {
+            const int steps = static_cast<int>(Key(entry, "size_steps", "a sweep row").AsNumber());
+            const Placed placed = Place(WithPairGrowth(g_rules, 0.0), Look(arrows, Controls::Preset::Uniform, steps), kView169);
+            const double top = placed.boxes[Ix(Controls::Id::Left)].min.y;
+            const Labels blocked = BlockedByWalk(placed, arrows, kView169, 16.0, 0.0);
+            const std::string where = std::string(ArrangementName(arrows)) + " size " + Num(Key(entry, "size", "a sweep row").AsNumber());
+            CHECK_MSG(std::fabs(top - Key(entry, "pair_top", "a sweep row").AsNumber()) <= kTol, where + ": the arrows' top " + Num(top) + ", the design's " + Num(Key(entry, "pair_top", "a sweep row").AsNumber()));
+            CheckList(where, blocked, LabelsOf(Key(entry, "blocked", "a sweep row")));
+            if (arrows == Controls::Arrows::Grouped) {
+                // The rule itself: at or below the row, no more than the 2 levels of the accepted layout; above it, more.
+                CHECK_MSG((top >= row) == (blocked.size() <= 2), where + ": the pair's top is " + Num(top) + " against the row " + Num(row) + " and it blocks " + std::to_string(blocked.size()));
+            } else {
+                CHECK_MSG(top < row || blocked.size() <= 2, where + ": the arrows' top is " + Num(top) + " at or below the row " + Num(row) + " and they block " + std::to_string(blocked.size()));
+                // The cost does not fall as the arrows grow: a bigger arrow reaches every shot a smaller one does (the hit rectangles nest).
+                CHECK_MSG(blocked.size() >= previous, where + ": blocks " + std::to_string(blocked.size()) + " levels, fewer than the size before (" + std::to_string(previous) + ")");
+            }
+            previous = blocked.size();
+        }
     }
-    // And the three looks that ship all sit at or below the row.
-    for (std::size_t look = 0; look < 3; ++look) {
-        const Placed placed = Place(g_rules, Look(Design::kPresetOf[look]), kView169);
-        CHECK_MSG(placed.boxes[Ix(Controls::Id::Left)].min.y >= row, std::string(Controls::NameOf(Design::kPresetOf[look])) + " puts the pair's top above the character's row");
+    // The split golden says what the Step says: nothing is blocked through size 0.8, and 3 levels are from 0.9.
+    {
+        const Json::Array& rows = Key(Key(Arrangement(Controls::Arrows::Split), "size_sweep", "split"), "rows", "size_sweep").AsArray();
+        for (const Json::Value& entry : rows) {
+            const int steps = static_cast<int>(Key(entry, "size_steps", "a sweep row").AsNumber());
+            const std::size_t listed = LabelsOf(Key(entry, "blocked", "a sweep row")).size();
+            CHECK_MSG((steps <= 8) == (listed == 0), "split size " + Num(Key(entry, "size", "a sweep row").AsNumber()) + ": " + std::to_string(listed) + " levels (none through 0.8, some from 0.9)");
+        }
+    }
+    // And the three looks that ship all sit at or below the row, in both arrangements.
+    for (const Controls::Arrows arrows : kArrangements) {
+        for (std::size_t look = 0; look < 3; ++look) {
+            const Placed placed = Place(g_rules, Look(arrows, Design::kPresetOf[look]), kView169);
+            CHECK_MSG(placed.boxes[Ix(Controls::Id::Left)].min.y >= row,
+                      std::string(ArrangementName(arrows)) + " " + Controls::NameOf(Design::kPresetOf[look]) + " puts the arrows' top above the character's row");
+        }
     }
 }
 
@@ -888,34 +1022,41 @@ void TheCornerButtonsCostWhatTheDesignSays() {
 }
 
 void TheCharacterAtLevelStartBehindThePairIsTheDesignsEstimate() {
-    // The character at level start behind the pair's BOX (the spawn marker seen through the camera that opens on it). The design's text names the
-    // levels (the uniform look 2-02 alone, the other two five), which the golden holds; the reason the look that ships is the uniform one is
-    // that it costs least here, and that is the relation held below.
-    const Json::Value& behind = Key(g_golden, "character_behind_the_pair", "the top level");
-    std::array<std::size_t, 3> counts{};
-    for (std::size_t look = 0; look < 3; ++look) {
-        const Placed placed = Place(g_rules, Look(Design::kPresetOf[look]), kView169);
-        const Hud::Rect& left = placed.boxes[Ix(Controls::Id::Left)];
-        const Hud::Rect& right = placed.boxes[Ix(Controls::Id::Right)];
-        std::set<std::string> found;
-        for (const Level& level : g_levels) {
-            if (level.noGravity) continue;
-            const Corner corner = CornerRange(level.bounds, kView169);
-            glm::dvec2 camera(0.0);
-            for (int axis = 0; axis < 2; ++axis) {
-                camera[axis] = kView169[axis] >= level.bounds[axis] ? corner.lo[axis]
-                                                                     : std::min(std::max(level.spawn[axis] - kView169[axis] / 2.0, 0.0), level.bounds[axis] - kView169[axis]);
+    // The character at level start behind the arrows' BOX (the spawn marker seen through the camera that opens on it). The design's text names the
+    // levels (grouped: the uniform look 2-02 alone, the other two five), which the golden holds; for the split arrows the golden says 2-02 at every look
+    // (the right arrow is in a corner no spawn marker is in). The reason the look that ships is the uniform one is that it costs least here, and that
+    // is the relation held below.
+    for (const Controls::Arrows arrows : kArrangements) {
+        const Json::Value& behind = Key(Arrangement(arrows), "character_behind_the_pair", ArrangementName(arrows));
+        std::array<std::size_t, 3> counts{};
+        for (std::size_t look = 0; look < 3; ++look) {
+            const Placed placed = Place(g_rules, Look(arrows, Design::kPresetOf[look]), kView169);
+            const Hud::Rect& left = placed.boxes[Ix(Controls::Id::Left)];
+            const Hud::Rect& right = placed.boxes[Ix(Controls::Id::Right)];
+            std::set<std::string> found;
+            for (const Level& level : g_levels) {
+                if (level.noGravity) continue;
+                const Corner corner = CornerRange(level.bounds, kView169);
+                glm::dvec2 camera(0.0);
+                for (int axis = 0; axis < 2; ++axis) {
+                    camera[axis] = kView169[axis] >= level.bounds[axis] ? corner.lo[axis]
+                                                                         : std::min(std::max(level.spawn[axis] - kView169[axis] / 2.0, 0.0), level.bounds[axis] - kView169[axis]);
+                }
+                const glm::dvec2 at = level.spawn - camera;
+                const bool inLeft = left.min.x <= at.x && at.x <= left.Max().x && left.min.y <= at.y && at.y <= left.Max().y;
+                const bool inRight = right.min.x <= at.x && at.x <= right.Max().x && right.min.y <= at.y && at.y <= right.Max().y;
+                // Grouped: the pair as one box, the gap between the arrows included (the design's estimate); split: either box.
+                const bool inPair = left.min.x <= at.x && at.x <= right.Max().x && left.min.y <= at.y && at.y <= left.Max().y;
+                if (arrows == Controls::Arrows::Grouped ? inPair : (inLeft || inRight)) found.insert(level.label);
             }
-            const glm::dvec2 at = level.spawn - camera;
-            if (left.min.x <= at.x && at.x <= right.Max().x && left.min.y <= at.y && at.y <= left.Max().y) found.insert(level.label);
+            const Labels mine(found.begin(), found.end());
+            const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
+            CheckList(std::string(ArrangementName(arrows)) + ": the character behind the arrows, " + preset, mine, LabelsOf(Key(behind, preset.c_str(), "character_behind_the_pair")));
+            counts[look] = mine.size();
         }
-        const Labels mine(found.begin(), found.end());
-        const std::string preset = Controls::NameOf(Design::kPresetOf[look]);
-        CheckList("the character behind the pair, " + preset, mine, LabelsOf(Key(behind, preset.c_str(), "character_behind_the_pair")));
-        counts[look] = mine.size();
+        CHECK_MSG(counts[0] <= counts[1] && counts[0] <= counts[2], std::string(ArrangementName(arrows)) + ": the uniform look puts the character behind the arrows in " + std::to_string(counts[0]) +
+                                                                      " levels, the others in " + std::to_string(counts[1]) + " and " + std::to_string(counts[2]));
     }
-    CHECK_MSG(counts[0] <= counts[1] && counts[0] <= counts[2], "the uniform look puts the character behind the pair in " + std::to_string(counts[0]) + " levels, the others in " +
-                                                                  std::to_string(counts[1]) + " and " + std::to_string(counts[2]));
 }
 
 void ThePairAlwaysTilesWhereTheCensusAssumesIt() {

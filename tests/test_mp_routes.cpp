@@ -97,7 +97,13 @@ struct Options {
     int trace = 0;                        // print every n ticks; 0: only the outcome
     std::optional<std::string> controls;  // --controls <classic|modern>: the controls census (planning step 182)
     bool classicClaims = false;           // --classic-claims: with modern, only the variant that claims classic
+    std::optional<Controls::Arrows> arrows; // --arrows <split|grouped>: the arrangement of the walk arrows the census plays (planning step 186); none: the data's, split
 };
+
+// The flag the census plays modern under: `modern`, with the arrangement it was asked for. The shipped arrangement needs no key.
+std::string ModernFlag(const Options& options) {
+    return options.arrows ? std::string("modern,arrows=") + Controls::NameOf(*options.arrows) : std::string("modern");
+}
 
 MagicPortalsLayer::Paths RoutePaths() {
     MagicPortalsLayer::Paths paths;
@@ -639,7 +645,7 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
 
     // (b) the modern layout and draw, the classic claims: identical to the reference, whole, with no exemption.
     Capture claims;
-    const Outcome classicClaims = Play(plan, Options{}, label, ControlsPaths("modern", true), &claims, true);
+    const Outcome classicClaims = Play(plan, Options{}, label, ControlsPaths(ModernFlag(options), true), &claims, true);
     const bool bPlayedModern = claims.style == Controls::Style::Modern && claims.ready;
     CHECK_MSG(bPlayedModern, name + ": the classic-claims variant plays the MODERN layout (N1): style=" + Controls::NameOf(claims.style));
     std::string said;
@@ -668,7 +674,7 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
     // (a) the modern run proper.
     ++table.modernRan;
     Capture modern;
-    const Outcome modernOutcome = Play(plan, Options{}, label, ControlsPaths("modern", false), &modern, false);
+    const Outcome modernOutcome = Play(plan, Options{}, label, ControlsPaths(ModernFlag(options), false), &modern, false);
     CHECK_MSG(modern.style == Controls::Style::Modern && modern.ready, name + ": the modern run plays the MODERN controls (N1): style=" + Controls::NameOf(modern.style));
     const Swallowed* first = claims.swallowed.empty() ? nullptr : &claims.swallowed.front();
     const std::size_t safe = first != nullptr ? static_cast<std::size_t>(std::max(first->tick - 1, 0)) : std::max(ticks, modern.records.size());
@@ -701,15 +707,17 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
     std::printf("%s; style=%s\n%s", line, Controls::NameOf(modern.style), tableText.c_str());
 }
 
-// The accepted list's lower bound: the levels whose pair or restart no camera can clear at 16:9 (tests/golden/controls_census.json, `shapes`).
+// The accepted list's lower bound: the levels whose walk arrows or restart no camera can clear at 16:9 (tests/golden/controls_census.json,
+// `arrangements.<name>.shapes`). Grouped (planning step 180) the arrows cost 1-20 and 3-27; split (planning step 186) they cost none, so the lower bound
+// for the walk arrows is empty and the census has no forced arrow touch to find.
 struct ForcedList {
     bool read = false;
-    std::vector<std::string> pair;
+    std::vector<std::string> walk; // the pair's list (grouped) or the union of walk_left's and walk_right's (split)
     std::vector<std::string> restart;
     std::vector<std::string> clearPortals; // an upper bound: clear-portals exists only while a portal does
 };
 
-ForcedList ReadForced() {
+ForcedList ReadForced(Controls::Arrows arrows) {
     ForcedList forced;
     std::ifstream file(kGolden + "/controls_census.json", std::ios::binary);
     if (!file) return forced;
@@ -718,8 +726,10 @@ ForcedList ReadForced() {
     const std::string content = text.str();
     Supersonic::Json::Value root;
     Supersonic::Json::Parser parser(content);
-    if (!parser.Parse(root) || !root.IsObject() || !root["shapes"].IsArray()) return forced;
-    for (const Supersonic::Json::Value& shape : root["shapes"].AsArray()) {
+    if (!parser.Parse(root) || !root.IsObject() || !root["arrangements"].IsObject() || !root["arrangements"][Controls::NameOf(arrows)].IsObject()) return forced;
+    const Supersonic::Json::Value& block = root["arrangements"][Controls::NameOf(arrows)];
+    if (!block["shapes"].IsArray()) return forced;
+    for (const Supersonic::Json::Value& shape : block["shapes"].AsArray()) {
         if (!shape.IsObject() || !shape["name"].IsString() || shape["name"].AsString() != "16:9" || !shape["blocked"].IsObject()) continue;
         const auto labels = [&shape](const char* key) {
             std::vector<std::string> out;
@@ -730,7 +740,11 @@ ForcedList ReadForced() {
             }
             return out;
         };
-        forced.pair = labels("pair");
+        for (const char* key : {"pair", "walk_left", "walk_right"}) {
+            for (const std::string& label : labels(key)) {
+                if (std::find(forced.walk.begin(), forced.walk.end(), label) == forced.walk.end()) forced.walk.push_back(label);
+            }
+        }
         forced.restart = labels("restart");
         forced.clearPortals = labels("clear_portals");
         forced.read = true;
@@ -761,9 +775,12 @@ void ReportCensus(const Options& options, const CensusTable& table) {
     // N1: the swallowed set is not empty (a census that finds nothing may be a census that ran classic).
     CHECK_MSG(!table.all.empty(), "the swallowed set is non-empty over all the routes");
     if (!options.only.empty()) return;
-    // The lower bound: what the census proves unavoidable at 16:9 must appear (the pair's levels by an arrow, restart's by restart).
-    const ForcedList forced = ReadForced();
-    CHECK_MSG(forced.read && !forced.pair.empty() && !forced.restart.empty(), "tests/golden/controls_census.json holds the 16:9 lists");
+    // The lower bound: what the census proves unavoidable at 16:9 must appear (the walk arrows' levels by an arrow, restart's by restart). The split
+    // arrows have no forced level, so for them the list is empty and only restart's is required.
+    const Controls::Arrows played = options.arrows.value_or(Controls::Arrows::Split);
+    const ForcedList forced = ReadForced(played);
+    CHECK_MSG(forced.read && !forced.restart.empty() && (played == Controls::Arrows::Split || !forced.walk.empty()),
+              std::string("tests/golden/controls_census.json holds the 16:9 lists of the ") + Controls::NameOf(played) + " arrangement");
     const auto takenBy = [&table](const std::string& label, std::initializer_list<const char*> controls) {
         for (const Swallowed& one : table.all) {
             if (one.label != label || !one.claimed) continue;
@@ -773,9 +790,10 @@ void ReportCensus(const Options& options, const CensusTable& table) {
         }
         return false;
     };
-    for (const std::string& label : forced.pair) {
-        CHECK_MSG(takenBy(label, {"walk_left", "walk_right"}), label + ": the census's forced list, the pair, appears in the swallowed set");
+    for (const std::string& label : forced.walk) {
+        CHECK_MSG(takenBy(label, {"walk_left", "walk_right"}), label + ": the census's forced list, the walk arrows, appears in the swallowed set");
     }
+    std::printf("  the census's forced list for the %s walk arrows at 16:9: %zu level(s)\n", Controls::NameOf(played), forced.walk.size());
     for (const std::string& label : forced.restart) {
         CHECK_MSG(takenBy(label, {"restart"}), label + ": the census's forced list, restart, appears in the swallowed set");
     }
@@ -868,8 +886,14 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
             }
         } else if (arg == "--classic-claims") {
             options.classicClaims = true;
+        } else if (arg == "--arrows" && i + 1 < argc) {
+            options.arrows = Controls::ArrowsOfName(argv[++i]);
+            if (!options.arrows) {
+                std::printf("test_mp_routes: --arrows wants split or grouped\n");
+                return 2;
+            }
         } else {
-            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--controls <classic|modern> [--classic-claims]]\n");
+            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--controls <classic|modern> [--classic-claims] [--arrows <split|grouped>]]\n");
             return 2;
         }
     }
@@ -883,6 +907,10 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
     }
     if (options.classicClaims && (!options.controls || *options.controls != "modern")) {
         std::printf("test_mp_routes: --classic-claims is the variant of --controls modern\n");
+        return 2;
+    }
+    if (options.arrows && (!options.controls || *options.controls != "modern")) {
+        std::printf("test_mp_routes: --arrows is the arrangement of --controls modern\n");
         return 2;
     }
     RunRoutes(options);

@@ -4,6 +4,26 @@
      lands, CTL-1 = step 177). The "CTL/..." and "out/parity/..." paths it names are working files in the gitignored out/ and may be gone.
      The questions in its section 6 are the owner's and are OPEN until he answers them. -->
 
+> **AMENDMENT, 2026-10-16 (planning Step 186, CTL-6b): THE OWNER SPLIT THE WALK ARROWS.** After he saw the layout on his screen the owner decided, in his words:
+> "moving stick should not be only on the left side. you should put one button to the left and one to the right like the classic ones." **This overrides his
+> 2026-10-15 answer that the two walk arrows be grouped in the bottom-left.** The arrows now stand **split**: `walk_left` inset in the bottom-LEFT corner and `walk_right`
+> inset in the bottom-RIGHT corner, each by the same margin (44 px to the box, on both edges of its corner), as the classic pair stands but inset. Restart and pause (top
+> right) and clear-portals (top left), the margin and the three looks are unchanged. The grouped arrangement of planning steps 180 to 185 is kept as an ALTERNATIVE that a
+> capture or a test asks for (`--controls modern,arrows=grouped`, data key `layout.default_arrows`, never saved), and `kLayoutVersion` and `layout.version` are 2 (a
+> `controls.json` saved at layout 1 keeps its mode, size and opacity and drops its moves).
+>
+> **Superseded by Step 186** (everything below describes the GROUPED arrangement unless Step 186 says otherwise): **1.2** (the default places: at 16:9 and size 0.7 `walk_right`'s box
+> is (407.6089, 208.4978)-(439.4667, 240.3556) and its hit (407.6089, 208.4978)-(455.1111, 256), 47.50 x 47.50 units, as the left arrow's hit is (0, 208.4978)-(47.5022, 256));
+> **1.4** (the pair's seam: there is none; each arrow's hit is its box plus the strips to its own two view edges, half-open, growth 0); **1.6** (the hint clears the LEFT arrow only,
+> and where the text cannot clear both it is drawn over the right arrow); **1.9** (the census: the split arrows cost NO recorded winning shot at any of the nine window shapes, so
+> 1-20 and 3-27 leave the list; the accepted lists of both arrangements are in `tests/golden/controls_census.json`); **2.3** (the Options thumbnails show one arrow in each
+> bottom corner); **3.2 and 3.3** (the adjustment screen: the 5.83 and the 22.86 clearances against the pair's top at size 1.4, and the pair top 176.64, are the GROUPED pair's. **With the split
+> arrows the editor has a REAL collision the grouped pair did not have: its Back button is at the bottom-RIGHT, box 38.68, inset 15.64 (3.2), which is where `walk_right` now
+> stands - at 16:9 the preview's walk_right box (407.6, 208.5)-(439.5, 240.4) lies wholly inside Back's (400.8, 201.7)-(439.5, 240.4) - the "tiles over controls" failure design
+> L5 forbids.** The widget column (W/2 +- 54.47) is clear of both arrows at every supported aspect and size (the left arrow's hit ends at 79.36 at size 1.4, the right one's begins at
+> W - 79.36, 240.64 at 5:4 against the column's 214.47), so the Restore-tile clearances against the pair's top do not arise.) **CTL-11 must re-derive the editor's clearance numbers
+> with `CTL/arith2/editor_clearance.py` first, for the split arrows, and must place Back (or the preview) so that no widget covers a control.**
+
 # CTL design: Magic Rampage's modernised controls for Magic Portals Enhanced (FINAL, second pass)
 
 Designer's final step plan, 2026-10-15, written after two independent reviews (`review1.md`: parity and regression; `review2.md`: player experience and design fidelity). Read-only role:

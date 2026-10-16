@@ -95,6 +95,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -23741,14 +23742,25 @@ Controls::Policy MdPolicy(const std::string& flag, bool classicClaims = false) {
     return policy;
 }
 
-MagicPortalsLayer::Paths MdPaths(const std::string& flag = "modern", bool classicClaims = false) {
+// THE ARRANGEMENT OF THE WALK ARROWS (planning step 186, the owner's decision of 2026-10-16). The arrows ship SPLIT, one in each bottom corner; the
+// modern cases written before that step (planning steps 182 to 185) are written for the GROUPED pair (both at the bottom left, table 1.2 as it was)
+// and are kept, aimed at `arrows=grouped`: a `modern` flag without an arrangement of its own is given `,arrows=grouped` here, so each of them
+// still reads the numbers it was written with. The cases of the split arrows ask for them (MdSplitPaths: the flag as it is, the data's default).
+MagicPortalsLayer::Paths MdPaths(const std::string& flag = "modern", bool classicClaims = false, Controls::Arrows arrows = Controls::Arrows::Grouped) {
     MagicPortalsLayer::Paths paths = TestPaths();
-    paths.controls = MdPolicy(flag, classicClaims);
+    std::string given = flag;
+    if (arrows == Controls::Arrows::Grouped && given.rfind("modern", 0) == 0 && given.find("arrows=") == std::string::npos) given += ",arrows=grouped";
+    paths.controls = MdPolicy(given, classicClaims);
     // The cases of this group were written for the five DRAWN glyphs, and a machine that has the original's art would give three of them its own
     // corner sprites (planning step 184, the second tier), drawn into the box's face, not the box. So the original's tier is OFF here, and the
     // cases that are about the tiers (the group after TheModernPicturesAreWrittenOnlyToTheScratchDirectory) turn it back on.
     paths.controls.withoutOriginalArt = true;
     return paths;
+}
+
+// The same under the data's own arrangement, the split one (no `arrows=` key): what a player's run and `--controls modern` play.
+MagicPortalsLayer::Paths MdSplitPaths(const std::string& flag = "modern", bool classicClaims = false) {
+    return MdPaths(flag, classicClaims, Controls::Arrows::Split);
 }
 
 std::string MdDescribe(const MagicPortalsLayer& layer) {
@@ -23764,6 +23776,20 @@ bool MdStyleIs(const MagicPortalsLayer& layer, Controls::Style want, const std::
     }
     CHECK_MSG(is, what + ": the layer plays the " + Controls::NameOf(want) + " controls (N1): " + MdDescribe(layer));
     return is;
+}
+
+// N1 for the arrangement: the layer lays the arrows out the way the case was written for, and its settled boxes show it (the right arrow is in the
+// left half of the view when grouped, in the right half when split).
+bool MdArrowsAre(const MagicPortalsLayer& layer, Controls::Arrows want, const std::string& what) {
+    const Controls::Arrows is = layer.ControlsApplied().ArrowsIn(layer.ControlsRules());
+    const glm::dvec2 view = layer.ViewPx();
+    // (With no insets: a case that moves the arrows by a safe area on purpose, as the swallow's does, puts even the grouped pair in the right half.)
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), view, Controls::Insets{});
+    const bool rightHalf = boxes[static_cast<std::size_t>(Controls::Id::Right)].Centre().x > view.x * 0.5;
+    const bool ok = is == want && rightHalf == (want == Controls::Arrows::Split);
+    CHECK_MSG(ok, what + ": the layer lays the walk arrows out " + Controls::NameOf(want) + " (N1): it plays " + Controls::NameOf(is) + ", the right arrow in the " +
+                      (rightHalf ? "right" : "left") + " half");
+    return ok;
 }
 
 // A layer attached, its level-start popup closed and 800 ms old (PtrReady), playing `want`. `settle` false: attached only, so that a
@@ -23786,6 +23812,9 @@ struct MdRun {
             CHECK_MSG(ok, what + " loads: " + layer.LoadError());
         }
         ok = ok && MdStyleIs(layer, want, what);
+        // N1 for the arrangement (planning step 186): a pin written for the grouped pair must be running on it, and a pin written for the split arrows on
+        // those - the flag's key rides the policy into the tuning the layout is laid out with, or the case would pass on the other arrangement.
+        if (ok && want == Controls::Style::Modern) ok = MdArrowsAre(layer, paths.controls.flag.arrows.value_or(layer.ControlsRules().defaultArrows), what);
     }
     ~MdRun() { layer.OnDetach(registry); }
     MdRun(const MdRun&) = delete;
@@ -23829,6 +23858,20 @@ const MdRow kMdTable[5] = {
     {PtrControl::Menu, "pause", {398.5067, 15.6444, 439.4667, 56.6044}, {392.8178, 0.0, 455.1111, 56.6044}},
     {PtrControl::Clear, "clear_portals", {15.6444, 15.6444, 56.6044, 56.6044}, {0.0, 0.0, 56.6044, 56.6044}},
 };
+
+// The SPLIT arrangement's rows of table 1.2 at 16:9 (planning step 186): walk_right in the bottom-right corner, the same literals as test_mp_controls'
+// kSplitTable. The corner buttons are the grouped rows'.
+const MdRow kMdTableSplit[5] = {
+    {PtrControl::Left, "walk_left", {15.6444, 208.4978, 47.5022, 240.3556}, {0.0, 208.4978, 47.5022, 256.0}},
+    {PtrControl::Right, "walk_right", {407.6089, 208.4978, 439.4667, 240.3556}, {407.6089, 208.4978, 455.1111, 256.0}},
+    {PtrControl::Reset, "restart", {346.1689, 15.6444, 387.1289, 56.6044}, {346.1689, 0.0, 392.8178, 56.6044}},
+    {PtrControl::Menu, "pause", {398.5067, 15.6444, 439.4667, 56.6044}, {392.8178, 0.0, 455.1111, 56.6044}},
+    {PtrControl::Clear, "clear_portals", {15.6444, 15.6444, 56.6044, 56.6044}, {0.0, 0.0, 56.6044, 56.6044}},
+};
+
+const MdRow* MdTableFor(Controls::Arrows arrows) {
+    return arrows == Controls::Arrows::Split ? kMdTableSplit : kMdTable;
+}
 
 bool MdRectIs(const Hud::Rect& rect, const double (&want)[4], double eps) {
     const glm::dvec2 max = rect.Max();
@@ -23898,9 +23941,9 @@ bool MdFiredNothingSince(const MagicPortalsLayer& layer, const MdShots& before) 
 
 // The four corners of the arrow's hit rectangle, 0.01 units inside, and its exact centre: each is the arrow's own claim, a touch held
 // there walks him that way, and the release, where it went down, fires nothing.
-void MdAHeldTouchOnAnArrow(bool left) {
+void MdAHeldTouchOnAnArrow(bool left, Controls::Arrows arrows = Controls::Arrows::Grouped) {
     const char* const testName = left ? "AHeldTouchOnTheModernLeftArrowWalksLeft" : "AHeldTouchOnTheModernRightArrowWalksRight";
-    MdRun run(MdPaths(), "level30", testName);
+    MdRun run(MdPaths("modern", false, arrows), "level30", std::string(testName) + (arrows == Controls::Arrows::Split ? " (split)" : ""));
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
@@ -23908,7 +23951,7 @@ void MdAHeldTouchOnAnArrow(bool left) {
     const PtrControl control = left ? PtrControl::Left : PtrControl::Right;
     const MdGeom g = MdGeometry(layer);
     // The rectangle under test is the design's: a probe of some other rectangle would pass for want of this one.
-    const MdRow& row = kMdTable[MdAt(control)];
+    const MdRow& row = MdTableFor(arrows)[MdAt(control)];
     CHECK_MSG(MdRectIs(g.hit[MdAt(control)], row.hit, 6e-5), side + " arrow: its hit rectangle is table 1.2's " + row.key + ": " + MdShow(g.hit[MdAt(control)]));
     const glm::dvec2 lo = g.hit[MdAt(control)].min;
     const glm::dvec2 hi = g.hit[MdAt(control)].Max();
@@ -24125,8 +24168,8 @@ void TheCornerEdgeOfTheViewIsAControlPressInModern() {
 // column that crosses the arrow's top edge (so the finger never passes over the other arrow: a slant from the world would). The model
 // is the claim itself: on every tick that is steady (the claim the same a tick before and a tick after, so a tick's lag cannot matter)
 // he walks exactly when the claim is this arrow's.
-void ATouchSlidOntoAModernArrowWalksAndOffItStops() {
-    MdRun run(MdPaths(), "level30", "ATouchSlidOntoAModernArrowWalksAndOffItStops");
+void MdSlideOntoArrows(Controls::Arrows arrows) {
+    MdRun run(MdPaths("modern", false, arrows), "level30", std::string("ATouchSlidOntoAModernArrowWalksAndOffItStops: ") + Controls::NameOf(arrows));
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
@@ -24135,7 +24178,7 @@ void ATouchSlidOntoAModernArrowWalksAndOffItStops() {
     for (const bool left : {true, false}) {
         const PtrControl control = left ? PtrControl::Left : PtrControl::Right;
         const std::string side = left ? "left" : "right";
-        const double x = left ? 26.0 : 72.0;
+        const double x = left ? 26.0 : (arrows == Controls::Arrows::Split ? view.x - 26.0 : 72.0);
         const glm::dvec2 world(x, 150.0);
         const glm::dvec2 pad(x, 240.0);
         struct Leg {
@@ -24184,22 +24227,34 @@ void ATouchSlidOntoAModernArrowWalksAndOffItStops() {
     }
 }
 
+void ATouchSlidOntoAModernArrowWalksAndOffItStops() {
+    MdSlideOntoArrows(Controls::Arrows::Grouped);
+}
+
+void ATouchSlidOntoASplitArrowWalksAndOffItStops() {
+    MdSlideOntoArrows(Controls::Arrows::Split);
+}
+
 // Where a point of the view is claimed by the pair, as the two arrows' rectangles slid out of the left edge by `slide` units say, half-open.
 PtrClaim MdPairClaim(const MdGeom& g, double slide, const glm::dvec2& point) {
-    const auto inside = [&point, slide](const Hud::Rect& rect) {
+    // Each arrow comes in from the NEARER side edge, judged where it rests: out of the left edge (shifted by -slide) in the left half, out of the right
+    // edge (shifted by +slide) in the right half.
+    const auto inside = [&g, &point, slide](PtrControl arrow) {
+        const Hud::Rect& rect = g.hit[MdAt(arrow)];
+        const double shift = g.box[MdAt(arrow)].Centre().x > g.view.x * 0.5 ? slide : -slide;
         const glm::dvec2 max = rect.Max();
-        return point.x >= rect.min.x - slide && point.y >= rect.min.y && point.x < max.x - slide && point.y < max.y;
+        return point.x >= rect.min.x + shift && point.y >= rect.min.y && point.x < max.x + shift && point.y < max.y;
     };
-    if (inside(g.hit[MdAt(PtrControl::Left)])) return PtrControl::Left;
-    if (inside(g.hit[MdAt(PtrControl::Right)])) return PtrControl::Right;
+    if (inside(PtrControl::Left)) return PtrControl::Left;
+    if (inside(PtrControl::Right)) return PtrControl::Right;
     return PtrClaim{};
 }
 
 // The arrows come in from the left (both centres are left of the view's middle), 128 units out over 700 ms, the classic pads' own slide
 // (ui.json), and the hit rectangle goes with the picture: at every age the claim over the lower part of the view (no corner button is
 // there) is the two rectangles shifted by the slide, and the settled claim is not.
-void TheModernPadsHitRectFollowsItsSlide() {
-    MdRun run(MdPaths(), "level30", "TheModernPadsHitRectFollowsItsSlide", glm::vec2(1280.0f, 720.0f), false);
+void MdHitFollowsSlide(Controls::Arrows arrows) {
+    MdRun run(MdPaths("modern", false, arrows), "level30", std::string("TheModernPadsHitRectFollowsItsSlide: ") + Controls::NameOf(arrows), glm::vec2(1280.0f, 720.0f), false);
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
@@ -24230,7 +24285,7 @@ void TheModernPadsHitRectFollowsItsSlide() {
         Hud::Rect rightBox;
         CHECK_MSG(layer.ControlRect(PtrControl::Left, leftBox) && layer.ControlRect(PtrControl::Right, rightBox) &&
                       NearD(leftBox.min.x, g.box[MdAt(PtrControl::Left)].min.x - slide, 1e-9) &&
-                      NearD(rightBox.min.x, g.box[MdAt(PtrControl::Right)].min.x - slide, 1e-9) && NearD(leftBox.min.y, g.box[MdAt(PtrControl::Left)].min.y, 1e-9),
+                      NearD(rightBox.min.x, g.box[MdAt(PtrControl::Right)].min.x + (arrows == Controls::Arrows::Split ? slide : -slide), 1e-9) && NearD(leftBox.min.y, g.box[MdAt(PtrControl::Left)].min.y, 1e-9),
                   at + ": the arrows are drawn where they are claimed: " + ShowRect(leftBox) + ", " + ShowRect(rightBox));
         if (tick == 1) {
             CHECK_MSG(claimed == 0 && slide > 100.0, at + ": under the opening the arrows are out of the view and claim nothing: " + std::to_string(claimed));
@@ -24245,6 +24300,14 @@ void TheModernPadsHitRectFollowsItsSlide() {
         }
     }
     CHECK_MSG(movedTicks == 5, "five of the ticks (1, 7, 15, 22, 30) showed a claim that was not the settled one: " + std::to_string(movedTicks));
+}
+
+void TheModernPadsHitRectFollowsItsSlide() {
+    MdHitFollowsSlide(Controls::Arrows::Grouped);
+}
+
+void TheSplitPadsHitRectsFollowTheirSlideFromTheNearerEdge() {
+    MdHitFollowsSlide(Controls::Arrows::Split);
 }
 
 // ---- the camera, the lift and the tutorial hand ask the modern rectangles -------------------------------------------------------------
@@ -24298,28 +24361,40 @@ MdFollow MdFollowUnderATouch(const MagicPortalsLayer::Paths& paths, const std::s
 // (weightless: no pair is drawn or claimed, in either style) a touch resting at a point of the MODERN rectangles keeps the camera's
 // follow running and one at a point of the CLASSIC discs only holds it, and the classic layer says the reverse: both consumers pinned
 // on the same points, which a camera still asking the discs under the modern pair (or the rectangles under the classic one) fails.
-void TheModernOnWalkControlIsUngatedLikeClassics() {
+void MdOnWalkControlIsUngated(Controls::Arrows arrows) {
     if (!OriginalArtIsThere("TheModernOnWalkControlIsUngatedLikeClassics")) return;
+    const bool split = arrows == Controls::Arrows::Split;
+    const double W = 1280.0 / 2.8125; // the 16:9 view these runs are at
     const struct {
         const char* where;
         glm::dvec2 at;
         bool modernOnPad;
         bool classicOnPad;
     } probes[] = {
-        // 0.01 units inside the left arrow's top edge, and 0.01 outside it: both inside the classic disc about the corner (55 units).
+        // 0.01 units inside the left arrow's top edge, and 0.01 outside it: both inside the classic disc about the corner (55 units). The left arrow is
+        // where it was in both arrangements.
         {"just inside the left arrow's top", glm::dvec2(26.0, 208.5078), true, true},
         {"just above the left arrow", glm::dvec2(26.0, 208.4878), false, true},
-        // Inside the right arrow, 80 units from the corner: outside the classic disc (64).
-        {"inside the right arrow, outside the classic disc", glm::dvec2(80.0, 250.0), true, false},
-        // Inside the classic disc (56 units) and above the modern pair.
-        {"inside the classic disc, above the modern pair", glm::dvec2(5.0, 200.0), false, true},
+        // Grouped: inside the right arrow, 80 units from the corner, outside the classic disc (64). Split: that place is the world (the right arrow
+        // is in the other corner), and the classic left disc (64 about the bottom-left corner) does not hold it either.
+        {split ? "where the grouped right arrow was" : "inside the right arrow, outside the classic disc", glm::dvec2(80.0, 250.0), !split, false},
+        // Inside the classic disc (56 units) and above the modern left arrow.
+        {"inside the classic disc, above the modern left arrow", glm::dvec2(5.0, 200.0), false, true},
         {"in the world", glm::dvec2(227.0, 40.0), false, false},
+        // The split right arrow: its top edge 0.01 units inside and outside (both inside the classic right disc, 54 units from its corner), a point of its
+        // hit that the classic right disc does not hold (46 units in from the right edge and 46 up from the bottom: 65 from the corner), and a point
+        // left of it that the classic disc does hold.
+        // (The modern column depends on the arrangement - grouped has nothing there - and the classic one does not: the discs are the discs.)
+        {"just inside the right arrow's top", glm::dvec2(W - 26.0, 208.5078), split, true},
+        {"just above the right arrow", glm::dvec2(W - 26.0, 208.4878), false, true},
+        {"inside the right arrow, outside the classic right disc", glm::dvec2(W - 46.0, 210.0), split, false},
+        {"left of the right arrow, inside the classic right disc", glm::dvec2(W - 50.0, 240.0), false, true},
     };
     for (const auto& probe : probes) {
-        const MdFollow modern = MdFollowUnderATouch(MdPaths(), "level1c", Controls::Style::Modern, probe.at, std::string("modern ") + probe.where);
+        const MdFollow modern = MdFollowUnderATouch(MdPaths("modern", false, arrows), "level1c", Controls::Style::Modern, probe.at, std::string("modern ") + probe.where);
         const MdFollow classic = MdFollowUnderATouch(TestPaths(), "level1c", Controls::Style::Classic, probe.at, std::string("classic ") + probe.where);
         if (!modern.ok || !classic.ok) continue;
-        std::printf("  4-02, a touch resting %s: the camera moves %.3f (modern), %.3f (classic)\n", probe.where, modern.moved, classic.moved);
+        std::printf("  4-02, a touch resting %s (%s): the camera moves %.3f (modern), %.3f (classic)\n", probe.where, Controls::NameOf(arrows), modern.moved, classic.moved);
         // The pair is neither shown nor claimed on a weightless level, in either style: the follow is `onPad` alone.
         CHECK_MSG(!modern.pairShown && !classic.pairShown && !modern.claim && !classic.claim,
                   std::string(probe.where) + ": no pair, and nothing is claimed there on a weightless level");
@@ -24334,26 +24409,43 @@ void TheModernOnWalkControlIsUngatedLikeClassics() {
             CHECK_MSG(classic.moved < 1e-9, std::string("classic, ") + probe.where + ": the follow waits, the camera moves " + PtrNum(classic.moved));
         }
     }
-    // The negative control, on 4-01 (gravity, the pair is shown): a touch resting on the arrow follows, one in the world holds.
-    const MdFollow onArrow = MdFollowUnderATouch(MdPaths(), "level0c", Controls::Style::Modern, glm::dvec2(26.0, 232.0), "modern 4-01 on the arrow");
-    const MdFollow inWorld = MdFollowUnderATouch(MdPaths(), "level0c", Controls::Style::Modern, glm::dvec2(227.0, 40.0), "modern 4-01 in the world");
-    if (onArrow.ok && inWorld.ok) {
-        CHECK_MSG(onArrow.pairShown && onArrow.claim == PtrClaim(PtrControl::Left), "4-01 shows its pair and claims the point: " + PtrName(onArrow.claim));
-        CHECK_MSG(onArrow.moved > 5.0 && inWorld.moved < 1e-9, "and the follow runs on the arrow and waits in the world: " + PtrNum(onArrow.moved) + ", " + PtrNum(inWorld.moved));
+    // The negative control, on 4-01 (gravity, the pair is shown): a touch resting on an arrow follows, one in the world holds.
+    const MdFollow onLeft = MdFollowUnderATouch(MdPaths("modern", false, arrows), "level0c", Controls::Style::Modern, glm::dvec2(26.0, 232.0), "modern 4-01 on the left arrow");
+    const MdFollow inWorld = MdFollowUnderATouch(MdPaths("modern", false, arrows), "level0c", Controls::Style::Modern, glm::dvec2(227.0, 40.0), "modern 4-01 in the world");
+    if (onLeft.ok && inWorld.ok) {
+        CHECK_MSG(onLeft.pairShown && onLeft.claim == PtrClaim(PtrControl::Left), "4-01 shows its pair and claims the point: " + PtrName(onLeft.claim));
+        CHECK_MSG(onLeft.moved > 5.0 && inWorld.moved < 1e-9, "and the follow runs on the arrow and waits in the world: " + PtrNum(onLeft.moved) + ", " + PtrNum(inWorld.moved));
+    }
+    if (split) {
+        const MdFollow onRight = MdFollowUnderATouch(MdPaths("modern", false, arrows), "level0c", Controls::Style::Modern, glm::dvec2(W - 26.0, 232.0), "modern 4-01 on the right arrow");
+        if (onRight.ok) {
+            CHECK_MSG(onRight.pairShown && onRight.claim == PtrClaim(PtrControl::Right) && onRight.moved > 5.0,
+                      "4-01 claims the bottom-right point for the right arrow, and the follow runs on it: " + PtrName(onRight.claim) + ", " + PtrNum(onRight.moved));
+        }
     }
 }
 
+void TheModernOnWalkControlIsUngatedLikeClassics() {
+    MdOnWalkControlIsUngated(Controls::Arrows::Grouped);
+}
+
+void TheSplitOnWalkControlIsUngatedLikeClassics() {
+    MdOnWalkControlIsUngated(Controls::Arrows::Split);
+}
+
 // The camera follows him while a touch is held on a modern arrow, exactly as it follows the key.
-PtrCameraTrace MdCameraRun(int mode, int ticks, const std::string& what) {
+PtrCameraTrace MdCameraRun(int mode, int ticks, const std::string& what, Controls::Arrows arrows = Controls::Arrows::Grouped) {
     PtrCameraTrace trace;
-    MdRun run(MdPaths(), "level30", what);
+    MdRun run(MdPaths("modern", false, arrows), "level30", what);
     if (!run.ok) return trace;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
     trace.ok = true;
     // A point of the right arrow's rectangle that the classic right disc does not hold.
-    const glm::vec2 padPixel = PtrPixel(layer, glm::dvec2(80.0, 240.0));
-    CHECK_MSG(layer.ControlAt(glm::dvec2(80.0, 240.0)) == PtrClaim(PtrControl::Right), what + ": the touch is on the right arrow");
+    // (Split: the same height, 30 units in from the view's right edge, the right arrow's own corner.)
+    const glm::dvec2 touch = arrows == Controls::Arrows::Split ? glm::dvec2(layer.ViewPx().x - 30.0, 240.0) : glm::dvec2(80.0, 240.0);
+    const glm::vec2 padPixel = PtrPixel(layer, touch);
+    CHECK_MSG(layer.ControlAt(touch) == PtrClaim(PtrControl::Right), what + ": the touch is on the right arrow");
     trace.playerFrom = playerPx(registry, layer).x;
     for (int tick = 0; tick < ticks; ++tick) {
         if (mode == 0) {
@@ -24367,10 +24459,10 @@ PtrCameraTrace MdCameraRun(int mode, int ticks, const std::string& what) {
     return trace;
 }
 
-void AHeldTouchOnAModernArrowKeepsTheCameraFollowing() {
+void MdCameraFollows(Controls::Arrows arrows) {
     const int ticks = 55;
-    const PtrCameraTrace key = MdCameraRun(0, ticks, "the key run");
-    const PtrCameraTrace pad = MdCameraRun(1, ticks, "the arrow run");
+    const PtrCameraTrace key = MdCameraRun(0, ticks, "the key run", arrows);
+    const PtrCameraTrace pad = MdCameraRun(1, ticks, "the arrow run", arrows);
     if (!key.ok || !pad.ok) return;
     const double keyMoved = key.centreX.back() - key.centreX.front();
     const double padMoved = pad.centreX.back() - pad.centreX.front();
@@ -24381,6 +24473,14 @@ void AHeldTouchOnAModernArrowKeepsTheCameraFollowing() {
     CHECK_MSG(padMoved > 30.0, "and the camera follows him while the touch is held on the arrow: " + PtrNum(padMoved));
     CHECK_MSG(std::fabs(pad.centreX.back() - key.centreX.back()) < 0.5,
               "exactly where the key's follow had it: " + PtrNum(pad.centreX.back()) + " against " + PtrNum(key.centreX.back()));
+}
+
+void AHeldTouchOnAModernArrowKeepsTheCameraFollowing() {
+    MdCameraFollows(Controls::Arrows::Grouped);
+}
+
+void AHeldTouchOnTheSplitRightArrowKeepsTheCameraFollowing() {
+    MdCameraFollows(Controls::Arrows::Split);
 }
 
 // The other side: a touch held in the world holds the view where it was, in the modern layout as in the classic one.
@@ -24428,24 +24528,31 @@ void AHeldTouchInTheWorldStopsItUnderTheModernControls() {
 // modern arrow and a point just off it in the one picture: the press on the arrow sends nothing, the press beside it sends the lift.
 // A: the lift centred on the right arrow's right edge (x 90.74), the points 80 and 100 units across. B: on the left arrow's top edge
 // (y 208.50), the points 220 and 202 down. (The classic discs would call the first of A off the pad: 80 units from the corner.)
-void APressOnAModernArrowOverALiftSendsNothingAndAPressOutsideSendsIt() {
-    const struct {
+void MdLiftUnderAnArrow(Controls::Arrows arrows) {
+    struct Scenario {
         const char* name;
         glm::dvec2 liftOnView;
         glm::dvec2 onArrow;
         glm::dvec2 beside;
         PtrControl control;
-    } scenarios[] = {
-        {"A: the right arrow's right edge", glm::dvec2(90.7378, 240.0), glm::dvec2(80.0, 235.0), glm::dvec2(100.0, 235.0), PtrControl::Right},
-        {"B: the left arrow's top edge", glm::dvec2(30.0, 216.0), glm::dvec2(30.0, 220.0), glm::dvec2(30.0, 202.0), PtrControl::Left},
+        const char* level; // a lift that the camera can put under the point: 2-02's is at the left of its level, 2-25's (level24a) at x 608 of 768
     };
+    // A: the lift centred on an arrow's inner edge, the points 80 and 100 units across (grouped: the right arrow's right edge, 90.74) or 12 either side
+    // of the split right arrow's left edge, 407.61, which is the edge that faces the world. B: the left arrow's top edge (y 208.50), the points 220 and
+    // 202 down, in both arrangements.
+    const std::vector<Scenario> scenarios =
+        arrows == Controls::Arrows::Split
+            ? std::vector<Scenario>{{"A: the right arrow's left edge", glm::dvec2(407.6089, 240.0), glm::dvec2(420.0, 235.0), glm::dvec2(395.0, 235.0), PtrControl::Right, "level24a"},
+                                    {"B: the left arrow's top edge", glm::dvec2(30.0, 216.0), glm::dvec2(30.0, 220.0), glm::dvec2(30.0, 202.0), PtrControl::Left, "level1a"}}
+            : std::vector<Scenario>{{"A: the right arrow's right edge", glm::dvec2(90.7378, 240.0), glm::dvec2(80.0, 235.0), glm::dvec2(100.0, 235.0), PtrControl::Right, "level1a"},
+                                    {"B: the left arrow's top edge", glm::dvec2(30.0, 216.0), glm::dvec2(30.0, 220.0), glm::dvec2(30.0, 202.0), PtrControl::Left, "level1a"}};
     for (const auto& scenario : scenarios) {
-        const std::string what = std::string("2-02, ") + scenario.name;
-        MdRun run(MdPaths(), "level1a", what);
+        const std::string what = std::string(scenario.level) + ", " + scenario.name + " (" + Controls::NameOf(arrows) + ")";
+        MdRun run(MdPaths("modern", false, arrows), scenario.level, what);
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
         entt::registry& registry = run.registry;
-        CHECK_MSG(!layer.SimLevel()->movers.lifts.empty(), "2-02 has a lift");
+        CHECK_MSG(!layer.SimLevel()->movers.lifts.empty(), std::string(scenario.level) + " has a lift");
         if (layer.SimLevel()->movers.lifts.empty()) return;
         const MagicPortals::Mover::Lift& theLift = layer.SimLevel()->movers.lifts.front();
         const glm::dvec2 view = layer.ViewPx();
@@ -24474,17 +24581,29 @@ void APressOnAModernArrowOverALiftSendsNothingAndAPressOutsideSendsIt() {
     }
 }
 
+void APressOnAModernArrowOverALiftSendsNothingAndAPressOutsideSendsIt() {
+    MdLiftUnderAnArrow(Controls::Arrows::Grouped);
+}
+
+void APressOnASplitArrowOverALiftSendsNothingAndAPressOutsideSendsIt() {
+    MdLiftUnderAnArrow(Controls::Arrows::Split);
+}
+
 // effects.json smoke_vanish_hand_tap: a release on a walk control takes no tutorial hand; the same release off them, within the hand's 30
 // units, does. 1-02's hand_tap, the camera put so that the hand is under the release both times. In the modern layout the controls are
 // the rectangles: a release on the left arrow and on the right arrow's far side (80 units from the corner, outside the classic disc)
 // leave the hand, and the classic layer takes it from the second.
-void AReleaseOnAModernArrowTakesNoTutorialHand() {
+void MdHandUnderAnArrow(Controls::Arrows arrows) {
     if (!OriginalArtIsThere("AReleaseOnAModernArrowTakesNoTutorialHand")) return;
     const char* const hand = "hand_tap_ent_622";
+    const bool split = arrows == Controls::Arrows::Split;
+    const double W = 1280.0 / 2.8125;
     const glm::dvec2 onLeft(26.0, 235.0);
-    const glm::dvec2 onRight(80.0, 250.0);
+    // Grouped: the right arrow's far side, 80 units from the corner, outside the classic disc. Split: a point of the right arrow's hit that the classic
+    // right disc does not hold (46 units in from the right edge and 46 up from the bottom: 65 from its corner).
+    const glm::dvec2 onRight = split ? glm::dvec2(W - 46.0, 210.0) : glm::dvec2(80.0, 250.0);
     {
-        MdRun run(MdPaths(), "level1", "AReleaseOnAModernArrowTakesNoTutorialHand");
+        MdRun run(MdPaths("modern", false, arrows), "level1", std::string("AReleaseOnAModernArrowTakesNoTutorialHand: ") + Controls::NameOf(arrows));
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
         entt::registry& registry = run.registry;
@@ -24509,7 +24628,7 @@ void AReleaseOnAModernArrowTakesNoTutorialHand() {
         CHECK_MSG(release(onLeft), "a release on the left arrow, the hand right under it, leaves the hand standing");
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         CHECK_MSG(layer.DrawnPicture(hand).drawn, "and it still stands a frame later");
-        CHECK_MSG(release(onRight), "a release on the right arrow, 80 units from the corner, leaves it too");
+        CHECK_MSG(release(onRight), "a release on the right arrow, outside the classic disc, leaves it too");
         layer.OnUpdate(registry, MagicPortalsLayer::kTick);
         CHECK_MSG(layer.DrawnPicture(hand).drawn, "and it still stands a frame later");
         CHECK_MSG(!release(offPad), "the control: the same release off the arrows takes it, on the release's tick");
@@ -24537,15 +24656,23 @@ void AReleaseOnAModernArrowTakesNoTutorialHand() {
     }
 }
 
+void AReleaseOnAModernArrowTakesNoTutorialHand() {
+    MdHandUnderAnArrow(Controls::Arrows::Grouped);
+}
+
+void AReleaseOnASplitArrowTakesNoTutorialHand() {
+    MdHandUnderAnArrow(Controls::Arrows::Split);
+}
+
 // ---- a weightless level has no pair, and its corner is the world ---------------------------------------------------------------------
 
 // 4-02 (level1c, the first weightless level) draws and claims no pair; the place where it would be is the world (a tap there fires a
 // portal) and restart and pause stay. 4-01 (level0c, with gravity) is the negative control: its pair is there, drawn and claimed.
-void TheModernPairIsHiddenAndUnclaimedOnAWeightlessLevelAndTheCornerIsWorld() {
+void MdPairIsHidden(Controls::Arrows arrows) {
     for (const bool weightless : {true, false}) {
         const std::string level = weightless ? "level1c" : "level0c";
         const std::string what = std::string("4-0") + (weightless ? "2" : "1") + " (" + level + ")";
-        MdRun run(MdPaths(), level, what);
+        MdRun run(MdPaths("modern", false, arrows), level, what + ", " + Controls::NameOf(arrows));
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
         entt::registry& registry = run.registry;
@@ -24567,16 +24694,30 @@ void TheModernPairIsHiddenAndUnclaimedOnAWeightlessLevelAndTheCornerIsWorld() {
         }
         if (weightless) {
             // Where the pair would be is the world: a tap there fires toward it, and does not walk or reload anything.
-            const glm::dvec2 where(26.0, 235.0);
-            const glm::vec2 pixel = PtrPixel(layer, where);
-            glm::dvec2 aimed(0.0);
-            waitForFirstTap(layer, registry);
-            tap(layer, registry, pixel);
-            CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), what + ": the pixel maps into the level");
-            lift(layer, registry, pixel);
-            CHECK_MSG(glm::distance(PtrLastTap(layer), aimed) < 0.01, what + ": a tap where the pair would be fires toward it: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+            // (Split: where the right arrow would be - the bottom-right corner - is the world too.)
+            bool first = true;
+            for (const glm::dvec2& where : {glm::dvec2(26.0, 235.0), glm::dvec2(layer.ViewPx().x - 26.0, 235.0)}) {
+                if (!first && arrows != Controls::Arrows::Split) break;
+                first = false;
+                const glm::vec2 pixel = PtrPixel(layer, where);
+                glm::dvec2 aimed(0.0);
+                waitForFirstTap(layer, registry);
+                tap(layer, registry, pixel);
+                CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), what + ": the pixel maps into the level");
+                lift(layer, registry, pixel);
+                CHECK_MSG(glm::distance(PtrLastTap(layer), aimed) < 0.01, what + ": a tap where the pair would be fires toward it: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+                PtrRest(layer, registry, 30);
+            }
         }
     }
+}
+
+void TheModernPairIsHiddenAndUnclaimedOnAWeightlessLevelAndTheCornerIsWorld() {
+    MdPairIsHidden(Controls::Arrows::Grouped);
+}
+
+void TheSplitArrowsAreHiddenAndUnclaimedOnAWeightlessLevelAndTheirCornersAreWorld() {
+    MdPairIsHidden(Controls::Arrows::Split);
 }
 
 // ---- nothing is claimed under a pause, a popup, after the door or after a death (the twin of CTL-2's case) -----------------------------
@@ -24918,16 +25059,17 @@ void ModernClearHidesAsItClearsAndItsTouchFiresNothing() {
 
 // The five controls at the window shapes the design tabulates: each drawn where it is laid out, laid out where table 1.2 says (the pair never
 // moves with the aspect; restart and pause hang from the right edge, so their x does), claimed at its centre.
-void TheSettledModernControlsAreTheirDrawnRectangles() {
+void MdSettledControls(Controls::Arrows arrows) {
     struct Window {
         const char* name;
         glm::vec2 size;
     };
+    const bool split = arrows == Controls::Arrows::Split;
     for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"5:4", glm::vec2(900.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)},
                                  Window{"3:2", glm::vec2(1080.0f, 720.0f)}, Window{"16:10", glm::vec2(1152.0f, 720.0f)}, Window{"21:9", glm::vec2(1680.0f, 720.0f)},
                                  Window{"32:9", glm::vec2(2560.0f, 720.0f)}}) {
-        const std::string in = std::string(" at ") + window.name;
-        MdRun run(MdPaths(), "level30", std::string("TheSettledModernControlsAreTheirDrawnRectangles") + in, window.size);
+        const std::string in = std::string(" at ") + window.name + " (" + Controls::NameOf(arrows) + ")";
+        MdRun run(MdPaths("modern", false, arrows), "level30", std::string("TheSettledModernControlsAreTheirDrawnRectangles") + in, window.size);
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
         entt::registry& registry = run.registry;
@@ -24936,18 +25078,20 @@ void TheSettledModernControlsAreTheirDrawnRectangles() {
         const double W = 256.0 * static_cast<double>(window.size.x) / static_cast<double>(window.size.y);
         // (The view's width is 256 x the viewport's aspect, which is a float: a window's exact ratio is not always one.)
         CHECK_MSG(NearD(g.view.x, W, 1e-3) && NearD(layer.ViewPx().y, 256.0, 1e-9), std::string("the view is 256 units tall and ") + PtrNum(W) + " wide" + in);
-        // The design's numbers, from its own literals: the pair's rows are the window's; restart and pause hang from the right edge by the margin
+        // The design's numbers, from its own literals: grouped, the pair's rows are the window's and never move; split, the right arrow hangs from the
+        // right edge by the margin (15.6444) around a box of 31.8578 like restart and pause; restart and pause hang from the right edge by the margin
         // (15.6444) and the gap (11.3778) around boxes of 40.96, and the seam between them is the middle of the gap.
         const double pauseX = W - 15.6444 - 40.96;
         const double restartX = W - 67.9822 - 40.96;
         const double middle = (restartX + 40.96 + pauseX) * 0.5;
+        const double rightArrowX = W - 15.6444 - 31.8578;
         const double box[5][4] = {{15.6444, 208.4978, 47.5022, 240.3556},
-                                  {58.8800, 208.4978, 90.7378, 240.3556},
+                                  {split ? rightArrowX : 58.8800, 208.4978, split ? W - 15.6444 : 90.7378, 240.3556},
                                   {restartX, 15.6444, restartX + 40.96, 56.6044},
                                   {pauseX, 15.6444, pauseX + 40.96, 56.6044},
                                   {15.6444, 15.6444, 56.6044, 56.6044}};
-        const double hit[5][4] = {{0.0, 208.4978, 53.1911, 256.0},
-                                  {53.1911, 208.4978, 90.7378, 256.0},
+        const double hit[5][4] = {{0.0, 208.4978, split ? 47.5022 : 53.1911, 256.0},
+                                  {split ? rightArrowX : 53.1911, 208.4978, split ? W : 90.7378, 256.0},
                                   {restartX, 0.0, middle, 56.6044},
                                   {middle, 0.0, W, 56.6044},
                                   {0.0, 0.0, 56.6044, 56.6044}};
@@ -24968,13 +25112,73 @@ void TheSettledModernControlsAreTheirDrawnRectangles() {
                   std::string("clear-portals is not shown with no portal, and its place is the design's") + in);
         // The INFO line, at 16:9, is table 1.2 to the printed digit (the layer logs it once at every level's start).
         if (std::string(window.name) == "16:9") {
-            const std::string line =
-                "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(149.6,720.0) px, walk_right (165.6,586.4)-(255.2,676.0) px hit "
-                "(149.6,586.4)-(255.2,720.0) px, restart (973.6,44.0)-(1088.8,159.2) px hit (973.6,0.0)-(1104.8,159.2) px, pause (1120.8,44.0)-(1236.0,159.2) px "
-                "hit (1104.8,0.0)-(1280.0,159.2) px, clear_portals (44.0,44.0)-(159.2,159.2) px hit (0.0,0.0)-(159.2,159.2) px, in a 1280x720 px window (view "
-                "455.11x256.00 units)";
-            CHECK_MSG(layer.ControlsRectsLine() == line, std::string("the INFO line is table 1.2's: ") + layer.ControlsRectsLine());
+            const std::string pair =
+                split ? "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(133.6,720.0) px, walk_right (1146.4,586.4)-(1236.0,676.0) px hit "
+                        "(1146.4,586.4)-(1280.0,720.0) px, "
+                      : "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(149.6,720.0) px, walk_right (165.6,586.4)-(255.2,676.0) px hit "
+                        "(149.6,586.4)-(255.2,720.0) px, ";
+            const std::string line = pair +
+                                     "restart (973.6,44.0)-(1088.8,159.2) px hit (973.6,0.0)-(1104.8,159.2) px, pause (1120.8,44.0)-(1236.0,159.2) px "
+                                     "hit (1104.8,0.0)-(1280.0,159.2) px, clear_portals (44.0,44.0)-(159.2,159.2) px hit (0.0,0.0)-(159.2,159.2) px, in a 1280x720 px window (view "
+                                     "455.11x256.00 units)";
+            CHECK_MSG(layer.ControlsRectsLine() == line, std::string("the INFO line is table 1.2's (") + Controls::NameOf(arrows) + "): " + layer.ControlsRectsLine());
         }
+    }
+}
+
+void TheSettledModernControlsAreTheirDrawnRectangles() {
+    MdSettledControls(Controls::Arrows::Grouped);
+}
+
+void TheSplitArrowsStandInTheTwoBottomCornersAtEveryWindowShape() {
+    MdSettledControls(Controls::Arrows::Split);
+    // The split arrows are the layer's default: a run with no `arrows=` key lays out as one that asks for them, and the grouped pair is what the key adds.
+    // (One layer is attached at a time.)
+    std::string plainLine;
+    std::string askedLine;
+    std::string groupedLine;
+    MdGeom a;
+    MdGeom b;
+    {
+        MdRun plain(MdSplitPaths(), "level30", "the default arrangement");
+        if (!plain.ok) return;
+        CHECK_MSG(plain.layer.ControlsApplied().ArrowsIn(plain.layer.ControlsRules()) == Controls::Arrows::Split && !plain.layer.ControlsApplied().arrows,
+                  "a run with no key plays the data's arrangement, split");
+        plainLine = plain.layer.ControlsRectsLine();
+        a = MdGeometry(plain.layer);
+    }
+    {
+        MdRun asked(MdSplitPaths("modern,arrows=split"), "level30", "arrows=split asked for");
+        if (!asked.ok) return;
+        askedLine = asked.layer.ControlsRectsLine();
+    }
+    {
+        MdRun grouped(MdPaths(), "level30", "arrows=grouped asked for");
+        if (!grouped.ok) return;
+        groupedLine = grouped.layer.ControlsRectsLine();
+        b = MdGeometry(grouped.layer);
+    }
+    CHECK_MSG(plainLine == askedLine && !plainLine.empty() && plainLine != groupedLine, "and its INFO line is the one `arrows=split` gives and not the grouped pair's");
+    CHECK_MSG(SameRect(a.box[MdAt(PtrControl::Left)], b.box[MdAt(PtrControl::Left)], 1e-12) && !SameRect(a.box[MdAt(PtrControl::Right)], b.box[MdAt(PtrControl::Right)], 1e-3),
+              "the arrangements differ in the right arrow alone: " + MdShow(a.box[MdAt(PtrControl::Right)]) + " against " + MdShow(b.box[MdAt(PtrControl::Right)]));
+    // The three looks (K2): the left arrow's top and the right arrow's, in the right corner, at each look's own size and bottom margin.
+    const double unit = 256.0 / 720.0;
+    for (const auto& look : {std::make_tuple("modern", 0.7, 44.0), std::make_tuple("modern,preset=balanced", 0.8, 34.0), std::make_tuple("modern,preset=mr", 1.0, 11.0)}) {
+        MdRun run(MdSplitPaths(std::get<0>(look)), "level30", std::string("the split looks: ") + std::get<0>(look));
+        if (!run.ok) return;
+        const double side = 128.0 * std::get<1>(look) * unit;
+        const double top = 256.0 - std::get<2>(look) * unit - side;
+        Hud::Rect left;
+        Hud::Rect right;
+        CHECK_MSG(run.layer.ControlRect(PtrControl::Left, left) && run.layer.ControlRect(PtrControl::Right, right), std::string(std::get<0>(look)) + ": both arrows are shown");
+        const double W = run.layer.ViewPx().x;
+        CHECK_MSG(NearD(left.min.x, 44.0 * unit, 1e-6) && NearD(left.min.y, top, 1e-6) && NearD(right.Max().x, W - 44.0 * unit, 1e-6) && NearD(right.min.y, top, 1e-6) &&
+                      NearD(left.size.x, side, 1e-6) && NearD(right.size.x, side, 1e-6) && NearD(256.0 - right.Max().y, std::get<2>(look) * unit, 1e-6),
+                  std::string(std::get<0>(look)) + ": the left arrow is 44 px in from the left, the right arrow 44 px in from the right, both " + PtrNum(side) +
+                      " a box with their top at " + PtrNum(top) + ": " + ShowRect(left) + ", " + ShowRect(right));
+        CHECK_MSG(top >= 206.0, std::string(std::get<0>(look)) + ": and the top is at or below the character's row (206)");
+        CHECK_MSG(run.layer.ControlAt(glm::dvec2(W - 1.0, top + 0.01)) == PtrClaim(PtrControl::Right) && !run.layer.ControlAt(glm::dvec2(W - 1.0, top - 0.01)),
+                  std::string(std::get<0>(look)) + ": the claim begins at the right arrow's top edge, out to the view's edge");
     }
 }
 
@@ -25083,9 +25287,9 @@ void TheModernPadsAreDrawnBetweenTheTwoBlacks() {
 
 // The tutorial's two rings, over each arrow's BOX centre, `size_over_box` boxes across at their fullest and growing as the classic ring does, in
 // the classic ring's own alpha, sliding in with the arrow; and drawn first, under everything.
-void TheModernRingFollowsTheArrowsBoxCentre() {
+void MdRingsFollow(Controls::Arrows arrows) {
     if (!OriginalArtIsThere("TheModernRingFollowsTheArrowsBoxCentre")) return;
-    MdRun run(MdPaths(), "level0", "TheModernRingFollowsTheArrowsBoxCentre", glm::vec2(1280.0f, 720.0f), false);
+    MdRun run(MdPaths("modern", false, arrows), "level0", std::string("TheModernRingFollowsTheArrowsBoxCentre: ") + Controls::NameOf(arrows), glm::vec2(1280.0f, 720.0f), false);
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
@@ -25125,6 +25329,14 @@ void TheModernRingFollowsTheArrowsBoxCentre() {
                   at + ": the rings are drawn first, under the controls");
     }
     CHECK_MSG(seen >= 3, "the ring was up on at least three of the five ticks: " + std::to_string(seen));
+}
+
+void TheModernRingFollowsTheArrowsBoxCentre() {
+    MdRingsFollow(Controls::Arrows::Grouped);
+}
+
+void TheSplitRingsFollowEachArrowsBoxCentre() {
+    MdRingsFollow(Controls::Arrows::Split);
 }
 
 // The corner buttons come in as the original's UIButtons do and clear-portals does not: at 512 ms (tick 32) restart and pause are 2.8 units out
@@ -25187,65 +25399,70 @@ GoldenEntries MdClaimEntries() {
         const char* name;
         glm::vec2 size;
     };
-    for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)}}) {
-        for (const bool clearShown : {false, true}) {
-            MdRun run(MdPaths(), "level30", std::string("the modern claim map, ") + window.name, window.size, false);
-            if (!run.ok) continue;
-            MagicPortalsLayer& layer = run.layer;
-            entt::registry& registry = run.registry;
-            if (clearShown) {
-                waitForFirstTap(layer, registry);
-                shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)) * (window.size / glm::vec2(1280.0f, 720.0f)));
-                landShot(layer, registry);
-                CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, std::string(window.name) + ": a portal is placed");
-            }
-            const std::vector<int> ticks = clearShown ? std::vector<int>{100, 313} : std::vector<int>{1, 7, 15, 22, 30, 40, 44, 313};
-            for (const int tick : ticks) {
-                CHECK_MSG(layer.LayerTicks() <= tick, std::string(window.name) + ": the layer is not past tick " + std::to_string(tick));
-                while (layer.LayerTicks() < tick) tickWith(layer, registry, kRest, {}, {});
-                Hud::Rect clear;
-                CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear) == clearShown,
-                          std::string(window.name) + " tick " + std::to_string(tick) + ": clear-portals is " + (clearShown ? "shown" : "hidden"));
-                char key[112];
-                std::snprintf(key, sizeof(key), "modern claim %s clear=%d tick %d age %.0f ms", window.name, clearShown ? 1 : 0, tick, layer.LevelAgeMs());
-                entries[key] = PtrClaimSnapshot(layer);
+    // TWO ARRANGEMENTS (planning step 186): the entries named `modern claim <state>` are the SPLIT arrows that ship, the ones named `modern claim
+    // arrows=grouped <state>` the grouped pair of planning step 180, with the values the golden held before it, byte for byte.
+    for (const Controls::Arrows arrows : {Controls::Arrows::Split, Controls::Arrows::Grouped}) {
+        const std::string prefix = arrows == Controls::Arrows::Grouped ? "modern claim arrows=grouped " : "modern claim ";
+        for (const Window& window : {Window{"16:9", glm::vec2(1280.0f, 720.0f)}, Window{"4:3", glm::vec2(960.0f, 720.0f)}}) {
+            for (const bool clearShown : {false, true}) {
+                MdRun run(MdPaths("modern", false, arrows), "level30", std::string("the modern claim map, ") + window.name, window.size, false);
+                if (!run.ok) continue;
+                MagicPortalsLayer& layer = run.layer;
+                entt::registry& registry = run.registry;
+                if (clearShown) {
+                    waitForFirstTap(layer, registry);
+                    shoot(layer, registry, screenOf(registry, glm::dvec2(250.0, 150.0)) * (window.size / glm::vec2(1280.0f, 720.0f)));
+                    landShot(layer, registry);
+                    CHECK_MSG(layer.SimLevel()->portals.placed.size() == 1u, std::string(window.name) + ": a portal is placed");
+                }
+                const std::vector<int> ticks = clearShown ? std::vector<int>{100, 313} : std::vector<int>{1, 7, 15, 22, 30, 40, 44, 313};
+                for (const int tick : ticks) {
+                    CHECK_MSG(layer.LayerTicks() <= tick, std::string(window.name) + ": the layer is not past tick " + std::to_string(tick));
+                    while (layer.LayerTicks() < tick) tickWith(layer, registry, kRest, {}, {});
+                    Hud::Rect clear;
+                    CHECK_MSG(layer.ControlRect(PtrControl::Clear, clear) == clearShown,
+                              std::string(window.name) + " tick " + std::to_string(tick) + ": clear-portals is " + (clearShown ? "shown" : "hidden"));
+                    char key[160];
+                    std::snprintf(key, sizeof(key), "%s%s clear=%d tick %d age %.0f ms", prefix.c_str(), window.name, clearShown ? 1 : 0, tick, layer.LevelAgeMs());
+                    entries[key] = PtrClaimSnapshot(layer);
+                }
             }
         }
-    }
-    // Clear-portals shown while restart and pause still slide in: the one state where its flat place differs from a corner's entrance.
-    {
-        MdRun run(MdPaths(), "level30", "the modern claim map, an early shot", glm::vec2(1280.0f, 720.0f), false);
-        if (run.ok && PtrLandEarly(run.registry, run.layer, glm::vec2(1280.0f, 720.0f), "16:9")) {
-            while (run.layer.LayerTicks() < kEarlyTick) tickWith(run.layer, run.registry, kRest, {}, {});
-            Hud::Rect clear;
-            CHECK_MSG(run.layer.ControlRect(PtrControl::Clear, clear), "16:9 tick " + std::to_string(kEarlyTick) + ": clear-portals is shown");
-            char key[112];
-            std::snprintf(key, sizeof(key), "modern claim 16:9 clear=1 tick %d age %.0f ms (an early shot)", kEarlyTick, run.layer.LevelAgeMs());
+        // Clear-portals shown while restart and pause still slide in: the one state where its flat place differs from a corner's entrance.
+        {
+            MdRun run(MdPaths("modern", false, arrows), "level30", "the modern claim map, an early shot", glm::vec2(1280.0f, 720.0f), false);
+            if (run.ok && PtrLandEarly(run.registry, run.layer, glm::vec2(1280.0f, 720.0f), "16:9")) {
+                while (run.layer.LayerTicks() < kEarlyTick) tickWith(run.layer, run.registry, kRest, {}, {});
+                Hud::Rect clear;
+                CHECK_MSG(run.layer.ControlRect(PtrControl::Clear, clear), "16:9 tick " + std::to_string(kEarlyTick) + ": clear-portals is shown");
+                char key[160];
+                std::snprintf(key, sizeof(key), "%s16:9 clear=1 tick %d age %.0f ms (an early shot)", prefix.c_str(), kEarlyTick, run.layer.LevelAgeMs());
+                entries[key] = PtrClaimSnapshot(run.layer);
+            }
+        }
+        // Settled states at tick 60: the weightless level (no pair), the gravity level beside it, the other two looks, three more window shapes.
+        const struct {
+            const char* what;
+            std::string flag;
+            const char* level;
+            glm::vec2 window;
+        } settled[] = {
+            {"4-02 weightless, 16:9", "modern", "level1c", glm::vec2(1280.0f, 720.0f)},
+            {"4-01 with gravity, 16:9", "modern", "level0c", glm::vec2(1280.0f, 720.0f)},
+            {"preset=balanced, 16:9", "modern,preset=balanced", "level30", glm::vec2(1280.0f, 720.0f)},
+            {"preset=mr, 16:9", "modern,preset=mr", "level30", glm::vec2(1280.0f, 720.0f)},
+            {"5:4", "modern", "level30", glm::vec2(900.0f, 720.0f)},
+            {"21:9", "modern", "level30", glm::vec2(1680.0f, 720.0f)},
+            {"32:9", "modern", "level30", glm::vec2(2560.0f, 720.0f)},
+        };
+        for (const auto& state : settled) {
+            MdRun run(MdPaths(state.flag, false, arrows), state.level, std::string("the modern claim map, ") + state.what, state.window, false);
+            if (!run.ok) continue;
+            while (run.layer.LayerTicks() < 60) tickWith(run.layer, run.registry, kRest, {}, {});
+            char key[200];
+            std::snprintf(key, sizeof(key), "%s%s (%s) tick 60 age %.0f ms", prefix.c_str(), state.what, state.level, run.layer.LevelAgeMs());
             entries[key] = PtrClaimSnapshot(run.layer);
         }
-    }
-    // Settled states at tick 60: the weightless level (no pair), the gravity level beside it, the other two looks, three more window shapes.
-    const struct {
-        const char* what;
-        std::string flag;
-        const char* level;
-        glm::vec2 window;
-    } settled[] = {
-        {"4-02 weightless, 16:9", "modern", "level1c", glm::vec2(1280.0f, 720.0f)},
-        {"4-01 with gravity, 16:9", "modern", "level0c", glm::vec2(1280.0f, 720.0f)},
-        {"preset=balanced, 16:9", "modern,preset=balanced", "level30", glm::vec2(1280.0f, 720.0f)},
-        {"preset=mr, 16:9", "modern,preset=mr", "level30", glm::vec2(1280.0f, 720.0f)},
-        {"5:4", "modern", "level30", glm::vec2(900.0f, 720.0f)},
-        {"21:9", "modern", "level30", glm::vec2(1680.0f, 720.0f)},
-        {"32:9", "modern", "level30", glm::vec2(2560.0f, 720.0f)},
-    };
-    for (const auto& state : settled) {
-        MdRun run(MdPaths(state.flag), state.level, std::string("the modern claim map, ") + state.what, state.window, false);
-        if (!run.ok) continue;
-        while (run.layer.LayerTicks() < 60) tickWith(run.layer, run.registry, kRest, {}, {});
-        char key[160];
-        std::snprintf(key, sizeof(key), "modern claim %s (%s) tick 60 age %.0f ms", state.what, state.level, run.layer.LevelAgeMs());
-        entries[key] = PtrClaimSnapshot(run.layer);
     }
     return entries;
 }
@@ -25269,8 +25486,8 @@ void MdCheckGolden(const char* file, const GoldenEntries& now) {
 
 void TheModernClaimMapIsPinned() {
     const GoldenEntries now = MdClaimEntries();
-    // 2 windows x (8 ticks clear hidden + 2 ticks clear shown) + 1 early-shot state + 7 settled states.
-    CHECK_MSG(now.size() == 28u, "28 modern claim snapshots: " + std::to_string(now.size()));
+    // Per arrangement: 2 windows x (8 ticks clear hidden + 2 ticks clear shown) + 1 early-shot state + 7 settled states = 28; two arrangements.
+    CHECK_MSG(now.size() == 56u, "56 modern claim snapshots (28 split, 28 grouped): " + std::to_string(now.size()));
     MdCheckGolden("modern_claim.json", now);
 }
 
@@ -25278,27 +25495,35 @@ void TheModernClaimMapIsPinned() {
 
 // A point at x == W or y == H is no modern control's (the rectangles are [min, max)), where classic's closed pause rectangle and discs claim it.
 // Decided, and said in the step: a pointer exactly on the view's far edge is the world's under the modern controls.
-void TheModernRectanglesAreHalfOpenAtTheViewsFarEdges() {
+void MdHalfOpenAtTheFarEdges(Controls::Arrows arrows) {
+    const bool split = arrows == Controls::Arrows::Split;
     const struct {
         const char* what;
         bool classicClaims;
     } layers[] = {{"modern", false}, {"the classic-claims variant", true}};
     for (const auto& which : layers) {
-        MdRun run(MdPaths("modern", which.classicClaims), "level30", std::string("TheModernRectanglesAreHalfOpenAtTheViewsFarEdges: ") + which.what);
+        MdRun run(MdPaths("modern", which.classicClaims, arrows), "level30", std::string("TheModernRectanglesAreHalfOpenAtTheViewsFarEdges: ") + which.what + ", " + Controls::NameOf(arrows));
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
         const double W = layer.ViewPx().x;
         const double H = layer.ViewPx().y;
         const double inside = std::nextafter(W, 0.0);
-        const std::string in = std::string(which.what) + ": ";
+        const std::string in = std::string(which.what) + " (" + Controls::NameOf(arrows) + "): ";
         if (!which.classicClaims) {
             for (const double y : {1.0, 28.0, 56.5}) {
                 CHECK_MSG(!layer.ControlAt(glm::dvec2(W, y)), in + "x == W at y " + PtrNum(y) + " is no control's: " + PtrName(layer.ControlAt(glm::dvec2(W, y))));
                 CHECK_MSG(layer.ControlAt(glm::dvec2(inside, y)) == PtrClaim(PtrControl::Menu), in + "and the double just inside it is pause's");
             }
-            for (const double x : {1.0, 26.0, 80.0}) {
+            // The bottom edge: an arrow's, the double just above it. Grouped, both arrows are in the left; split, the right arrow is in the right corner too.
+            for (const double x : split ? std::vector<double>{1.0, 26.0, W - 1.0, W - 26.0, W - 40.0} : std::vector<double>{1.0, 26.0, 80.0}) {
                 CHECK_MSG(!layer.ControlAt(glm::dvec2(x, H)), in + "y == H at x " + PtrNum(x) + " is no control's: " + PtrName(layer.ControlAt(glm::dvec2(x, H))));
                 CHECK_MSG(layer.ControlAt(glm::dvec2(x, std::nextafter(H, 0.0))).has_value(), in + "and the double just above it is an arrow's");
+            }
+            if (split) {
+                // The middle of the bottom edge is the world's, above and at the edge: there is no arrow there.
+                CHECK_MSG(!layer.ControlAt(glm::dvec2(W * 0.5, std::nextafter(H, 0.0))) && !layer.ControlAt(glm::dvec2(W * 0.5, H)), in + "the middle of the bottom edge is the world's");
+                // The bottom-right corner: the double just inside both far edges is the right arrow's, and the corner point itself is nobody's.
+                CHECK_MSG(layer.ControlAt(glm::dvec2(inside, std::nextafter(H, 0.0))) == PtrClaim(PtrControl::Right), in + "the double just inside the bottom-right corner is the right arrow's");
             }
             CHECK_MSG(!layer.ControlAt(glm::dvec2(W, H)) && !layer.ControlAt(glm::dvec2(0.0, H)), in + "nor are the view's two bottom corners");
             // The far edges' near neighbours are claimed: the top row and the left column are inside (min edges are closed).
@@ -25311,6 +25536,14 @@ void TheModernRectanglesAreHalfOpenAtTheViewsFarEdges() {
                           PtrName(layer.ControlAt(glm::dvec2(26.0, H))) + ", " + PtrName(layer.ControlAt(glm::dvec2(W, H))));
         }
     }
+}
+
+void TheModernRectanglesAreHalfOpenAtTheViewsFarEdges() {
+    MdHalfOpenAtTheFarEdges(Controls::Arrows::Grouped);
+}
+
+void TheSplitRectanglesAreHalfOpenAtTheViewsFarEdges() {
+    MdHalfOpenAtTheFarEdges(Controls::Arrows::Split);
 }
 
 // ---- the three looks (K2) -------------------------------------------------------------------------------------------------------------------
@@ -26386,9 +26619,9 @@ struct MdWalkTrace {
 
 // 1-01 from the start for 200 ticks, the right walk by a scheduled touch on the arrow's centre (down on tick 60, held to 160, up on 161) or by
 // a scheduled hold from `from` to `to`.
-MdWalkTrace MdWalkRun(bool byTouch, int from, int to, const std::string& what) {
+MdWalkTrace MdWalkRun(bool byTouch, int from, int to, const std::string& what, Controls::Arrows arrows = Controls::Arrows::Grouped) {
     MdWalkTrace trace;
-    MdRun run(MdPaths(), "level0", what, glm::vec2(1280.0f, 720.0f), false);
+    MdRun run(MdPaths("modern", false, arrows), "level0", what, glm::vec2(1280.0f, 720.0f), false);
     if (!run.ok) return trace;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
@@ -26407,10 +26640,10 @@ MdWalkTrace MdWalkRun(bool byTouch, int from, int to, const std::string& what) {
     return trace;
 }
 
-void AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey() {
-    const MdWalkTrace key = MdWalkRun(false, 60, 160, "the held key");
-    const MdWalkTrace touch = MdWalkRun(true, 0, 0, "the touch on the arrow");
-    const MdWalkTrace shifted = MdWalkRun(false, 61, 161, "the key held one tick late");
+void MdWalksLikeAKey(Controls::Arrows arrows) {
+    const MdWalkTrace key = MdWalkRun(false, 60, 160, "the held key", arrows);
+    const MdWalkTrace touch = MdWalkRun(true, 0, 0, "the touch on the arrow", arrows);
+    const MdWalkTrace shifted = MdWalkRun(false, 61, 161, "the key held one tick late", arrows);
     if (!key.ok || !touch.ok || !shifted.ok) return;
     const auto compare = [](const MdWalkTrace& a, const MdWalkTrace& b, std::string& first) {
         int differ = 0;
@@ -26443,8 +26676,8 @@ void AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey() {
     double touchWalked = 0.0;
     walking(key, keyFirst, keyLast, keyWalked);
     walking(touch, touchFirst, touchLast, touchWalked);
-    std::printf("  a held key and a touch on the modern right arrow, 200 ticks: walked %.1f and %.1f units, first moving tick %d and %d, last %d and %d, %d ticks differ\n",
-                keyWalked, touchWalked, keyFirst, touchFirst, keyLast, touchLast, differ);
+    std::printf("  a held key and a touch on the modern right arrow (%s), 200 ticks: walked %.1f and %.1f units, first moving tick %d and %d, last %d and %d, %d ticks differ\n",
+                Controls::NameOf(arrows), keyWalked, touchWalked, keyFirst, touchFirst, keyLast, touchLast, differ);
     CHECK_MSG(keyWalked > 80.0 && touchWalked > 80.0, "both walk him right: " + PtrNum(keyWalked) + " and " + PtrNum(touchWalked));
     CHECK_MSG(keyFirst == touchFirst && keyLast == touchLast && keyFirst >= 60 && keyLast <= 180,
               "from the same tick to the same tick: " + std::to_string(keyFirst) + " to " + std::to_string(keyLast) + " against " + std::to_string(touchFirst) + " to " + std::to_string(touchLast));
@@ -26453,6 +26686,14 @@ void AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey() {
     std::string firstShifted;
     const int shiftedDiffer = compare(key, shifted, firstShifted);
     CHECK_MSG(shiftedDiffer > 50, "the same key held one tick late differs on " + std::to_string(shiftedDiffer) + " ticks, the first " + firstShifted + ": the comparison can fail");
+}
+
+void AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey() {
+    MdWalksLikeAKey(Controls::Arrows::Grouped);
+}
+
+void AHeldTouchOnTheSplitRightArrowWalksLikeAHeldKey() {
+    MdWalksLikeAKey(Controls::Arrows::Split);
 }
 
 // ---- a classic layer ignores everything modern --------------------------------------------------------------------------------------------
@@ -26568,10 +26809,10 @@ double MiPadByte(const MagicPortalsLayer& layer) {
 
 // ---- the pressed look -----------------------------------------------------------------------------------------------------------------------
 
-void APressedModernControlDrawsTheBoost() {
+void MdPressedLook(Controls::Arrows arrows) {
     if (!OriginalArtIsThere("APressedModernControlDrawsTheBoost")) return;
     constexpr double kBoost = 38.0 / 255.0; // design 1.5: +38 bytes
-    MdRun run(MdPaths(), "level30", "APressedModernControlDrawsTheBoost");
+    MdRun run(MdPaths("modern", false, arrows), "level30", std::string("APressedModernControlDrawsTheBoost: ") + Controls::NameOf(arrows));
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
@@ -26640,6 +26881,14 @@ void APressedModernControlDrawsTheBoost() {
         CHECK_MSG(NearD(MdPadAlpha(frame, layer, PtrControl::Menu), corner, 1e-6) && NearD(MdPadAlpha(frame, layer, PtrControl::Reset), corner, 1e-6),
                   "under the pause restart and pause are drawn frozen at the flat 120, unpressed: " + PtrNum(MdPadAlpha(frame, layer, PtrControl::Menu) * 255.0));
     }
+}
+
+void APressedModernControlDrawsTheBoost() {
+    MdPressedLook(Controls::Arrows::Grouped);
+}
+
+void APressedSplitArrowDrawsTheBoost() {
+    MdPressedLook(Controls::Arrows::Split);
 }
 
 // Classic never lights anything: a held classic pad is drawn at the pulse's byte and no brighter, and the touch does work it. The same
@@ -27152,8 +27401,9 @@ namespace CreditsUi = MagicPortals::Credits;
 namespace MainMenuUi = MagicPortals::MainMenu;
 
 constexpr double kOsPxPerUnit = 2.8125; // 720 px over 256 units
-const std::string kOsModernFile = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1}}";
-const std::string kOsClassicFile = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":1}}";
+const std::string kOsModernFile = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}";
+// The number is the arrangement the file was saved against: 2 since planning step 186 (the arrows split), 1 before (the pair grouped).
+const std::string kOsClassicFile = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2}}";
 const std::string kOsGear = "options_gear.png";
 
 // A directory of the case's own, removed with the others when the case ends.
@@ -27591,6 +27841,34 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
         OsClick(run, OsTileCentre(run.layer, Style::Modern));
         CHECK_MSG(OsSavedFile(broken) == kOsModernFile, "the next choice writes it over: " + OsSavedFile(broken));
     }
+}
+
+// A controls.json saved against the grouped pair (layout 1: planning step 185, and a size, an opacity and moves as CTL-10 will write them) is read by
+// the split arrows' code the way design 2.4 promises: the choice of style and the size and the opacity are kept, the moves - which were made against
+// another arrangement - are dropped, the file is not touched by starting, and the next choice writes it at layout 2.
+void ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves() {
+    if (!OriginalArtIsThere("ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string saves = OsDir("layout1-saves");
+    const std::string old = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":1,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
+    OsWrite(saves, "controls.json", old);
+    OsRun run(OsPaths(saves, OsDir("layout1-prisms")), "ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern && layer.ControlsLine() == "controls: modern (saved)", "the choice is kept: '" + layer.ControlsLine() + "'");
+    const Controls::Tuning& saved = layer.ControlsStore().SavedTuning();
+    CHECK_MSG(saved.sizeSteps && *saved.sizeSteps == 12 && saved.opacitySteps && *saved.opacitySteps == 3, "and so are the size (1.2) and the opacity (0.6)");
+    bool anyMove = false;
+    for (const glm::dvec2& move : saved.move) anyMove = anyMove || move != glm::dvec2(0.0);
+    CHECK_MSG(!anyMove, "while the moves, made against layout 1, are dropped");
+    CHECK_MSG(layer.ControlsApplied().ArrowsIn(layer.ControlsRules()) == Controls::Arrows::Split, "the arrows play the data's arrangement, split, whatever the file was saved against");
+    CHECK_MSG(OsSavedFile(saves) == old, "starting does not touch the file");
+    if (!OsOpenOptions(run, "the layout-1 file")) return;
+    OsClick(run, OsTileCentre(layer, Style::Classic));
+    OsClick(run, OsTileCentre(layer, Style::Modern));
+    CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6}}",
+              "the next choice writes layout 2 with the size and the opacity and no move: " + OsSavedFile(saves));
 }
 
 void TheFlagBeatsTheSavedValueAndWritesNothing() {
@@ -28600,6 +28878,197 @@ void AnEmptyArtDirIsNowhereToLookEvenWhereTheWorkingDirectoryHoldsAPicture() {
 
 // The modern controls' cases, in one list so that a developer can run them alone (`test_mp test_mp_layer --modern-only`) and the whole suite runs
 // them last. AClassicLayerIgnoresEverythingModern is the longest (it runs CTL-2's pins again) and goes at the end.
+// ---- the split arrows (planning step 186) ------------------------------------------------------------------------------------------------------
+//
+// The owner's decision of 2026-10-16, after he saw the grouped pair on his screen: walk_left in the bottom-left corner and walk_right in the bottom-right one,
+// each inset by the margin, as the classic pair stands but inset. The cases above this group run for both arrangements (the helpers take the arrangement:
+// MdPaths asks for the grouped pair, MdSplitPaths for the data's default); the cases below are the ones only the split arrows have.
+
+// 0.01 units outside a split arrow's hit rectangle on every side that faces the world, the claim is none and the release fires toward the finger; 0.02
+// units further in it is the arrow's; and the middle of the view between them is the world's, with no seam anywhere.
+void ATouchJustOutsideASplitHitRectFiresAPortal() {
+    MdRun run(MdSplitPaths(), "level30", "ATouchJustOutsideASplitHitRectFiresAPortal");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    const double W = g.view.x;
+    constexpr double kOut = 0.01;
+    const Hud::Rect& leftHit = g.hit[MdAt(PtrControl::Left)];
+    const Hud::Rect& rightHit = g.hit[MdAt(PtrControl::Right)];
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+        PtrClaim inside; // what a point 0.02 units further in is
+        glm::dvec2 further;
+    } probes[] = {
+        {"the left arrow's top", glm::dvec2(26.0, leftHit.min.y - kOut), PtrControl::Left, glm::dvec2(26.0, leftHit.min.y + kOut)},
+        {"the left arrow's inner side", glm::dvec2(leftHit.Max().x + kOut, 232.0), PtrControl::Left, glm::dvec2(leftHit.Max().x - kOut, 232.0)},
+        {"the right arrow's top", glm::dvec2(W - 26.0, rightHit.min.y - kOut), PtrControl::Right, glm::dvec2(W - 26.0, rightHit.min.y + kOut)},
+        {"the right arrow's inner side", glm::dvec2(rightHit.min.x - kOut, 232.0), PtrControl::Right, glm::dvec2(rightHit.min.x + kOut, 232.0)},
+        {"restart's left side", glm::dvec2(g.hit[MdAt(PtrControl::Reset)].min.x - kOut, 30.0), PtrControl::Reset, glm::dvec2(g.hit[MdAt(PtrControl::Reset)].min.x + kOut, 30.0)},
+    };
+    int fired = 0;
+    for (const auto& probe : probes) {
+        const std::string where = std::string("just outside ") + probe.where + " " + Point(probe.at);
+        CHECK_MSG(!layer.ControlAt(probe.at), where + ": claimed by " + PtrName(layer.ControlAt(probe.at)));
+        CHECK_MSG(layer.ControlAt(probe.further) == probe.inside, std::string("and 0.02 units further in it is ") + PtrName(probe.inside) + "'s: " + PtrName(layer.ControlAt(probe.further)));
+        const glm::vec2 pixel = PtrPixel(layer, probe.at);
+        const double before = playerPx(registry, layer).x;
+        const double age = layer.LevelAgeMs();
+        tap(layer, registry, pixel);
+        glm::dvec2 aimed(0.0);
+        CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), where + ": the pixel maps into the level");
+        lift(layer, registry, pixel);
+        const bool shot = glm::distance(PtrLastTap(layer), aimed) < 0.01;
+        CHECK_MSG(shot, where + ": the release fires toward " + Point(aimed) + ": the last tap is " + Point(PtrLastTap(layer)));
+        if (shot) ++fired;
+        CHECK_MSG(std::fabs(playerPx(registry, layer).x - before) < 3.0, where + ": he does not walk: " + PtrNum(playerPx(registry, layer).x - before));
+        CHECK_MSG(layer.LevelAgeMs() > age && !layer.Paused(), where + ": nothing reloaded and nothing paused");
+        PtrRest(layer, registry, 30);
+    }
+    CHECK_MSG(fired == 5, "five outside probes, five shots: " + std::to_string(fired));
+    // No seam: everywhere between the two arrows' boxes, at the arrows' height, is the world's.
+    int claimed = 0;
+    int points = 0;
+    for (double x = g.box[MdAt(PtrControl::Left)].Max().x + 0.5; x < g.box[MdAt(PtrControl::Right)].min.x - 0.5; x += 2.0) {
+        for (double y = rightHit.min.y; y < g.view.y; y += 3.0) {
+            ++points;
+            if (layer.ControlAt(glm::dvec2(x, y))) ++claimed;
+        }
+    }
+    CHECK_MSG(points > 2000 && claimed == 0, "between the two arrows nothing is claimed: " + std::to_string(claimed) + " of " + std::to_string(points) + " lattice points");
+    // The middle of the view is a shot, not a walk: a tap there fires toward it.
+    const glm::dvec2 middle(W * 0.5, 232.0);
+    const glm::vec2 pixel = PtrPixel(layer, middle);
+    glm::dvec2 aimed(0.0);
+    tap(layer, registry, pixel);
+    CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), "the middle of the view maps into the level");
+    lift(layer, registry, pixel);
+    CHECK_MSG(glm::distance(PtrLastTap(layer), aimed) < 0.01, "a tap in the middle between the arrows fires toward it: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+}
+
+// A held touch on each split arrow walks him its way, as the grouped pair's did (the same body, aimed at the split rectangles).
+void AHeldTouchOnTheSplitLeftArrowWalksLeft() {
+    MdAHeldTouchOnAnArrow(true, Controls::Arrows::Split);
+}
+
+void AHeldTouchOnTheSplitRightArrowWalksRight() {
+    MdAHeldTouchOnAnArrow(false, Controls::Arrows::Split);
+}
+
+// The popup-close swallow with the finger on the RIGHT arrow in the bottom-right corner: the press that closes a popup claims the arrow and works
+// nothing, until it is up (the arrow slides in from the right under the finger).
+void ThePopupCloseSwallowsTooOnTheSplitRightArrow() {
+    if (!OriginalArtIsThere("ThePopupCloseSwallowsTooOnTheSplitRightArrow")) return;
+    MiPopupCloseOnTheRightArrow(MdSplitPaths(), Controls::Style::Modern, false, true, "ThePopupCloseSwallowsTooOnTheSplitRightArrow: modern, split");
+}
+
+// A safe area moves the split arrows in from the edges they stand against: the left arrow from the left and the bottom, the right arrow from the right
+// and the bottom, each hit still reaching the view's own edge.
+void TheSplitArrowsMoveInWithTheSafeArea() {
+    MagicPortalsLayer::Paths paths = MdSplitPaths();
+    paths.controls.testInsets = Controls::Insets{10.0, 20.0, 30.0, 40.0};
+    double W = 0.0;
+    const double margin = 44.0 * 256.0 / 720.0;
+    {
+    MdRun run(paths, "level30", "TheSplitArrowsMoveInWithTheSafeArea");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    const MdGeom g = MdGeometry(layer);
+    W = g.view.x;
+    const double H = g.view.y;
+    const Hud::Rect& left = g.box[MdAt(PtrControl::Left)];
+    const Hud::Rect& right = g.box[MdAt(PtrControl::Right)];
+    CHECK_MSG(NearD(left.min.x, 10.0 + margin, 1e-9) && NearD(H - 40.0 - left.Max().y, margin, 1e-9), "the left arrow is the margin inside the safe area's left and bottom edges: " + MdShow(left));
+    CHECK_MSG(NearD(W - 30.0 - right.Max().x, margin, 1e-9) && NearD(H - 40.0 - right.Max().y, margin, 1e-9), "the right arrow is the margin inside its right and bottom edges: " + MdShow(right));
+    CHECK_MSG(g.hit[MdAt(PtrControl::Left)].min.x == 0.0 && g.hit[MdAt(PtrControl::Left)].Max().y == H, "the left arrow's hit still reaches the view's left edge and bottom");
+    CHECK_MSG(g.hit[MdAt(PtrControl::Right)].Max().x == W && g.hit[MdAt(PtrControl::Right)].Max().y == H, "and the right arrow's the view's right edge and bottom");
+    CHECK_MSG(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0)) == PtrClaim(PtrControl::Right) && layer.ControlAt(glm::dvec2(1.0, H - 1.0)) == PtrClaim(PtrControl::Left),
+              "a tap in the notch's own corner strips is the arrow's: " + PtrName(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(1.0, H - 1.0))));
+    }
+    // A left inset of 20 does not move the right arrow, and a right inset of 40 does not move the left one.
+    MagicPortalsLayer::Paths onlyLeft = MdSplitPaths();
+    onlyLeft.controls.testInsets = Controls::Insets{20.0, 0.0, 0.0, 0.0};
+    MdRun second(onlyLeft, "level30", "TheSplitArrowsMoveInWithTheSafeArea: a left inset alone");
+    if (!second.ok) return;
+    const MdGeom h = MdGeometry(second.layer);
+    CHECK_MSG(NearD(h.box[MdAt(PtrControl::Left)].min.x, 20.0 + margin, 1e-9) && NearD(h.box[MdAt(PtrControl::Right)].Max().x, W - margin, 1e-9),
+              "a left inset moves the left arrow 20 units in and the right arrow not at all");
+}
+
+// 1-21's hint with the split arrows: the text starts clear of the LEFT arrow's hit rectangle only (the right arrow, in the other corner, is crossed as
+// the classic text crosses its disc where the free span is narrower than the text), so at the default size - the left arrow ends at 47.50, under the
+// classic 50 - it does not move at all. Retaken at every window shape and look; and the numbers of the crossing are the Step's.
+void TheHintClearsTheSplitLeftArrowOnly() {
+    if (!OriginalArtIsThere("TheHintClearsTheSplitLeftArrowOnly")) return;
+    const glm::vec2 window(1280.0f, 720.0f);
+    const MiHint classic = MiHintOf(TestPaths(), window, Controls::Style::Classic, "TheHintClearsTheSplitLeftArrowOnly: classic");
+    const MiHint modern = MiHintOf(MdSplitPaths(), window, Controls::Style::Modern, "TheHintClearsTheSplitLeftArrowOnly: modern split");
+    if (!classic.ok || !modern.ok) return;
+    // At the default size nothing moves: the same first glyph, the same rows, the same fade.
+    CHECK_MSG(NearD(modern.left, classic.left, 1e-9) && NearD(modern.right, classic.right, 1e-9), "split, size 0.7: the text is where classic has it (starts at 50): " + PtrNum(modern.left) + " against " + PtrNum(classic.left));
+    CHECK_MSG(modern.glyphs == classic.glyphs && NearD(modern.top, classic.top, 1e-9) && NearD(modern.bottom, classic.bottom, 1e-9) && modern.alpha == classic.alpha, "the same letters on the same rows at the same fade");
+    // The arrows' rows meet the text's row and the left arrow's hit ends under the text's start: nothing to clear.
+    MdRun run(MdSplitPaths(), "level20", "TheHintClearsTheSplitLeftArrowOnly: the geometry");
+    if (!run.ok) return;
+    const MdGeom g = MdGeometry(run.layer);
+    CHECK_MSG(g.hit[MdAt(PtrControl::Left)].Max().x < classic.left && g.hit[MdAt(PtrControl::Right)].min.x > modern.right,
+              "at 16:9 the text stands between the two arrows' hit rectangles: " + PtrNum(g.hit[MdAt(PtrControl::Left)].Max().x) + " < " + PtrNum(classic.left) + " and " +
+                  PtrNum(modern.right) + " < " + PtrNum(g.hit[MdAt(PtrControl::Right)].min.x));
+    // A safe area of 20 units on the left moves the left arrow, and the text clears it: its hit ends at 67.50. A right inset leaves the text alone.
+    MagicPortalsLayer::Paths inset = MdSplitPaths();
+    inset.controls.testInsets = Controls::Insets{20.0, 0.0, 0.0, 0.0};
+    const MiHint moved = MiHintOf(inset, window, Controls::Style::Modern, "TheHintClearsTheSplitLeftArrowOnly: a safe area of 20 on the left");
+    if (moved.ok) CHECK_MSG(NearD(moved.left - classic.left, 47.5022 + 20.0 - 50.0, 1e-3), "a left inset of 20 moves the left arrow and the text 17.5 units: " + PtrNum(moved.left - classic.left));
+    MagicPortalsLayer::Paths rightInset = MdSplitPaths();
+    rightInset.controls.testInsets = Controls::Insets{0.0, 0.0, 40.0, 0.0};
+    const MiHint kept = MiHintOf(rightInset, window, Controls::Style::Modern, "TheHintClearsTheSplitLeftArrowOnly: a safe area of 40 on the right");
+    if (kept.ok) CHECK_MSG(NearD(kept.left, classic.left, 1e-9), "and a right inset, which moves the right arrow alone, leaves the text at 50: " + PtrNum(kept.left));
+}
+
+// Every window shape and every look the layer can play: the line is wholly on the screen, 8 units in at least; it starts clear of the LEFT arrow's hit
+// wherever it fits (the design's rule, minus the right arrow); and where the free span between the arrows is narrower than the text it runs over the right
+// arrow (printed: the Step's table).
+void TheSplitHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
+    if (!OriginalArtIsThere("TheSplitHintStaysOnTheScreenAtEverySupportedAspectAndSize")) return;
+    const MiHint classic = MiHintOf(TestPaths(), glm::vec2(1280.0f, 720.0f), Controls::Style::Classic, "TheSplitHintStaysOnTheScreen: classic");
+    if (!classic.ok) return;
+    constexpr double kExtent = 258.4;
+    const struct {
+        const char* name;
+        float width;
+    } windows[] = {{"5:4", 900.0f}, {"4:3", 960.0f}, {"3:2", 1080.0f}, {"16:10", 1152.0f}, {"16:9", 1280.0f}, {"21:9", 1680.0f}, {"32:9", 2560.0f}};
+    const struct {
+        const char* flag;
+        double size;
+    } looks[] = {{"modern", 0.7}, {"modern,preset=balanced", 0.8}, {"modern,preset=mr", 1.0}};
+    for (const auto& window : windows) {
+        for (const auto& look : looks) {
+            const std::string what = std::string("TheSplitHintStaysOnTheScreen: ") + window.name + " " + look.flag;
+            const MiHint modern = MiHintOf(MdSplitPaths(look.flag), glm::vec2(window.width, 720.0f), Controls::Style::Modern, what);
+            if (!modern.ok) continue;
+            const double width = 256.0 * static_cast<double>(window.width) / 720.0;
+            const double leftRight = 15.6444 + 45.5111 * look.size;          // the left arrow's hit right edge
+            const double rightLeft = width - (15.6444 + 45.5111 * look.size); // the right arrow's hit left edge
+            const double wanted = std::min(std::max(50.0, leftRight), width - kExtent - 8.0);
+            const bool fits = leftRight <= width - kExtent - 8.0;
+            CHECK_MSG(modern.right <= width - 8.0 + 1e-3, what + ": the line ends inside the view by 8 units: " + PtrNum(modern.right) + " of " + PtrNum(width - 8.0));
+            CHECK_MSG(NearD(modern.left - classic.left, wanted - 50.0, fits ? 1e-3 : 0.25),
+                      what + ": the text starts at " + PtrNum(wanted) + " (" + (fits ? "clear of the left arrow" : "clamped to the screen") + "): " + PtrNum(modern.left - classic.left + 50.0));
+            if (fits) CHECK_MSG(modern.left >= leftRight - 1e-3, what + ": clear of the left arrow's hit right edge " + PtrNum(leftRight) + ": " + PtrNum(modern.left));
+            // At the default size the text never moves at any shape.
+            if (look.size == 0.7) CHECK_MSG(NearD(modern.left - classic.left, 0.0, 1e-3), what + ": at size 0.7 the text is where classic has it");
+            const double crossesRight = std::max(0.0, modern.right - rightLeft);
+            const double crossesLeft = std::max(0.0, leftRight - modern.left);
+            const double wantedCrossing = std::max(0.0, wanted + kExtent - rightLeft);
+            CHECK_MSG(NearD(crossesRight, wantedCrossing, 0.7), what + ": the text runs " + PtrNum(crossesRight) + " units into the right arrow's hit, the model's " + PtrNum(wantedCrossing));
+            std::printf("  1-21's hint, split, %s %s: starts %.2f, ends %.2f of %.2f; over the left arrow by %.1f, over the right arrow by %.1f\n", window.name, look.flag, modern.left,
+                        modern.right, width, crossesLeft, crossesRight);
+        }
+    }
+}
+
 void runModernTests() {
     AHeldTouchOnTheModernLeftArrowWalksLeft();
     AHeldTouchOnTheModernRightArrowWalksRight();
@@ -28644,6 +29113,26 @@ void runModernTests() {
     TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw();
     AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey();
     TheModernClaimMapIsPinned();
+    // The split arrows (planning step 186): the owner's decision of 2026-10-16, after he saw the grouped pair on his screen.
+    TheSplitArrowsStandInTheTwoBottomCornersAtEveryWindowShape();
+    AHeldTouchOnTheSplitLeftArrowWalksLeft();
+    AHeldTouchOnTheSplitRightArrowWalksRight();
+    ATouchJustOutsideASplitHitRectFiresAPortal();
+    ATouchSlidOntoASplitArrowWalksAndOffItStops();
+    TheSplitPadsHitRectsFollowTheirSlideFromTheNearerEdge();
+    AHeldTouchOnTheSplitRightArrowKeepsTheCameraFollowing();
+    TheSplitOnWalkControlIsUngatedLikeClassics();
+    APressOnASplitArrowOverALiftSendsNothingAndAPressOutsideSendsIt();
+    AReleaseOnASplitArrowTakesNoTutorialHand();
+    TheSplitArrowsAreHiddenAndUnclaimedOnAWeightlessLevelAndTheirCornersAreWorld();
+    TheSplitRectanglesAreHalfOpenAtTheViewsFarEdges();
+    TheSplitRingsFollowEachArrowsBoxCentre();
+    AHeldTouchOnTheSplitRightArrowWalksLikeAHeldKey();
+    APressedSplitArrowDrawsTheBoost();
+    ThePopupCloseSwallowsTooOnTheSplitRightArrow();
+    TheSplitArrowsMoveInWithTheSafeArea();
+    TheHintClearsTheSplitLeftArrowOnly();
+    TheSplitHintStaysOnTheScreenAtEverySupportedAspectAndSize();
     // The modern controls' own input behaviour (planning step 183).
     APressedModernControlDrawsTheBoost();
     AClassicControlIsNeverLit();
@@ -28661,6 +29150,7 @@ void runModernTests() {
     TheOptionsEntryOpensOptionsAndItsPressIsSpent();
     BackLeavesOptionsAndTheMainMenuTakesNothingFromThePress();
     TappingAModernTileSavesAndTheNextLayerStartsModern();
+    ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves();
     TheFlagBeatsTheSavedValueAndWritesNothing();
     UnderAForcedStyleATileChangesTheRunNotTheFile();
     AFixedStepRunIsClassicWhateverIsSaved();
