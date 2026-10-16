@@ -23783,8 +23783,12 @@ bool MdStyleIs(const MagicPortalsLayer& layer, Controls::Style want, const std::
 bool MdArrowsAre(const MagicPortalsLayer& layer, Controls::Arrows want, const std::string& what) {
     const Controls::Arrows is = layer.ControlsApplied().ArrowsIn(layer.ControlsRules());
     const glm::dvec2 view = layer.ViewPx();
-    // (With no insets: a case that moves the arrows by a safe area on purpose, as the swallow's does, puts even the grouped pair in the right half.)
-    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), view, Controls::Insets{});
+    // (With no insets, and with the look and the arrangement ALONE: a case that moves the arrows on purpose - by a safe area, or by a tuning, as the swallow's
+    // and the slide's do - puts even the grouped pair in the right half. A move is not an arrangement, and the size is the look's own.)
+    Controls::Tuning shape;
+    shape.preset = layer.ControlsApplied().preset;
+    shape.arrows = layer.ControlsApplied().arrows;
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(layer.ControlsRules(), shape, view, Controls::Insets{});
     const bool rightHalf = boxes[static_cast<std::size_t>(Controls::Id::Right)].Centre().x > view.x * 0.5;
     const bool ok = is == want && rightHalf == (want == Controls::Arrows::Split);
     CHECK_MSG(ok, what + ": the layer lays the walk arrows out " + Controls::NameOf(want) + " (N1): it plays " + Controls::NameOf(is) + ", the right arrow in the " +
@@ -25594,7 +25598,7 @@ void TheThreeLooksAreTheDesignsPairTops() {
     CHECK_MSG(lines.size() == 3u, "three looks, three different INFO lines: " + std::to_string(lines.size()));
 }
 
-// ---- the flag's keys are held, not applied, before CTL-10 (carry-over 4) -------------------------------------------------------------------
+// ---- the flag's keys are played (planning step 187, CTL-10; held and not applied until then) ---------------------------------------------------
 
 struct MdSnap {
     bool ok = false;
@@ -25639,35 +25643,47 @@ MdSnap MdSnapshotOf(const std::string& flag) {
     return snap;
 }
 
-// `--controls modern,size=1.4,opacity=1.8,walk_left=10:10` is read (every key on the table's grids) and HELD, and the layout it lays out is
-// the same one `--controls modern` lays out - the boxes, the INFO line, the HUD's every quad, the claim over the view - because the plan applies
-// size, opacity and moves at CTL-10. `preset=` is the one key that is the LOOK and is applied now.
-void TheFlagsKeysAreHeldNotAppliedBeforeCTL10() {
+// `--controls modern,size=1.4,opacity=1.8,walk_left=10:10` is read (every key on the table's grids) AND PLAYED (planning step 187, CTL-10; until then the keys were
+// held and the layout was the plain one - this case said so, and this is the pin that flipped): the layout it lays out is NOT the one `--controls modern` lays out.
+// The numbers are the design's arithmetic written out here (size 1.4 is the classic 64-unit arrow: 63.7156 units; the margins and the gap are constants that do not
+// grow with it; a move is units from the control's own corner and is not scaled by size), for the GROUPED pair this helper's flag plays: out/parity/program/CTL/CTL10/
+// work/numbers.py. `preset=` is the LOOK and is applied too, and a size beside it is the player's size under that look.
+void TheFlagsSizeOpacityAndMovesArePlayed() {
     const MdSnap plain = MdSnapshotOf("modern");
     const MdSnap keyed = MdSnapshotOf("modern,size=1.4,opacity=1.8,walk_left=10:10");
     const MdSnap look = MdSnapshotOf("modern,preset=balanced,size=1.4");
     if (!plain.ok || !keyed.ok || !look.ok) return;
-    // Read and held on the tuning...
-    CHECK_MSG(plain.tuning.IsDefault(plain.rules), "plain: the tuning is the base");
+    // Read onto the tuning ...
+    CHECK_MSG(plain.tuning.IsDefault(plain.rules) && plain.applied.IsDefault(plain.rules), "plain: the tuning and what is applied are the base");
     CHECK_MSG(keyed.tuning.Size(keyed.rules) == 1.4 && keyed.tuning.Opacity(keyed.rules) == 1.8 && keyed.tuning.move[MdAt(PtrControl::Left)] == glm::dvec2(10.0, 10.0),
               "the keys are read onto the tuning: size 1.4, opacity 1.8 and walk_left moved by (10, 10)");
-    // ... and not what the layout is laid out with.
-    CHECK_MSG(!keyed.applied.sizeSteps && !keyed.applied.opacitySteps && !keyed.applied.preset &&
-                  std::all_of(keyed.applied.move.begin(), keyed.applied.move.end(), [](const glm::dvec2& move) { return move == glm::dvec2(0.0); }),
-              "what the layout applies holds no size, no opacity, no look and no move");
-    CHECK_MSG(keyed.rects == plain.rects && !plain.rects.empty(), "the INFO line is the plain run's: " + keyed.rects);
-    int sameBoxes = 0;
+    // ... and it is what the layout applies, whole: not a copy of the look.
+    CHECK_MSG(keyed.applied.sizeSteps == std::optional<int>(14) && keyed.applied.opacitySteps == std::optional<int>(9) && !keyed.applied.preset &&
+                  keyed.applied.move[MdAt(PtrControl::Left)] == glm::dvec2(10.0, 10.0) && keyed.applied.move[MdAt(PtrControl::Right)] == glm::dvec2(0.0),
+              "what the layout applies holds the size 1.4, the opacity 1.8 and the one move, and no look");
+    CHECK_MSG(keyed.rects != plain.rects && !plain.rects.empty(), "the INFO line is not the plain run's: " + keyed.rects);
+    // The boxes, to the digit. Grouped, 16:9, size 1.4: walk_left moved (10, 10) from (15.6444, 176.64); walk_right behind it at the gap; the corner buttons grow to 57.344
+    // (0.9 x the arrow's box at size 1.4) and stay inset by the same constants.
+    const double boxes[5][4] = {{25.6444, 186.6400, 89.3600, 250.3556},
+                                {90.7378, 176.6400, 154.4533, 240.3556},
+                                {313.4009, 15.6444, 370.7449, 72.9884},
+                                {382.1227, 15.6444, 439.4667, 72.9884},
+                                {15.6444, 15.6444, 72.9884, 72.9884}};
+    int right = 0;
     for (const Controls::Id id : Controls::kClaimOrder) {
         const std::size_t at = MdAt(id);
-        if (keyed.shown[at] == plain.shown[at] && SameRect(keyed.box[at], plain.box[at], 1e-12)) ++sameBoxes;
+        const bool is = keyed.shown[at] && MdRectIs(keyed.box[at], boxes[at], 1e-3);
+        CHECK_MSG(is, std::string(kMdTable[at].key) + ": size 1.4 is the design's box " + MdShow(keyed.box[at]));
+        if (is) ++right;
     }
-    CHECK_MSG(sameBoxes == 5, "all five boxes are the plain run's, clear-portals included: " + std::to_string(sameBoxes));
-    CHECK_MSG(keyed.hud == plain.hud && keyed.hud != 0, "every HUD quad is the plain run's: " + PtrHex(keyed.hud) + " against " + PtrHex(plain.hud));
-    CHECK_MSG(keyed.claims == plain.claims && !plain.claims.empty(), "and so is the claim over the view");
-    // The look is applied: preset=balanced with a size beside it is balanced's own 0.8 and not the 1.4.
-    CHECK_MSG(look.applied.preset == Controls::Preset::Balanced && !look.applied.sizeSteps, "preset=balanced is applied and the size beside it is not");
-    CHECK_MSG(NearD(look.box[MdAt(PtrControl::Left)].size.x, 128.0 * 0.8 * 256.0 / 720.0, 1e-6) && look.rects != plain.rects,
-              "so the pair is balanced's 0.8 box, " + PtrNum(look.box[MdAt(PtrControl::Left)].size.x) + " units");
+    CHECK_MSG(right == 5, "all five boxes are the tuned ones, clear-portals included: " + std::to_string(right));
+    CHECK_MSG(NearD(keyed.box[MdAt(PtrControl::Left)].size.x, 63.7156, 1e-3) && keyed.box[MdAt(PtrControl::Left)].size.x < 64.0, "an arrow at size 1.4 is the classic pad's 64 units to a third of a unit");
+    CHECK_MSG(keyed.hud != plain.hud && keyed.hud != 0, "the HUD's quads are not the plain run's: " + PtrHex(keyed.hud) + " against " + PtrHex(plain.hud));
+    CHECK_MSG(keyed.claims != plain.claims && !plain.claims.empty(), "and neither is the claim over the view");
+    // The look is applied, and a size beside it is the size under that look: balanced's 34 px bottom margin (12.0889 units) with an arrow of 63.7156.
+    CHECK_MSG(look.applied.preset == Controls::Preset::Balanced && look.applied.sizeSteps == std::optional<int>(14), "preset=balanced is applied and the size beside it is applied with it");
+    CHECK_MSG(NearD(look.box[MdAt(PtrControl::Left)].size.x, 63.7156, 1e-3) && NearD(256.0 - look.box[MdAt(PtrControl::Left)].Max().y, 34.0 * 256.0 / 720.0, 1e-3),
+              "so the pair is 63.7156 units, balanced's margin from the bottom: " + MdShow(look.box[MdAt(PtrControl::Left)]));
 }
 
 // ---- the INFO line names the window the run is in -------------------------------------------------------------------------------------------
@@ -26707,6 +26723,28 @@ struct MdClassicWithEverythingSet {
     MdClassicWithEverythingSet& operator=(const MdClassicWithEverythingSet&) = delete;
 };
 
+// Every CTL-2 pin of the classic pointer path, in order: what a classic run is, whatever policy it runs under. Run under a forced policy with everything modern set
+// (below) and under a plain launch's (AnUnforcedClassicRunPlaysTheClassicClaimsAndHud).
+void RunTheClassicPins() {
+    AHeldTouchOnTheLeftPadWalksThePlayerLeft();
+    AHeldTouchOnTheRightPadWalksThePlayerRight();
+    ThePadHitCircleIsStrictlyInside();
+    ATouchSlidOntoAPadWalksAndOffItStops();
+    AHeldTouchOnAPadKeepsTheCameraFollowing();
+    AHeldTouchInTheWorldStopsIt();
+    APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt();
+    AReleaseOnAPadTakesNoTutorialHand();
+    TheClaimOrderIsLeftRightResetMenuClear();
+    RestartPauseAndClearActOnThePressAndSpendTheTouch();
+    ARestingTouchInAWeightlessCornerStillCountsAsOnAPad();
+    NothingClaimsUnderAPauseAPopupOrAfterTheDoorOrADeath();
+    TheSettledControlsAreTheirDrawnRectangles();
+    TheClearButtonIsFlatWhileRestartAndPauseSlideIn();
+    TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath();
+    TheClassicClaimMapIsPinned();
+    TheClassicHudQuadsOfEveryLevelArePinned();
+}
+
 // `{available, forced = Classic}` with every other modern field set to something that would show if a classic run read it: the table is read (the
 // feature is available) and the style is Classic because the policy FORCES it. Every CTL-2 pin - the held touches, the hit circle, the slide, the
 // camera, the lift and the hand gates, the claim order, the corner buttons, the weightless quirk, the settled rectangles, the entrance, the end byte,
@@ -26755,23 +26793,7 @@ void AClassicLayerIgnoresEverythingModern() {
     }
     if (!OriginalArtIsThere("AClassicLayerIgnoresEverythingModern: the CTL-2 pins")) return;
     const MdClassicWithEverythingSet set(policy);
-    AHeldTouchOnTheLeftPadWalksThePlayerLeft();
-    AHeldTouchOnTheRightPadWalksThePlayerRight();
-    ThePadHitCircleIsStrictlyInside();
-    ATouchSlidOntoAPadWalksAndOffItStops();
-    AHeldTouchOnAPadKeepsTheCameraFollowing();
-    AHeldTouchInTheWorldStopsIt();
-    APressOnAPadOverALiftSendsNothingAndAPressOutsideSendsIt();
-    AReleaseOnAPadTakesNoTutorialHand();
-    TheClaimOrderIsLeftRightResetMenuClear();
-    RestartPauseAndClearActOnThePressAndSpendTheTouch();
-    ARestingTouchInAWeightlessCornerStillCountsAsOnAPad();
-    NothingClaimsUnderAPauseAPopupOrAfterTheDoorOrADeath();
-    TheSettledControlsAreTheirDrawnRectangles();
-    TheClearButtonIsFlatWhileRestartAndPauseSlideIn();
-    TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath();
-    TheClassicClaimMapIsPinned();
-    TheClassicHudQuadsOfEveryLevelArePinned();
+    RunTheClassicPins();
 }
 
 // `test_mp test_mp_layer --record-modern-golden <dir>`: writes modern_claim.json on the code as it stands. Like the classic recorder it never
@@ -26943,19 +26965,28 @@ glm::dvec2 MiResumePoint(const MagicPortalsLayer& layer) {
 }
 
 // A press that did something else - the pause's Resume - is still held when the level takes the tick again, with the pointer over an arrow
-// (the pair moved there by a safe-area inset, which the layer reads from the same place a device's notch would come from): it claims the arrow
+// (the arrow moved there by the player's kept tuning, which the layer applies since planning step 187): it claims the arrow
 // and works nothing, until it is up; and a press that goes down afterwards walks.
 void TheSwallowHoldsAClaimUntilTheTouchIsUp() {
     if (!OriginalArtIsThere("TheSwallowHoldsAClaimUntilTheTouchIsUp")) return;
-    MagicPortalsLayer::Paths paths = MdPaths();
-    // A left inset of 230 units puts the pair right of the view's middle, under the pause's Resume button (0.58 across and 0.44 down the view):
-    // the left arrow's hit rectangle then reaches from the view's left edge to 283 across, and from 98.5 down to the bottom with the bottom inset.
-    paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 110.0};
+    MagicPortalsLayer::Paths paths = MdSplitPaths();
+    // A TUNING puts the left arrow under the pause's Resume button (0.58 across and 0.44 down the view, (263.96, 112.64) at 16:9): size 1.4 is a box of 63.7156
+    // units, moved 230 right of the corner it stands in and 90 up. Nowhere near an edge, the hit rectangle is the box: (245.64, 86.64)-(309.36, 150.36), which holds
+    // the Resume button's centre with 18 units to spare on its left side and 26 above. (Step 183 moved the pair with a safe-area inset, the only seam there was
+    // before the layer applied a tuning.)
+    Controls::Tuning kept;
+    kept.sizeSteps = 14;
+    kept.move[MdAt(PtrControl::Left)] = glm::dvec2(230.0, -90.0);
+    paths.controls.tuning = kept;
     MdRun run(paths, "level30", "TheSwallowHoldsAClaimUntilTheTouchIsUp");
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
-    CHECK_MSG(layer.ControlsInsets().left == 230.0 && layer.ControlsInsets().bottom == 110.0, "the layer lays out with the injected insets");
+    CHECK_MSG(layer.ControlsApplied().sizeSteps == std::optional<int>(14) && layer.ControlsApplied().move[MdAt(PtrControl::Left)] == glm::dvec2(230.0, -90.0),
+              "the layer lays out with the injected tuning");
+    const double movedHit[4] = {245.6444, 86.6400, 309.3600, 150.3556};
+    CHECK_MSG(MdRectIs(MdGeometry(layer).hit[MdAt(PtrControl::Left)], movedHit, 1e-3),
+              "and the left arrow's hit rectangle is the moved box: " + MdShow(MdGeometry(layer).hit[MdAt(PtrControl::Left)]));
     press(layer, registry, MagicPortalsLayer::kBack);
     CHECK_MSG(layer.Paused(), "Escape pauses");
     PtrRest(layer, registry, 120);
@@ -27130,9 +27161,9 @@ void TheHintClearsTheModernPair() {
     if (moved.ok) CHECK_MSG(NearD(moved.left - classic.left, 90.7378 + 20.0 - 50.0, 1e-3), "a left inset of 20 moves the pair and the text 20 units: " + PtrNum(moved.left - classic.left));
 }
 
-// Every supported window shape and every size the layer can play (the three looks: 0.7, 0.8 and 1.0; 0.4 and 1.4 are the module's own pin,
-// HintLeftClearsThePairAndLeavesClassicAlone, until CTL-10 lets the layer apply a size): the line is wholly on the screen, 8 units in at least,
-// and clear of the pair wherever it fits - the design's 90.74, 74.93 and 53.60 among them.
+// Every supported window shape and every size the layer can play: the three looks (0.7, 0.8 and 1.0) and, since planning step 187 applies a tuning, the plan's
+// four sizes 0.4, 0.7, 1.0 and 1.4 as the player's own (`Paths::controls.tuning`, in place of the insets and looks this pin could only use before): the line is
+// wholly on the screen, 8 units in at least, and clear of the pair wherever it fits - the design's 90.74, 74.93 and 53.60 among them.
 void TheHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
     if (!OriginalArtIsThere("TheHintStaysOnTheScreenAtEverySupportedAspectAndSize")) return;
     const MiHint classic = MiHintOf(TestPaths(), glm::vec2(1280.0f, 720.0f), Controls::Style::Classic, "TheHintStaysOnTheScreen: classic");
@@ -27145,13 +27176,20 @@ void TheHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
     const struct {
         const char* flag;
         double size;
-    } looks[] = {{"modern", 0.7}, {"modern,preset=balanced", 0.8}, {"modern,preset=mr", 1.0}};
+        int tenths; // the player's own size, in tenths, through the tuning; 0: the look's
+    } looks[] = {{"modern", 0.7, 0}, {"modern,preset=balanced", 0.8, 0}, {"modern,preset=mr", 1.0, 0}, {"modern", 0.4, 4}, {"modern", 1.0, 10}, {"modern", 1.4, 14}};
     int clamped = 0;
     int clear = 0;
     for (const auto& window : windows) {
         for (const auto& look : looks) {
-            const std::string what = std::string("TheHintStaysOnTheScreen: ") + window.name + " " + look.flag;
-            const MiHint modern = MiHintOf(MdPaths(look.flag), glm::vec2(window.width, 720.0f), Controls::Style::Modern, what);
+            const std::string what = std::string("TheHintStaysOnTheScreen: ") + window.name + " " + look.flag + (look.tenths != 0 ? " size " + std::to_string(look.tenths) + "/10" : "");
+            MagicPortalsLayer::Paths paths = MdPaths(look.flag);
+            if (look.tenths != 0) {
+                Controls::Tuning kept;
+                kept.sizeSteps = look.tenths;
+                paths.controls.tuning = kept;
+            }
+            const MiHint modern = MiHintOf(paths, glm::vec2(window.width, 720.0f), Controls::Style::Modern, what);
             if (!modern.ok) continue;
             const double width = 256.0 * static_cast<double>(window.width) / 720.0;
             CHECK_MSG(NearD(modern.view, width, 1e-3), what + ": the view is " + PtrNum(width) + " wide: " + PtrNum(modern.view));
@@ -27303,13 +27341,19 @@ void SafeInsetsReachTheLayoutOnlyInModern() {
 // ---- the slide by half ---------------------------------------------------------------------------------------------------------------------
 
 // An arrow comes in from the nearer of the view's side edges, by the half its centre is in (Controls::LayOut, CTL-4): the pair on the left
-// slides in from the left, as the classic pads do; a pair moved to the right half - here by a left safe-area inset of 230 units - slides in from
-// the RIGHT, and its hit rectangle goes with the picture. Asked of the layer, which draws and claims what the module lays out.
+// slides in from the left, as the classic pads do; a pair moved to the right half - here by the player's own tuning, 230 units right of the corner it
+// stands in (planning step 187; Step 183 had only a safe-area inset to do it with) - slides in from the RIGHT, and its hit rectangle goes with the
+// picture. Asked of the layer, which draws and claims what the module lays out.
 void AControlOnTheRightHalfSlidesInFromTheRight() {
     for (const bool right : {false, true}) {
         const std::string what = std::string("AControlOnTheRightHalfSlidesInFromTheRight: ") + (right ? "the pair on the right half" : "the pair on the left half (the control)");
         MagicPortalsLayer::Paths paths = MdPaths();
-        if (right) paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 0.0};
+        if (right) {
+            Controls::Tuning kept;
+            kept.move[MdAt(PtrControl::Left)] = glm::dvec2(230.0, 0.0);
+            kept.move[MdAt(PtrControl::Right)] = glm::dvec2(230.0, 0.0);
+            paths.controls.tuning = kept;
+        }
         MdRun run(paths, "level30", what, glm::vec2(1280.0f, 720.0f), false);
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
@@ -27441,8 +27485,8 @@ struct OsRun {
     MagicPortalsLayer layer;
     bool ok = false;
 
-    OsRun(const MagicPortalsLayer::Paths& paths, const std::string& what) : layer(paths, "") {
-        publishViewport(registry);
+    OsRun(const MagicPortalsLayer::Paths& paths, const std::string& what, const glm::vec2& window = glm::vec2(1280.0f, 720.0f)) : layer(paths, "") {
+        publishViewport(registry, window);
         layer.OnAttach(registry);
         ok = layer.LoadError().empty() && TickToTheMainMenu(layer, registry);
         CHECK_MSG(ok, what + " reaches its main menu: " + layer.LoadError());
@@ -27461,8 +27505,12 @@ void OsClick(OsRun& run, const glm::dvec2& onView) {
     tickWith(run.layer, run.registry, kRest, {}, {});
 }
 
+Hud::Rect OsEntryRect(const MagicPortalsLayer& layer) {
+    return OptionsUi::EntryAt(layer.OptionsRules(), layer.MainMenuRules().layer, layer.MainMenuRules().state, layer.ViewPx(), 1.0e9, false).rect;
+}
+
 glm::dvec2 OsEntryCentre(const MagicPortalsLayer& layer) {
-    return OptionsUi::EntryAt(layer.OptionsRules(), layer.MainMenuRules().layer, layer.MainMenuRules().state, layer.ViewPx(), 1.0e9, false).rect.Centre();
+    return OsEntryRect(layer).Centre();
 }
 
 glm::dvec2 OsTileCentre(const MagicPortalsLayer& layer, Controls::Style style) {
@@ -27863,6 +27911,11 @@ void ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves() {
     for (const glm::dvec2& move : saved.move) anyMove = anyMove || move != glm::dvec2(0.0);
     CHECK_MSG(!anyMove, "while the moves, made against layout 1, are dropped");
     CHECK_MSG(layer.ControlsApplied().ArrowsIn(layer.ControlsRules()) == Controls::Arrows::Split, "the arrows play the data's arrangement, split, whatever the file was saved against");
+    // Planning step 187 applies the kept tuning: the size 1.2 and the opacity 0.6 are PLAYED, and the dropped moves are not.
+    CHECK_MSG(NearD(layer.ControlsApplied().Size(layer.ControlsRules()), 1.2, 1e-12) && NearD(layer.ControlsApplied().Opacity(layer.ControlsRules()), 0.6, 1e-12),
+              "the layout is laid out with the size 1.2 and the opacity 0.6 the file kept");
+    CHECK_MSG(std::all_of(layer.ControlsApplied().move.begin(), layer.ControlsApplied().move.end(), [](const glm::dvec2& move) { return move == glm::dvec2(0.0); }),
+              "and with none of the moves, which were made against the grouped pair");
     CHECK_MSG(OsSavedFile(saves) == old, "starting does not touch the file");
     if (!OsOpenOptions(run, "the layout-1 file")) return;
     OsClick(run, OsTileCentre(layer, Style::Classic));
@@ -28175,6 +28228,19 @@ void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
         entt::registry& registry = run.registry;
         CHECK_MSG(layer.OptionsAvailable(), what + ": a player's run, in 1-01");
         int taps = 0;
+        // What each press brought up, as the layer reports it AFTER the press, in order: the count of presses a player makes is the length of this path, derived
+        // from the screens observed on the way and not from a literal beside a counter (planning step 185 compared the two with 5).
+        std::vector<std::string> trail;
+        const auto where = [&layer]() -> std::string {
+            if (layer.Paused()) return "the pause";
+            switch (layer.MenuScreen()) {
+            case Screen::Main: return "the main menu";
+            case Screen::Worlds: return "chapter select";
+            case Screen::Levels: return "the level grid";
+            case Screen::Options: return "Options";
+            default: return "somewhere else";
+            }
+        };
         // 1. The pause: the corner button, or the back key.
         if (byKey) {
             press(layer, registry, MagicPortalsLayer::kBack);
@@ -28184,6 +28250,7 @@ void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
             lift(layer, registry, pause);
         }
         ++taps;
+        trail.push_back(where());
         CHECK_MSG(layer.Paused(), what + ": 1. the pause is open");
         PtrRest(layer, registry, 80);
         // 2. The pause's Levels button.
@@ -28191,6 +28258,7 @@ void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
         tap(layer, registry, levels);
         lift(layer, registry, levels);
         ++taps;
+        trail.push_back(where());
         CHECK_MSG(layer.MenuScreen() == Screen::Levels && !layer.Paused(), what + ": 2. the level grid of 1-01's chapter");
         PtrRest(layer, registry, 80);
         CHECK_MSG(layer.SelectorState().page == 0, what + ": on its first page, so back leaves it and does not turn a page");
@@ -28204,6 +28272,7 @@ void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
             OsClickAt(layer, registry, back);
         }
         ++taps;
+        trail.push_back(where());
         CHECK_MSG(layer.MenuScreen() == Screen::Worlds, what + ": 3. chapter select");
         PtrRest(layer, registry, 80);
         CHECK_MSG(layer.SelectorState().page == 0, what + ": on its first page");
@@ -28217,16 +28286,83 @@ void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
             OsClickAt(layer, registry, back);
         }
         ++taps;
+        trail.push_back(where());
         CHECK_MSG(layer.MenuScreen() == Screen::Main, what + ": 4. the main menu");
         PtrRest(layer, registry, 80);
         // 5. The entry.
         OsClickAt(layer, registry, OsEntryCentre(layer));
         ++taps;
         PtrRest(layer, registry, 5);
+        trail.push_back(where());
         CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": 5. Options");
-        CHECK_EQ(taps, 5);
+        // The way down is a fixed chain of screens, each reached by the press before it: the pause, the grid, chapter select, the main menu, Options. Every press
+        // brought up a DIFFERENT screen than the one it was made on (a press that did nothing would repeat one), and the count is the length of the chain.
+        const std::vector<std::string> chain = {"the pause", "the level grid", "chapter select", "the main menu", "Options"};
+        CHECK_MSG(trail == chain, what + ": the screens on the way are the chain");
+        bool distinct = true;
+        for (std::size_t i = 1; i < trail.size(); ++i) distinct = distinct && trail[i] != trail[i - 1];
+        CHECK_MSG(distinct, what + ": and no press left the screen it was made on");
+        CHECK_EQ(taps, static_cast<int>(trail.size()));
         std::printf("  from a level to Options takes %d presses (%s): the pause, Levels, back, back, the entry\n", taps, byKey ? "keys for the pause and the two backs" : "the pointer throughout");
     }
+}
+
+// The entry is claimed BEFORE the main menu's own buttons (mainDown is cleared when the press is on the entry), so a press on the gear is not also a press on
+// whatever stands under it. Step 185 could not pin the order because it did not know of a point that both claim. This LOOKS for one, at every supported window
+// shape, over the entry's closed rectangle (both are closed rectangles, so a line they share is in both): if there is one, a press THERE must open Options and
+// nothing else; if there is none, that is what is printed, and the order is right by construction. The press is a scheduled tap, whose place is its fraction of the
+// view times the view in double arithmetic - the one way to land on an edge exactly; a real pointer's float arithmetic (px / window size, then times the view)
+// cannot, and a point the tap would not reach exactly is not asserted. What it found at each shape is printed.
+void TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint() {
+    if (!OriginalArtIsThere("TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    const struct {
+        const char* name;
+        double width;
+    } shapes[] = {{"5:4", 900.0}, {"4:3", 960.0}, {"3:2", 1080.0}, {"16:10", 1152.0}, {"16:9", 1280.0}, {"2:1", 1440.0}, {"21:9", 1680.0}, {"32:9", 2560.0}};
+    int shapesWithAPoint = 0;
+    int pressed = 0;
+    for (const auto& shape : shapes) {
+        const std::string what = std::string("TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint: ") + shape.name;
+        OsRun run(OsPaths(OsDir("claim-saves"), OsDir("claim-prisms")), what, glm::vec2(static_cast<float>(shape.width), 720.0f));
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.OptionsAvailable() && layer.MenuScreen() == Screen::Main, what + ": a player's main menu with the entry");
+        const glm::dvec2 view = layer.ViewPx();
+        const Hud::Rect entry = OsEntryRect(layer);
+        const MagicPortals::Pause::Switches switches = layer.MainMenuSwitches();
+        const auto shared = [&](const glm::dvec2& point) {
+            return entry.Contains(point) && MainMenuUi::ButtonsAt(layer.MainMenuRules(), switches, view, 1.0e9, point) != 0u;
+        };
+        // The entry's closed rectangle on a lattice of a quarter unit, its far edges included (it is flush in the corner).
+        glm::dvec2 first(0.0);
+        int count = 0;
+        for (double y = entry.min.y; y <= entry.Max().y + 1e-9; y += 0.25) {
+            for (double x = entry.min.x; x <= entry.Max().x + 1e-9; x += 0.25) {
+                if (!shared(glm::dvec2(x, y))) continue;
+                if (count == 0) first = glm::dvec2(x, y);
+                ++count;
+            }
+        }
+        if (count == 0) {
+            std::printf("  %s: no point of the entry is also a main-menu button's: nothing to order\n", shape.name);
+            continue;
+        }
+        ++shapesWithAPoint;
+        const glm::dvec2 fraction = first / view;
+        const glm::dvec2 reached = fraction * view; // what the layer computes for a scheduled tap
+        std::printf("  %s: %d lattice points of the entry are also a main-menu button's, the first (%.4f, %.4f); the tap reaches (%.17g, %.17g)\n", shape.name, count, first.x, first.y,
+                    reached.x, reached.y);
+        if (!shared(reached)) continue; // an edge the arithmetic cannot land on exactly is not asserted
+        layer.ScheduleDevTap(0, fraction, 0);
+        for (int tick = 0; tick < 4; ++tick) tickWith(layer, run.registry, kRest, {}, {});
+        PtrRest(layer, run.registry, 5);
+        CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": a press where the entry and a main-menu button meet opens Options, the entry's, and not the button's: screen " + std::to_string(static_cast<int>(layer.MenuScreen())));
+        ++pressed;
+    }
+    std::printf("  the entry and a main-menu button share a point at %d of %d window shapes; %d of them were pressed exactly\n", shapesWithAPoint, static_cast<int>(sizeof(shapes) / sizeof(shapes[0])), pressed);
+    CHECK_MSG(pressed == shapesWithAPoint, "every shared point the tap can reach was pressed, and was the entry's");
 }
 
 // ---- Options, as drawn ------------------------------------------------------------------------------------------------------------------------------
@@ -28460,7 +28596,7 @@ void EscThenEscWithTheTouchHeldOnAnArrowSwallowsItInModernAndNotInClassic() {
 void APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain() {
     if (!OriginalArtIsThere("APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain")) return;
     MagicPortalsLayer::Paths paths = MdPaths();
-    paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 110.0}; // the pair under the pause's Resume button, as TheSwallowHoldsAClaimUntilTheTouchIsUp has it
+    paths.controls.testInsets = Controls::Insets{230.0, 0.0, 0.0, 110.0}; // the pair under the pause's Resume button, as TheSwallowHoldsAClaimUntilTheTouchIsUp had it before planning step 187 (a safe-area seam)
     MdRun run(paths, "level30", "APointerThatLeavesTheGameClearsTheSwallowAndItsReturnIsSwallowedAgain");
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
@@ -28972,20 +29108,20 @@ void TheSplitArrowsMoveInWithTheSafeArea() {
     double W = 0.0;
     const double margin = 44.0 * 256.0 / 720.0;
     {
-    MdRun run(paths, "level30", "TheSplitArrowsMoveInWithTheSafeArea");
-    if (!run.ok) return;
-    MagicPortalsLayer& layer = run.layer;
-    const MdGeom g = MdGeometry(layer);
-    W = g.view.x;
-    const double H = g.view.y;
-    const Hud::Rect& left = g.box[MdAt(PtrControl::Left)];
-    const Hud::Rect& right = g.box[MdAt(PtrControl::Right)];
-    CHECK_MSG(NearD(left.min.x, 10.0 + margin, 1e-9) && NearD(H - 40.0 - left.Max().y, margin, 1e-9), "the left arrow is the margin inside the safe area's left and bottom edges: " + MdShow(left));
-    CHECK_MSG(NearD(W - 30.0 - right.Max().x, margin, 1e-9) && NearD(H - 40.0 - right.Max().y, margin, 1e-9), "the right arrow is the margin inside its right and bottom edges: " + MdShow(right));
-    CHECK_MSG(g.hit[MdAt(PtrControl::Left)].min.x == 0.0 && g.hit[MdAt(PtrControl::Left)].Max().y == H, "the left arrow's hit still reaches the view's left edge and bottom");
-    CHECK_MSG(g.hit[MdAt(PtrControl::Right)].Max().x == W && g.hit[MdAt(PtrControl::Right)].Max().y == H, "and the right arrow's the view's right edge and bottom");
-    CHECK_MSG(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0)) == PtrClaim(PtrControl::Right) && layer.ControlAt(glm::dvec2(1.0, H - 1.0)) == PtrClaim(PtrControl::Left),
-              "a tap in the notch's own corner strips is the arrow's: " + PtrName(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(1.0, H - 1.0))));
+        MdRun run(paths, "level30", "TheSplitArrowsMoveInWithTheSafeArea");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        const MdGeom g = MdGeometry(layer);
+        W = g.view.x;
+        const double H = g.view.y;
+        const Hud::Rect& left = g.box[MdAt(PtrControl::Left)];
+        const Hud::Rect& right = g.box[MdAt(PtrControl::Right)];
+        CHECK_MSG(NearD(left.min.x, 10.0 + margin, 1e-9) && NearD(H - 40.0 - left.Max().y, margin, 1e-9), "the left arrow is the margin inside the safe area's left and bottom edges: " + MdShow(left));
+        CHECK_MSG(NearD(W - 30.0 - right.Max().x, margin, 1e-9) && NearD(H - 40.0 - right.Max().y, margin, 1e-9), "the right arrow is the margin inside its right and bottom edges: " + MdShow(right));
+        CHECK_MSG(g.hit[MdAt(PtrControl::Left)].min.x == 0.0 && g.hit[MdAt(PtrControl::Left)].Max().y == H, "the left arrow's hit still reaches the view's left edge and bottom");
+        CHECK_MSG(g.hit[MdAt(PtrControl::Right)].Max().x == W && g.hit[MdAt(PtrControl::Right)].Max().y == H, "and the right arrow's the view's right edge and bottom");
+        CHECK_MSG(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0)) == PtrClaim(PtrControl::Right) && layer.ControlAt(glm::dvec2(1.0, H - 1.0)) == PtrClaim(PtrControl::Left),
+                  "a tap in the notch's own corner strips is the arrow's: " + PtrName(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(1.0, H - 1.0))));
     }
     // A left inset of 20 does not move the right arrow, and a right inset of 40 does not move the left one.
     MagicPortalsLayer::Paths onlyLeft = MdSplitPaths();
@@ -29027,7 +29163,8 @@ void TheHintClearsTheSplitLeftArrowOnly() {
     if (kept.ok) CHECK_MSG(NearD(kept.left, classic.left, 1e-9), "and a right inset, which moves the right arrow alone, leaves the text at 50: " + PtrNum(kept.left));
 }
 
-// Every window shape and every look the layer can play: the line is wholly on the screen, 8 units in at least; it starts clear of the LEFT arrow's hit
+// Every window shape and every size the layer can play (the three looks, and the plan's four sizes 0.4, 0.7, 1.0 and 1.4 as the player's own through the tuning,
+// planning step 187): the line is wholly on the screen, 8 units in at least; it starts clear of the LEFT arrow's hit
 // wherever it fits (the design's rule, minus the right arrow); and where the free span between the arrows is narrower than the text it runs over the right
 // arrow (printed: the Step's table).
 void TheSplitHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
@@ -29042,11 +29179,18 @@ void TheSplitHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
     const struct {
         const char* flag;
         double size;
-    } looks[] = {{"modern", 0.7}, {"modern,preset=balanced", 0.8}, {"modern,preset=mr", 1.0}};
+        int tenths; // the player's own size, in tenths, through the tuning; 0: the look's
+    } looks[] = {{"modern", 0.7, 0}, {"modern,preset=balanced", 0.8, 0}, {"modern,preset=mr", 1.0, 0}, {"modern", 0.4, 4}, {"modern", 1.0, 10}, {"modern", 1.4, 14}};
     for (const auto& window : windows) {
         for (const auto& look : looks) {
-            const std::string what = std::string("TheSplitHintStaysOnTheScreen: ") + window.name + " " + look.flag;
-            const MiHint modern = MiHintOf(MdSplitPaths(look.flag), glm::vec2(window.width, 720.0f), Controls::Style::Modern, what);
+            const std::string what = std::string("TheSplitHintStaysOnTheScreen: ") + window.name + " " + look.flag + (look.tenths != 0 ? " size " + std::to_string(look.tenths) + "/10" : "");
+            MagicPortalsLayer::Paths paths = MdSplitPaths(look.flag);
+            if (look.tenths != 0) {
+                Controls::Tuning kept;
+                kept.sizeSteps = look.tenths;
+                paths.controls.tuning = kept;
+            }
+            const MiHint modern = MiHintOf(paths, glm::vec2(window.width, 720.0f), Controls::Style::Modern, what);
             if (!modern.ok) continue;
             const double width = 256.0 * static_cast<double>(window.width) / 720.0;
             const double leftRight = 15.6444 + 45.5111 * look.size;          // the left arrow's hit right edge
@@ -29063,10 +29207,458 @@ void TheSplitHintStaysOnTheScreenAtEverySupportedAspectAndSize() {
             const double crossesLeft = std::max(0.0, leftRight - modern.left);
             const double wantedCrossing = std::max(0.0, wanted + kExtent - rightLeft);
             CHECK_MSG(NearD(crossesRight, wantedCrossing, 0.7), what + ": the text runs " + PtrNum(crossesRight) + " units into the right arrow's hit, the model's " + PtrNum(wantedCrossing));
-            std::printf("  1-21's hint, split, %s %s: starts %.2f, ends %.2f of %.2f; over the left arrow by %.1f, over the right arrow by %.1f\n", window.name, look.flag, modern.left,
-                        modern.right, width, crossesLeft, crossesRight);
+            std::printf("  1-21's hint, split, %s %s size %.1f: starts %.2f, ends %.2f of %.2f; over the left arrow by %.1f, over the right arrow by %.1f\n", window.name, look.flag,
+                        look.size, modern.left, modern.right, width, crossesLeft, crossesRight);
         }
     }
+}
+
+// ---- the tuning, kept and applied (planning step 187, CTL-10) ----------------------------------------------------------------------------------------
+//
+// A player's size, opacity and moves are kept in controls.json (Controls::Store) or asked for by the dev flag (`--controls modern,size=1.2,opacity=0.6,
+// walk_left=-10:5`), and the layer APPLIES them: through the layout (the box grows with the size; the margin and the gap do not; a move is in units from the
+// control's own corner and is not scaled by size), the hit rectangles, the slide, the ring, the hint and the draw (the opacity multiplies the byte and caps at
+// 255). A flag that carries a size, an opacity or a move REPLACES what a player kept, never merges with it; without one the kept tuning plays; the classic
+// controls never read any of it. The numbers are written out here from the design's arithmetic (out/parity/program/CTL/CTL10/work/numbers.py), for the SPLIT
+// arrows the data ships, at 16:9 unless a case says otherwise; each case reads the style and the arrangement it plays (N1: MdRun).
+
+Controls::Tuning TnKept(std::optional<int> sizeSteps, std::optional<int> opacitySteps, std::initializer_list<std::pair<PtrControl, glm::dvec2>> moves = {}) {
+    Controls::Tuning kept;
+    kept.sizeSteps = sizeSteps;
+    kept.opacitySteps = opacitySteps;
+    for (const auto& entry : moves) kept.move[MdAt(entry.first)] = entry.second;
+    return kept;
+}
+
+bool TnNoMoves(const Controls::Tuning& tuning) {
+    return std::all_of(tuning.move.begin(), tuning.move.end(), [](const glm::dvec2& move) { return move == glm::dvec2(0.0); });
+}
+
+// What a layer draws and claims, as a pair: the hash of the HUD's quads and the claim over the view every 16 units.
+std::pair<std::uint64_t, std::vector<int>> TnHudAndClaims(MdRun& run) {
+    std::pair<std::uint64_t, std::vector<int>> out;
+    out.first = PtrHashQuads(HudFrame(run.registry, run.layer));
+    const glm::dvec2 view = run.layer.ViewPx();
+    for (double y = 0.0; y <= view.y; y += 16.0) {
+        for (double x = 0.0; x <= view.x; x += 16.0) {
+            const PtrClaim claim = run.layer.ControlAt(glm::dvec2(x, y));
+            out.second.push_back(claim ? static_cast<int>(*claim) : -1);
+        }
+    }
+    return out;
+}
+
+// Size 1.4 is the classic pad's size: an arrow of 63.7156 units (179.2 px at 720p) where the pad is 64, and every constant stays: the margin from the two edges of
+// its corner, the gap, the corner buttons' inset. Boxes and hit rectangles to four decimals, the INFO line to the pixel, the picture to the box.
+void ASizeOfOnePointFourDrawsTheClassicSizeOfArrow() {
+    MdRun run(MdSplitPaths("modern,size=1.4"), "level30", "ASizeOfOnePointFourDrawsTheClassicSizeOfArrow");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    CHECK_MSG(NearD(layer.ControlsApplied().Size(rules), 1.4, 1e-12) && layer.ControlsApplied().sizeSteps == std::optional<int>(14), "the layout is laid out at size 1.4");
+    CHECK_MSG(layer.ControlsTuningLine() == "controls: tuning from the flag: size 1.4, opacity 1", "and the run says whose tuning it is: '" + layer.ControlsTuningLine() + "'");
+    const double box[5][4] = {{15.6444, 176.6400, 79.3600, 240.3556},    // walk_left
+                              {375.7511, 176.6400, 439.4667, 240.3556},  // walk_right
+                              {313.4009, 15.6444, 370.7449, 72.9884},    // restart
+                              {382.1227, 15.6444, 439.4667, 72.9884},    // pause
+                              {15.6444, 15.6444, 72.9884, 72.9884}};     // clear_portals
+    const double hit[5][4] = {{0.0, 176.6400, 79.3600, 256.0},
+                              {375.7511, 176.6400, 455.1111, 256.0},
+                              {313.4009, 0.0, 376.4338, 72.9884},
+                              {376.4338, 0.0, 455.1111, 72.9884},
+                              {0.0, 0.0, 72.9884, 72.9884}};
+    const MdGeom g = MdGeometry(layer);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const std::size_t at = MdAt(id);
+        CHECK_MSG(MdRectIs(g.box[at], box[at], 1e-3), std::string(kMdTable[at].key) + ": its box at size 1.4: " + MdShow(g.box[at]));
+        CHECK_MSG(MdRectIs(g.hit[at], hit[at], 1e-3), std::string(kMdTable[at].key) + ": its hit rectangle at size 1.4: " + MdShow(g.hit[at]));
+    }
+    for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+        CHECK_MSG(NearD(g.box[MdAt(arrow)].size.x, 63.7156, 1e-3) && NearD(g.box[MdAt(arrow)].size.y, 63.7156, 1e-3), std::string(kMdTable[MdAt(arrow)].key) + ": 63.7156 units square (179.2 px)");
+        CHECK_MSG(std::fabs(g.box[MdAt(arrow)].size.x - 64.0) < 0.3, std::string(kMdTable[MdAt(arrow)].key) + ": the classic pad's 64 units to a third of a unit");
+    }
+    // The constants do not grow with the size (Penumbra L2): the margin from both edges of each arrow's corner is the 44 px it is at 0.7.
+    const double margin = 44.0 * 256.0 / 720.0;
+    CHECK_MSG(NearD(g.box[MdAt(PtrControl::Left)].min.x, margin, 1e-3) && NearD(g.view.y - g.box[MdAt(PtrControl::Left)].Max().y, margin, 1e-3), "walk_left: 44 px from its two edges, as at size 0.7");
+    CHECK_MSG(NearD(g.view.x - g.box[MdAt(PtrControl::Right)].Max().x, margin, 1e-3) && NearD(g.view.y - g.box[MdAt(PtrControl::Right)].Max().y, margin, 1e-3), "walk_right: 44 px from its two edges, as at size 0.7");
+    CHECK_MSG(NearD(g.view.x - g.box[MdAt(PtrControl::Menu)].Max().x, margin, 1e-3) && NearD(g.box[MdAt(PtrControl::Menu)].min.y, margin, 1e-3), "pause: 44 px from its corner");
+    CHECK_MSG(NearD(g.box[MdAt(PtrControl::Menu)].min.x - g.box[MdAt(PtrControl::Reset)].Max().x, 32.0 * 256.0 / 720.0, 1e-3), "and restart is 32 px from pause, the gap that does not grow");
+    // Drawn where it is laid out, and the picture fills the box.
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    for (const PtrControl control : {PtrControl::Left, PtrControl::Right, PtrControl::Reset, PtrControl::Menu}) {
+        Hud::Rect drawn;
+        CHECK_MSG(layer.ControlRect(control, drawn) && SameRect(drawn, g.box[MdAt(control)], 1e-6), std::string(kMdTable[MdAt(control)].key) + ": drawn in its box");
+        const int at = MdQuadOf(frame, layer.ModernImage(control));
+        CHECK_MSG(at >= 0, std::string(kMdTable[MdAt(control)].key) + ": has a picture in the frame");
+        if (at >= 0) CHECK_MSG(SameRect(OnView(layer, frame[static_cast<std::size_t>(at)]), g.box[MdAt(control)], 1e-3), std::string(kMdTable[MdAt(control)].key) + ": and the picture fills the box");
+    }
+    // The INFO line the capture reads: the arrows' boxes are 179.2 px across at 1280 x 720.
+    const std::string line = layer.ControlsRectsLine();
+    CHECK_MSG(line.find("walk_left (44.0,496.8)-(223.2,676.0) px hit (0.0,496.8)-(223.2,720.0) px") != std::string::npos, "the INFO line: walk_left is 179.2 px across: " + line);
+    CHECK_MSG(line.find("walk_right (1056.8,496.8)-(1236.0,676.0) px hit (1056.8,496.8)-(1280.0,720.0) px") != std::string::npos, "and walk_right: " + line);
+    // The claim is the bigger rectangle: a point at the old size's top (208.0, which was the world's at 0.7) is the left arrow's now, and just above the new top it is not.
+    CHECK_MSG(layer.ControlAt(glm::dvec2(40.0, 208.0)) == PtrClaim(PtrControl::Left) && layer.ControlAt(glm::dvec2(g.view.x - 40.0, 208.0)) == PtrClaim(PtrControl::Right),
+              "a point 208 units down, the world's at size 0.7, is an arrow's at 1.4");
+    CHECK_MSG(!layer.ControlAt(glm::dvec2(40.0, 176.63)) && !layer.ControlAt(glm::dvec2(g.view.x - 40.0, 176.63)), "and a point just above the new top is the world's");
+    CHECK_MSG(layer.ControlAt(glm::dvec2(40.0, 176.65)) == PtrClaim(PtrControl::Left) && layer.ControlAt(glm::dvec2(g.view.x - 40.0, 176.65)) == PtrClaim(PtrControl::Right), "and just below it is the arrow's");
+}
+
+// The opacity MULTIPLIES the byte the pad is drawn at and caps at 255: min(255, round(byte x idle_scale x opacity)). At 0.2 the byte is a fifth of the pulse's (every
+// byte a whole one), at 1.8 the pulse's top, 160, would be 288 and is 255; the corner buttons' flat 120 is a fraction and is multiplied as one (and never past 1).
+void OpacityMultipliesTheByteAndCapsAtOne() {
+    const struct {
+        const char* flag;
+        double opacity;
+    } rows[] = {{"modern,opacity=0.2", 0.2}, {"modern,opacity=0.6", 0.6}, {"modern,opacity=1.0", 1.0}, {"modern,opacity=1.8", 1.8}};
+    for (const auto& row : rows) {
+        const std::string what = std::string("OpacityMultipliesTheByteAndCapsAtOne: ") + row.flag;
+        MdRun run(MdSplitPaths(row.flag), "level30", what, glm::vec2(1280.0f, 720.0f), false);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(NearD(layer.ControlsApplied().Opacity(layer.ControlsRules()), row.opacity, 1e-12), what + ": the layout is laid out at that opacity");
+        const Hud::Rules& rules = layer.HudRules();
+        int wrong = 0;
+        int drawn = 0;
+        int capped = 0;
+        int highest = 0;
+        std::string first;
+        for (int tick = 1; tick <= 130; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+            const int byte = Controls::ClassicWalkAlphaByte(rules, layer.LevelAgeMs(), false);
+            highest = std::max(highest, byte);
+            const double product = static_cast<double>(byte) * row.opacity;
+            const double want = std::min(255.0, std::floor(product + 0.5)) / 255.0;
+            if (product > 255.0) ++capped;
+            for (const PtrControl pad : {PtrControl::Left, PtrControl::Right}) {
+                const double alpha = MdPadAlpha(frame, layer, pad);
+                if (alpha < 0.0) continue;
+                ++drawn;
+                if (!NearD(alpha, want, 1e-6) || alpha > 1.0 + 1e-9) {
+                    if (wrong == 0) first = "tick " + std::to_string(tick) + " " + PtrName(pad) + " drew " + PtrNum(alpha * 255.0) + " of byte " + std::to_string(byte) + " x " + PtrNum(row.opacity);
+                    ++wrong;
+                }
+            }
+        }
+        CHECK_MSG(wrong == 0, what + ": every drawn pad is min(255, round(byte x opacity)): " + std::to_string(wrong) + " wrong, first " + first);
+        CHECK_MSG(drawn > 100, what + ": the pads were drawn on most of the 130 ticks: " + std::to_string(drawn));
+        CHECK_MSG(highest >= 150 && highest <= 160, what + ": the pulse tops out near 160 (a triangle of 40 over the flat 120): " + std::to_string(highest));
+        if (row.opacity == 1.8) CHECK_MSG(capped > 0, what + ": the cap was met: a pulse byte x 1.8 past 255 on " + std::to_string(capped) + " ticks");
+        else CHECK_MSG(capped == 0, what + ": the cap was not reached");
+        // Restart and pause, flat once they are in: 120/255 x the opacity (a fraction), never past 1.
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        for (const PtrControl corner : {PtrControl::Reset, PtrControl::Menu}) {
+            const double alpha = MdPadAlpha(frame, layer, corner);
+            CHECK_MSG(NearD(alpha, std::min(1.0, 120.0 / 255.0 * row.opacity), 1e-6), what + ": " + PtrName(corner) + " is 120/255 x the opacity: " + PtrNum(alpha * 255.0));
+        }
+    }
+}
+
+// A moved control is claimed where it is drawn, and the place it left is the world's again. Both arrows moved 40 units toward the middle and 20 up from the
+// corners they stand in (the same screen direction for the arrow in the right corner: -40 is toward the middle), at the default size and at 1.4, where the move
+// is the same 40 units: it is NOT scaled by the size. Nowhere near an edge, each hit rectangle is its box.
+void AMovedControlIsClaimedWhereItIsDrawn() {
+    const struct {
+        const char* flag;
+        const char* title;
+        bool walks;
+        double left[4];
+        double right[4];
+    } rows[] = {
+        {"modern,walk_left=40:-20,walk_right=-40:-20", "size 0.7", true, {55.6444, 188.4978, 87.5022, 220.3556}, {367.6089, 188.4978, 399.4667, 220.3556}},
+        {"modern,size=1.4,walk_left=40:-20,walk_right=-40:-20", "size 1.4", false, {55.6444, 156.6400, 119.3600, 220.3556}, {335.7511, 156.6400, 399.4667, 220.3556}},
+    };
+    for (const auto& row : rows) {
+        const std::string what = std::string("AMovedControlIsClaimedWhereItIsDrawn: ") + row.title;
+        MdRun run(MdSplitPaths(row.flag), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const MdGeom g = MdGeometry(layer);
+        CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Left)], row.left, 1e-3) && MdRectIs(g.hit[MdAt(PtrControl::Left)], row.left, 1e-3), what + ": walk_left's box, which is its hit: " + MdShow(g.box[MdAt(PtrControl::Left)]));
+        CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Right)], row.right, 1e-3) && MdRectIs(g.hit[MdAt(PtrControl::Right)], row.right, 1e-3), what + ": walk_right's: " + MdShow(g.box[MdAt(PtrControl::Right)]));
+        // The move is 40 units at either size: it is added to the anchored place, not scaled by the size.
+        Controls::Tuning unmoved;
+        unmoved.sizeSteps = layer.ControlsApplied().sizeSteps;
+        const std::array<Hud::Rect, 5> old = Controls::Boxes(layer.ControlsRules(), unmoved, g.view, layer.ControlsInsets());
+        CHECK_MSG(NearD(g.box[MdAt(PtrControl::Left)].min.x - old[MdAt(PtrControl::Left)].min.x, 40.0, 1e-9) && NearD(g.box[MdAt(PtrControl::Left)].min.y - old[MdAt(PtrControl::Left)].min.y, -20.0, 1e-9),
+                  what + ": walk_left moved by exactly (40, -20)");
+        CHECK_MSG(NearD(g.box[MdAt(PtrControl::Right)].min.x - old[MdAt(PtrControl::Right)].min.x, -40.0, 1e-9) && NearD(g.box[MdAt(PtrControl::Right)].min.y - old[MdAt(PtrControl::Right)].min.y, -20.0, 1e-9),
+                  what + ": and walk_right by exactly (-40, -20), toward the middle from its own corner");
+        // Drawn there.
+        for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+            Hud::Rect drawn;
+            CHECK_MSG(layer.ControlRect(arrow, drawn) && SameRect(drawn, g.box[MdAt(arrow)], 1e-6), what + ": " + PtrName(arrow) + " is drawn in its moved box");
+        }
+        // Claimed there, side by side: 0.01 inside every side the arrow is, 0.01 outside it is not (half-open at the far sides).
+        for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+            const glm::dvec2 lo = g.hit[MdAt(arrow)].min;
+            const glm::dvec2 hi = g.hit[MdAt(arrow)].Max();
+            const glm::dvec2 mid = g.hit[MdAt(arrow)].Centre();
+            const glm::dvec2 inside[4] = {{lo.x + 0.01, mid.y}, {hi.x - 0.01, mid.y}, {mid.x, lo.y + 0.01}, {mid.x, hi.y - 0.01}};
+            const glm::dvec2 outside[4] = {{lo.x - 0.01, mid.y}, {hi.x + 0.01, mid.y}, {mid.x, lo.y - 0.01}, {mid.x, hi.y + 0.01}};
+            for (int side = 0; side < 4; ++side) {
+                CHECK_MSG(layer.ControlAt(inside[side]) == PtrClaim(arrow), what + ": " + PtrName(arrow) + " side " + std::to_string(side) + " 0.01 inside is claimed: " + PtrName(layer.ControlAt(inside[side])));
+                CHECK_MSG(!layer.ControlAt(outside[side]), what + ": " + PtrName(arrow) + " side " + std::to_string(side) + " 0.01 outside is the world's: " + PtrName(layer.ControlAt(outside[side])));
+            }
+            // The place it left is the world's.
+            CHECK_MSG(!layer.ControlAt(old[MdAt(arrow)].Centre()), what + ": where " + PtrName(arrow) + " used to stand is the world's: " + PtrName(layer.ControlAt(old[MdAt(arrow)].Centre())));
+        }
+        if (!row.walks) continue;
+        // A touch held on the moved left arrow walks him left; a tap at the place it left fires a portal toward it and walks nobody.
+        const glm::vec2 pixel = PtrPixel(layer, g.hit[MdAt(PtrControl::Left)].Centre());
+        const double before = playerPx(registry, layer).x;
+        for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+        CHECK_MSG(before - playerPx(registry, layer).x > 8.0, what + ": held on the moved left arrow he walks left: " + PtrNum(before - playerPx(registry, layer).x));
+        lift(layer, registry, pixel);
+        PtrRest(layer, registry, 30);
+        const glm::vec2 leftBehind = PtrPixel(layer, old[MdAt(PtrControl::Left)].Centre());
+        const double standing = playerPx(registry, layer).x;
+        tap(layer, registry, leftBehind);
+        glm::dvec2 aimed(0.0);
+        CHECK_MSG(layer.ViewportToLevelPx(registry, leftBehind, aimed), what + ": the old place maps into the level");
+        lift(layer, registry, leftBehind);
+        CHECK_MSG(glm::distance(PtrLastTap(layer), aimed) < 0.01, what + ": a tap where the arrow stood fires toward it: " + Point(PtrLastTap(layer)));
+        CHECK_MSG(std::fabs(playerPx(registry, layer).x - standing) < 3.0, what + ": and walks nobody");
+    }
+}
+
+// A move saved against a window that had more room is pulled in by the layout wherever the view cannot hold it, and the file still says what the player chose:
+// walk_left +350 fits a 16:9 view (room for 392) and not a 5:4 one (257), where the box stops against the right edge; the tuning in the store and the bytes on
+// disk are 350, before and after a choice is saved from that window.
+void ASavedMoveThatNoLongerFitsIsPulledInAtLayoutAndLeftAsStored() {
+    if (!OriginalArtIsThere("ASavedMoveThatNoLongerFitsIsPulledInAtLayoutAndLeftAsStored")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string what = "ASavedMoveThatNoLongerFitsIsPulledInAtLayoutAndLeftAsStored";
+    const std::string saves = OsDir("pull-saves");
+    const std::string file = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"move\":{\"walk_left\":[350,0]}}}";
+    OsWrite(saves, "controls.json", file);
+    {
+        MdRun run(OsPaths(saves, OsDir("pull-prisms-a")), "level30", what + " (16:9)", glm::vec2(1280.0f, 720.0f), true, Style::Modern);
+        if (!run.ok) return;
+        const double fits[4] = {365.6444, 208.4978, 397.5022, 240.3556};
+        const MdGeom g = MdGeometry(run.layer);
+        CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Left)], fits, 1e-3), what + ": at 16:9 the move fits and is played as it is: " + MdShow(g.box[MdAt(PtrControl::Left)]));
+        CHECK_MSG(run.layer.ControlsStore().SavedTuning().move[MdAt(PtrControl::Left)] == glm::dvec2(350.0, 0.0), what + ": the store holds 350");
+        CHECK_MSG(OsSavedFile(saves) == file && OsEntries(saves) == (std::vector<std::string>{"controls.json"}), what + ": the file is as it was");
+    }
+    {
+        MdRun run(OsPaths(saves, OsDir("pull-prisms-b")), "level30", what + " (5:4)", glm::vec2(900.0f, 720.0f), true, Style::Modern);
+        if (!run.ok) return;
+        const double pulled[4] = {288.1422, 208.4978, 320.0, 240.3556};
+        const MdGeom g = MdGeometry(run.layer);
+        CHECK_MSG(NearD(g.view.x, 320.0, 1e-9), what + ": the view is 320 wide");
+        CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Left)], pulled, 1e-3), what + ": at 5:4 the box is pulled in against the right edge: " + MdShow(g.box[MdAt(PtrControl::Left)]));
+        CHECK_MSG(g.box[MdAt(PtrControl::Left)].Max().x <= g.view.x + 1e-9, what + ": wholly inside the view");
+        Hud::Rect drawn;
+        CHECK_MSG(run.layer.ControlRect(PtrControl::Left, drawn) && SameRect(drawn, g.box[MdAt(PtrControl::Left)], 1e-6), what + ": and drawn there");
+        CHECK_MSG(run.layer.ControlAt(g.box[MdAt(PtrControl::Left)].Centre()) == PtrClaim(PtrControl::Left), what + ": and claimed there (it stands over the right arrow's box, and the earlier in the claim order wins)");
+        CHECK_MSG(run.layer.ControlsStore().SavedTuning().move[MdAt(PtrControl::Left)] == glm::dvec2(350.0, 0.0), what + ": the store still holds 350, not the pulled-in place");
+        CHECK_MSG(OsSavedFile(saves) == file, what + ": and so does the file");
+    }
+    {
+        // A choice made from that window writes the 350 back as it was stored.
+        OsRun run(OsPaths(saves, OsDir("pull-prisms-c")), what + " (Options at 5:4)", glm::vec2(900.0f, 720.0f));
+        if (!run.ok) return;
+        if (!OsOpenOptions(run, what)) return;
+        OsClick(run, OsTileCentre(run.layer, Style::Classic));
+        CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"move\":{\"walk_left\":[350,0]}}}",
+                  what + ": the next choice keeps the move as stored: " + OsSavedFile(saves));
+    }
+}
+
+// A flag that carries a size, an opacity or a move REPLACES the tuning a player kept (a test's seam stands for the kept tuning here: the store of a flag's run is
+// memory-only and holds nothing); one that carries only the look or the arrangement leaves it in force; none leaves it. And the flag writes nothing: a file beside it
+// is not read and is not touched, though Options is used.
+void AFlagTuningReplacesNeverMergesAndWritesNothing() {
+    const ControlsScratchGuard scratch;
+    const Controls::Tuning kept = TnKept(12, 3, {{PtrControl::Left, glm::dvec2(5.0, 5.0)}, {PtrControl::Menu, glm::dvec2(-8.0, 0.0)}});
+    const struct {
+        const char* flag;
+        const char* title;
+        std::optional<int> size;
+        std::optional<int> opacity;
+        bool leftMove;
+        bool menuMove;
+        bool rightMove;
+        std::optional<Controls::Preset> preset;
+        std::optional<Controls::Arrows> arrows;
+        const char* from; // the source the tuning line names; nullptr: the tuning is the base and the line is empty
+    } rows[] = {
+        {"modern", "no tuning key: the kept tuning plays", 12, 3, true, true, false, std::nullopt, std::nullopt, "the test seam"},
+        {"modern,opacity=0.8", "an opacity replaces the kept tuning whole", std::nullopt, 4, false, false, false, std::nullopt, std::nullopt, "the flag"},
+        {"modern,preset=mr", "a look leaves it in force", 12, 3, true, true, false, Controls::Preset::Mr, std::nullopt, "the test seam"},
+        {"modern,arrows=grouped", "an arrangement leaves it in force", 12, 3, true, true, false, std::nullopt, Controls::Arrows::Grouped, "the test seam"},
+        {"modern,walk_right=3:3", "a move replaces it whole", std::nullopt, std::nullopt, false, false, true, std::nullopt, std::nullopt, "the flag"},
+        {"modern,size=0.7", "a size equal to the default still replaces it", std::nullopt, std::nullopt, false, false, false, std::nullopt, std::nullopt, nullptr},
+    };
+    for (const auto& row : rows) {
+        const std::string what = std::string("AFlagTuningReplacesNeverMergesAndWritesNothing: ") + row.flag + " (" + row.title + ")";
+        MagicPortalsLayer::Paths paths = MdSplitPaths(row.flag);
+        paths.controls.tuning = kept;
+        MdRun run(paths, "level30", what);
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        const Controls::Tuning& applied = layer.ControlsApplied();
+        CHECK_MSG(applied.sizeSteps == row.size && applied.opacitySteps == row.opacity, what + ": the size and the opacity in force");
+        CHECK_MSG((applied.move[MdAt(PtrControl::Left)] == glm::dvec2(5.0, 5.0)) == row.leftMove && (applied.move[MdAt(PtrControl::Menu)] == glm::dvec2(-8.0, 0.0)) == row.menuMove &&
+                      (applied.move[MdAt(PtrControl::Right)] == glm::dvec2(3.0, 3.0)) == row.rightMove,
+                  what + ": the moves in force");
+        CHECK_MSG(applied.preset == row.preset && applied.arrows == row.arrows, what + ": the look and the arrangement are the flag's alone");
+        if (row.from != nullptr) CHECK_MSG(layer.ControlsTuningLine().find(row.from) != std::string::npos, what + ": the tuning line names its source: '" + layer.ControlsTuningLine() + "'");
+        else CHECK_MSG(layer.ControlsTuningLine().empty(), what + ": the tuning is the base and says nothing: '" + layer.ControlsTuningLine() + "'");
+        // What is laid out is what is in force: the left arrow's box side is the size's - the player's where there is one, else the look's (uniform 0.7, mr 1.0).
+        const double lookSide = 45.5111 * (row.size ? static_cast<double>(*row.size) / 10.0 : (row.preset == Controls::Preset::Mr ? 1.0 : 0.7));
+        CHECK_MSG(NearD(MdGeometry(layer).box[MdAt(PtrControl::Left)].size.x, lookSide, 1e-3), what + ": the left arrow's box is " + PtrNum(lookSide) + " units");
+    }
+    if (!OriginalArtIsThere("AFlagTuningReplacesNeverMergesAndWritesNothing: Options")) return;
+    // The flag beside a file that says otherwise: the file is not read, and using Options changes the run and not the file.
+    using Style = Controls::Style;
+    const std::string what = "AFlagTuningReplacesNeverMergesAndWritesNothing: beside a file";
+    const std::string saves = OsDir("flag-tuning-saves");
+    const std::string saved = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"size\":0.5,\"opacity\":0.4}}";
+    OsWrite(saves, "controls.json", saved);
+    OsRun run(OsPaths(saves, OsDir("flag-tuning-prisms"), std::string("modern,size=1.4,walk_left=10:10")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern && layer.ControlsApplied().sizeSteps == std::optional<int>(14) && !layer.ControlsApplied().opacitySteps &&
+                  layer.ControlsApplied().move[MdAt(PtrControl::Left)] == glm::dvec2(10.0, 10.0),
+              what + ": the flag's tuning is in force, not the file's size 0.5 and opacity 0.4");
+    CHECK_MSG(!layer.ControlsStore().Persists() && layer.ControlsStore().SavedTuning().IsDefault(layer.ControlsRules()), what + ": the store is memory-only and holds the default tuning");
+    if (!OsOpenOptions(run, what)) return;
+    OsClick(run, OsTileCentre(layer, Style::Classic));
+    OsClick(run, OsTileCentre(layer, Style::Modern));
+    CHECK_MSG(layer.ControlsApplied().sizeSteps == std::optional<int>(14), what + ": the choice of a tile leaves the flag's tuning in force");
+    CHECK_MSG(OsSavedFile(saves) == saved && OsEntries(saves) == (std::vector<std::string>{"controls.json"}), what + ": the file is as it was, byte for byte, with nothing beside it: " + OsSavedFile(saves));
+}
+
+// A player's run with a hand-written controls.json that holds a size, an opacity and a move: modern (saved), the tuning played from the file - the boxes, the INFO
+// line, the pad's byte - and nothing written by playing.
+void ThePlayersKeptTuningIsPlayedFromTheFileAndNothingIsWritten() {
+    const ControlsScratchGuard scratch;
+    const std::string what = "ThePlayersKeptTuningIsPlayedFromTheFileAndNothingIsWritten";
+    const std::string saves = OsDir("kept-saves");
+    const std::string file = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[10,-5]}}}";
+    OsWrite(saves, "controls.json", file);
+    MdRun run(OsPaths(saves, OsDir("kept-prisms")), "level30", what, glm::vec2(1280.0f, 720.0f), false);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsLine() == "controls: modern (saved)", what + ": the choice is the saved one: '" + layer.ControlsLine() + "'");
+    CHECK_MSG(layer.ControlsTuningLine() == "controls: tuning from controls.json: size 1.2, opacity 0.6, walk_left moved (10, -5)", what + ": and says whose numbers they are: '" + layer.ControlsTuningLine() + "'");
+    CHECK_MSG(layer.ControlsStore().Persists() && layer.ControlsStore().FromFile(), what + ": the store read the file");
+    CHECK_MSG(layer.ControlsApplied().sizeSteps == layer.ControlsStore().SavedTuning().sizeSteps && layer.ControlsApplied().opacitySteps == layer.ControlsStore().SavedTuning().opacitySteps &&
+                  layer.ControlsApplied().move[MdAt(PtrControl::Left)] == glm::dvec2(10.0, -5.0) && !layer.ControlsApplied().preset && !layer.ControlsApplied().arrows,
+              what + ": what is applied is what the store kept");
+    for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const MdGeom g = MdGeometry(layer);
+    const double leftBox[4] = {25.6444, 180.7422, 80.2578, 235.3556};
+    const double rightBox[4] = {384.8533, 185.7422, 439.4667, 240.3556};
+    const double rightHit[4] = {384.8533, 185.7422, 455.1111, 256.0};
+    CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Left)], leftBox, 1e-3) && MdRectIs(g.hit[MdAt(PtrControl::Left)], leftBox, 1e-3), what + ": walk_left: a 54.6133 box moved (10, -5): " + MdShow(g.box[MdAt(PtrControl::Left)]));
+    CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Right)], rightBox, 1e-3) && MdRectIs(g.hit[MdAt(PtrControl::Right)], rightHit, 1e-3), what + ": walk_right: the size alone, in its own corner: " + MdShow(g.box[MdAt(PtrControl::Right)]));
+    const std::string line = layer.ControlsRectsLine();
+    CHECK_MSG(line.find("walk_left (72.1,508.3)-(225.7,661.9) px hit (72.1,508.3)-(225.7,661.9) px") != std::string::npos, what + ": the INFO line shows the tuned rectangles: " + line);
+    CHECK_MSG(line.find("walk_right (1082.4,522.4)-(1236.0,676.0) px hit (1082.4,522.4)-(1280.0,720.0) px") != std::string::npos, what + ": " + line);
+    CHECK_MSG(layer.ControlAt(g.hit[MdAt(PtrControl::Left)].Centre()) == PtrClaim(PtrControl::Left), what + ": and the moved arrow is claimed where it is drawn");
+    // The opacity 0.6 on the pad's pulse.
+    int checked = 0;
+    for (int tick = 0; tick < 40; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const double byte = static_cast<double>(Controls::ClassicWalkAlphaByte(layer.HudRules(), layer.LevelAgeMs(), false));
+        const double want = std::floor(byte * 0.6 + 0.5) / 255.0;
+        for (const PtrControl pad : {PtrControl::Left, PtrControl::Right}) {
+            if (NearD(MdPadAlpha(frame, layer, pad), want, 1e-6)) ++checked;
+        }
+    }
+    CHECK_MSG(checked == 80, what + ": both pads are drawn at 0.6 of the pulse's byte on all 40 ticks: " + std::to_string(checked) + " of 80");
+    CHECK_MSG(OsSavedFile(saves) == file && OsEntries(saves) == (std::vector<std::string>{"controls.json"}), what + ": playing writes nothing: " + OsSavedFile(saves));
+}
+
+// The classic controls never read the tuning (a classic start with a tuned file draws and claims what an untuned classic start does, to the quad and to the point),
+// and the tuning is not lost: a player whose file says Classic and carries a size, an opacity and a move chooses Modern in Options, and the next level plays it, and
+// the file keeps it.
+void ATunedFileIsIgnoredByAClassicRunAndPlayedAfterTheSwitch() {
+    if (!OriginalArtIsThere("ATunedFileIsIgnoredByAClassicRunAndPlayedAfterTheSwitch")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string what = "ATunedFileIsIgnoredByAClassicRunAndPlayedAfterTheSwitch";
+    const std::string tuned = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"size\":1.4,\"opacity\":0.2,\"move\":{\"walk_left\":[40,-20]}}}";
+    const std::string plain = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2}}";
+    const std::string savesTuned = OsDir("classic-tuned-saves");
+    const std::string savesPlain = OsDir("classic-plain-saves");
+    OsWrite(savesTuned, "controls.json", tuned);
+    OsWrite(savesPlain, "controls.json", plain);
+    {
+        MdRun withTuning(OsPaths(savesTuned, OsDir("classic-tuned-prisms")), "level30", what + ": tuned", glm::vec2(1280.0f, 720.0f), true, Style::Classic);
+        MdRun without(OsPaths(savesPlain, OsDir("classic-plain-prisms")), "level30", what + ": plain", glm::vec2(1280.0f, 720.0f), true, Style::Classic);
+        if (!withTuning.ok || !without.ok) return;
+        CHECK_MSG(withTuning.layer.ControlsLine() == "controls: classic (saved)" && without.layer.ControlsLine() == "controls: classic (saved)", what + ": both start classic from the file");
+        CHECK_MSG(NearD(withTuning.layer.ControlsApplied().Size(withTuning.layer.ControlsRules()), 1.4, 1e-12), what + ": the layer holds the kept size, ready for a switch to modern");
+        CHECK_MSG(withTuning.layer.ControlsRectsLine().empty() && without.layer.ControlsRectsLine().empty(), what + ": and logs no modern rectangles");
+        const auto a = TnHudAndClaims(withTuning);
+        const auto b = TnHudAndClaims(without);
+        CHECK_MSG(a.first == b.first && a.first != 0, what + ": the classic HUD is the same, quad for quad: " + PtrHex(a.first) + " against " + PtrHex(b.first));
+        CHECK_MSG(a.second == b.second && !a.second.empty(), what + ": and so is the claim over the view");
+        Hud::Rect left;
+        CHECK_MSG(withTuning.layer.ControlRect(PtrControl::Left, left) && SameRect(left, Controls::ClassicWalkFrame(withTuning.layer.HudRules(), Controls::Id::Left, withTuning.layer.ViewPx(), withTuning.layer.LevelAgeMs()).rect, 1e-9),
+                  what + ": the left pad is the classic one, flush in its corner");
+    }
+    // Chosen in Options, the tuning plays at the next level, and the file keeps it.
+    OsRun run(OsPaths(savesTuned, OsDir("classic-switch-prisms")), what + ": the switch");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsStyle() == Style::Classic, what + ": a classic start");
+    if (!OsOpenOptions(run, what)) return;
+    OsClick(run, OsTileCentre(layer, Style::Modern));
+    CHECK_MSG(layer.ControlsTuningLine() == "controls: tuning from controls.json: size 1.4, opacity 0.2, walk_left moved (40, -20)", what + ": the line names the kept tuning: '" + layer.ControlsTuningLine() + "'");
+    CHECK_MSG(OsSavedFile(savesTuned) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.4,\"opacity\":0.2,\"move\":{\"walk_left\":[40,-20]}}}",
+              what + ": the choice is saved with the tuning beside it: " + OsSavedFile(savesTuned));
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main, what + ": back to the main menu");
+    MagicPortalsLayer::MenuButton button;
+    button.kind = MagicPortalsLayer::MenuButton::Kind::Level;
+    button.world = 0;
+    button.level = layer.ChapterTable().Find("level0");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+    PtrRest(layer, registry, 60);
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern && layer.ControlsRectsLine().rfind("controls: modern, walk_left", 0) == 0, what + ": the level plays modern: " + layer.ControlsRectsLine());
+    const double movedBox[4] = {55.6444, 156.6400, 119.3600, 220.3556};
+    Hud::Rect left;
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && MdRectIs(left, movedBox, 1e-3), what + ": and the left arrow stands in the tuned box, size 1.4 moved (40, -20): " + MdShow(left));
+    // (The line's x is 156.5 px - 55.6444 units; its y values are decimal ties at one place, 440.55 and 619.75 px, which a float's last bit would decide, so only the x is held.)
+    CHECK_MSG(layer.ControlsRectsLine().find("walk_left (156.5,") != std::string::npos && layer.ControlsRectsLine().find("-(335.7,") != std::string::npos,
+              what + ": which the INFO line says: " + layer.ControlsRectsLine());
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    const int at = MdQuadOf(frame, layer.ModernImage(PtrControl::Left));
+    CHECK_MSG(at >= 0 && NearD(MdPadAlpha(frame, layer, PtrControl::Left), std::floor(static_cast<double>(Controls::ClassicWalkAlphaByte(layer.HudRules(), layer.LevelAgeMs(), true)) * 0.2 + 0.5) / 255.0, 1e-6),
+              what + ": and drawn at a fifth of the byte");
+}
+
+// A plain launch of the game is a player's run whose style is the shipped default, classic: no flag, none of the rig's three, so the feature EXISTS (the policy is
+// available) and nothing forces a style. Every CTL-2 pin has so far run under a hand-built `forced == Classic` policy (above) or a bare layer's; this runs the same
+// pins - the held touches, the claim map, the HUD of all 128 levels against the goldens - under the policy a plain launch resolves (planning step 185's LEFT FOR LATER).
+void AnUnforcedClassicRunPlaysTheClassicClaimsAndHud() {
+    if (!OriginalArtIsThere("AnUnforcedClassicRunPlaysTheClassicClaimsAndHud")) return;
+    Controls::Policy policy = Controls::ResolvePolicy(std::nullopt, false, false, false);
+    CHECK_MSG(policy.valid && policy.available && !policy.forced && policy.saveAllowed, "a plain launch resolves to a feature that exists, forces no style, and may save");
+    {
+        const MdClassicWithEverythingSet set(policy);
+        MdRun run(TestPaths(), "level30", "AnUnforcedClassicRunPlaysTheClassicClaimsAndHud", glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+        if (!run.ok) return;
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ControlsPolicy().available && !layer.ControlsPolicy().forced && layer.ModernReady(), "the layer is given that policy and reads the table: " + MdDescribe(layer));
+        CHECK_MSG(layer.ControlsLine() == "controls: classic (the shipped default)", "and plays the shipped default, classic: '" + layer.ControlsLine() + "'");
+        CHECK_MSG(layer.OptionsAvailable() && layer.ControlsRectsLine().empty() && layer.ControlsTuningLine().empty(), "with the Options entry, no modern rectangles and no tuning");
+    }
+    const MdClassicWithEverythingSet set(policy);
+    RunTheClassicPins();
 }
 
 void runModernTests() {
@@ -29108,7 +29700,7 @@ void runModernTests() {
     AGeneratedFileNameThatClimbsOutIsRefusedAtLoad();
     TheGeneratedFilesAreWrittenOnlyWhenTheyDiffer();
     TheThreeLooksAreTheDesignsPairTops();
-    TheFlagsKeysAreHeldNotAppliedBeforeCTL10();
+    TheFlagsSizeOpacityAndMovesArePlayed();
     TheModernRectanglesLineNamesTheWindowItIsIn();
     TheClassicClaimsVariantClaimsTheClassicShapesUnderTheModernDraw();
     AHeldTouchOnTheModernRightArrowWalksLikeAHeldKey();
@@ -29157,6 +29749,7 @@ void runModernTests() {
     AnOptionsBlockThatWillNotReadMakesModernUnavailableAndHidesTheEntry();
     TheStyleChosenInOptionsIsPlayedAtTheNextLevel();
     TheNumberOfTapsFromALevelToOptionsIsRecorded();
+    TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint();
     TheOptionsScreenIsDrawn();
     // The gaps step 183 left, and the folds of step 184 (planning step 185).
     AHeldArrowThroughADoorIsNotSwallowedAndAnEndScreensButtonIsAtTheNextLevel();
@@ -29172,6 +29765,16 @@ void runModernTests() {
     TheAtomicReplaceHoldsWhileAnotherHandleHasTheTargetOpen();
     AnEmptyArtDirIsNowhereToLookEvenWhereTheWorkingDirectoryHoldsAPicture();
     AClassicLayerIgnoresEverythingModern();
+
+    // The tuning, kept and applied (planning step 187).
+    ASizeOfOnePointFourDrawsTheClassicSizeOfArrow();
+    OpacityMultipliesTheByteAndCapsAtOne();
+    AMovedControlIsClaimedWhereItIsDrawn();
+    ASavedMoveThatNoLongerFitsIsPulledInAtLayoutAndLeftAsStored();
+    AFlagTuningReplacesNeverMergesAndWritesNothing();
+    ThePlayersKeptTuningIsPlayedFromTheFileAndNothingIsWritten();
+    ATunedFileIsIgnoredByAClassicRunAndPlayedAfterTheSwitch();
+    AnUnforcedClassicRunPlaysTheClassicClaimsAndHud();
 }
 
 void runTests() {

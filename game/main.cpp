@@ -43,6 +43,9 @@ namespace {
 // directory.
 constexpr const char* kLogFile = "magicportals.log";
 constexpr const char* kPreviousLogFile = "magicportals.prev.log";
+// The modern controls' table, in the port's data directory (the layer reads the same file): main reads it only to refuse a flag whose size or
+// opacity is off its grid.
+constexpr const char* kControlsDataFile = "/controls.json";
 
 // The last run's log moved to `previous`, replacing the one before. Renamed
 // first; copied where the rename is refused, as Windows refuses it while
@@ -476,11 +479,15 @@ int main(int argc, char** argv) {
                   << "                    docs/planning/2026-10-15-modern-controls.md). Modern lays out,\n"
                   << "                    draws and claims the five inset controls (pictures: Magic Rampage's\n"
                   << "                    own where --padart's folder holds them, then the original's own\n"
-                  << "                    corner sprites, then ones the game draws); of its keys only\n"
-                  << "                    preset= and arrows= are applied so far (arrows=grouped puts both\n"
-                  << "                    walk arrows at the bottom left, as the first layout did; the\n"
-                  << "                    default is one arrow in each bottom corner; neither key is ever\n"
-                  << "                    kept): size, opacity and the moves are read, checked and held.\n"
+                  << "                    corner sprites, then ones the game draws). Its keys: preset= and\n"
+                  << "                    arrows= (arrows=grouped puts both walk arrows at the bottom\n"
+                  << "                    left, as the first layout did; the default is one arrow in each\n"
+                  << "                    bottom corner) choose the look, and are never kept; size= (0.4 to\n"
+                  << "                    1.4 by 0.1), opacity= (0.2 to 1.8 by 0.2) and a move as\n"
+                  << "                    walk_left=dx:dy (design units from the control's own corner, in\n"
+                  << "                    screen direction, never scaled by size) tune it: they REPLACE the\n"
+                  << "                    tuning a player kept, never merge with it, and a value off its\n"
+                  << "                    grid is refused.\n"
                   << "                    A player's run (none of the developer's flags\n"
                   << "                    below) has an Options button in the main menu's top-right corner,\n"
                   << "                    where the choice is made; it is kept in controls.json beside the\n"
@@ -569,6 +576,19 @@ int main(int argc, char** argv) {
         // After the move, which replaces the whole struct: the command line has no word for the folder in
         // ResolvePolicy, so it is set here. Classic never reads it.
         paths.controls.artDir = padArtDir;
+        // A size or an opacity must sit on the grids controls.json names (planning step 187, CTL-10): a capture that asked for size=1.45 would
+        // otherwise play the base look and say so only in a log, so the flag is refused here, with the usage, like any other bad item. A table
+        // that will not read is not this check's business: the layer says why modern is unavailable, and a classic run never meets it.
+        if (paths.controls.available && paths.controls.flag.Tunes()) {
+            MagicPortals::Controls::Rules rules;
+            MagicPortals::Controls::Tuning tuning;
+            std::string why;
+            if (MagicPortals::Controls::LoadRules(paths.portData + kControlsDataFile, rules, why) &&
+                !MagicPortals::Controls::Tuning::FromFlag(paths.controls.flag, rules, tuning, why)) {
+                std::cerr << "--controls: " << why << "; " << MagicPortals::Controls::FlagUsage() << "\n";
+                return EXIT_FAILURE;
+            }
+        }
     }
 
     // The diagnostics to a FILE as well as the console.

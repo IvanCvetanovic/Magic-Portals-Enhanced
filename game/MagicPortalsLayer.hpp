@@ -172,7 +172,7 @@ public:
         // what no level places (Art.hpp).
         std::string original = MAGICPORTALS_ORIGINAL_DIR;
 
-        // WHERE THE PLAYER'S MEDALS ARE KEPT, and empty by default - which
+        // WHERE THE PLAYER'S MEDALS ARE KEPT (and the rest of what a player keeps: audio.json, achievements.json, controls.json), empty by default - which
         // means this layer keeps no save on the filesystem.
         //
         // Injected rather than resolved here, which is WolfBrigadeLayer's
@@ -1255,16 +1255,22 @@ public:
     // whenever the policy says the feature does not exist, and when either would not read.
     bool ModernReady() const { return m_modernReady; }
     const Controls::Rules& ControlsRules() const { return m_controlsRules; }
-    // The flag's tuning as it was read onto those rules: its size, opacity and moves are held here and
-    // are NOT applied before CTL-10. What the layout applies is ControlsApplied() below.
+    // The flag's tuning as it was read onto those rules (the default tuning where there was no flag, or none of its keys). What the
+    // layout is laid out with is ControlsApplied() below, which is this tuning only when the flag carried a size, an opacity or a move.
     const Controls::Tuning& ControlsTuning() const { return m_controlsTuning; }
-    // The tuning the modern layout is laid out with: the LOOK (`preset=`) and the ARRANGEMENT of the walk arrows
-    // (`arrows=`, planning step 186) and nothing else, so the flag's size, opacity and moves are inert until CTL-10
-    // decides how they are applied.
+    // The tuning the modern layout is laid out with, drawn with and claimed by (planning step 187, CTL-10): the flag's tuning when the flag
+    // carries a size, an opacity or a move (it REPLACES what a player kept, never merges); else what the player kept - a test's seam
+    // (`Paths::controls.tuning`) or controls.json's - with the flag's look (`preset=`) and arrangement (`arrows=`, planning step 186), which are a
+    // capture's and never kept. The default tuning where nothing is tuned. A classic run never reads it, though it is set for a run that
+    // may switch to Modern in Options.
     const Controls::Tuning& ControlsApplied() const { return m_controlsApplied; }
-    // The INFO line the run logged once at attach, or empty where it logs none: a developer's or a
-    // bare run is silent, so its log is the log it always was. And the one ERROR line, or empty:
-    // why controls.json or the flag's tuning would not read.
+    // The INFO line a modern run says once about a tuning that is not the base, `controls: tuning from the flag: size 1.4, opacity 1.8,
+    // walk_left moved (10, 10)` (the source is the flag, controls.json or the test seam), or empty where the tuning is the base. Said when the
+    // run first plays modern: at attach, or at the first switch to Modern in Options.
+    const std::string& ControlsTuningLine() const { return m_controlsTuningLine; }
+    // The INFO line the run says about WHICH style it plays, at attach and again when a tile is tapped in Options (so it is the line of the
+    // style in force, not only the one logged once), or empty where it says none: a developer's or a bare run is silent, so its log is the log
+    // it always was. And the one ERROR line, or empty: why controls.json or the flag's tuning would not read.
     const std::string& ControlsLine() const { return m_controlsLine; }
     const std::string& ControlsError() const { return m_controlsError; }
     // The INFO line the modern controls log once at each level's start: `controls: modern, ` then each
@@ -1275,7 +1281,7 @@ public:
     // Whether the touch now held is being swallowed (see m_swallowUntilUp): a test's precondition for "it did not walk because it was
     // swallowed", not because nothing claimed it.
     bool TouchSwallowed() const { return m_swallowUntilUp; }
-    // The picture a modern control is drawn with, resolved once at attach through the four tiers (planning step 184): Magic Rampage's file,
+    // The picture a modern control is drawn with, resolved once per run through the four tiers (planning step 184): Magic Rampage's file,
     // the original's own corner sprite, the glyph the game draws (written into Paths::prisms), or empty where there is none - and the
     // control is a flat quad. Empty for a classic run.
     const std::string& ModernImage(Control control) const { return m_modernArt[static_cast<std::size_t>(control)].image; }
@@ -3350,8 +3356,12 @@ private:
     void saveControls();
     Controls::Rules m_controlsRules;
     Controls::Tuning m_controlsTuning;
-    // The part of the tuning the layout applies until CTL-10: the look and the arrows' arrangement, nothing else (see ControlsApplied).
+    // The tuning the layout is laid out with (see ControlsApplied): the flag's, or the player's kept one with the flag's look and arrangement.
     Controls::Tuning m_controlsApplied;
+    // The INFO line about a tuning that is not the base, and whether it has been said yet (sayControlsTuning).
+    std::string m_controlsTuningLine;
+    bool m_controlsTuningSaid{false};
+    void sayControlsTuning();
     Controls::Style m_controlsStyle{Controls::Style::Classic};
     bool m_modernReady{false};
     std::string m_controlsLine;
@@ -3368,8 +3378,9 @@ private:
     // The test variant that claims with the classic rules under the modern layout and draw: the hit shapes,
     // the camera's / lift's / hand's `onPad`, and the corner buttons acting on the press (Paths::controls).
     bool claimsClassic() const { return m_paths.controls.classicClaims; }
-    // Each modern control's picture, resolved ONCE per run at attach and never touched by a level's load (unloadControls does not clear
-    // it): the file, the tier it came from and that tier's margin. By Id. A control with no file is a flat quad (tier four).
+    // Each modern control's picture, resolved ONCE per run and never touched by a level's load (unloadControls does not clear it): at attach
+    // for a run that starts modern, else at the first switch to Modern in Options (chooseControlsStyle). The file, the tier it came from and
+    // that tier's margin. By Id. A control with no file is a flat quad (tier four).
     struct ModernArt {
         std::string image;
         Controls::ArtSource source;

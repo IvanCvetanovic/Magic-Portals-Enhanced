@@ -3363,6 +3363,21 @@ void ArtHalfDressedNeedsAMagicRampagePictureInAMix() {
 
 // ---- the saved choice (planning step 185) ----------------------------------------------------------------------------------------------------------
 
+// The store cases' scratch goes when each case ends (and any that a run which crashed left goes before it starts): there were nine directories, each
+// holding a controls.json, left in %TEMP%\supersonic-test-mp-controls\store by every run of this suite (planning step 185's LEFT FOR LATER).
+struct StoreClean {
+    static void Run() {
+        std::error_code ec;
+        const std::filesystem::path root = std::filesystem::temp_directory_path() / "supersonic-test-mp-controls";
+        std::filesystem::remove_all(root / "store", ec);
+        std::filesystem::remove(root, ec); // only if nothing else of the suite is in it
+    }
+    StoreClean() { Run(); }
+    ~StoreClean() { Run(); }
+    StoreClean(const StoreClean&) = delete;
+    StoreClean& operator=(const StoreClean&) = delete;
+};
+
 // A fresh directory under the suite's scratch for each case, emptied first.
 std::filesystem::path StoreDir(const char* name) {
     const std::filesystem::path dir = ScratchDir() / "store" / name;
@@ -3394,6 +3409,7 @@ std::vector<std::string> StoreEntries(const std::filesystem::path& dir) {
 }
 
 void ControlsStoreRoundTrips() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("round");
     const std::filesystem::path file = dir / Controls::kStoreFileName;
@@ -3452,6 +3468,7 @@ void ControlsStoreRoundTrips() {
 }
 
 void TheFileHoldsDeltasOnly() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("deltas");
     const std::filesystem::path file = dir / Controls::kStoreFileName;
@@ -3486,6 +3503,7 @@ void TheFileHoldsDeltasOnly() {
 }
 
 void AMissingFileIsTheShippedDefault() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("missing");
     Controls::Store store;
@@ -3507,6 +3525,7 @@ void AMissingFileIsTheShippedDefault() {
 }
 
 void AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("unreadable");
     const std::filesystem::path file = dir / Controls::kStoreFileName;
@@ -3537,6 +3556,7 @@ void AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave() {
 }
 
 void AMemoryOnlyStoreWritesNothing() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("memory");
     std::string error;
@@ -3555,6 +3575,7 @@ void AMemoryOnlyStoreWritesNothing() {
 }
 
 void ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("layout");
     const std::filesystem::path file = dir / Controls::kStoreFileName;
@@ -3586,23 +3607,31 @@ void ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity() {
 }
 
 void ASaveThatCannotBeMadeSaysSoAndLeavesNothingHalfWritten() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("blocked");
     std::string error;
     Controls::Store store;
     CHECK(store.Open(dir.string(), rules, error));
     store.SetMode(Controls::Style::Modern);
-    // The temporary's own name taken by a directory: the write cannot open it.
+    // The name the file is to have taken by a directory that holds something: the temporary is written, the rename onto it is refused, and the save says
+    // so, naming the file, and leaves no temporary behind. (The temporary has a name of its own for every save, so the way to a failure that
+    // planning step 185 had - the temporary's name taken - is gone; this is the one that remains.)
     std::error_code ec;
-    std::filesystem::create_directories(dir / "controls.json.tmp", ec);
-    CHECK_MSG(!store.Save(error) && error.find("controls.json") != std::string::npos, "a save that cannot open its temporary says so, naming it: " + error);
-    CHECK_MSG(!std::filesystem::exists(dir / Controls::kStoreFileName), "and wrote no controls.json");
-    std::filesystem::remove_all(dir / "controls.json.tmp", ec);
-    CHECK_MSG(store.Save(error) && std::filesystem::exists(dir / Controls::kStoreFileName), "the next save, with the way clear, writes (a failure is not remembered as a write): " + error);
+    std::filesystem::create_directories(dir / Controls::kStoreFileName, ec);
+    StoreWrite(dir / Controls::kStoreFileName / "keep.txt", "kept");
+    CHECK_MSG(!store.Save(error) && error.find("controls.json") != std::string::npos, "a save that cannot be put in place says so, naming it: " + error);
+    CHECK_MSG(std::filesystem::is_directory(dir / Controls::kStoreFileName) && StoreRead(dir / Controls::kStoreFileName / "keep.txt") == "kept",
+              "and what stood in its way is where it was, whole");
+    CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "and no temporary is left beside it");
+    std::filesystem::remove_all(dir / Controls::kStoreFileName, ec);
+    CHECK_MSG(store.Save(error) && std::filesystem::is_regular_file(dir / Controls::kStoreFileName), "the next save, with the way clear, writes (a failure is not remembered as a write): " + error);
+    CHECK_MSG(StoreRead(dir / Controls::kStoreFileName) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}", "the bytes it holds: " + StoreRead(dir / Controls::kStoreFileName));
 }
 
 // The other stores are not this one's business: audio.json is Switches::Store's, and a save of either leaves the other's bytes alone.
 void TheSwitchesStoreIsNotTouched() {
+    const StoreClean clean;
     const Controls::Rules rules = LoadModern();
     const std::filesystem::path dir = StoreDir("switches");
     std::string error;
@@ -3628,6 +3657,270 @@ void TheSwitchesStoreIsNotTouched() {
     CHECK_MSG(StoreRead(dir / Controls::kStoreFileName) == controls, "and a switch leaves controls.json's");
     // Neither reads the other's: audio.json holds no controls key, controls.json no audio one.
     CHECK_MSG(audio.find("controls") == std::string::npos && controls.find("audio") == std::string::npos, "no key of one is in the other");
+}
+
+// ---- the tuning, kept (planning step 187, CTL-10) ---------------------------------------------------------------------------------------------------
+
+// The tuning a player keeps goes into the file as deltas on one line, and reads back as it was. Every field is off the default here, the moves are in
+// claim order with a fractional one, one at each bound of the move, and the look and the arrangement ride on the tuning handed in but are NOT kept.
+void TheTuningRoundTripsThroughTheFile() {
+    const StoreClean clean;
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("tuning");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    Controls::Store store;
+    CHECK(store.Open(dir.string(), rules, error));
+
+    Controls::Tuning kept;
+    kept.sizeSteps = 14;
+    kept.opacitySteps = 9;
+    kept.move[0] = glm::dvec2(2.0, -3.5);
+    kept.move[1] = glm::dvec2(-40.0, 20.5);
+    kept.move[2] = glm::dvec2(0.1, -0.1);
+    kept.move[3] = glm::dvec2(-1024.0, 1024.0);
+    kept.move[4] = glm::dvec2(300.0, -0.4);
+    kept.preset = Controls::Preset::Mr;           // a capture's look: not a player's, never kept
+    kept.arrows = Controls::Arrows::Grouped;      // a capture's arrangement: likewise
+    store.SetTuning(kept);
+    CHECK_MSG(!store.SavedTuning().preset && !store.SavedTuning().arrows, "the look and the arrangement are not held by the store");
+    CHECK_MSG(store.SavedTuning().sizeSteps == std::optional<int>(14) && store.SavedTuning().opacitySteps == std::optional<int>(9), "the size 1.4 and the opacity 1.8 are held");
+    CHECK_MSG(!std::filesystem::exists(file), "setting writes nothing");
+    store.SetMode(Controls::Style::Modern);
+    CHECK_MSG(store.Save(error), "saved: " + error);
+    const std::string want =
+        "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.4,\"opacity\":1.8,\"move\":{\"walk_left\":[2,-3.5],\"walk_right\":[-40,20.5],"
+        "\"restart\":[0.1,-0.1],\"pause\":[-1024,1024],\"clear_portals\":[300,-0.4]}}}";
+    CHECK_MSG(StoreRead(file) == want, "the file is one line, the deltas in claim order: " + StoreRead(file));
+    CHECK_MSG(StoreRead(file).find("preset") == std::string::npos && StoreRead(file).find("arrows") == std::string::npos, "and holds no look and no arrangement");
+    CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "and nothing beside it");
+
+    Controls::Store again;
+    CHECK_MSG(again.Open(dir.string(), rules, error) && again.FromFile(), "it opens again: " + error);
+    CHECK_MSG(SameTuning(again.SavedTuning(), store.SavedTuning()), "and the tuning is the one that was kept, field for field");
+    CHECK_MSG(again.SavedTuning().move[3] == glm::dvec2(-1024.0, 1024.0) && again.SavedTuning().move[4] == glm::dvec2(300.0, -0.4), "the moves at the bound and the fractional one are exact");
+    CHECK_MSG(Near(again.SavedTuning().Size(rules), 1.4, 1e-12) && Near(again.SavedTuning().Opacity(rules), 1.8, 1e-12), "the size and the opacity in force are 1.4 and 1.8");
+    CHECK_MSG(again.Text() == want, "and Text says the same bytes again");
+
+    // Moved back to the defaults the keys go: the file is the bare choice again, so a later change of the shipped default reaches this player.
+    again.SetTuning(Controls::Tuning{});
+    CHECK(again.Save(error));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}", "set back to the default, the keys are gone: " + StoreRead(file));
+
+    // A number that is not a number is never written: a NaN or an infinity is no move (0), a finite one past the bound is held at it.
+    Controls::Tuning odd;
+    odd.move[1] = glm::dvec2(std::numeric_limits<double>::quiet_NaN(), 5.0);
+    odd.move[2] = glm::dvec2(5000.0, -5000.0);
+    odd.move[3] = glm::dvec2(std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity());
+    again.SetTuning(odd);
+    CHECK(again.Save(error));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"move\":{\"walk_right\":[0,5],\"restart\":[1024,-1024]}}}",
+              "NaN and infinity are 0, 5000 is the bound 1024, and no 'nan' or 'inf' is written: " + StoreRead(file));
+
+    // A memory-only store keeps the tuning for the run and writes nothing, as it does the mode.
+    Controls::Store memory;
+    CHECK(memory.Open("", rules, error));
+    memory.SetTuning(kept);
+    CHECK_MSG(memory.SavedTuning().sizeSteps == std::optional<int>(14) && memory.Save(error) && !memory.Persists(), "a memory-only store holds it and saves nothing");
+    CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "and wrote no file anywhere it was pointed");
+}
+
+// Nothing is written for nothing: a size and an opacity that equal the default, and a move that snaps to zero, are no keys - on a store that was
+// handed them and on one that read them from a file - and a player who never chose has no mode either.
+void TheDefaultTuningWritesNoMoveAndNoSurprise() {
+    const StoreClean clean;
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("defaults_written");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    Controls::Store store;
+    CHECK(store.Open(dir.string(), rules, error));
+    CHECK_MSG(store.Text() == "{\"version\":1,\"controls\":{\"layout\":2}}", "a store nobody touched: " + store.Text());
+    store.SetTuning(Controls::Tuning{});
+    CHECK_MSG(store.Text() == "{\"version\":1,\"controls\":{\"layout\":2}}", "the default tuning adds nothing: " + store.Text());
+
+    Controls::Tuning spelt;
+    spelt.sizeSteps = 7;      // the look's own 0.7
+    spelt.opacitySteps = 5;   // the default 1.0
+    for (glm::dvec2& m : spelt.move) m = glm::dvec2(0.04, -0.03); // under half a tenth: nothing
+    store.SetTuning(spelt);
+    store.SetMode(Controls::Style::Modern);
+    CHECK_MSG(store.Text() == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}", "the default spelt out in full is not written: " + store.Text());
+    CHECK_MSG(!store.SavedTuning().sizeSteps && !store.SavedTuning().opacitySteps && store.SavedTuning().IsDefault(rules), "and is not held either");
+    CHECK(store.Save(error));
+    CHECK_MSG(StoreRead(file).find("move") == std::string::npos && StoreRead(file).find("size") == std::string::npos && StoreRead(file).find("opacity") == std::string::npos,
+              "no move, no size, no opacity in the file: " + StoreRead(file));
+
+    // The key of ONE field is the only key: a size alone, an opacity alone, one move alone.
+    const std::array<std::pair<Controls::Tuning, const char*>, 3> single = {{
+        {[] { Controls::Tuning t; t.sizeSteps = 5; return t; }(), "{\"version\":1,\"controls\":{\"layout\":2,\"size\":0.5}}"},
+        {[] { Controls::Tuning t; t.opacitySteps = 1; return t; }(), "{\"version\":1,\"controls\":{\"layout\":2,\"opacity\":0.2}}"},
+        {[] { Controls::Tuning t; t.move[4] = glm::dvec2(0.0, 0.1); return t; }(), "{\"version\":1,\"controls\":{\"layout\":2,\"move\":{\"clear_portals\":[0,0.1]}}}"},
+    }};
+    for (const auto& [tuning, text] : single) {
+        Controls::Store one;
+        CHECK(one.Open(StoreDir("defaults_single").string(), rules, error));
+        one.SetTuning(tuning);
+        CHECK_MSG(one.Text() == text, std::string("one field, one key: ") + one.Text());
+    }
+}
+
+// Design 2.4: only what differs from the data's default is written, so a default that changes later reaches a player who never moved a slider. A player who did
+// keeps what they chose.
+void ADefaultThatChangesReachesAPlayerWhoNeverMovedASlider() {
+    const StoreClean clean;
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("later_default");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    // This release's: the player chose Modern and never touched a slider, or moved the size to the default and back. No key.
+    Controls::Store player;
+    CHECK(player.Open(dir.string(), rules, error));
+    player.SetMode(Controls::Style::Modern);
+    Controls::Tuning backAtTheDefault;
+    backAtTheDefault.sizeSteps = rules.presets[0].sizeSteps;
+    player.SetTuning(backAtTheDefault);
+    CHECK(player.Save(error));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}", "the file of a player who never moved a slider has no size: " + StoreRead(file));
+    CHECK_MSG(Near(player.SavedTuning().Size(rules), 0.7, 1e-12) && Near(player.SavedTuning().Opacity(rules), 1.0, 1e-12), "this release plays 0.7 and 1.0");
+
+    // A later release changes the shipped size (0.7 to 0.9) and opacity (1.0 to 0.8): the same file now plays the new defaults.
+    Controls::Rules later = rules;
+    later.presets[0].sizeSteps = 9;
+    later.opacityDefaultSteps = 4;
+    Controls::Store next;
+    CHECK(next.Open(dir.string(), later, error));
+    CHECK_MSG(!next.SavedTuning().sizeSteps && !next.SavedTuning().opacitySteps, "the file still says nothing about either");
+    CHECK_MSG(Near(next.SavedTuning().Size(later), 0.9, 1e-12) && Near(next.SavedTuning().Opacity(later), 0.8, 1e-12),
+              "and the new defaults reach this player: " + Num(next.SavedTuning().Size(later)) + ", " + Num(next.SavedTuning().Opacity(later)));
+    CHECK_MSG(next.SavedTuning().IsDefault(later), "who is still on the default");
+
+    // A player who chose a size and an opacity keeps them whatever the default becomes.
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6}}");
+    Controls::Store chose;
+    CHECK(chose.Open(dir.string(), later, error));
+    CHECK_MSG(Near(chose.SavedTuning().Size(later), 1.2, 1e-12) && Near(chose.SavedTuning().Opacity(later), 0.6, 1e-12), "a player who chose 1.2 and 0.6 keeps them");
+    CHECK_MSG(!chose.SavedTuning().IsDefault(later), "and is no longer on the default");
+    // A player who chose exactly the NEW default's value under the old release is a player on the old default: the file is read against the rules it is opened
+    // with, so 0.9 under this release's rules is a size they chose, and stays 0.9 when the default is 0.9 and when it moves again.
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"layout\":2,\"size\":0.9}}");
+    Controls::Store nine;
+    CHECK(nine.Open(dir.string(), rules, error));
+    CHECK_MSG(Near(nine.SavedTuning().Size(rules), 0.9, 1e-12), "a size of 0.9 chosen against this release's 0.7 is 0.9");
+    Controls::Store nineLater;
+    CHECK(nineLater.Open(dir.string(), later, error));
+    CHECK_MSG(!nineLater.SavedTuning().sizeSteps && Near(nineLater.SavedTuning().Size(later), 0.9, 1e-12), "and is the later default when that is 0.9 too (a choice equal to the default is none)");
+}
+
+// A file with the look or the arrangement in it - a hand edit, a future version - is read without them: they are a capture's, never a player's, so a saved
+// file cannot strand a player on a look or an arrangement (planning step 186's hygiene item 2).
+void AFileWithStrayLookKeysIsReadWithoutThem() {
+    const StoreClean clean;
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("stray");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    StoreWrite(file, "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"preset\":\"mr\",\"arrows\":\"grouped\",\"size\":1.2,\"opacity\":0.6}}");
+    Controls::Store store;
+    CHECK_MSG(store.Open(dir.string(), rules, error) && store.FromFile(), "opens: " + error);
+    CHECK_MSG(!store.SavedTuning().preset && !store.SavedTuning().arrows, "neither key is read onto the tuning");
+    CHECK_MSG(store.SavedTuning().PresetIn(rules) == rules.defaultPreset && store.SavedTuning().ArrowsIn(rules) == rules.defaultArrows, "the look and the arrangement in force are the data's");
+    CHECK_MSG(Near(store.SavedTuning().Size(rules), 1.2, 1e-12) && Near(store.SavedTuning().Opacity(rules), 0.6, 1e-12), "while the size and the opacity beside them are kept");
+    store.SetMode(Controls::Style::Classic);
+    CHECK(store.Save(error));
+    CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"size\":1.2,\"opacity\":0.6}}", "and the next save does not write them back: " + StoreRead(file));
+    // The same through Tuning::ReadFrom, the reader the store uses.
+    const Controls::Tuning read = Controls::Tuning::ReadFrom(ParseText("{\"preset\":\"balanced\",\"arrows\":\"split\",\"size\":0.5}"), rules);
+    CHECK_MSG(!read.preset && !read.arrows && Near(read.Size(rules), 0.5, 1e-12), "ReadFrom ignores them too");
+}
+
+// The flag's keys that TUNE - a size, an opacity, a move - replace what a player kept; the look and the arrangement do not (the layer's rule, planning step 187).
+void TheFlagTunesOnlyWithASizeAnOpacityOrAMove() {
+    const std::array<std::pair<const char*, bool>, 12> rows = {{{"", false},
+                                                               {"preset=mr", false},
+                                                               {"arrows=grouped", false},
+                                                               {"preset=balanced,arrows=split", false},
+                                                               {"size=1.2", true},
+                                                               {"opacity=0.6", true},
+                                                               {"walk_left=1:2", true},
+                                                               {"walk_right=0:0", true},
+                                                               {"restart=1:1", true},
+                                                               {"pause=-1:-1", true},
+                                                               {"clear_portals=5:5", true},
+                                                               {"preset=mr,arrows=grouped,size=1.4", true}}};
+    for (const auto& [text, tunes] : rows) {
+        Controls::FlagItems items;
+        std::string error;
+        CHECK_MSG(Controls::Tuning::ParseFlag(text, items, error), std::string("'") + text + "' parses: " + error);
+        CHECK_MSG(items.Tunes() == tunes, std::string("'") + text + "' " + (tunes ? "tunes" : "does not tune"));
+        CHECK_MSG(items.Any() == (std::string(text) != ""), std::string("'") + text + "': Any() is every key, tuning or not");
+    }
+}
+
+// Design 2.4 and the open items of Steps 183 to 186: the replace is one step and the live file is never removed. The scenarios: a leftover temporary of the
+// first version's fixed name that something holds open (where the old code removed the live file and then could not rename: the choice was LOST), a live file
+// another handle holds (the replace is refused or lands whole, never half), two stores saving alternately, and no temporary left on any path.
+// NOT run against the old code (it is not here to run): the first scenario fails there by reading, since its temporary was that very name.
+void ASaveReplacesInOneStepAndNeverRemovesTheLiveFile() {
+    const StoreClean clean;
+    const Controls::Rules rules = LoadModern();
+    const std::filesystem::path dir = StoreDir("replace");
+    const std::filesystem::path file = dir / Controls::kStoreFileName;
+    std::string error;
+    const std::string modern = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2}}";
+    const std::string classic = "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2}}";
+    Controls::Store store;
+    CHECK(store.Open(dir.string(), rules, error));
+    store.SetMode(Controls::Style::Modern);
+    CHECK(store.Save(error) && StoreRead(file) == modern);
+    CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "a save leaves no temporary");
+
+    // 1. The first version's temporary name, held open by another writer: it is not this save's temporary, so it neither blocks the save nor is touched by it.
+    {
+        std::ofstream holder(dir / "controls.json.tmp", std::ios::binary | std::ios::trunc);
+        holder << "HELD";
+        holder.flush();
+        store.SetMode(Controls::Style::Classic);
+        CHECK_MSG(store.Save(error) && error.empty(), "a leftover of the old fixed temporary name, held open, does not stop a save: " + error);
+        CHECK_MSG(std::filesystem::is_regular_file(file) && StoreRead(file) == classic, "and the live file is there and holds the new bytes: " + StoreRead(file));
+        CHECK_MSG(StoreRead(dir / "controls.json.tmp") == "HELD", "while the other writer's file is as it left it");
+    }
+    std::error_code ec;
+    std::filesystem::remove(dir / "controls.json.tmp", ec);
+
+    // 2. The live file held open by another handle (another window's read, a scanner): the rename is refused on Windows and lands whole where it is allowed.
+    {
+        std::ifstream holder(file, std::ios::binary);
+        CHECK_MSG(holder.is_open(), "another handle holds the live file open");
+        store.SetMode(Controls::Style::Modern);
+        const bool saved = store.Save(error);
+        CHECK_MSG(std::filesystem::is_regular_file(file), "the live file is there whether the save was refused or not");
+        const std::string now = StoreRead(file);
+        CHECK_MSG(now == classic || now == modern, "wholly the old bytes or wholly the new, never a mixture: " + now);
+        CHECK_MSG(saved == (now == modern), "and the save says which");
+        if (!saved) CHECK_MSG(error.find("controls.json") != std::string::npos, "a refused save names the file: " + error);
+        CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "no temporary is left beside it on either path");
+        std::printf("  a handle on the live file: the replace was %s on this machine\n", saved ? "allowed (the new bytes landed whole)" : "refused (the old bytes stayed whole)");
+    }
+    // With the handle gone, the next save makes it right (a refusal is not remembered as a write).
+    CHECK_MSG(store.Save(error) && StoreRead(file) == modern, "the handle closed, the next save writes the bytes: " + error);
+
+    // 3. Two stores (two windows) saving alternately: after every save the file is whole and is the saver's bytes, and nothing is left.
+    Controls::Store a;
+    Controls::Store b;
+    CHECK(a.Open(dir.string(), rules, error) && b.Open(dir.string(), rules, error));
+    int whole = 0;
+    for (int round = 0; round < 6; ++round) {
+        const bool even = round % 2 == 0;
+        a.SetMode(even ? Controls::Style::Classic : Controls::Style::Modern);
+        CHECK(a.Save(error));
+        whole += StoreRead(file) == a.Text() ? 1 : 0;
+        b.SetMode(even ? Controls::Style::Modern : Controls::Style::Classic);
+        CHECK(b.Save(error));
+        whole += StoreRead(file) == b.Text() ? 1 : 0;
+    }
+    CHECK_MSG(whole == 12, "twelve alternating saves, each one whole: " + std::to_string(whole));
+    CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "and no temporary was left by any of them");
 }
 
 void runTests() {
@@ -3701,6 +3994,14 @@ void runTests() {
     ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity();
     ASaveThatCannotBeMadeSaysSoAndLeavesNothingHalfWritten();
     TheSwitchesStoreIsNotTouched();
+
+    // The tuning, kept (planning step 187).
+    TheTuningRoundTripsThroughTheFile();
+    TheDefaultTuningWritesNoMoveAndNoSurprise();
+    ADefaultThatChangesReachesAPlayerWhoNeverMovedASlider();
+    AFileWithStrayLookKeysIsReadWithoutThem();
+    TheFlagTunesOnlyWithASizeAnOpacityOrAMove();
+    ASaveReplacesInOneStepAndNeverRemovesTheLiveFile();
 }
 
 } // namespace

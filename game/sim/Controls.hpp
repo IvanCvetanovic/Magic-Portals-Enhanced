@@ -151,7 +151,7 @@ inline constexpr std::array<Preset, kPresetCount> kPresets = {Preset::Uniform, P
 // alternative a capture or a test can ask for (`--controls modern,arrows=grouped`), never saved, so every pin written
 // for the grouped pair is kept and aimed at it.
 enum class Arrows { Split, Grouped };
-inline constexpr std::size_t kArrowsCount = 2;
+inline constexpr std::array<Arrows, 2> kArrangements = {Arrows::Split, Arrows::Grouped};
 
 // What restart, pause and clear-portals act on in the modern style: the press (as the classic style
 // does, a recorded deviation) or the release inside the hit rectangle after a press inside it.
@@ -326,7 +326,7 @@ bool ArtHalfDressed(const ArtSources& sources);
 // The keys a tuning is spelt with, in the flag (`--controls modern,size=1.2`) and in the saved file's `controls` object
 // (`{"size":1.2,...}`): one place, so the parser, the reader and the writer cannot spell one two ways. `kMode`, `kVersion` and
 // `kControls` are the saved file's own members around the tuning (the options step writes `{"version":1,"controls":{"mode":...,
-// "layout":1,...}}`), and `kLayout` is the number of the arrangement the moves were made against. Not the keys of controls.json,
+// "layout":2,...}}`), and `kLayout` is the number of the arrangement the moves were made against. Not the keys of controls.json,
 // which has its own objects of the same names.
 namespace TuningKey {
 inline constexpr const char* kPreset = "preset";
@@ -350,6 +350,10 @@ struct FlagItems {
     std::array<std::optional<glm::dvec2>, 5> move; // by Id
 
     bool Any() const;
+    // A key of the TUNING was given: a size, an opacity or a move. `preset=` and `arrows=` are the look and the arrangement, a capture's
+    // choice of where the controls stand, not something a player kept. A flag that Tunes() REPLACES the tuning a player kept (the layer
+    // lays out with the flag's tuning alone, never a merge); one that does not leaves the kept tuning in force.
+    bool Tunes() const;
 };
 
 // What a player changed from the look in force: a size, an opacity and a move of each control. Kept as
@@ -425,12 +429,14 @@ inline constexpr const char* kStoreFileName = "controls.json";
 
 // The style a player chose in Options, and the tuning they made, kept between runs:
 //
-//   {"version":1,"controls":{"mode":"modern","layout":1}}
+//   {"version":1,"controls":{"mode":"modern","layout":2}}
 //
 // `mode` is written once a player has chosen (and only then: a file of a player who never did has none, so the shipped default
 // reaches them); `layout` is always kLayoutVersion, the arrangement a saved move was made against; and the tuning's own members
-// (size, opacity, move) follow, DELTAS ONLY - Tuning::ToJsonMembers writes nothing that equals the default. CTL-9 reads the tuning
-// and writes it back unchanged; only the mode is edited by it.
+// (size, opacity, move) follow, DELTAS ONLY - Tuning::ToJsonMembers writes nothing that equals the default. A file saved against another
+// layout number keeps its size and opacity and loses its moves (an expected migration); a move that no longer fits the view is pulled in
+// by the layout and stays as it was stored here. CTL-9 edited the mode and wrote the tuning back unchanged; CTL-10 applies the stored
+// tuning (the layer lays out with SavedTuning()) and gives the store its setter, which the adjustment screen uses and the tests exercise.
 //
 // Free of the engine, like Switches::Store, so a test can exercise all of it with a temporary directory and no window.
 class Store {
@@ -446,11 +452,16 @@ public:
 
     // The style the player chose, or none: no file, a file without one, or a file that would not read.
     std::optional<Style> Mode() const { return m_mode; }
-    // What the file held for the tuning (the default where it held none), kept and written back unchanged.
+    // What the file held for the tuning (the default where it held none), as the player kept it: the layer plays it when no flag asks
+    // otherwise, and Save writes it back (deltas only).
     const Tuning& SavedTuning() const { return m_tuning; }
 
     // The choice, in memory. A memory-only store keeps it for the run and writes nothing.
     void SetMode(Style style) { m_mode = style; }
+    // The tuning to keep, in memory: made valid (Clamped) and without the look and the arrangement, which are a capture's and never
+    // saved. A flag's tuning is never handed to it by the layer: the store holds what the player kept, so a choice made in Options while
+    // a capture's flag is in force cannot write the flag's numbers. A memory-only store keeps it for the run and writes nothing.
+    void SetTuning(const Tuning& tuning);
 
     // The bytes Save writes for what the store holds now: one line, no trailing newline.
     std::string Text() const;
@@ -458,6 +469,11 @@ public:
     // Writes controls.json by a temporary and a rename, as Switches::Store::Save does and for its reason (a crash cannot leave half a file
     // where the choice was). Nothing is written when these bytes are the ones this store wrote last: a gesture repeated is one write.
     // A memory-only store writes nothing and succeeds.
+    //
+    // The live file is NEVER removed: the replace is the rename (which replaces in one step on Windows and on POSIX), and where the
+    // rename is refused - another handle holds the file, a filesystem will not rename onto an existing name - Save says so and the file
+    // that was there stays whole, the old bytes, for the next Save to try again. The temporary has a name of its own for every Save, so
+    // two windows saving at once, or a leftover of an earlier run, cannot share one, and it is removed on every failure path.
     bool Save(std::string& error);
 
     // Whether this store has somewhere to write, and whether Open read a file.
@@ -591,7 +607,10 @@ struct Policy {
     Insets testInsets;                // CTL-6 and CTL-7: a test's safe-area insets, in units; none on a desktop
     std::string artDir;               // CTL-8: where Magic Rampage's pictures are looked for; empty: nowhere
     bool withoutOriginalArt = false;  // CTL-8: a test's variant: the original's own corner sprites (the second tier) are not tried
-    std::optional<Tuning> tuning;     // CTL-10: a saved tuning a test injects in place of the store's, which the flag's keys then replace
+    // CTL-10: a kept tuning a test injects IN PLACE OF the store's (the layer plays it as the player's file). A flag that carries a size, an
+    // opacity or a move (FlagItems::Tunes) replaces it; one that carries only `preset=` / `arrows=`, or none, leaves it in force. Classic
+    // never reads it.
+    std::optional<Tuning> tuning;
 };
 
 // The policy of a run from `--controls <classic|modern>[,key=value...]` (absent: nullopt) and the three rig

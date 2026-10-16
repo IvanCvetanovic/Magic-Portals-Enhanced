@@ -79,17 +79,18 @@ constexpr const char* kControlsModernFlag = "controls: modern (--controls modern
 constexpr const char* kControlsClassicDefault = "controls: classic (the shipped default)";
 constexpr const char* kControlsModernDefault = "controls: modern (the shipped default)";
 // A player's run reads what Options kept (planning step 185), and says so: the second launch of a capture that chose Modern in Options
-// is greped for `controls: modern (saved)`. A tile tapped in Options changes the line to say it was chosen there.
+// is grepped for `controls: modern (saved)`. A tile tapped in Options changes the line to say it was chosen there.
 constexpr const char* kControlsClassicSaved = "controls: classic (saved)";
 constexpr const char* kControlsModernSaved = "controls: modern (saved)";
 constexpr const char* kControlsClassicChosen = "controls: classic (chosen in Options)";
 constexpr const char* kControlsModernChosen = "controls: modern (chosen in Options)";
 constexpr const char* kControlsClassicUnavailable = "controls: classic (modern is unavailable: see the error above)";
 constexpr const char* kControlsModernRectsPrefix = "controls: modern, ";
-// What the flag's size, opacity and move keys cost until CTL-10 applies them: said once at attach, so a capture
-// that asked for one does not take its absence for a bug.
-constexpr const char* kControlsKeysHeld =
-    "controls: the flag's size, opacity and move keys are checked and held, not applied before CTL-10";
+// The tuning a modern run plays, said once at attach when it is not the base (planning step 187): whose it is, and what it changes.
+constexpr const char* kControlsTuningPrefix = "controls: tuning from ";
+constexpr const char* kTuningFromFlag = "the flag";
+constexpr const char* kTuningFromFile = "controls.json";
+constexpr const char* kTuningFromSeam = "the test seam";
 
 // Markers - buttons, crystals, the exit, portals - stand in front of the bodies.
 constexpr float kMarkerZ = 0.5f;
@@ -523,6 +524,8 @@ void MagicPortalsLayer::resolveControls() {
     m_controlsStyle = Controls::Style::Classic;
     m_modernReady = false;
     m_controlsLine.clear();
+    m_controlsTuningLine.clear();
+    m_controlsTuningSaid = false;
     m_controlsError.clear();
     m_controlsRectsLine.clear();
     m_controlsRectsPending = false;
@@ -588,13 +591,25 @@ void MagicPortalsLayer::resolveControls() {
     }
     const std::optional<Controls::Style> saved = m_controlsStore.Mode();
     m_controlsStyle = Controls::ResolveStyle(policy, saved, m_controlsRules.defaultMode);
-    // THE LAYOUT APPLIES THE LOOK AND THE ARRANGEMENT AND NOTHING ELSE until CTL-10: the flag's size, opacity and moves are on
-    // m_controlsTuning (read, on the table's grids, held), and the plan applies them there. `preset=` is the key a capture needs
-    // for the owner's comparison of the three looks, and `arrows=` (planning step 186) the one that asks for the grouped pair the
-    // split arrows replaced as the default: both are a capture's or a test's, never saved. A key left out here would be read,
-    // validated and then silently not played, so the arrangement is copied beside the look.
-    m_controlsApplied.preset = m_controlsTuning.preset;
-    m_controlsApplied.arrows = m_controlsTuning.arrows;
+    // THE TUNING THE LAYOUT IS LAID OUT WITH (planning step 187, CTL-10). Whichever style the run starts in, because the Options screen can
+    // switch a classic start to Modern and the level that follows must play the tuning the player kept; classic's own code never reads it.
+    // A flag that carries a size, an opacity or a move REPLACES what the player kept - it does not merge with it - so a capture that asks for
+    // `size=1.2` has the base opacity and no moves whatever the file holds. Without such a key the kept tuning is in force: a test's seam
+    // (`Paths::controls.tuning`, in place of the store's) or what controls.json held. `preset=` and `arrows=` are the look and the arrangement:
+    // a capture's, taken from the flag every time and never kept. The store is never handed any of it - it holds what the player kept, so a choice
+    // made in Options under a flag cannot write the flag's numbers (and a flag's run has a memory-only store in any case).
+    const Controls::FlagItems& flag = policy.flag;
+    const char* tuningFrom = kTuningFromFlag;
+    Controls::Tuning applied;
+    if (flag.Tunes()) {
+        applied = m_controlsTuning;
+    } else {
+        tuningFrom = policy.tuning ? kTuningFromSeam : kTuningFromFile;
+        applied = policy.tuning ? policy.tuning->Clamped(m_controlsRules) : m_controlsStore.SavedTuning();
+        applied.preset = m_controlsTuning.preset;
+        applied.arrows = m_controlsTuning.arrows;
+    }
+    m_controlsApplied = applied.Clamped(m_controlsRules);
     // WHY the style is what it is: the flag when there was one (it forces its style, a hand-built
     // `{available, forced = Classic}` policy included), otherwise the shipped default.
     const bool modern = m_controlsStyle == Controls::Style::Modern;
@@ -606,12 +621,20 @@ void MagicPortalsLayer::resolveControls() {
         m_controlsLine = modern ? kControlsModernDefault : kControlsClassicDefault;
     }
     SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
+    // What differs from the base, in the player's words, so that a capture's log and a player's say which numbers they played. Composed
+    // for every run that can play modern and said when it does: at attach, or at the first switch to Modern in Options.
+    if (!m_controlsApplied.IsDefault(m_controlsRules)) {
+        std::ostringstream tuning;
+        tuning << kControlsTuningPrefix << tuningFrom << ": size " << m_controlsApplied.Size(m_controlsRules) << ", opacity "
+               << m_controlsApplied.Opacity(m_controlsRules);
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            const glm::dvec2 move = m_controlsApplied.move[static_cast<std::size_t>(id)];
+            if (move.x != 0.0 || move.y != 0.0) tuning << ", " << Controls::KeyOf(id) << " moved (" << move.x << ", " << move.y << ")";
+        }
+        m_controlsTuningLine = tuning.str();
+    }
     if (modern) {
-        const Controls::FlagItems& flag = policy.flag;
-        const bool keysHeld = flag.size || flag.opacity ||
-                              std::any_of(flag.move.begin(), flag.move.end(),
-                                          [](const std::optional<glm::dvec2>& move) { return move.has_value(); });
-        if (keysHeld) SUPERSONIC_LOG_INFO("Magic Portals") << kControlsKeysHeld << std::endl;
+        sayControlsTuning();
         // The pictures the five controls are drawn with, once for the run. A run that starts classic has none yet: it resolves them at the
         // first switch to modern in Options (chooseControlsStyle), or never.
         resolveModernImages();
@@ -626,9 +649,17 @@ void MagicPortalsLayer::chooseControlsStyle(Controls::Style style) {
     // switching back and forth costs nothing and says nothing twice. unloadControls is not called - no level is loaded while Options is up,
     // and the pictures belong to the run, not to a level (planning step 184).
     if (style == Controls::Style::Modern && !m_modernArtResolved) resolveModernImages();
+    if (style == Controls::Style::Modern) sayControlsTuning();
     m_controlsLine = style == Controls::Style::Modern ? kControlsModernChosen : kControlsClassicChosen;
     SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
     saveControls();
+}
+
+void MagicPortalsLayer::sayControlsTuning() {
+    // Once for the run, the first time it plays modern: a switch back and forth says nothing twice.
+    if (m_controlsTuningLine.empty() || m_controlsTuningSaid) return;
+    m_controlsTuningSaid = true;
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsTuningLine << std::endl;
 }
 
 void MagicPortalsLayer::saveControls() {
@@ -8662,7 +8693,7 @@ void MagicPortalsLayer::layOutControls() {
     // what differs is where each is, what it claims and the byte it is drawn at - all from sim/Controls.
     if (playsModern()) {
         const Controls::Rules& rules = m_controlsRules;
-        // Only the look of the tuning is applied until CTL-10 (resolveControls).
+        // The tuning in force (resolveControls): the player's kept one, or the flag's.
         const Controls::Tuning& tuning = m_controlsApplied;
         const Controls::Insets insets = ControlsInsets();
         const Controls::Layout layout =

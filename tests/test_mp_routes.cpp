@@ -400,6 +400,7 @@ struct Capture {
     std::vector<Swallowed> swallowed; // when classifying: every touch the modern claim would take, in the order they go down
     Controls::Style style = Controls::Style::Classic;
     bool ready = false;
+    std::optional<Controls::Arrows> arrows; // the arrangement of the walk arrows the layer actually laid out (planning step 187), when it plays modern
 };
 
 // The touches of the plan that go down on `tick`, asked what the modern claim says of each (a tap at its place; a drag at every tick it is held),
@@ -545,6 +546,7 @@ Outcome Play(const Route::Plan& plan, const Options& options, const std::string&
     if (capture != nullptr) {
         capture->style = layer.ControlsStyle();
         capture->ready = layer.ModernReady();
+        if (capture->ready) capture->arrows = layer.ControlsApplied().ArrowsIn(layer.ControlsRules());
         if (classify) Classify(layer, plan, label, layer.LayerTicks() + 1, *capture);
     }
     while (!driver.Finished()) {
@@ -633,7 +635,19 @@ struct CensusTable {
     int classicClaimsIdentical = 0;
     int modernIdenticalToTheEnd = 0;
     int modernDiverged = 0;
+    std::optional<Controls::Arrows> played; // the arrangement the layer laid out, which every run of the census must agree on (planning step 187)
 };
+
+// The arrangement a run played is the layer's own, not the one the flag was asked for: a data file whose default is grouped plays grouped under a flag with no
+// `arrows=` key, and a census that read the answer from the flag would then check the wrong arrangement's lists. Every run agrees with the first and with the flag
+// where the flag named one (N1 for the arrangement).
+void NoteArrangement(const std::string& name, const char* run, const Capture& capture, const Options& options, CensusTable& table) {
+    CHECK_MSG(capture.arrows.has_value(), name + ": the " + run + " run reports the arrangement it played");
+    if (!capture.arrows) return;
+    if (options.arrows) CHECK_MSG(*capture.arrows == *options.arrows, name + ": the " + run + " run lays the arrows out as asked: " + Controls::NameOf(*capture.arrows));
+    if (!table.played) table.played = capture.arrows;
+    CHECK_MSG(*capture.arrows == *table.played, name + ": the " + run + " run plays the arrangement every run plays: " + Controls::NameOf(*capture.arrows));
+}
 
 void CensusRoute(const Route::Plan& plan, const Options& options, const std::string& label, const Capture& reference, const Outcome& referenceOutcome,
                  CensusTable& table) {
@@ -648,6 +662,7 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
     const Outcome classicClaims = Play(plan, Options{}, label, ControlsPaths(ModernFlag(options), true), &claims, true);
     const bool bPlayedModern = claims.style == Controls::Style::Modern && claims.ready;
     CHECK_MSG(bPlayedModern, name + ": the classic-claims variant plays the MODERN layout (N1): style=" + Controls::NameOf(claims.style));
+    NoteArrangement(name, "classic-claims", claims, options, table);
     std::string said;
     const int bDiffers = FirstDifference(reference.records, claims.records, std::max(ticks, claims.records.size()), said);
     CHECK_MSG(bDiffers == 0 && classicClaims.problems.empty() && classicClaims.wonTick == referenceOutcome.wonTick,
@@ -676,6 +691,7 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
     Capture modern;
     const Outcome modernOutcome = Play(plan, Options{}, label, ControlsPaths(ModernFlag(options), false), &modern, false);
     CHECK_MSG(modern.style == Controls::Style::Modern && modern.ready, name + ": the modern run plays the MODERN controls (N1): style=" + Controls::NameOf(modern.style));
+    NoteArrangement(name, "modern", modern, options, table);
     const Swallowed* first = claims.swallowed.empty() ? nullptr : &claims.swallowed.front();
     const std::size_t safe = first != nullptr ? static_cast<std::size_t>(std::max(first->tick - 1, 0)) : std::max(ticks, modern.records.size());
     std::string saidModern;
@@ -777,7 +793,9 @@ void ReportCensus(const Options& options, const CensusTable& table) {
     if (!options.only.empty()) return;
     // The lower bound: what the census proves unavoidable at 16:9 must appear (the walk arrows' levels by an arrow, restart's by restart). The split
     // arrows have no forced level, so for them the list is empty and only restart's is required.
-    const Controls::Arrows played = options.arrows.value_or(Controls::Arrows::Split);
+    // The arrangement the layer PLAYED, which a data file's default may make other than the flag's: read from the runs, so that the lists are the right ones.
+    CHECK_MSG(table.played.has_value(), "the census saw the arrangement the layer played");
+    const Controls::Arrows played = table.played.value_or(options.arrows.value_or(Controls::Arrows::Split));
     const ForcedList forced = ReadForced(played);
     CHECK_MSG(forced.read && !forced.restart.empty() && (played == Controls::Arrows::Split || !forced.walk.empty()),
               std::string("tests/golden/controls_census.json holds the 16:9 lists of the ") + Controls::NameOf(played) + " arrangement");
@@ -792,6 +810,21 @@ void ReportCensus(const Options& options, const CensusTable& table) {
     };
     for (const std::string& label : forced.walk) {
         CHECK_MSG(takenBy(label, {"walk_left", "walk_right"}), label + ": the census's forced list, the walk arrows, appears in the swallowed set");
+    }
+    // The headline of Step 186, ASSERTED (it was only printed): the split arrows take no recorded shot of the 128 routes, and the left arrow takes none in either
+    // arrangement - the grouped pair's touches are all its right arrow's.
+    int byLeft = 0;
+    int byRight = 0;
+    for (const Swallowed& one : table.all) {
+        if (!one.claimed) continue;
+        byLeft += one.control == "walk_left" ? 1 : 0;
+        byRight += one.control == "walk_right" ? 1 : 0;
+    }
+    CHECK_MSG(byLeft == 0, std::string("no recorded touch is taken by walk_left in the ") + Controls::NameOf(played) + " arrangement: " + std::to_string(byLeft));
+    if (played == Controls::Arrows::Split) {
+        CHECK_MSG(byRight == 0, "and none by walk_right: the split arrows cost the 128 recorded winning routes nothing: " + std::to_string(byRight));
+    } else {
+        CHECK_MSG(byRight > 0, "the grouped pair's right arrow takes the touches the split arrangement gave back: " + std::to_string(byRight));
     }
     std::printf("  the census's forced list for the %s walk arrows at 16:9: %zu level(s)\n", Controls::NameOf(played), forced.walk.size());
     for (const std::string& label : forced.restart) {

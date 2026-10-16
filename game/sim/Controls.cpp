@@ -4,9 +4,11 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <random>
 #include <sstream>
 #include <vector>
 
@@ -129,6 +131,12 @@ std::size_t Index(Id id) {
 
 std::size_t Index(Preset preset) {
     return static_cast<std::size_t>(preset);
+}
+
+// Whether a box stands in the RIGHT half of the view: the one test of "which side edge is nearer", which the slide (an arrow comes in
+// from that edge) and the hint (only an arrow in the left half is one the text can be started clear of) both ask.
+bool InRightHalf(const Hud::Rect& box, const glm::dvec2& viewUnits) {
+    return box.Centre().x > viewUnits.x * 0.5;
 }
 
 // A number that is not a NaN or an infinity, so that no comparison below is asked of one.
@@ -496,7 +504,7 @@ const char* NameOf(Arrows arrows) {
 }
 
 std::optional<Arrows> ArrowsOfName(const std::string& name) {
-    for (const Arrows arrows : {Arrows::Split, Arrows::Grouped}) {
+    for (const Arrows arrows : kArrangements) {
         if (name == NameOf(arrows)) return arrows;
     }
     return std::nullopt;
@@ -780,7 +788,11 @@ bool ArtHalfDressed(const ArtSources& sources) {
 // ---- the tuning ------------------------------------------------------------------------------------------
 
 bool FlagItems::Any() const {
-    if (preset || arrows || size || opacity) return true;
+    return preset || arrows || Tunes();
+}
+
+bool FlagItems::Tunes() const {
+    if (size || opacity) return true;
     for (const auto& item : move) {
         if (item) return true;
     }
@@ -1043,6 +1055,14 @@ bool Store::Open(const std::string& directory, const Rules& rules, std::string& 
     return true;
 }
 
+void Store::SetTuning(const Tuning& tuning) {
+    // Only what a player keeps: the look and the arrangement are a capture's and are never written, so they are not held either.
+    Tuning kept = tuning;
+    kept.preset.reset();
+    kept.arrows.reset();
+    m_tuning = kept.Clamped(m_rules);
+}
+
 std::string Store::Text() const {
     std::string text = std::string("{\"") + TuningKey::kVersion + "\":1,\"" + TuningKey::kControls + "\":{";
     if (m_mode) text += std::string("\"") + TuningKey::kMode + "\":\"" + NameOf(*m_mode) + "\",";
@@ -1051,6 +1071,17 @@ std::string Store::Text() const {
     if (!members.empty()) text += "," + members;
     return text + "}}";
 }
+
+namespace {
+
+// A name no other writer - another window, an earlier run - and no earlier Save has used for its half-written copy.
+std::string TempSuffix() {
+    static std::atomic<unsigned> counter{0};
+    std::random_device device;
+    return std::to_string(device()) + "-" + std::to_string(counter.fetch_add(1));
+}
+
+} // namespace
 
 bool Store::Save(std::string& error) {
     error.clear();
@@ -1062,7 +1093,9 @@ bool Store::Save(std::string& error) {
     std::error_code ec;
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
 
-    const std::filesystem::path temp = path.string() + ".tmp";
+    // The temporary is this Save's own: a name every writer shares (the file's name and ".tmp") let one window truncate what another was
+    // about to rename, and a copy held open by a scanner or a second window made the rename fail with the live file already gone.
+    const std::filesystem::path temp = path.string() + "." + TempSuffix() + ".tmp";
     {
         std::ofstream file(temp, std::ios::binary | std::ios::trunc);
         if (!file) {
@@ -1079,15 +1112,11 @@ bool Store::Save(std::string& error) {
         }
     }
 
+    // The replace is the rename, one step: the live file is whole, old or new, at every instant. Where the rename is refused the live file is
+    // left exactly as it was - it is NOT removed to make room, which on a failing second rename was the only copy of the choice - and the
+    // caller is told, so the next Save tries again with the bytes it still holds.
     ec.clear();
     std::filesystem::rename(temp, path, ec);
-    if (ec) {
-        // Some filesystems refuse a rename onto an existing file.
-        ec.clear();
-        std::filesystem::remove(path, ec);
-        ec.clear();
-        std::filesystem::rename(temp, path, ec);
-    }
     if (ec) {
         error = m_path + ": " + ec.message();
         std::error_code ignored;
@@ -1231,7 +1260,7 @@ Layout LayOut(Style style, const Rules& rules, const Hud::Rules& hud, const Tuni
         }
         // Each arrow comes in from the nearer of the view's side edges, the classic pads' own distance and
         // time; the hit rectangle goes with the picture. Which edge is judged where the arrow rests.
-        const bool fromRight = settled.rect.Centre().x > viewUnits.x * 0.5;
+        const bool fromRight = InRightHalf(settled.rect, viewUnits);
         Hud::Rect drawn = settled.rect;
         drawn.min.x += fromRight ? slide : -slide;
         layout.frames[Index(id)] = FollowDrawn(settled, drawn);
@@ -1291,7 +1320,7 @@ double HintLeft(Style style, const Rules& rules, const Layout& layout, const Hin
         // Only an arrow in the LEFT half of the view (the slide's own nearer-edge test) is one the text can be started clear of: an arrow in
         // the right half (split: the bottom-right corner) is crossed by the text, as the classic text crosses its disc, when the free span
         // between the two is narrower than the text - starting further right would only carry the text off the view.
-        if (layout.At(id).rect.Centre().x > viewUnits.x * 0.5) continue;
+        if (InRightHalf(layout.At(id).rect, viewUnits)) continue;
         const Hud::Rect& hit = layout.At(id).hit.rect;
         const glm::dvec2 max = hit.Max();
         if (hit.min.y < row.top + row.height && max.y > row.top) {
