@@ -291,6 +291,8 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, const O
         if (!Positive(unlocked, "outline_thickness_units", u.outlineThicknessUnits, why, at) ||
             !Byte(unlocked, "outline_alpha_byte", u.outlineAlphaByte, why, at) || !Byte(unlocked, "outline_swing_byte", u.outlineSwingByte, why, at) ||
             !Whole(unlocked, "outline_period_ticks", u.outlinePeriodTicks, why, at) || !ReadRgb(unlocked, "outline_rgb", u.outlineRgb, why, at) ||
+            !Positive(unlocked, "held_outline_thickness_units", u.heldOutlineThicknessUnits, why, at) ||
+            !Byte(unlocked, "held_outline_alpha_byte", u.heldOutlineAlphaByte, why, at) ||
             !Byte(unlocked, "hit_frame_alpha_byte", u.hitFrameAlphaByte, why, at) ||
             !Positive(unlocked, "hit_frame_thickness_units", u.hitFrameThicknessUnits, why, at) ||
             !ReadRgb(unlocked, "hit_frame_rgb", u.hitFrameRgb, why, at) ||
@@ -302,6 +304,14 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, const O
             why = Named(at, "outline_swing_byte") + " takes outline_alpha_byte outside 0 to 255";
             return fail();
         }
+    }
+
+    if (!Object(block, "drag", why, where)) return fail();
+    {
+        // A step under twice the tenth a move is kept to would be lost in the rounding (the walk would stand still); and a step over 8 units could
+        // be longer than the overlap of the smallest box (18.2 units at size 0.4) with an obstacle's grown one, and a neighbour stepped over.
+        const std::string at = Named(where, "drag");
+        if (!Number(block["drag"], "step_units", 2.0 * Controls::Tuning::kMoveSnap, 8.0, read.drag.stepUnits, why, at)) return fail();
     }
 
     if (!Object(block, "art", why, where)) return fail();
@@ -404,11 +414,15 @@ Widget WidgetAt(const Layout& layout, const glm::dvec2& point) {
 
 // ---- the touch -------------------------------------------------------------------------------------------------
 
+bool StaysDead(const Touch& touch, bool pressed, bool touching) {
+    return touch.dead && !pressed && touching;
+}
+
 Press Follow(Touch& touch, bool pressed, bool released, bool touching, Widget on) {
     if (touch.dead) {
         // The press that opened the screen, if it is still down, belongs to the screen before: nothing it does here counts. A new press
         // or a finger that is up ends it, and the tick goes on as any other.
-        if (pressed || !touching) {
+        if (!StaysDead(touch, pressed, touching)) {
             touch.dead = false;
         } else {
             touch.down = Widget::None;
@@ -463,7 +477,7 @@ bool Enabled(Widget widget, const Controls::Rules& rules, const Controls::Tuning
     return false;
 }
 
-Outcome Act(Widget widget, const Controls::Rules& rules, const Controls::Tuning& tuning, bool unlocked) {
+Outcome Act(Widget widget, const Controls::Rules& rules, const Controls::Tuning& tuning, bool unlocked, const Field* field) {
     Outcome outcome;
     outcome.tuning = tuning;
     outcome.unlocked = unlocked;
@@ -473,6 +487,9 @@ Outcome Act(Widget widget, const Controls::Rules& rules, const Controls::Tuning&
     case Widget::SizePlus: {
         // One grid step, and a size step RE-LOCKS (Magic Rampage l.79): the controls under a drag would be the wrong size.
         outcome.tuning = tuning.SizeStepped(rules, widget == Widget::SizePlus ? 1 : -1);
+        // The boxes are bigger or smaller: the ones that now meet go home (Magic Rampage pushes them apart every frame; this is the same guarantee
+        // with no state and no animation).
+        if (field != nullptr) outcome.tuning = SendHome(rules, outcome.tuning, *field);
         outcome.unlocked = false;
         break;
     }
@@ -501,6 +518,260 @@ Outcome Act(Widget widget, const Controls::Rules& rules, const Controls::Tuning&
     outcome.acted = true;
     outcome.tuningChanged = !SameKept(outcome.tuning, tuning);
     return outcome;
+}
+
+// ---- where a control may stand ---------------------------------------------------------------------------------
+
+double ClearanceUnits(const Controls::Rules& rules, const glm::dvec2& viewUnits) {
+    return rules.clearancePx * viewUnits.y / rules.referenceHeightPx;
+}
+
+double OverlapArea(const Hud::Rect& a, const Hud::Rect& b) {
+    const glm::dvec2 amax = a.Max();
+    const glm::dvec2 bmax = b.Max();
+    const double ox = std::min(amax.x, bmax.x) - std::max(a.min.x, b.min.x);
+    const double oy = std::min(amax.y, bmax.y) - std::max(a.min.y, b.min.y);
+    return ox > 0.0 && oy > 0.0 ? ox * oy : 0.0;
+}
+
+namespace {
+
+Hud::Rect Grown(const Hud::Rect& rect, double by) {
+    return Hud::Rect{rect.min - glm::dvec2(by), rect.size + glm::dvec2(2.0 * by)};
+}
+
+std::size_t Idx(Controls::Id id) {
+    return static_cast<std::size_t>(id);
+}
+
+} // namespace
+
+namespace {
+
+// The distance between two intervals along one axis: positive when they are apart, negative when they overlap. The same four numbers whichever
+// interval is asked first, so the answer is the same both ways to the last bit.
+double Separation(double aMin, double aMax, double bMin, double bMax) {
+    return std::max(aMin - bMax, bMin - aMax);
+}
+
+// A gap that is the clearance to the last digit is CLEAR. It happens: at size 1.0 an arrow is 128 px and the clearance 16 px, 144 px is 51.2 units - a multiple
+// of the tenth a move is kept to - so two arrows can stand exactly that far apart, and a comparison of two different roundings of that number must not call
+// it a meeting in one direction and not in the other.
+constexpr double kMeetEpsilon = 1.0e-9;
+
+} // namespace
+
+bool Meets(const Hud::Rect& a, const Hud::Rect& b, double clearance) {
+    const glm::dvec2 amax = a.Max();
+    const glm::dvec2 bmax = b.Max();
+    return Separation(a.min.x, amax.x, b.min.x, bmax.x) < clearance - kMeetEpsilon && Separation(a.min.y, amax.y, b.min.y, bmax.y) < clearance - kMeetEpsilon;
+}
+
+bool AnyMeet(const std::array<Hud::Rect, 5>& boxes, double clearance) {
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        for (std::size_t j = i + 1; j < boxes.size(); ++j) {
+            if (Meets(boxes[i], boxes[j], clearance)) return true;
+        }
+    }
+    return false;
+}
+
+Controls::Tuning SendHome(const Controls::Rules& rules, const Controls::Tuning& stepped, const Field& field) {
+    const double clearance = ClearanceUnits(rules, field.view);
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, stepped, field.view, field.insets);
+    Controls::Tuning out = stepped;
+    // Both of a meeting pair: a control that meets another is flagged, and so is the other, because each meets one.
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        for (const Controls::Id other : Controls::kClaimOrder) {
+            if (other == id || !Meets(boxes[Idx(id)], boxes[Idx(other)], clearance)) continue;
+            out.move[Idx(id)] = glm::dvec2(0.0);
+            break;
+        }
+    }
+    // A control sent home may now stand where a third, which met nothing, was moved to.
+    if (AnyMeet(Controls::Boxes(rules, out, field.view, field.insets), clearance)) out.move = {};
+    return out;
+}
+
+// ---- the drag --------------------------------------------------------------------------------------------------
+
+namespace {
+
+// What a dragged box may not meet: a rectangle and the clearance to keep from it - another control's box and the layout's 16 px, or a widget's box and none.
+struct Obstacle {
+    Hud::Rect rect;
+    double clearance = 0.0;
+};
+
+// How deep a box is in an obstacle: the area it shares with the obstacle grown by its clearance (0 where it does not meet it).
+double Depth(const Hud::Rect& box, const Obstacle& obstacle) {
+    return OverlapArea(box, Grown(obstacle.rect, obstacle.clearance));
+}
+
+// Whether a step to `candidate` may be taken from `current`: it meets no obstacle - or, for one the control already meets, it meets it LESS than it
+// did (so a control that starts inside an obstacle can leave it, and none can go deeper in). The test is Meets, the one the five boxes are held to
+// everywhere (SendHome, AnyMeet), so what the walk accepts is what they accept.
+bool Accepts(const Hud::Rect& candidate, const Hud::Rect& current, const std::vector<Obstacle>& obstacles) {
+    for (const Obstacle& obstacle : obstacles) {
+        if (!Meets(candidate, obstacle.rect, obstacle.clearance)) continue;
+        if (Meets(current, obstacle.rect, obstacle.clearance) && Depth(candidate, obstacle) < Depth(current, obstacle)) continue;
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+Step Drag::End(const Context& context) {
+    Step out;
+    out.tuning = context.tuning;
+    if (!m_grab) return out;
+    out.tuning = m_live;
+    // One gesture, one keeping: only a control that ended somewhere else is to be kept (a drag that came back to where it began is not).
+    out.commit = !SameKept(m_live, m_base);
+    m_grab.reset();
+    m_offset = glm::dvec2(0.0);
+    return out;
+}
+
+void Drag::Cancel() {
+    m_use = Use::None;
+    m_grab.reset();
+    m_offset = glm::dvec2(0.0);
+    m_base = Controls::Tuning{};
+    m_live = Controls::Tuning{};
+}
+
+void Drag::Walk(const Pointer& pointer, const Context& context, Step& out) {
+    const Controls::Id id = *m_grab;
+    const Field& field = context.field;
+    const double stepUnits = context.rules.drag.stepUnits;
+    const double clearance = ClearanceUnits(context.controls, field.view);
+
+    const std::array<Hud::Rect, 5> boxes = Controls::Boxes(context.controls, m_live, field.view, field.insets);
+    Hud::Rect current = boxes[Idx(id)];
+
+    // What the box may not meet: the other four controls' boxes grown by the clearance, and the seven widgets' boxes (Back included).
+    std::vector<Obstacle> obstacles;
+    for (const Controls::Id other : Controls::kClaimOrder) {
+        if (other != id) obstacles.push_back(Obstacle{boxes[Idx(other)], clearance});
+    }
+    for (const Widget widget : kWidgets) obstacles.push_back(Obstacle{context.widgets.At(widget).box, 0.0});
+
+    // Where the pointer wants it: the pointer minus the offset it was grabbed with, inside the safe rectangle by the ONE shared clamp.
+    const glm::dvec2 target = Controls::ClampBox(pointer.at - m_offset, current.size, field.view, field.insets);
+
+    // One try at standing with `axis` at `value` (the other as it is now). Validated on the LAID-OUT result: the move the placement function gives back
+    // (clamped, then kept to a tenth) and the box the layout makes of it - not on the raw wish, which rounding and the clamp can move into a neighbour.
+    enum class Try { Same, Refused, Taken };
+    const auto attempt = [&](int axis, double value) {
+        glm::dvec2 wanted = current.min;
+        wanted[axis] = value;
+        Controls::Tuning next = m_live;
+        next.move[Idx(id)] = Controls::MoveFor(context.controls, m_live, id, wanted, field.view, field.insets);
+        const Hud::Rect box = Controls::Boxes(context.controls, next, field.view, field.insets)[Idx(id)];
+        if (std::fabs(box.min.x - current.min.x) < 1e-9 && std::fabs(box.min.y - current.min.y) < 1e-9) return Try::Same; // rounds to where it stands
+        if (!Accepts(box, current, obstacles)) return Try::Refused;
+        m_live = next;
+        current = box;
+        return Try::Taken;
+    };
+
+    const Controls::Tuning before = m_live;
+    for (int axis = 0; axis < 2; ++axis) {
+        const double from = current.min[axis];
+        const double to = target[axis];
+        const double distance = std::fabs(to - from);
+        if (!(distance > 0.0)) continue;
+        const double sign = to > from ? 1.0 : -1.0;
+        const long steps = std::min(static_cast<long>(std::ceil(distance / stepUnits)), 1L << 20);
+        double last = from;
+        for (long k = 1; k <= steps; ++k) {
+            // Steps of at most stepUnits, the last landing on the target: every place between here and there is tried, so a neighbour is never jumped.
+            const double value = k == steps ? to : from + sign * stepUnits * static_cast<double>(k);
+            if (attempt(axis, value) == Try::Refused) {
+                // The obstacle lies between the last place taken and this one: bisect to the farthest place a tenth of a unit lets (the same place
+                // whatever the length of the steps and the pace of the pointer that got here, so 1 unit a tick and 40 end alike).
+                double low = last;
+                double high = value;
+                for (int round = 0; round < 40 && std::fabs(high - low) > 0.25 * Controls::Tuning::kMoveSnap; ++round) {
+                    const double middle = 0.5 * (low + high);
+                    if (attempt(axis, middle) == Try::Taken) {
+                        low = middle;
+                    } else {
+                        high = middle;
+                    }
+                }
+                break;
+            }
+            last = value;
+        }
+    }
+    out.moved = !SameKept(m_live, before);
+}
+
+Step Drag::Tick(const Pointer& pointer, bool dead, const Context& context) {
+    Step out;
+    out.tuning = m_grab ? m_live : context.tuning;
+    if (dead) {
+        // The press that opened the screen, still down: it belongs to the screen before it and grabs nothing, wherever it slides.
+        m_use = Use::Dead;
+        out.use = Use::Dead;
+        return out;
+    }
+    const bool finger = pointer.pressed || pointer.touching || pointer.released;
+    if (!finger) {
+        // No finger this tick: a grab that is still held lost it (the pointer left the window, which the layer sees as no touch at all) and ends
+        // where it stands.
+        out = End(context);
+        m_use = Use::None;
+        return out;
+    }
+    if (pointer.pressed) {
+        if (m_grab) {
+            // A press with a grab still held: its release was never seen. It ends here and this press takes nothing, as a finger that lands as
+            // another lifts is not read twice.
+            out = End(context);
+            m_use = Use::None;
+            return out;
+        }
+        m_use = Use::None;
+        if (pointer.over && WidgetAt(context.widgets, pointer.at) != Widget::None) {
+            // A widget wins where it covers a control: its face is a tile's, the control's uncovered part is all a drag can take.
+            m_use = Use::Widget;
+        } else if (pointer.over && context.unlocked) {
+            const std::array<Hud::Rect, 5> boxes = Controls::Boxes(context.controls, context.tuning, context.field.view, context.field.insets);
+            // The DRAWN box, not the hit rectangle (which reaches the edge of the view), and the topmost: the preview draws the claim order's last last.
+            for (auto id = Controls::kClaimOrder.rbegin(); id != Controls::kClaimOrder.rend(); ++id) {
+                if (!StrictlyInside(boxes[Idx(*id)], pointer.at)) continue;
+                m_use = Use::Control;
+                m_grab = *id;
+                m_offset = pointer.at - boxes[Idx(*id)].min;
+                m_base = context.tuning;
+                m_live = context.tuning;
+                break;
+            }
+        }
+    }
+    out.use = m_use;
+    if (!m_grab) return out;
+    if (!context.unlocked) {
+        // The lock closed under a grab (it cannot with one pointer: a tile is its own touch): the grab is dropped, nothing kept.
+        out.tuning = context.tuning;
+        Cancel();
+        return out;
+    }
+    Walk(pointer, context, out);
+    out.tuning = m_live;
+    out.grabbed = m_grab;
+    if (pointer.released || !pointer.touching) {
+        const bool moved = out.moved;
+        out = End(context);
+        out.moved = moved;
+        out.use = Use::Control;
+        m_use = Use::None;
+    }
+    return out;
 }
 
 // ---- the readouts ----------------------------------------------------------------------------------------------
@@ -590,11 +861,15 @@ std::vector<Piece> Pieces(const Rules& rules, const Controls::Rules& controls, c
         }
         for (const Controls::Id id : Controls::kClaimOrder) {
             if (id == Controls::Id::Clear && !scene.previewClearShown) continue;
-            for (const Hud::Rect& strip : FrameStrips(layout.At(id).rect, u.outlineThicknessUnits, true)) {
+            // The control a finger holds has the held outline: thicker, solid, not breathing (design 3.3.2).
+            const bool held = scene.grabbed && *scene.grabbed == id;
+            const double thickness = held ? u.heldOutlineThicknessUnits : u.outlineThicknessUnits;
+            const Colour colour = held ? Colour{u.outlineRgb[0], u.outlineRgb[1], u.outlineRgb[2], u.heldOutlineAlphaByte} : outlineColour;
+            for (const Hud::Rect& strip : FrameStrips(layout.At(id).rect, thickness, true)) {
                 Piece piece;
                 piece.element = Element::Outline;
                 piece.rect = strip;
-                piece.colour = outlineColour;
+                piece.colour = colour;
                 piece.control = id;
                 pieces.push_back(std::move(piece));
             }

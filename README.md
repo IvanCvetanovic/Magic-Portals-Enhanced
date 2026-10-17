@@ -442,7 +442,7 @@ configures once - if `build\`'s data paths move, delete `build-play\` and run it
 | left mouse on a menu | buttons and tiles; drag scrolls the credits and the achievements, the wheel scrolls the achievements |
 | left mouse on the main menu's top-right gear | Options (below); a run that is not a developer's and not `--controls classic` has it |
 | left mouse on Options' "Adjust controls" button | the adjustment screen (below); shown and claimed only while the style in force is Modern |
-| left mouse on the adjustment screen | the seven widgets (below): a tile acts on the release strictly inside it after a press strictly inside it; a press on the preview or on empty space does nothing, and no pointer reaches a level while it is up |
+| left mouse on the adjustment screen | the seven widgets (below): a tile acts on the release strictly inside it after a press strictly inside it; with the lock open, a press on a control's drawn box grabs it and the drag moves it (below); a press on empty space does nothing, and no pointer reaches a level while it is up |
 | `Esc` | in a level: pause, and resume from it; closes a popup; in a menu: back a screen; on the main menu: quit |
 | `R` | retry the level |
 | `N` | skip to the next level (dev) |
@@ -460,8 +460,8 @@ the tiles then change the run only: nothing is written. The size, the opacity an
 deltas on one line (`{"version":1,"controls":{"mode":"modern","layout":2,"size":1.2,"opacity":0.6,"move":{"walk_left":[10,-5]}}}`: a value
 equal to the shipped default is not written, so a later change of the default reaches a player who never moved a slider; a move is in
 design units from the control's own corner, in screen direction, and a file saved under another `layout` number keeps the size and the
-opacity and drops the moves), and a modern run plays them. The size and the opacity are set on the adjustment screen (below); the moves are still
-edited by hand in the file, or a capture asks with the flag below (dragging a control is the next step). From a level it takes five presses to reach Options: the pause, Levels, back, back
+opacity and drops the moves), and a modern run plays them. The size and the opacity are set on the adjustment screen (below); the moves are made by dragging
+the controls on that screen (below), or written by hand in the file, or asked by a capture with the flag below. From a level it takes five presses to reach Options: the pause, Levels, back, back
 (from the grid to chapter select, and from there to the main menu), the gear; `Esc` is the pause and the two backs.
 
 **The adjustment screen** (planning step 192, CTL-11 of the modern-controls plan). Options has an "Adjust controls" button under its two tiles, drawn and pressable only while the style in force is
@@ -472,11 +472,24 @@ the **size** row (a minus tile, the size in force, a plus tile: 0.4 to 1.4 by 0.
 nothing. A step takes effect at once and is kept at once - **one save per tap**, never per frame - in `controls.json` (the size and the opacity as deltas, as above), and the next level lays out, claims, draws and
 hints with it; a classic choice reads none of it. The first step made on the screen also drops a `--controls modern,size=...` flag's tuning (the screen shows the flag's numbers, an edit applies on top of them, and from then on they
 are the screen's); under any `--controls` flag the edit changes the run only and writes nothing. The **lock** opens the editing cues - an outline breathing round each control, each control's hit rectangle as a faint frame
-and a line across the preview at the character's row (206 units) - and **a size step re-locks it, an opacity step does not**; the screen always opens locked and the lock is never saved. Dragging the controls and the rest of
-Restore's work are the next step: here nothing moves a control, and Restore (enabled only while a control is moved by the file or the flag) clears every move, keeps the size and the opacity and re-locks. **Back and `Esc`
+and a line across the preview at the character's row (206 units) - and **a size step re-locks it, an opacity step does not**; the screen always opens locked and the lock is never saved. **Restore** (enabled only while a control is moved) clears every move, keeps the size and the opacity and re-locks. **Back and `Esc`
 leave for Options**, committing what is unsaved. Its pictures are Magic Rampage's own, read from the folder `editor` beside the controls' folder (made by `tools/art/make_mr_controls.py --stage editor`, never committed), then
 glyphs the game draws, then flat quads (`docs/magic-rampage-controls.md`). Capture it with the chain `--controls modern --fixed-step --tap 1235,45@300 --tap 640,605@360 --frames 480` (the entry, then the button, at 1280x720; `--tap`
 and `--press back@<tick>` drive all of it).
+
+**Dragging** (planning step 193, CTL-12). The lock arms it. With the lock open, a press on a control's **drawn box** - strictly inside it; not the larger hit rectangle, which reaches the view's
+edge, and not under a widget's face (a widget wins where it covers a control: the control's uncovered part is all a drag can take) - grabs the control, and it follows the pointer, keeping the offset the pointer had
+in its box. It stays wholly inside the safe rectangle (the one shared clamp: `Controls::Boxes` lays a move out and `Controls::MoveFor` turns a wish back into one, a move kept to a tenth of a unit), clear of
+every other control by Magic Rampage's own 16 px (5.69 units) and clear of every widget's box, Back included: a place that would meet one is refused. The pointer's x and y are walked separately, x first, in
+steps of half a unit (`adjust.drag.step_units`), so a control **slides along** an obstacle instead of sticking to it, stops within a tenth of a unit of it, and cannot jump a neighbour at any speed of the pointer - a
+drag blocked along one axis, or sliding along one face, ends on the same place at 1 unit a tick and at 40 (a diagonal drag that ends inside an obstacle can end beside it or above it, depending on how
+coarsely the pointer is sampled). A control that already meets a widget (restart at 5:4 and the larger sizes) can be dragged out of it and never deeper in. A control is **kept once, at
+the release**, if it ended somewhere else: while the finger is down the tuning in force and the file do not change (the screen shows the held control where the walk has it, with a thicker solid outline), and a
+drag that came back to where it began writes nothing - one save per gesture. `Back` or `Esc` while a finger holds a control drops that gesture (nothing is kept); a pointer that leaves the window with the button
+down ends it where it stands. A **size step** sends home the controls whose new boxes meet (both of a pair; and if one sent home now meets a third, everyone goes home), and re-locks; Restore re-locks too. The next
+level lays out, claims and draws what the screen left: a moved control is claimed where it is drawn and the place it left is the world's, and the pause's Resume and a popup's close swallow the press over a moved control as
+over any. **A limit, recorded and not built:** a moved control keeps its original anchor, so one dragged across the screen stays attached to the edge it was anchored at when the window changes shape (the layout pulls it
+back inside; a window resized inside a run can leave two stored moves meeting). Not verifiable here: a live mouse on a real window and real touch.
 
 The mouse is contact 0 and stands in for the original's touch: the port reads the pointer and the left
 button as that contact, and, under the modern controls, the engine's other contacts (the other fingers

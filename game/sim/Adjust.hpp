@@ -11,8 +11,10 @@
 // rectangle as a faint frame, and a guide at the character's row.
 //
 // WHAT IS HERE. Pure functions of data, a view and a tuning - the layer keeps the touch and the lock, draws what Pieces says, and decides
-// what a press does with Act's answer. Dragging, the clamp and the overlap refusal are the next step's (CTL-12): nothing here moves a
-// control, and the lock only arms what that step builds.
+// what a press does with Act's answer. From planning step 193 (CTL-12) the lock arms a DRAG: a press on a control's drawn box while it is open
+// grabs the control (Drag, below), which follows the pointer by the offset it was grabbed with, inside the safe rectangle (the one shared clamp,
+// Controls::ClampBox) and clear of every other control and every widget, and is kept ONCE, at the release. Restore sends every move home; a size
+// step sends home the controls whose new boxes meet.
 //
 // A WIDGET HAS TWO RECTANGLES. Its BOX is Magic Rampage's (the tile's picture is drawn into it, and the clearance the default controls keep
 // from it is measured on it). Its FACE is the box shrunk by the picture's own margin: what is seen, and what a tap hits, strictly inside it.
@@ -105,12 +107,20 @@ struct Rules {
         int outlineSwingByte = 0;      // how far either way
         int outlinePeriodTicks = 0;    // one full breath
         std::array<int, 3> outlineRgb{};
+        // The outline of the control a finger is dragging: thicker, and solid (it does not breathe).
+        double heldOutlineThicknessUnits = 0.0;
+        int heldOutlineAlphaByte = 0;
         int hitFrameAlphaByte = 0;
         double hitFrameThicknessUnits = 0.0;
         std::array<int, 3> hitFrameRgb{};
         double guideThicknessUnits = 0.0;
         Colour guide{};
     } unlocked;
+
+    // How a drag walks (design 3.3.3): the length of one step toward the pointer. A move is kept to a tenth of a unit, so a step must be more.
+    struct DragRules {
+        double stepUnits = 0.0;
+    } drag;
 
     // The picture of each widget through the tiers (design 4.2): Magic Rampage's file in the folder `editor`, and the glyph the game
     // draws and writes. A file name is a bare file name; an entry is there for every picture.
@@ -174,6 +184,11 @@ struct Press {
     Widget widget = Widget::None;
 };
 
+// Whether the touch is still the press that opened the screen, down and spent, on this tick: Follow's own test, said once so the drag asks
+// the same question BEFORE Follow runs (Follow ends the death on the tick a lift or a fresh press comes, and the drag must not see a press
+// that was dead a tick ago as a fresh one). `pressed` is the tick a touch goes down, `touching` that it is down this tick.
+bool StaysDead(const Touch& touch, bool pressed, bool touching);
+
 // One tick of the touch. `pressed` is the tick it goes down, `released` the tick it comes up, `touching` that it is down this tick, and `on`
 // the widget the pointer is on this tick (WidgetAt: strictly inside a face) - none off the game. On the release, `happened` is whether it
 // was a press, and `widget` the widget it went down on; the touch is then forgotten (but not `dead`, which only a lift or a press ends).
@@ -199,14 +214,119 @@ struct Outcome {
     bool leave = false;          // Back
 };
 
+// The field the controls stand in: the view the screen is laid out on and the safe area's insets.
+struct Field {
+    glm::dvec2 view{0.0};
+    Controls::Insets insets;
+};
+
 // What a press on `widget` does, given the tuning in force and the lock:
-//   * a size step is one grid step (0.1) and RE-LOCKS; at a limit it is inert;
+//   * a size step is one grid step (0.1) and RE-LOCKS; at a limit it is inert; given the field (planning step 193) it also SENDS HOME the
+//     controls whose new boxes meet (SendHome);
 //   * an opacity step is one grid step (0.2) and does NOT re-lock; at a limit it is inert;
 //   * the lock toggles (it is never saved: the screen always opens locked);
 //   * Restore clears every move, KEEPS the size and the opacity, and re-locks; inert while no control is moved;
 //   * Back leaves.
-// A size step does not touch a move: sending the controls that now meet home is the next step's (CTL-12), with the drag.
-Outcome Act(Widget widget, const Controls::Rules& rules, const Controls::Tuning& tuning, bool unlocked);
+// Without a field a size step leaves the moves alone (the answer of planning step 192, which every older call keeps).
+Outcome Act(Widget widget, const Controls::Rules& rules, const Controls::Tuning& tuning, bool unlocked, const Field* field = nullptr);
+
+// ---- where a control may stand ---------------------------------------------------------------------------------
+
+// The clearance between two controls' boxes in units: Magic Rampage's own 16 px (controls.json `clearance_px`, spec 42 l.119).
+double ClearanceUnits(const Controls::Rules& rules, const glm::dvec2& viewUnits);
+
+// The area the interiors of two rectangles share: 0 when they touch or are apart.
+double OverlapArea(const Hud::Rect& a, const Hud::Rect& b);
+
+// Magic Rampage's `a.isOverlapping(b, clearance)`: `a` grown by `clearance` on every side shares area with `b` - on both axes the boxes are apart by less than
+// the clearance. Symmetric to the last bit (the same four numbers either way round); a gap of the clearance to within a billionth of a unit is CLEAR, which
+// arithmetic puts in the way (at size 1.0 an arrow and the clearance are 144 px, 51.2 units, a multiple of the tenth a move is kept to).
+bool Meets(const Hud::Rect& a, const Hud::Rect& b, double clearance);
+
+// Whether any two of the five boxes meet.
+bool AnyMeet(const std::array<Hud::Rect, 5>& boxes, double clearance);
+
+// What a size step does to the moves (design 3.3.4, planning step 193), for a tuning whose size has just been stepped: a control whose box now
+// meets another control's, and the other one of the pair, are sent HOME (their moves become none); the rest keep theirs. If a pair STILL meets
+// - a control sent home now stands where a third, moved one stands - everyone goes home. The widgets are not asked: a control that meets one
+// is the player's to move, and Restore recovers anything a widget covers.
+Controls::Tuning SendHome(const Controls::Rules& rules, const Controls::Tuning& stepped, const Field& field);
+
+// ---- the drag ------------------------------------------------------------------------------------------------------
+
+// What the touch that is down is doing, chosen by the press that began it and kept until it lifts:
+//   Dead    - the press that OPENED the screen, still down: it belongs to the screen before it and does nothing here;
+//   Widget  - it went down on a widget's face (a tile, the lock, Restore, Back): Follow works it, and a widget WINS over a control under it;
+//   Control - it went down on a control's drawn BOX while the lock was open: it drags that control;
+//   None    - it went down on nothing that works (empty space; a control while the lock is closed).
+enum class Use { Dead, Widget, Control, None };
+
+// One tick of the one pointer, as the layer reads it (the first finger only): `over` it is on the game at all, `pressed` the tick it goes down,
+// `released` the tick it comes up, `touching` that it is down this tick, `at` where, in view units.
+struct Pointer {
+    bool over = false;
+    bool pressed = false;
+    bool released = false;
+    bool touching = false;
+    glm::dvec2 at{0.0};
+};
+
+// What a tick of the drag needs of the screen: the data, the widgets on this view (boxes are the forbidden zones, faces win a press), the field,
+// the tuning in force and the lock.
+struct Context {
+    const Rules& rules;
+    const Controls::Rules& controls;
+    const Layout& widgets;
+    Field field;
+    const Controls::Tuning& tuning;
+    bool unlocked = false;
+};
+
+// What a tick did.
+struct Step {
+    Use use = Use::None;                   // what the touch down now is; None where none is
+    std::optional<Controls::Id> grabbed;   // the control held after this tick
+    Controls::Tuning tuning;               // what the screen shows: the tuning in force, with the held control where the walk has it
+    bool moved = false;                    // the walk moved the held control this tick
+    bool commit = false;                   // a grab ended with the control somewhere else: `tuning` is to be KEPT, once
+};
+
+// THE DRAG (design 3.3.3). A press on a control's drawn box - strictly inside it, and not on a widget's face - while the lock is open grabs it,
+// keeping the pointer's offset in the box. Each tick the control walks toward `pointer - offset`, clamped inside the safe rectangle by the one
+// shared clamp (Controls::ClampBox, and the placement function Controls::MoveFor used backwards), in steps of rules.drag.stepUnits - the x
+// component first, then the y - and a step is REFUSED when the laid-out box it makes meets another control's (grown by the clearance) or a
+// widget's. A refused step is bisected to the farthest place a tenth of a unit allows and ends the walk of that component, and the other goes on,
+// so the control SLIDES along an obstacle instead of sticking to it, stops flush against it, and because it is walked in steps it cannot jump a
+// neighbour: a pointer moving 1 unit a tick and one moving 40 end on the same place.
+//
+// A step into an obstacle is refused unless it makes the overlap with every obstacle the control ALREADY meets smaller: a control that starts
+// meeting a widget (restart at 5:4 and a bigger size) can be dragged out of it and never deeper into it.
+//
+// The held control's place is kept HERE, not in the tuning in force: the screen shows Step::tuning while the grab lasts, and the release says
+// `commit` once, if the control ended somewhere else (SameKept) - one save per gesture, none for a drag that came back to where it began. The
+// release is also the tick the finger is not there (a pointer that left the window lifts nothing the layer can see). A grab is dropped, kept
+// by nobody, by Cancel (the screen closes, the lock closes).
+class Drag {
+public:
+    // `dead`: StaysDead(touch, pressed, touching), asked BEFORE Follow runs this tick.
+    Step Tick(const Pointer& pointer, bool dead, const Context& context);
+    void Cancel();
+
+    Use CurrentUse() const { return m_use; }
+    std::optional<Controls::Id> Grabbed() const { return m_grab; }
+    // The tuning the grab is showing; the tuning given to Tick before one, which is the caller's own.
+    const Controls::Tuning& Live() const { return m_live; }
+
+private:
+    Step End(const Context& context);
+    void Walk(const Pointer& pointer, const Context& context, Step& out);
+
+    Use m_use = Use::None;
+    std::optional<Controls::Id> m_grab;
+    glm::dvec2 m_offset{0.0};     // the pointer minus the box's top-left, at the press
+    Controls::Tuning m_base;      // the tuning at the press: what the release compares with
+    Controls::Tuning m_live;
+};
 
 // ---- the readouts ----------------------------------------------------------------------------------------------
 
@@ -252,6 +372,8 @@ struct Scene {
     int ticks = 0;
     int pressTintByte = 255;
     bool previewClearShown = true;
+    // The control a finger is dragging (planning step 193): its outline is the held one, thicker and solid, and does not breathe.
+    std::optional<Controls::Id> grabbed;
 };
 
 // One side of a frame: the four thin rectangles round `rect` (top, bottom, left, right), `outside` them or inside its edge.

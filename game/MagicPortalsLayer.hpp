@@ -1371,6 +1371,14 @@ public:
     Adjust::Widget AdjustHeld() const { return m_adjust.touch.held; }
     bool AdjustUnlocked() const { return m_adjust.unlocked; }
     bool AdjustTouchDead() const { return m_adjust.touch.dead; }
+    // THE DRAG (planning step 193, CTL-12). While the lock is open a press on a control's drawn box grabs it and it follows the pointer, kept ONCE at the
+    // release (ControlsApplied() changes then, and not before: SaveCount() counts the writes). What the screen shows meanwhile is AdjustShownTuning().
+    // AdjustGrabbed() is the control a finger holds now, AdjustUse() what the touch that is down is doing (Adjust::Use).
+    std::optional<Controls::Id> AdjustGrabbed() const { return m_adjust.drag.Grabbed(); }
+    Adjust::Use AdjustUse() const { return m_adjust.drag.CurrentUse(); }
+    const Controls::Tuning& AdjustShownTuning() const { return m_adjust.drag.Grabbed() ? m_adjust.drag.Live() : m_controlsApplied; }
+    // The field the screen's controls stand in, as the drag and a size step read it.
+    Adjust::Field AdjustField() const { return Adjust::Field{MenuBoxPx(), ControlsInsets()}; }
     // The picture each widget is drawn with, resolved ONCE when the screen first opens (Magic Rampage's file in the folder `editor`, the glyph the game
     // draws and writes, a flat quad), its tier and margin, the INFO line the resolution said (`adjust art: size_minus=mr ...`), every WARN it said, and
     // how many glyph files it made.
@@ -3167,6 +3175,7 @@ private:
     // screen opens; it is not one of the WORLD's records (resetWorldRecords lists those by hand), because a menu reads one finger and never the level's.
     struct AdjustScreen {
         Adjust::Touch touch;
+        Adjust::Drag drag; // the control a finger holds, while it holds one (planning step 193): made fresh with the screen, dropped when it closes
         bool unlocked{false}; // the lock: the screen always opens locked, and it is never saved
     };
     AdjustScreen m_adjust;

@@ -44,6 +44,18 @@
 > size or aspect**; restart's box meets a widget's FACE (what a tap hits) from size 1.1 at 5:4 and from 1.2 at 4:3 only. No default control is wholly under a widget anywhere. The arrows stand in the corners: 26.169 units from the column at 5:4 and size 1.4 (93.72 at 16:9), so Restore's old "5.83 against the pair" does not arise (the column's bottom, 170.809, is 5.831 above the arrows' top
 > at size 1.4, in the middle of the screen against the corners). Widgets win every hit test in Adjust, and Restore recovers anything a widget covers.
 
+> **AMENDMENT, 2026-10-17 (planning Step 193, CTL-12): THE DRAG.** What 3.3 left to the step is decided here, and the code wins where this and 3.3 differ. **(1) The forbidden zones are the seven widgets' BOXES, Back included** (not
+> the column's bounding box, which is the six tiles' hull and covers the readouts and the gaps between them, and not the faces: a press is won by a widget's FACE, a control is kept off its BOX); the clearance of 16 px (5.689 units,
+> `clearance_px`) is kept from the other four controls' boxes and none from a widget. **"Meets"** is one predicate everywhere (the walk, the five boxes' test, a size step): apart by less than the clearance on both axes, and a gap that is the clearance
+> to a billionth of a unit is clear (at size 1.0 an arrow and the clearance are 144 px, 51.2 units, a multiple of the tenth a move is kept to, so the exact gap happens; the 10,000-gesture fuzz found it). **(2) The walk:** the control goes toward the
+> pointer minus its offset, clamped by the one shared clamp, x first and then y, in steps of at most `adjust.drag.step_units` (0.5), every step validated on the LAID-OUT box (`MoveFor` then `Boxes`: the clamp and the tenth are applied), a refused
+> step bisected to the farthest tenth. So a control slides along an obstacle (the refused component stops, the other goes on), stops within a tenth of it, **cannot jump a neighbour at any pace** (for a drag blocked along one axis, or sliding along one face, a pointer at 1 unit a tick and one at 40 end on the same
+> place, the review's F9; a diagonal drag that ends inside an obstacle can end beside it or above it depending on how coarsely the pointer is sampled: Step 193's LEFT FOR THE OWNER 1), and a control below a neighbour that the pointer has passed catches up with the pointer's x at once. **(3) A control that STARTS meeting an obstacle** (restart at 5:4 and the larger sizes meets the size row's plus tile) takes a step that
+> makes it meet that obstacle LESS and refuses one that makes it meet more: it can leave, and never goes deeper. **(4) Kept once:** the held control's place lives in the drag, not in the tuning in force; the release says "keep" iff the tuning is not the one at the
+> press, and the layer keeps it through `editTuning` (one save). `Back` or `Esc` while a finger holds a control **drops** the gesture (nothing kept); a pointer that leaves the window ends it where it stands (and keeps it). **(5) A size step** sends home both of every
+> meeting pair, and if a pair still meets (a control sent home stands where a third, moved one stands) everyone goes home; widgets are not asked. **(6) Not changed:** the layout number stays 2 (a move's meaning, units from the anchor, is what Step 187 made it);
+> a moved control keeps its original anchor (3.3.3's limit, recorded and not built).
+
 # CTL design: Magic Rampage's modernised controls for Magic Portals Enhanced (FINAL, second pass)
 
 Designer's final step plan, 2026-10-15, written after two independent reviews (`review1.md`: parity and regression; `review2.md`: player experience and design fidelity). Read-only role:

@@ -4487,16 +4487,31 @@ void MagicPortalsLayer::adjustInput(entt::registry& registry) {
     const Adjust::Layout layout = AdjustLayout();
     const Adjust::Widget on = touch.over ? Adjust::WidgetAt(layout, touch.atView) : Adjust::Widget::None;
     const bool touching = touch.pressed || (touch.held && !touch.released);
+
+    // THE DRAG (planning step 193), every tick and BEFORE Follow: whether the press that opened the screen is still down is Follow's to end on the tick a
+    // lift or a fresh press comes, and the drag must see it as Follow found it. A press on a widget is the widget's (Follow below); a press on a control's
+    // drawn box with the lock open grabs it, and the control follows the pointer; the keeping is ONCE, at the release, if the control ended somewhere else.
+    {
+        const bool dead = Adjust::StaysDead(m_adjust.touch, touch.pressed, touching);
+        const Adjust::Pointer pointer{touch.over, touch.pressed, touch.released, touching, touch.atView};
+        const Adjust::Context context{m_adjustRules, m_controlsRules, layout, AdjustField(), m_controlsApplied, m_adjust.unlocked};
+        const Adjust::Step drag = m_adjust.drag.Tick(pointer, dead, context);
+        if (drag.commit) editTuning(drag.tuning);
+    }
+
     // Button::update's rule, strictly inside: a widget acts on the release inside the one the touch went down on; the press that opened the screen is
     // spent until it lifts.
     const Adjust::Press press = Adjust::Follow(m_adjust.touch, touch.pressed, touch.released, touching, on);
     if (!press.happened) return;
-    const Adjust::Outcome outcome = Adjust::Act(press.widget, m_controlsRules, m_controlsApplied, m_adjust.unlocked);
+    const Adjust::Field field = AdjustField();
+    const Adjust::Outcome outcome = Adjust::Act(press.widget, m_controlsRules, m_controlsApplied, m_adjust.unlocked, &field);
     // A widget at its limit, and Restore with nothing to restore, are inert: they do nothing and make no noise.
     if (!outcome.acted) return;
     // getButtonSoundName: the credits' back button's own noise, for every widget.
     latch("menu_button");
     m_adjust.unlocked = outcome.unlocked;
+    // A re-lock drops a grab (a size step and Restore re-lock): with one pointer a tile is its own touch and none is held, so this is the rule and not a case.
+    if (!outcome.unlocked) m_adjust.drag.Cancel();
     // ONE save per gesture: a tile is one. The first edit also drops the flag's tuning (editTuning).
     if (outcome.tuningChanged) editTuning(outcome.tuning);
     if (outcome.leave) leaveAdjust();
@@ -4504,9 +4519,11 @@ void MagicPortalsLayer::adjustInput(entt::registry& registry) {
 
 void MagicPortalsLayer::leaveAdjust() {
     // COMMITTING WHAT IS UNSAVED: a save that failed at its gesture is tried once more here. Nothing else is written - a screen opened and left with no
-    // edit writes nothing (the store would otherwise rewrite a hand-written file in its own shape).
+    // edit writes nothing (the store would otherwise rewrite a hand-written file in its own shape). A control a finger still holds is NOT kept: its
+    // gesture is not over, and the tuning in force never took its place (the drag keeps it apart), so dropping the grab is all it takes.
     if (m_tuningUnsaved) saveTuning();
     m_adjust.touch = Adjust::Touch{};
+    m_adjust.drag.Cancel();
     m_pendingMenu.kind = PendingMenu::Kind::Screen;
     m_pendingMenu.screen = Screen::Options;
 }
@@ -4816,8 +4833,10 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             scene.held = m_adjust.touch.held;
             scene.ticks = m_menuClock.ticks;
             scene.pressTintByte = m_creditsRules.state.pressTintByte;
+            scene.grabbed = m_adjust.drag.Grabbed();
+            // A control a finger holds is drawn where the walk has it (the drag keeps its place apart from the tuning in force until the release).
             for (const Adjust::Piece& piece :
-                 Adjust::Pieces(m_adjustRules, m_controlsRules, m_hudRules, m_controlsApplied, view, ControlsInsets(), scene)) {
+                 Adjust::Pieces(m_adjustRules, m_controlsRules, m_hudRules, AdjustShownTuning(), view, ControlsInsets(), scene)) {
                 const glm::vec4 flat(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
                                      static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
                 switch (piece.element) {

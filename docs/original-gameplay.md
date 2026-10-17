@@ -52,7 +52,9 @@ what the pads do, it says what **Classic** does.
 where the size and the opacity of the five modern controls are stepped and kept - is the same kind of thing: **modern controls are
 an enhancement of this port's, classic is the original.** The original has no options screen and no adjustable controls, so
 nothing on that screen is decoded and nothing in it is read by a classic run (a classic choice lays out, claims, draws and hints
-exactly as it did, whatever was kept for the modern style).
+exactly as it did, whatever was kept for the modern style). **Planning step 193** adds the drag to it: with the lock open a control is
+dragged by its drawn box inside the safe rectangle and clear of the other controls and the widgets, and the moved place is what a
+modern level then lays out and claims - again nothing the original has, and a classic run never reads a move.
 
 **IDENTIFIER.** `ScreenPad` (`assets/ScreenPad.angelscript`), `setDirection`,
 `MainCharacter` (`assets/MainCharacter.angelscript`), `getMainCharacter`,

@@ -37,7 +37,9 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <initializer_list>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -1552,6 +1554,19 @@ void WhatTheAdjustBlockRefuses() {
         {{"adjust", "unlocked", "hit_frame_rgb"}, "[1, 2]", false},
         {{"adjust", "unlocked", "guide_thickness_units"}, "-1", false},
         {{"adjust", "unlocked", "guide_rgba"}, "[1, 2, 3]", false},
+        {{"adjust", "unlocked", "held_outline_thickness_units"}, "0", false},
+        {{"adjust", "unlocked", "held_outline_thickness_units"}, "-1", false},
+        {{"adjust", "unlocked", "held_outline_thickness_units"}, "1.5", true},
+        {{"adjust", "unlocked", "held_outline_alpha_byte"}, "256", false},
+        {{"adjust", "unlocked", "held_outline_alpha_byte"}, "-1", false},
+        {{"adjust", "unlocked", "held_outline_alpha_byte"}, "200", true},
+        {{"adjust", "drag"}, "5", false},
+        {{"adjust", "drag", "step_units"}, "0.19", false},
+        {{"adjust", "drag", "step_units"}, "0.2", true},
+        {{"adjust", "drag", "step_units"}, "8", true},
+        {{"adjust", "drag", "step_units"}, "8.01", false},
+        {{"adjust", "drag", "step_units"}, "-0.5", false},
+        {{"adjust", "drag", "step_units"}, "\"a\"", false},
         // The art: a file is a bare file name, and no two of the sixteen are the same file.
         {{"adjust", "art", "mr", "back", "file"}, "\"back.png\"", true},
         {{"adjust", "art", "mr", "back", "file"}, "\"renamed.png\"", true},
@@ -1629,6 +1644,1037 @@ void WhatTheAdjustBlockRefuses() {
     }
 }
 
+// ---- THE DRAG (planning step 193, CTL-12) --------------------------------------------------------------------------------------------------
+//
+// The drag is Adjust::Drag, a pure class fed one pointer and the screen. Pinned here with no layer: a pad that drives it the way the layer does, tick by
+// tick, the tuning in force changing only when a tick says `commit`. THE LITERALS of the scenarios come from out/parity/program/CTL/CTL12/work/model_drag.py,
+// an independent Python model of the specification (the shared clamp, the clearance, the walk in steps, the bisection) that reads controls.json for its
+// constants and nothing of this code: the scenarios are the ones of 16:9 at the default size, where the default boxes are
+//   walk_left (15.6444, 208.4978)-(47.5022, 240.3556)   restart (346.1689, 15.6444)-(387.1289, 56.6044)   clear_portals (15.6444, 15.6444)-(56.6044, 56.6044)
+// and the widgets are kWidgetRows169's. A move is kept to a tenth of a unit, so a control stops within a tenth of what it may not meet.
+
+constexpr std::size_t Ix(Controls::Id id) {
+    return static_cast<std::size_t>(id);
+}
+
+// A screen of the editor: a view, its safe area's insets, the widgets on it.
+struct Screen {
+    glm::dvec2 view;
+    Controls::Insets insets;
+    Adjust::Layout widgets;
+    Adjust::Field field;
+    explicit Screen(double ratio, const Controls::Insets& ins = Controls::Insets{})
+        : view(ViewOf(ratio)), insets(ins), widgets(Adjust::LayOut(Data().adjust, Data().controls, ViewOf(ratio), ins)), field{ViewOf(ratio), ins} {}
+    std::array<Hud::Rect, 5> Boxes(const Controls::Tuning& tuning) const { return Controls::Boxes(Data().controls, tuning, view, insets); }
+    double Clearance() const { return Adjust::ClearanceUnits(Data().controls, view); }
+};
+
+// Drives Adjust::Drag as the layer does, tick by tick: the tuning in force changes ONLY on a tick that says `commit`.
+struct Pad {
+    const Screen& screen;
+    Adjust::Drag drag;
+    Controls::Tuning tuning;
+    bool unlocked = true;
+    int commits = 0;
+    int ticks = 0;
+    Adjust::Step last;
+
+    explicit Pad(const Screen& s) : screen(s) {}
+
+    Adjust::Step Tick(bool pressed, bool released, bool touching, const glm::dvec2& at, bool dead = false, bool over = true) {
+        const Adjust::Pointer pointer{over, pressed, released, touching, at};
+        const Adjust::Context context{Data().adjust, Data().controls, screen.widgets, screen.field, tuning, unlocked};
+        last = drag.Tick(pointer, dead, context);
+        ++ticks;
+        if (last.commit) {
+            tuning = last.tuning;
+            ++commits;
+        }
+        return last;
+    }
+    Adjust::Step Press(const glm::dvec2& at) { return Tick(true, false, true, at); }
+    Adjust::Step Move(const glm::dvec2& at) { return Tick(false, false, true, at); }
+    Adjust::Step Release(const glm::dvec2& at) { return Tick(false, true, false, at); }
+    // A tick with no finger at all (the pointer is off the game: the layer's touch is empty).
+    Adjust::Step Rest() { return Tick(false, false, false, glm::dvec2(0.0), false, false); }
+
+    // The pointer goes from `from` to `to` at `speed` units a tick, the last tick landing on `to`.
+    void Along(const glm::dvec2& from, const glm::dvec2& to, double speed) {
+        const double length = glm::length(to - from);
+        const int n = std::max(1, static_cast<int>(std::ceil(length / speed)));
+        for (int i = 1; i <= n; ++i) Move(from + (to - from) * (static_cast<double>(i) / static_cast<double>(n)));
+    }
+    // A whole drag, as --drag makes one: down at `from`, to `to` at an even pace, let go there.
+    Adjust::Step Straight(const glm::dvec2& from, const glm::dvec2& to, double speed) {
+        Press(from);
+        Along(from, to, speed);
+        return Release(to);
+    }
+    // The box the screen shows for `id` now: where the walk has the held control, else the tuning in force.
+    Hud::Rect Shown(Controls::Id id) const { return screen.Boxes(drag.Grabbed() ? drag.Live() : tuning)[Ix(id)]; }
+};
+
+glm::dvec2 MoveOf(const Controls::Tuning& tuning, Controls::Id id) {
+    return tuning.move[Ix(id)];
+}
+
+// The committed tuning of the same straight drag at each of several paces.
+std::vector<Controls::Tuning> AtPaces(const Screen& screen, const glm::dvec2& from, const glm::dvec2& to, std::initializer_list<double> paces) {
+    std::vector<Controls::Tuning> out;
+    for (const double pace : paces) {
+        Pad pad(screen);
+        pad.Straight(from, to, pace);
+        out.push_back(pad.tuning);
+    }
+    return out;
+}
+
+bool AllEqual(const std::vector<Controls::Tuning>& tunings) {
+    for (const Controls::Tuning& tuning : tunings) {
+        if (!Adjust::SameKept(tuning, tunings.front())) return false;
+    }
+    return true;
+}
+
+bool InsideSafe(const Hud::Rect& box, const Screen& screen, double eps = 1e-9) {
+    const glm::dvec2 max = box.Max();
+    return box.min.x >= screen.insets.left - eps && box.min.y >= screen.insets.top - eps && max.x <= screen.view.x - screen.insets.right + eps &&
+           max.y <= screen.view.y - screen.insets.bottom + eps;
+}
+
+void TheDragDataIsWhatTheFileSays() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Adjust::Rules& a = d.adjust;
+    CHECK_MSG(a.unlocked.heldOutlineThicknessUnits == 1.0 && a.unlocked.heldOutlineAlphaByte == 255, "the outline of a held control is 1 unit and solid (design 3.3.2)");
+    CHECK_MSG(a.drag.stepUnits == 0.5, "a drag walks in steps of half a unit");
+    CHECK_MSG(a.drag.stepUnits > 2.0 * Controls::Tuning::kMoveSnap && a.drag.stepUnits <= 8.0, "more than twice the tenth a move is kept to, and no more than a quarter of the smallest box");
+    CHECK_MSG(d.controls.clearancePx == 16.0, "the clearance between two controls is Magic Rampage's 16 px");
+    CHECK_MSG(Near(Adjust::ClearanceUnits(d.controls, ViewOf(16.0 / 9.0)), kClearanceUnits, 1e-8), "which is 5.689 units on the view's 256");
+    CHECK_MSG(Near(Adjust::ClearanceUnits(d.controls, glm::dvec2(500.0, 512.0)), 2.0 * kClearanceUnits, 1e-8), "and scales with the view's height");
+}
+
+void TheOverlapRuleIsMagicRampagesClearance() {
+    const Hud::Rect a{glm::dvec2(0.0, 0.0), glm::dvec2(10.0, 10.0)};
+    const double c = 4.0;
+    // Apart by more than the clearance, exactly the clearance, and less: only less meets. Symmetric.
+    for (const double gap : {20.0, 4.0 + 1e-6, 4.0}) {
+        const Hud::Rect b{glm::dvec2(10.0 + gap, 0.0), glm::dvec2(10.0, 10.0)};
+        CHECK_MSG(!Adjust::Meets(a, b, c) && !Adjust::Meets(b, a, c), "a gap of " + Num(gap) + " against a clearance of 4 is clear, both ways");
+    }
+    for (const double gap : {4.0 - 1e-6, 3.9, 0.0, -1.0}) {
+        const Hud::Rect b{glm::dvec2(10.0 + gap, 0.0), glm::dvec2(10.0, 10.0)};
+        CHECK_MSG(Adjust::Meets(a, b, c) && Adjust::Meets(b, a, c), "a gap of " + Num(gap) + " against a clearance of 4 meets, both ways");
+    }
+    // Diagonal neighbours: the clearance is on each axis (the box grown on every side), so a corner within it on both axes meets.
+    const Hud::Rect corner{glm::dvec2(13.0, 13.0), glm::dvec2(10.0, 10.0)};
+    CHECK_MSG(Adjust::Meets(a, corner, c) && !Adjust::Meets(a, corner, 2.0), "diagonally 3 apart on each axis meets at 4 and not at 2");
+    // Zero clearance is the plain overlap: touching boxes do not meet.
+    const Hud::Rect touching{glm::dvec2(10.0, 0.0), glm::dvec2(10.0, 10.0)};
+    CHECK_MSG(!Adjust::Meets(a, touching, 0.0) && Adjust::OverlapArea(a, touching) == 0.0, "touching boxes share no area and do not meet at no clearance");
+    CHECK_MSG(Near(Adjust::OverlapArea(a, Hud::Rect{glm::dvec2(5.0, 5.0), glm::dvec2(10.0, 10.0)}), 25.0) && Near(Adjust::OverlapArea(a, a), 100.0), "the shared area is the product of the two overlaps");
+    // AnyMeet: five boxes, one pair.
+    std::array<Hud::Rect, 5> five;
+    for (std::size_t i = 0; i < five.size(); ++i) five[i] = Hud::Rect{glm::dvec2(30.0 * static_cast<double>(i), 0.0), glm::dvec2(10.0, 10.0)};
+    CHECK_MSG(!Adjust::AnyMeet(five, c), "five boxes 20 apart do not meet at 4");
+    five[3].min.x = five[2].min.x + 10.0 + 3.0;
+    CHECK_MSG(Adjust::AnyMeet(five, c) && !Adjust::AnyMeet(five, 2.0), "two of them 3 apart do, at 4 and not at 2");
+}
+
+// A press on a control's drawn box grabs it, and it follows the pointer by the offset it was grabbed with; the tuning in force does not change until the release.
+void ADragMovesTheBoxWithThePointersOffset() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // Grabbed 10 right and 20 down of its corner, and again at its far corner: the same pointer path gives the same place (the offset is the pointer's).
+    for (const glm::dvec2 offset : {glm::dvec2(10.0, 20.0), glm::dvec2(31.0, 31.0), glm::dvec2(0.5, 0.5)}) {
+        Pad pad(s);
+        const Hud::Rect start = pad.Shown(Controls::Id::Left);
+        const glm::dvec2 press = start.min + offset;
+        const Adjust::Step down = pad.Press(press);
+        CHECK_MSG(down.use == Adjust::Use::Control && down.grabbed == std::optional<Controls::Id>(Controls::Id::Left) && !down.moved && !down.commit,
+                  "pressed on walk_left's box (" + Num(offset.x) + ", " + Num(offset.y) + ") in: it is grabbed, nothing moved, nothing kept");
+        const Adjust::Step half = pad.Move(press + glm::dvec2(30.0, -40.0));
+        CHECK_MSG(half.moved && NearPoint(pad.Shown(Controls::Id::Left).min, start.min + glm::dvec2(30.0, -40.0), 1e-9), "30 right and 40 up of the press, the box stands 30 right and 40 up of where it began, whatever the offset");
+        const Adjust::Step farStep = pad.Move(press + glm::dvec2(60.0, -90.0));
+        CHECK_MSG(farStep.moved && NearPoint(pad.Shown(Controls::Id::Left).min, start.min + glm::dvec2(60.0, -90.0), 1e-9), "and at (60, -90) it stands at (75.6444, 118.4978)");
+        CHECK_MSG(NearPoint(pad.Shown(Controls::Id::Left).min, glm::dvec2(75.644444444, 118.497777778), 1e-6), "the literal of the Python model");
+        CHECK_MSG(!pad.last.commit && pad.commits == 0 && Adjust::SameKept(pad.tuning, Controls::Tuning{}), "the tuning in force has not changed while the finger is down");
+        CHECK_MSG(NearPoint(MoveOf(farStep.tuning, Controls::Id::Left), glm::dvec2(60.0, -90.0)) && farStep.grabbed, "the screen is shown the tuning with the move (60, -90)");
+        const Adjust::Step up = pad.Release(press + glm::dvec2(60.0, -90.0));
+        CHECK_MSG(up.commit && up.use == Adjust::Use::Control && !up.grabbed && pad.commits == 1, "the release keeps it, once, and lets go");
+        CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Left), glm::dvec2(60.0, -90.0)) && NearRect(pad.Shown(Controls::Id::Left), Hud::Rect{glm::dvec2(75.644444444, 118.497777778), start.size}, 1e-6),
+                  "the kept move is (60, -90): the box is (75.6444, 118.4978)-(107.5022, 150.3556)");
+        for (const Controls::Id other : Controls::kClaimOrder) {
+            if (other != Controls::Id::Left) CHECK_MSG(NearPoint(MoveOf(pad.tuning, other), glm::dvec2(0.0)), std::string(Controls::KeyOf(other)) + " did not move");
+        }
+        CHECK_MSG(pad.Rest().use == Adjust::Use::None, "and the next tick, with no finger, is nothing");
+    }
+}
+
+void ADragIsClampedWhollyInsideTheView() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    int walks = 0;
+    for (const Aspect& aspect : kAspects) {
+        for (const Controls::Insets& insets : kInsetSets) {
+            const Screen s(aspect.ratio, insets);
+            for (const Controls::Id id : Controls::kClaimOrder) {
+                // Each control grabbed in the middle of its box and dragged far past every edge and corner of the view, in eight directions.
+                for (int dir = 0; dir < 8; ++dir) {
+                    const double angle = static_cast<double>(dir) * 0.7853981633974483;
+                    Pad pad(s);
+                    const glm::dvec2 grab = pad.Shown(id).Centre();
+                    pad.Press(grab);
+                    const glm::dvec2 faraway = grab + glm::dvec2(std::cos(angle), std::sin(angle)) * 2000.0;
+                    for (int tick = 1; tick <= 8; ++tick) {
+                        pad.Move(grab + (faraway - grab) * (static_cast<double>(tick) / 8.0));
+                        CHECK_MSG(InsideSafe(pad.Shown(id), s), std::string(aspect.name) + " " + Controls::KeyOf(id) + " heading " + std::to_string(dir) + ": the box is inside the safe rectangle on tick " + std::to_string(tick) + ": " + Show(pad.Shown(id)));
+                    }
+                    pad.Release(faraway);
+                    CHECK_MSG(InsideSafe(pad.Shown(id), s), std::string(aspect.name) + " " + Controls::KeyOf(id) + " heading " + std::to_string(dir) + ": and kept inside it");
+                    ++walks;
+                }
+            }
+        }
+    }
+    CHECK_MSG(walks == 9 * 4 * 5 * 8, "1,440 walks to the edges: " + std::to_string(walks));
+    // The literal: walk_right dragged past the bottom-right corner stands at the corner, a tenth's rounding inside it (Python model).
+    {
+        const Screen s(16.0 / 9.0);
+        Pad pad(s);
+        pad.Straight(pad.Shown(Controls::Id::Right).Centre(), glm::dvec2(1000.0, 1000.0), 40.0);
+        const Hud::Rect box = pad.Shown(Controls::Id::Right);
+        CHECK_MSG(NearRect(box, Hud::Rect{glm::dvec2(423.208888889, 224.097777778), box.size}, 1e-6) && box.Max().x <= s.view.x && box.Max().y <= s.view.y && s.view.x - box.Max().x < 0.05 + 1e-9,
+                  "walk_right past the bottom-right corner: " + Show(box));
+        CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Right), glm::dvec2(15.6, 15.6)), "a move of (15.6, 15.6) from its place");
+    }
+    {
+        const Screen s(16.0 / 9.0, Controls::Insets{21.3, 0.0, 21.3, 12.1});
+        Pad pad(s);
+        pad.Straight(pad.Shown(Controls::Id::Right).Centre(), glm::dvec2(1000.0, 1000.0), 40.0);
+        const Hud::Rect box = pad.Shown(Controls::Id::Right);
+        CHECK_MSG(NearRect(box, Hud::Rect{glm::dvec2(401.908888889, 211.997777778), box.size}, 1e-6), "and with a notch's insets it stops at the safe rectangle's corner, not the view's: " + Show(box));
+    }
+}
+
+void ACandidateMeetingAnotherBoxIsRefusedAndTheControlStays() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    Pad pad(s);
+    const Hud::Rect restart = pad.Shown(Controls::Id::Reset);
+    const Hud::Rect pause = pad.Shown(Controls::Id::Menu);
+    const double gap0 = pause.min.x - restart.Max().x;
+    CHECK_MSG(Near(gap0, 11.377777778, 1e-8) && s.Clearance() < gap0, "restart stands 11.378 from pause, further than the clearance 5.689");
+    const glm::dvec2 grab = restart.Centre();
+    pad.Press(grab);
+    pad.Move(grab + glm::dvec2(3.0, 0.0));
+    CHECK_MSG(NearPoint(pad.Shown(Controls::Id::Reset).min, restart.min + glm::dvec2(3.0, 0.0), 1e-9), "3 units toward pause is free");
+    pad.Move(grab + glm::dvec2(60.0, 0.0));
+    const Hud::Rect stopped = pad.Shown(Controls::Id::Reset);
+    const double gap = pause.min.x - stopped.Max().x;
+    CHECK_MSG(gap >= s.Clearance() && gap < s.Clearance() + 0.1 + 1e-9, "60 units on, the pointer is inside pause and restart stands the clearance from it, to a tenth: gap " + Num(gap));
+    CHECK_MSG(NearPoint(stopped.min - restart.min, glm::dvec2(5.6, 0.0), 1e-9), "at 5.6 from where it began (the Python model)");
+    pad.Move(grab + glm::dvec2(200.0, 0.0));
+    CHECK_MSG(!pad.last.moved && NearRect(pad.Shown(Controls::Id::Reset), stopped), "further on, the control stays");
+    pad.Move(grab + glm::dvec2(20.0, 0.0));
+    CHECK_MSG(NearRect(pad.Shown(Controls::Id::Reset), stopped), "and with the pointer back at 20 - still inside pause's clearance - it stays where it is: it does not jump to the pointer");
+    pad.Release(grab + glm::dvec2(200.0, 0.0));
+    CHECK_MSG(pad.last.commit && pad.commits == 1 && NearPoint(MoveOf(pad.tuning, Controls::Id::Reset), glm::dvec2(5.6, 0.0)) && NearPoint(MoveOf(pad.tuning, Controls::Id::Menu), glm::dvec2(0.0)),
+              "the keeping is where it stayed; pause did not move");
+    CHECK_MSG(!Adjust::AnyMeet(s.Boxes(pad.tuning), s.Clearance()), "and no two of the five meet");
+    // Every control against every other: dragged straight at each neighbour from where it stands, none ever ends within the clearance of one.
+    int pairs = 0;
+    for (const Controls::Id a : Controls::kClaimOrder) {
+        for (const Controls::Id b : Controls::kClaimOrder) {
+            if (a == b) continue;
+            Pad each(s);
+            const glm::dvec2 from = each.Shown(a).Centre();
+            each.Straight(from, each.Shown(b).Centre(), 7.0);
+            CHECK_MSG(!Adjust::AnyMeet(s.Boxes(each.tuning), s.Clearance()), std::string(Controls::KeyOf(a)) + " dragged at " + Controls::KeyOf(b) + " ends clear of it");
+            ++pairs;
+        }
+    }
+    CHECK_MSG(pairs == 20, "twenty ordered pairs");
+}
+
+void ADragSlidesAlongAnObstacleInsteadOfStickingToIt() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // restart toward pause and down: x is refused at the clearance, y is free, so it goes down along pause's side instead of stopping where it met it.
+    {
+        Pad pad(s);
+        const Hud::Rect restart = pad.Shown(Controls::Id::Reset);
+        const glm::dvec2 grab = restart.Centre();
+        pad.Press(grab);
+        pad.Move(grab + glm::dvec2(30.0, 25.0));
+        const Hud::Rect now = pad.Shown(Controls::Id::Reset);
+        CHECK_MSG(NearPoint(now.min - restart.min, glm::dvec2(5.6, 25.0), 1e-9), "right 30 and down 25: x stops at 5.6, y goes on to 25: " + Show(now));
+        pad.Move(grab + glm::dvec2(30.0, 60.0));
+        CHECK_MSG(NearPoint(pad.Shown(Controls::Id::Reset).min - restart.min, glm::dvec2(5.6, 60.0), 1e-9), "and on down to 60, still along pause's side: it slid, it did not stick");
+        // Back up with the pointer still past pause's side: restart is below pause now, so nothing holds it from the pointer's x - it goes there at once,
+        // x first - and pause's underside, the clearance above it, stops it going further up.
+        const Hud::Rect pause = pad.Shown(Controls::Id::Menu);
+        pad.Move(grab + glm::dvec2(30.0, 40.0));
+        const Hud::Rect below = pad.Shown(Controls::Id::Reset);
+        const double underside = below.min.y - pause.Max().y;
+        CHECK_MSG(NearPoint(below.min - restart.min, glm::dvec2(30.0, 46.7), 1e-9) && underside >= s.Clearance() && underside < s.Clearance() + 0.1 + 1e-9,
+                  "and up again with the pointer past pause: under it, the clearance below its underside (to a tenth), at the pointer's x: " + Show(below));
+        // The pointer comes back along pause's side: the control goes up it, to the pointer.
+        pad.Move(grab + glm::dvec2(3.0, 0.0));
+        CHECK_MSG(NearPoint(pad.Shown(Controls::Id::Reset).min - restart.min, glm::dvec2(3.0, 0.0), 1e-9), "and with the pointer back clear of pause's side it goes up it, to the pointer: " + Show(pad.Shown(Controls::Id::Reset)));
+        pad.Release(grab + glm::dvec2(3.0, 0.0));
+        CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Reset), glm::dvec2(3.0, 0.0)), "kept at (3, 0)");
+    }
+    // The same drag at several paces: 1 unit a tick, 40, and the ones between and beyond - the end states agree (review 2 F9). A fast move that would
+    // jump a neighbour ends on the same valid place as a slow one.
+    struct Row {
+        const char* what;
+        Controls::Id id;
+        glm::dvec2 delta;     // the pointer's move from the middle of the box
+        glm::dvec2 expect;    // the kept move (Python model)
+    };
+    const Row rows[] = {
+        {"restart across pause (ends inside it)", Controls::Id::Reset, glm::dvec2(80.0, 0.0), glm::dvec2(5.6, 0.0)},
+        {"restart right and down along pause", Controls::Id::Reset, glm::dvec2(30.0, 25.0), glm::dvec2(5.6, 25.0)},
+        {"walk_left up into Back", Controls::Id::Left, glm::dvec2(0.0, -150.0), glm::dvec2(0.0, -91.1)},
+        {"clear_portals right into the size row", Controls::Id::Clear, glm::dvec2(300.0, 0.0), glm::dvec2(116.4, 0.0)},
+        {"clear_portals down onto Back", Controls::Id::Clear, glm::dvec2(0.0, 200.0), glm::dvec2(0.0, 22.0)},
+        {"clear_portals right and down along Back", Controls::Id::Clear, glm::dvec2(20.0, 200.0), glm::dvec2(20.0, 22.0)},
+    };
+    for (const Row& row : rows) {
+        const glm::dvec2 from = Pad(s).Shown(row.id).Centre();
+        const std::vector<Controls::Tuning> ends = AtPaces(s, from, from + row.delta, {0.5, 1.0, 3.0, 7.3, 40.0, 200.0, 5000.0});
+        CHECK_MSG(AllEqual(ends), std::string(row.what) + ": seven paces from 0.5 to 5,000 units a tick end on the same place");
+        CHECK_MSG(NearPoint(MoveOf(ends.front(), row.id), row.expect, 1e-9) && NearPoint(MoveOf(ends[4], row.id), row.expect, 1e-9),
+                  std::string(row.what) + ": at the Python model's (" + Num(row.expect.x) + ", " + Num(row.expect.y) + "): " + Num(MoveOf(ends.front(), row.id).x) + ", " + Num(MoveOf(ends.front(), row.id).y));
+        CHECK_MSG(!Adjust::AnyMeet(s.Boxes(ends[4]), s.Clearance()), std::string(row.what) + ": and clear of every control");
+    }
+}
+
+// At size 1.0 an arrow is 128 px, the clearance 16 px: 144 px is 51.2 units, a multiple of the tenth a move is kept to, so two arrows CAN stand exactly the
+// clearance apart. That is clear - in both directions, to the last bit - and the walk and the five boxes' test agree on it (ten thousand fuzz gestures found it).
+void AGapOfExactlyTheClearanceIsClearInBothDirectionsAndTheWalkStopsThere() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Controls::Rules& c = d.controls;
+    const Screen s(16.0 / 9.0);
+    Controls::Tuning tuning = SizedTuning(10);
+    const std::array<Hud::Rect, 5> home = s.Boxes(tuning);
+    const double alignX = -(home[Ix(Controls::Id::Right)].min.x - home[Ix(Controls::Id::Left)].min.x);
+    // walk_right moved onto walk_left's column and 51.2 above it: its bottom is exactly the clearance above walk_left's top.
+    tuning.move[Ix(Controls::Id::Right)] = glm::dvec2(std::round(alignX * 10.0) / 10.0, -51.2);
+    tuning = tuning.Clamped(c);
+    const std::array<Hud::Rect, 5> boxes = s.Boxes(tuning);
+    const Hud::Rect& left = boxes[Ix(Controls::Id::Left)];
+    const Hud::Rect& right = boxes[Ix(Controls::Id::Right)];
+    const double gap = left.min.y - right.Max().y;
+    CHECK_MSG(Near(gap, s.Clearance(), 1e-9) && std::fabs(left.min.x - right.min.x) < 0.06, "the arrows stand " + Num(gap) + " apart (the clearance is " + Num(s.Clearance()) + ") in one column");
+    CHECK_MSG(!Adjust::Meets(left, right, s.Clearance()) && !Adjust::Meets(right, left, s.Clearance()) && !Adjust::AnyMeet(boxes, s.Clearance()), "a gap of exactly the clearance is clear, both ways");
+    // A tenth closer meets, a tenth further does not.
+    Controls::Tuning closer = tuning;
+    closer.move[Ix(Controls::Id::Right)].y = -51.1;
+    Controls::Tuning further = tuning;
+    further.move[Ix(Controls::Id::Right)].y = -51.3;
+    const std::array<Hud::Rect, 5> a = s.Boxes(closer);
+    const std::array<Hud::Rect, 5> b = s.Boxes(further);
+    CHECK_MSG(Adjust::Meets(a[Ix(Controls::Id::Left)], a[Ix(Controls::Id::Right)], s.Clearance()) && Adjust::Meets(a[Ix(Controls::Id::Right)], a[Ix(Controls::Id::Left)], s.Clearance()), "a tenth closer, they meet");
+    CHECK_MSG(!Adjust::AnyMeet(b, s.Clearance()), "a tenth further, they do not");
+    // The walk takes that place (the box stands exactly there) and not one tenth nearer: walk_right dragged straight down toward walk_left from a tenth above.
+    Pad pad(s);
+    pad.tuning = further;
+    const glm::dvec2 grab = pad.Shown(Controls::Id::Right).Centre();
+    pad.Straight(grab, grab + glm::dvec2(0.0, 40.0), 3.0);
+    CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Right), glm::dvec2(tuning.move[Ix(Controls::Id::Right)].x, -51.2)) && !Adjust::AnyMeet(s.Boxes(pad.tuning), s.Clearance()),
+              "dragged down at walk_left it stops at the 51.2: " + Num(MoveOf(pad.tuning, Controls::Id::Right).y));
+}
+
+void ACandidateMeetingAWidgetIsRefused() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // restart left into the size row's plus tile, clear_portals right into its minus tile: each stops at the tile's box, to a tenth.
+    {
+        Pad pad(s);
+        pad.Straight(pad.Shown(Controls::Id::Reset).Centre(), pad.Shown(Controls::Id::Reset).Centre() - glm::dvec2(140.0, 0.0), 40.0);
+        const Hud::Rect box = pad.Shown(Controls::Id::Reset);
+        const Hud::Rect tile = s.widgets.At(Adjust::Widget::SizePlus).box;
+        CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Reset), glm::dvec2(-64.1, 0.0)), "restart left 140: it stops at (-64.1, 0), the plus tile's right edge");
+        CHECK_MSG(Adjust::OverlapArea(box, tile) == 0.0 && box.min.x - tile.Max().x >= 0.0 && box.min.x - tile.Max().x < 0.1 + 1e-9, "flush against the tile's box, to a tenth: " + Num(box.min.x - tile.Max().x));
+    }
+    {
+        Pad pad(s);
+        pad.Straight(pad.Shown(Controls::Id::Clear).Centre(), pad.Shown(Controls::Id::Clear).Centre() + glm::dvec2(300.0, 0.0), 40.0);
+        const Hud::Rect box = pad.Shown(Controls::Id::Clear);
+        const Hud::Rect tile = s.widgets.At(Adjust::Widget::SizeMinus).box;
+        CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Clear), glm::dvec2(116.4, 0.0)) && Adjust::OverlapArea(box, tile) == 0.0 && tile.min.x - box.Max().x < 0.1 + 1e-9, "clear_portals right: stops at (116.4, 0) against the minus tile");
+    }
+    // A drop on every widget's middle, from the free side: never inside it. Nothing of the seven is a place a control may be dropped.
+    int drops = 0;
+    for (const Adjust::Widget widget : Adjust::kWidgets) {
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            Pad pad(s);
+            const glm::dvec2 from = pad.Shown(id).Centre();
+            const Hud::Rect target = s.widgets.At(widget).box;
+            pad.Straight(from, target.Centre(), 9.0);
+            for (const Adjust::Widget other : Adjust::kWidgets) {
+                CHECK_MSG(Adjust::OverlapArea(pad.Shown(id), s.widgets.At(other).box) == 0.0, std::string(Controls::KeyOf(id)) + " dragged to the " + Adjust::NameOf(widget) + " does not rest on the " + Adjust::NameOf(other));
+            }
+            ++drops;
+        }
+    }
+    CHECK_MSG(drops == 35, "seven widgets, five controls: " + std::to_string(drops));
+}
+
+void AControlDroppedOnTheBackButtonIsRefused() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    const Hud::Rect back = s.widgets.At(Adjust::Widget::Back).box;
+    CHECK_MSG(NearRect(back, RectOf(kBackBox), 1e-6), "Back stands at the top left, under clear_portals' place: " + Show(back));
+    // From below: walk_left dragged up until the pointer is inside Back.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Left).Centre();
+        const glm::dvec2 into = back.Centre();
+        pad.Straight(from, glm::dvec2(from.x, into.y), 25.0);
+        const Hud::Rect box = pad.Shown(Controls::Id::Left);
+        CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Left), glm::dvec2(0.0, -91.1)), "walk_left up into Back stops at (0, -91.1)");
+        CHECK_MSG(Adjust::OverlapArea(box, back) == 0.0 && box.min.y >= back.Max().y && box.min.y - back.Max().y < 0.1 + 1e-9, "its top is Back's bottom, to a tenth: " + Num(box.min.y - back.Max().y));
+        CHECK_MSG(Adjust::StrictlyInside(s.widgets.At(Adjust::Widget::Back).face, glm::dvec2(from.x, into.y)), "while the pointer stands inside Back's face");
+    }
+    // From above: clear_portals dragged down onto Back.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Clear).Centre();
+        pad.Straight(from, back.Centre(), 5.0);
+        const Hud::Rect box = pad.Shown(Controls::Id::Clear);
+        CHECK_MSG(Adjust::OverlapArea(box, back) == 0.0 && !Adjust::Meets(box, back, 0.0), "clear_portals dropped on Back does not rest on it: " + Show(box));
+        CHECK_MSG(back.min.y - box.Max().y >= 0.0 && back.min.y - box.Max().y < 0.1 + 1e-9, "it stays just above: " + Num(back.min.y - box.Max().y));
+    }
+    // At every aspect and with every set of insets, a control dragged onto Back never rests on it.
+    int drops = 0;
+    for (const Aspect& aspect : kAspects) {
+        for (const Controls::Insets& insets : kInsetSets) {
+            const Screen t(aspect.ratio, insets);
+            const Hud::Rect b = t.widgets.At(Adjust::Widget::Back).box;
+            for (const Controls::Id id : Controls::kClaimOrder) {
+                Pad pad(t);
+                pad.Straight(pad.Shown(id).Centre(), b.Centre(), 11.0);
+                CHECK_MSG(Adjust::OverlapArea(pad.Shown(id), b) == 0.0, std::string(aspect.name) + " " + Controls::KeyOf(id) + " dropped on Back");
+                ++drops;
+            }
+        }
+    }
+    CHECK_MSG(drops == 9 * 4 * 5, "180 drops on Back: " + std::to_string(drops));
+}
+
+void AGrabIsTheDrawnBoxNotTheHitRect() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, d.controls, d.hud, Controls::Tuning{}, s.view, s.insets, kSettled);
+    // walk_left's hit rectangle reaches the view's left and bottom edges; its box does not.
+    const Hud::Rect box = layout.At(Controls::Id::Left).rect;
+    CHECK_MSG(NearRect(box, Hud::Rect{glm::dvec2(15.644444444, 208.497777778), glm::dvec2(31.857777778)}, 1e-6), "walk_left's box (15.6444, 208.4978)");
+    const glm::dvec2 inHitOnly(5.0, 250.0);
+    CHECK_MSG(layout.At(Controls::Id::Left).hit.Contains(inHitOnly) && !Adjust::StrictlyInside(box, inHitOnly), "(5, 250) is in the hit rectangle and outside the box");
+    {
+        Pad pad(s);
+        const Adjust::Step step = pad.Press(inHitOnly);
+        CHECK_MSG(step.use == Adjust::Use::None && !step.grabbed, "a press in the hit rectangle and outside the box grabs nothing");
+        pad.Move(inHitOnly + glm::dvec2(40.0, -40.0));
+        CHECK_MSG(!pad.last.moved && pad.Release(inHitOnly).commit == false, "and dragging on moves nothing and keeps nothing");
+    }
+    // The edges: strictly inside, as a tile is.
+    const glm::dvec2 max = box.Max();
+    const glm::dvec2 mid = box.Centre();
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+        bool grabs;
+    } probes[] = {
+        {"the left edge", glm::dvec2(box.min.x, mid.y), false},
+        {"0.01 inside the left edge", glm::dvec2(box.min.x + 0.01, mid.y), true},
+        {"the right edge", glm::dvec2(max.x, mid.y), false},
+        {"0.01 inside the right edge", glm::dvec2(max.x - 0.01, mid.y), true},
+        {"the top edge", glm::dvec2(mid.x, box.min.y), false},
+        {"0.01 inside the top edge", glm::dvec2(mid.x, box.min.y + 0.01), true},
+        {"the bottom edge", glm::dvec2(mid.x, max.y), false},
+        {"0.01 inside the bottom edge", glm::dvec2(mid.x, max.y - 0.01), true},
+        {"0.01 outside the corner", glm::dvec2(max.x + 0.01, max.y + 0.01), false},
+    };
+    for (const auto& probe : probes) {
+        Pad pad(s);
+        const Adjust::Step step = pad.Press(probe.at);
+        CHECK_MSG((step.use == Adjust::Use::Control && step.grabbed == std::optional<Controls::Id>(Controls::Id::Left)) == probe.grabs, std::string("a press on ") + probe.where + (probe.grabs ? " grabs" : " does not grab"));
+    }
+    // The corner buttons' hit rectangles reach the view's edge too: a press at the very corner is the world's (it grabs nothing); inside the box it grabs.
+    {
+        Pad pad(s);
+        CHECK_MSG(pad.Press(glm::dvec2(s.view.x - 1.0, 1.0)).use == Adjust::Use::None, "the corner of the view, in pause's hit rectangle and outside its box, grabs nothing");
+        Pad inside(s);
+        const Adjust::Step step = inside.Press(inside.Shown(Controls::Id::Menu).Centre());
+        CHECK_MSG(step.use == Adjust::Use::Control && step.grabbed == std::optional<Controls::Id>(Controls::Id::Menu), "and a press in pause's box grabs pause");
+    }
+    // Two boxes on one point (a hand-made file can do it): the one the preview draws on top, the later in the claim order.
+    {
+        Controls::Tuning together;
+        together.move[Ix(Controls::Id::Right)] = glm::dvec2(-392.0, 0.0);
+        const std::array<Hud::Rect, 5> boxes = s.Boxes(together);
+        CHECK_MSG(Adjust::OverlapArea(boxes[Ix(Controls::Id::Right)], boxes[Ix(Controls::Id::Left)]) > 1000.0, "walk_right is moved onto walk_left's place (a tenth off)");
+        Pad pad(s);
+        pad.tuning = together;
+        const Adjust::Step step = pad.Press(boxes[Ix(Controls::Id::Left)].Centre());
+        CHECK_MSG(step.grabbed == std::optional<Controls::Id>(Controls::Id::Right), "a press on both takes the one drawn over the other");
+    }
+}
+
+void AWidgetWinsWhereItCoversAControl() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    // At 5:4 and size 1.4 restart's box meets the size row's plus tile by 798.6 units^2 (the recorded meeting), and its face by some.
+    const Screen s(1.25);
+    Pad pad(s);
+    pad.tuning = SizedTuning(14);
+    const Hud::Rect restart = pad.Shown(Controls::Id::Reset);
+    const Hud::Rect face = s.widgets.At(Adjust::Widget::SizePlus).face;
+    const glm::dvec2 low(std::max(restart.min.x, face.min.x), std::max(restart.min.y, face.min.y));
+    const glm::dvec2 high(std::min(restart.Max().x, face.Max().x), std::min(restart.Max().y, face.Max().y));
+    CHECK_MSG(low.x < high.x && low.y < high.y, "restart's box and the plus tile's face share area at 5:4 and size 1.4");
+    const glm::dvec2 covered = (low + high) * 0.5;
+    CHECK_MSG(Adjust::StrictlyInside(restart, covered) && Adjust::WidgetAt(s.widgets, covered) == Adjust::Widget::SizePlus, "a point in both: restart's box and the plus tile's face");
+    const Adjust::Step press = pad.Press(covered);
+    CHECK_MSG(press.use == Adjust::Use::Widget && !press.grabbed, "pressed there it is the widget's: nothing is grabbed");
+    pad.Move(covered + glm::dvec2(-30.0, 0.0));
+    CHECK_MSG(!pad.last.moved && pad.Release(covered).commit == false && pad.commits == 0, "and dragging on from it moves nothing");
+    // The control's uncovered part is all a drag can take.
+    const glm::dvec2 uncovered(restart.Max().x - 3.0, restart.min.y + 3.0);
+    CHECK_MSG(Adjust::StrictlyInside(restart, uncovered) && Adjust::WidgetAt(s.widgets, uncovered) == Adjust::Widget::None, "a point of restart's box under no face");
+    Pad other(s);
+    other.tuning = SizedTuning(14);
+    const Adjust::Step grab = other.Press(uncovered);
+    CHECK_MSG(grab.use == Adjust::Use::Control && grab.grabbed == std::optional<Controls::Id>(Controls::Id::Reset), "pressed there it is grabbed");
+    // Locked: nothing is grabbed anywhere.
+    Pad locked(s);
+    locked.tuning = SizedTuning(14);
+    locked.unlocked = false;
+    CHECK_MSG(locked.Press(uncovered).use == Adjust::Use::None && locked.Press(covered).use == Adjust::Use::Widget, "locked, a control is not grabbed and a widget is still a widget");
+}
+
+void ADeadEntryPressDoesNotGrab() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // StaysDead is Follow's own question: the death stands while the press that opened the screen is down and no fresh press has come.
+    Adjust::Touch dead;
+    dead.dead = true;
+    CHECK_MSG(Adjust::StaysDead(dead, false, true) && !Adjust::StaysDead(dead, true, true) && !Adjust::StaysDead(dead, false, false) && !Adjust::StaysDead(Adjust::Touch{}, false, true),
+              "it stands for a held press, and ends on a fresh press, on a lift, and is never there for a live touch");
+    // The lock is OPEN (forced, as a layer cannot have it on the first tick) and the press that opened the screen is still down over a control: it grabs nothing, wherever it goes.
+    Pad pad(s);
+    const glm::dvec2 over = pad.Shown(Controls::Id::Reset).Centre();
+    for (int tick = 0; tick < 3; ++tick) {
+        const Adjust::Step step = pad.Tick(false, false, true, over + glm::dvec2(static_cast<double>(tick), 0.0), true);
+        CHECK_MSG(step.use == Adjust::Use::Dead && !step.grabbed && !step.moved && !step.commit, "a dead press over restart's box grabs nothing (tick " + std::to_string(tick) + ")");
+    }
+    pad.Tick(false, false, true, pad.Shown(Controls::Id::Left).Centre(), true);
+    CHECK_MSG(pad.last.use == Adjust::Use::Dead && !pad.drag.Grabbed(), "and slid onto walk_left it still grabs nothing");
+    // It lifts (a tick with no finger); a fresh press on the same box grabs.
+    CHECK_MSG(pad.Tick(false, true, false, over, false).use == Adjust::Use::Dead && !pad.drag.Grabbed(), "the lift is the end of a dead touch, and grabs nothing");
+    CHECK_MSG(pad.Rest().use == Adjust::Use::None, "and the tick after it is none");
+    CHECK_MSG(pad.Press(over).use == Adjust::Use::Control && pad.drag.Grabbed() == std::optional<Controls::Id>(Controls::Id::Reset), "and a fresh press grabs");
+}
+
+void TheScreenAlwaysOpensLockedAndTheLockIsNeverSaved() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // Locked, a press on a control's box is nothing and a drag moves nothing: the lock is what arms it.
+    Pad locked(s);
+    locked.unlocked = false;
+    const glm::dvec2 from = locked.Shown(Controls::Id::Left).Centre();
+    CHECK_MSG(locked.Press(from).use == Adjust::Use::None, "locked: a press on walk_left's box is nothing");
+    locked.Along(from, from + glm::dvec2(60.0, -60.0), 5.0);
+    CHECK_MSG(!locked.last.moved && !locked.drag.Grabbed() && locked.Release(from).commit == false, "and nothing moves or is kept");
+    // The lock tile toggles, and changes no number: the lock is not in the tuning, so it cannot be in the file.
+    const Controls::Rules& c = d.controls;
+    Pad dragged(s);
+    dragged.Straight(dragged.Shown(Controls::Id::Left).Centre(), dragged.Shown(Controls::Id::Left).Centre() + glm::dvec2(40.0, -30.0), 10.0);
+    const Adjust::Outcome open = Adjust::Act(Adjust::Widget::Lock, c, dragged.tuning, false, &s.field);
+    CHECK_MSG(open.acted && open.unlocked && !open.tuningChanged, "the lock opens and no number changes");
+    const std::string text = dragged.tuning.ToJson(c);
+    CHECK_MSG(text.find("lock") == std::string::npos && text.find("unlock") == std::string::npos && text.find("move") != std::string::npos, "the tuning a drag kept says its move and nothing of the lock: " + text);
+    // A size step re-locks; an opacity step does not (with a field, as the layer calls Act).
+    CHECK_MSG(!Adjust::Act(Adjust::Widget::SizePlus, c, dragged.tuning, true, &s.field).unlocked && Adjust::Act(Adjust::Widget::OpacityMinus, c, dragged.tuning, true, &s.field).unlocked, "a size step re-locks with a drag in the file; an opacity step does not");
+}
+
+void ADragCommitsOnceAtTheRelease() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    Pad pad(s);
+    const glm::dvec2 from = pad.Shown(Controls::Id::Right).Centre();
+    pad.Press(from);
+    int moves = 0;
+    glm::dvec2 at = from;
+    for (int tick = 0; tick < 200; ++tick) {
+        at = from - glm::dvec2(0.5 * tick, 0.5 * tick);
+        const Adjust::Step step = pad.Move(at);
+        moves += step.moved ? 1 : 0;
+        CHECK_MSG(!step.commit, "tick " + std::to_string(tick) + " of the drag keeps nothing");
+    }
+    CHECK_MSG(moves > 150 && pad.commits == 0 && Adjust::SameKept(pad.tuning, Controls::Tuning{}), "200 ticks, the control moved on " + std::to_string(moves) + " of them and the tuning in force is as it was");
+    const Adjust::Step up = pad.Release(at);
+    CHECK_MSG(up.commit && pad.commits == 1 && !Adjust::SameKept(pad.tuning, Controls::Tuning{}), "the release keeps it: once");
+    pad.Rest();
+    pad.Rest();
+    CHECK_MSG(pad.commits == 1, "and the ticks after it keep nothing more");
+}
+
+void NothingIsSavedIfTheSameAsLastSaved() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // A drag that comes back to where it began is not a change: no keeping.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Reset).Centre();
+        pad.Press(from);
+        pad.Along(from, from + glm::dvec2(-40.0, 30.0), 7.0);
+        CHECK_MSG(pad.last.moved, "it went somewhere");
+        pad.Along(from + glm::dvec2(-40.0, 30.0), from, 7.0);
+        const Adjust::Step up = pad.Release(from);
+        CHECK_MSG(!up.commit && pad.commits == 0 && Adjust::SameKept(up.tuning, Controls::Tuning{}), "and came home: the release keeps nothing");
+    }
+    // From a moved place to the same moved place: nothing either.
+    {
+        Pad pad(s);
+        pad.tuning.move[Ix(Controls::Id::Menu)] = glm::dvec2(-5.0, 10.0);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Menu).Centre();
+        pad.Press(from);
+        pad.Along(from, from + glm::dvec2(5.0, 5.0), 1.0);
+        pad.Along(from + glm::dvec2(5.0, 5.0), from, 1.0);
+        CHECK_MSG(!pad.Release(from).commit && pad.commits == 0, "a moved control dragged and put back is not a change");
+    }
+    // A press and a release with no move at all.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Clear).Centre();
+        pad.Press(from);
+        CHECK_MSG(!pad.Release(from).commit && pad.commits == 0, "a click on a control keeps nothing");
+    }
+}
+
+void ALostFingerEndsAGrabWhereItStands() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Screen s(16.0 / 9.0);
+    // The pointer leaves the window with the button down: the layer's touch is empty (no release is seen). The grab ends where it stands, and is kept.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Left).Centre();
+        pad.Press(from);
+        pad.Along(from, from + glm::dvec2(50.0, -20.0), 5.0);
+        const Adjust::Step lost = pad.Rest();
+        CHECK_MSG(lost.commit && !lost.grabbed && pad.commits == 1 && NearPoint(MoveOf(pad.tuning, Controls::Id::Left), glm::dvec2(50.0, -20.0)), "a finger that is gone ends the grab where it stood: kept at (50, -20)");
+        CHECK_MSG(pad.Rest().use == Adjust::Use::None && pad.commits == 1, "once");
+    }
+    // A press while a grab is held (its release was never seen): the grab ends, and that press takes nothing.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Left).Centre();
+        pad.Press(from);
+        pad.Move(from + glm::dvec2(20.0, 0.0));
+        const Adjust::Step again = pad.Press(pad.Shown(Controls::Id::Right).Centre());
+        CHECK_MSG(again.commit && !again.grabbed && again.use == Adjust::Use::None && pad.commits == 1, "a second press ends the first grab and grabs nothing itself");
+    }
+    // Cancel: nothing is kept, nothing is held.
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Left).Centre();
+        pad.Press(from);
+        pad.Along(from, from + glm::dvec2(30.0, 0.0), 5.0);
+        CHECK_MSG(pad.drag.Grabbed() && pad.last.moved, "a control is held and has moved");
+        pad.drag.Cancel();
+        CHECK_MSG(!pad.drag.Grabbed() && pad.drag.CurrentUse() == Adjust::Use::None, "cancelled, none is held");
+        const Adjust::Step up = pad.Release(from + glm::dvec2(30.0, 0.0));
+        CHECK_MSG(!up.commit && pad.commits == 0 && Adjust::SameKept(pad.tuning, Controls::Tuning{}), "and its release keeps nothing");
+    }
+    // The lock closing under a grab drops it (it cannot with one pointer; the rule is the drag's own).
+    {
+        Pad pad(s);
+        const glm::dvec2 from = pad.Shown(Controls::Id::Left).Centre();
+        pad.Press(from);
+        pad.unlocked = false;
+        const Adjust::Step step = pad.Move(from + glm::dvec2(20.0, 0.0));
+        CHECK_MSG(!step.moved && !step.grabbed && !step.commit && !pad.drag.Grabbed(), "the lock closed: the grab is dropped and nothing is kept");
+    }
+}
+
+void ADragStepsOutOfAnObstacleItStartsInAndNeverGoesDeeper() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    // At 5:4 and size 1.4 restart's default box already meets the size row's plus tile (the recorded meeting, 798.6 u^2). It can be dragged out of it, and
+    // never further in.
+    const Screen s(1.25);
+    Pad pad(s);
+    pad.tuning = SizedTuning(14);
+    const Hud::Rect restart = pad.Shown(Controls::Id::Reset);
+    const Hud::Rect tile = s.widgets.At(Adjust::Widget::SizePlus).box;
+    const double start = Adjust::OverlapArea(restart, tile);
+    CHECK_MSG(Near(start, 798.626551, 1e-4), "restart's box meets the plus tile's by 798.6 units^2 where it stands: " + Num(start));
+    const glm::dvec2 grab(restart.Max().x - 3.0, restart.min.y + 3.0);
+    // Up: the overlap shrinks at every step, so it goes (as far as the top of the view, which is a clamp).
+    pad.Straight(grab, grab + glm::dvec2(0.0, -30.0), 5.0);
+    const double up = Adjust::OverlapArea(pad.Shown(Controls::Id::Reset), tile);
+    CHECK_MSG(NearPoint(MoveOf(pad.tuning, Controls::Id::Reset), glm::dvec2(0.0, -15.6)), "dragged up it goes to the top of the view: (0, -15.6)");
+    CHECK_MSG(up > 0.0 && up < start && Near(up, 234.197751, 1e-4), "and meets the tile less: " + Num(up));
+    // Down again: deeper, refused. Left: deeper, refused. Both leave the tuning as it was.
+    for (const glm::dvec2 deeper : {glm::dvec2(0.0, 30.0), glm::dvec2(-20.0, 0.0), glm::dvec2(-20.0, 20.0)}) {
+        const Controls::Tuning before = pad.tuning;
+        const glm::dvec2 at = pad.Shown(Controls::Id::Reset).Max() - glm::dvec2(3.0, 3.0);
+        pad.Straight(at, at + deeper, 5.0);
+        CHECK_MSG(Adjust::SameKept(pad.tuning, before), "dragged (" + Num(deeper.x) + ", " + Num(deeper.y) + ") - deeper into the tile - it does not move");
+        CHECK_MSG(Adjust::OverlapArea(pad.Shown(Controls::Id::Reset), tile) <= up + 1e-9, "the overlap is no bigger than it was");
+    }
+    // A control that starts inside a WIDGET does not make the other controls any easier: restart still keeps its clearance from pause.
+    CHECK_MSG(!Adjust::Meets(pad.Shown(Controls::Id::Reset), pad.Shown(Controls::Id::Menu), s.Clearance()), "and clear of pause");
+}
+
+// A size step sends home the controls whose new boxes meet, and only those (design 3.3.4).
+void ASizeStepSendsHomeOnlyTheControlsThatNowMeet() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Controls::Rules& c = d.controls;
+    const Screen s(16.0 / 9.0);
+    // The arrows 12 units apart at 0.7 (clear of each other by the clearance 5.689) and 2.9 apart at 0.8; restart moved 20 left, meeting nothing.
+    Controls::Tuning tuning;
+    const std::array<Hud::Rect, 5> home = s.Boxes(tuning);
+    const double span = home[Ix(Controls::Id::Right)].min.x - home[Ix(Controls::Id::Left)].Max().x; // 359.3 at the default size
+    tuning.move[Ix(Controls::Id::Left)] = glm::dvec2(100.0, 0.0);
+    tuning.move[Ix(Controls::Id::Right)] = glm::dvec2(-(span - 12.0 - 100.0), 0.0);
+    tuning.move[Ix(Controls::Id::Reset)] = glm::dvec2(-20.0, 0.0);
+    tuning = tuning.Clamped(c);
+    {
+        const std::array<Hud::Rect, 5> now = s.Boxes(tuning);
+        const double gap = now[Ix(Controls::Id::Right)].min.x - now[Ix(Controls::Id::Left)].Max().x;
+        CHECK_MSG(Near(gap, 12.0, 0.06) && !Adjust::AnyMeet(now, s.Clearance()), "the arrows stand 12 apart (to the tenth a move is kept to) at 0.7 and no two meet: " + Num(gap));
+        Controls::Tuning bigger = tuning;
+        bigger.sizeSteps = 8;
+        const std::array<Hud::Rect, 5> after = s.Boxes(bigger);
+        CHECK_MSG(Adjust::Meets(after[Ix(Controls::Id::Left)], after[Ix(Controls::Id::Right)], s.Clearance()) && Near(after[Ix(Controls::Id::Right)].min.x - after[Ix(Controls::Id::Left)].Max().x, 2.8977777778, 0.06),
+                  "at 0.8 they are 2.9 apart: they meet");
+    }
+    const Adjust::Outcome out = Adjust::Act(Adjust::Widget::SizePlus, c, tuning, true, &s.field);
+    CHECK_MSG(out.acted && out.tuningChanged && !out.unlocked && out.tuning.SizeStepsIn(c) == 8, "the step is taken and the screen re-locks");
+    CHECK_MSG(NearPoint(MoveOf(out.tuning, Controls::Id::Left), glm::dvec2(0.0)) && NearPoint(MoveOf(out.tuning, Controls::Id::Right), glm::dvec2(0.0)), "both arrows of the pair that meets go home");
+    CHECK_MSG(NearPoint(MoveOf(out.tuning, Controls::Id::Reset), glm::dvec2(-20.0, 0.0)), "restart, which meets nothing, keeps its move");
+    CHECK_MSG(!Adjust::AnyMeet(s.Boxes(out.tuning), s.Clearance()), "and no two of the five meet");
+    // With no field the answer is Step 192's: the moves are left as they are.
+    const Adjust::Outcome plain = Adjust::Act(Adjust::Widget::SizePlus, c, tuning, true);
+    CHECK_MSG(NearPoint(MoveOf(plain.tuning, Controls::Id::Left), glm::dvec2(100.0, 0.0)), "asked without a field it sends nothing home");
+    // A step that makes no boxes meet keeps every move.
+    Controls::Tuning calm;
+    calm.move[Ix(Controls::Id::Left)] = glm::dvec2(30.0, -20.0);
+    calm.move[Ix(Controls::Id::Menu)] = glm::dvec2(-4.0, 5.0); // pause 4 left: 7.4 from restart, clear of its 5.69
+    const Adjust::Outcome kept = Adjust::Act(Adjust::Widget::SizePlus, c, calm, false, &s.field);
+    CHECK_MSG(NearPoint(MoveOf(kept.tuning, Controls::Id::Left), glm::dvec2(30.0, -20.0)) && NearPoint(MoveOf(kept.tuning, Controls::Id::Menu), glm::dvec2(-4.0, 5.0)), "a step that meets nothing sends nothing home");
+    // SendHome is the function, and it is a function of the stepped tuning alone.
+    Controls::Tuning stepped = tuning;
+    stepped.sizeSteps = 8;
+    CHECK_MSG(Adjust::SameKept(Adjust::SendHome(c, stepped, s.field), out.tuning), "SendHome on the stepped tuning is what Act gave");
+}
+
+void IfAnyPairStillMeetsEveryoneGoesHome() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Controls::Rules& c = d.controls;
+    const Screen s(16.0 / 9.0);
+    // As above, and clear_portals moved down so that it stands 6 units above the left arrow's HOME at 0.7 (clear of it) and 1.45 above its home at 0.8: the
+    // arrows meet and go home, and the left arrow at home now meets clear_portals, which met nothing and was not sent: so everyone goes home.
+    Controls::Tuning tuning;
+    const std::array<Hud::Rect, 5> home = s.Boxes(tuning);
+    const double span = home[Ix(Controls::Id::Right)].min.x - home[Ix(Controls::Id::Left)].Max().x;
+    tuning.move[Ix(Controls::Id::Left)] = glm::dvec2(100.0, 0.0);
+    tuning.move[Ix(Controls::Id::Right)] = glm::dvec2(-(span - 12.0 - 100.0), 0.0);
+    tuning.move[Ix(Controls::Id::Reset)] = glm::dvec2(-20.0, 0.0);
+    const double clearY = home[Ix(Controls::Id::Left)].min.y - home[Ix(Controls::Id::Clear)].size.y - 6.0;
+    tuning.move[Ix(Controls::Id::Clear)] = glm::dvec2(0.0, clearY - home[Ix(Controls::Id::Clear)].min.y);
+    tuning = tuning.Clamped(c);
+    {
+        CHECK_MSG(!Adjust::AnyMeet(s.Boxes(tuning), s.Clearance()), "at 0.7 no two meet");
+        Controls::Tuning bigger = tuning;
+        bigger.sizeSteps = 8;
+        const std::array<Hud::Rect, 5> after = s.Boxes(bigger);
+        int meeting = 0;
+        for (const Controls::Id a : Controls::kClaimOrder) {
+            for (const Controls::Id b : Controls::kClaimOrder) {
+                if (Ix(a) < Ix(b) && Adjust::Meets(after[Ix(a)], after[Ix(b)], s.Clearance())) ++meeting;
+            }
+        }
+        CHECK_MSG(meeting == 1 && Adjust::Meets(after[Ix(Controls::Id::Left)], after[Ix(Controls::Id::Right)], s.Clearance()), "at 0.8 only the arrows meet");
+        Controls::Tuning homed = bigger;
+        homed.move[Ix(Controls::Id::Left)] = glm::dvec2(0.0);
+        homed.move[Ix(Controls::Id::Right)] = glm::dvec2(0.0);
+        CHECK_MSG(Adjust::AnyMeet(s.Boxes(homed), s.Clearance()), "and with those two home, the left arrow meets clear_portals");
+    }
+    const Adjust::Outcome out = Adjust::Act(Adjust::Widget::SizePlus, c, tuning, true, &s.field);
+    CHECK_MSG(!Adjust::HasMove(out.tuning), "so everyone goes home - restart and clear_portals too: " + out.tuning.ToJson(c));
+    CHECK_MSG(out.tuning.SizeStepsIn(c) == 8 && !out.unlocked, "the size is the step's and the screen is locked");
+    CHECK_MSG(!Adjust::AnyMeet(s.Boxes(out.tuning), s.Clearance()), "and no two of the five meet");
+}
+
+void RestoreAfterRealDragsClearsThemAllAndKeepsSizeAndOpacity() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Controls::Rules& c = d.controls;
+    const Screen s(16.0 / 9.0);
+    Pad pad(s);
+    pad.tuning = SizedTuning(9);
+    pad.tuning.opacitySteps = 3;
+    CHECK_MSG(!Adjust::Enabled(Adjust::Widget::Restore, c, pad.tuning), "Restore is inert while nothing is moved");
+    pad.Straight(pad.Shown(Controls::Id::Left).Centre(), pad.Shown(Controls::Id::Left).Centre() + glm::dvec2(70.0, -50.0), 9.0);
+    pad.Straight(pad.Shown(Controls::Id::Menu).Centre(), pad.Shown(Controls::Id::Menu).Centre() + glm::dvec2(-30.0, 40.0), 9.0);
+    CHECK_MSG(pad.commits == 2 && Adjust::HasMove(pad.tuning) && Adjust::Enabled(Adjust::Widget::Restore, c, pad.tuning), "two controls dragged: Restore is lit");
+    const Adjust::Outcome out = Adjust::Act(Adjust::Widget::Restore, c, pad.tuning, true, &s.field);
+    CHECK_MSG(out.acted && out.tuningChanged && !out.unlocked && !Adjust::HasMove(out.tuning), "Restore clears every move and re-locks");
+    CHECK_MSG(out.tuning.SizeStepsIn(c) == 9 && out.tuning.OpacityStepsIn(c) == 3 && out.tuning.opacitySteps == std::optional<int>(3), "and keeps the size (0.9) and the opacity (0.6)");
+    CHECK_MSG(!Adjust::Enabled(Adjust::Widget::Restore, c, out.tuning), "and is inert again");
+}
+
+void TheHeldOutlineIsThickerAndSolidAndTheRestBreatheInTicks() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Adjust::Rules::Unlocked& u = d.adjust.unlocked;
+    const glm::dvec2 view = ViewOf(16.0 / 9.0);
+    const Hud::Rect restart = Controls::Boxes(d.controls, Controls::Tuning{}, view, kNoInsets)[Ix(Controls::Id::Reset)];
+    for (const int ticks : {0, 7, 24, 31, 48}) {
+        Adjust::Scene scene;
+        scene.unlocked = true;
+        scene.ticks = ticks;
+        scene.grabbed = Controls::Id::Reset;
+        const std::vector<Adjust::Piece> pieces = Adjust::Pieces(d.adjust, d.controls, d.hud, Controls::Tuning{}, view, kNoInsets, scene);
+        const std::vector<Adjust::Piece> outlines = Of(pieces, Adjust::Element::Outline);
+        CHECK_MSG(outlines.size() == 20u, "twenty outline strips, as ever: tick " + std::to_string(ticks));
+        int held = 0;
+        for (const Adjust::Piece& piece : outlines) {
+            if (piece.control == std::optional<Controls::Id>(Controls::Id::Reset)) {
+                ++held;
+                CHECK_MSG(piece.colour[3] == 255 && u.heldOutlineAlphaByte == 255, "the held control's outline is solid at tick " + std::to_string(ticks));
+                CHECK_MSG(Near(std::min(piece.rect.size.x, piece.rect.size.y), 1.0, 1e-9), "and 1 unit thick");
+            } else {
+                CHECK_MSG(piece.colour[3] == Adjust::OutlineAlphaByte(u, ticks), "the others breathe on the state's ticks: tick " + std::to_string(ticks));
+                CHECK_MSG(Near(std::min(piece.rect.size.x, piece.rect.size.y), 0.7, 1e-9), "and are 0.7 thick");
+            }
+        }
+        CHECK_MSG(held == 4, "four strips round the held control");
+        // The strips are the frame outside its box, 1 unit out.
+        const std::array<Hud::Rect, 4> want = Adjust::FrameStrips(restart, 1.0, true);
+        int matched = 0;
+        for (const Adjust::Piece& piece : outlines) {
+            for (const Hud::Rect& strip : want) matched += piece.control == std::optional<Controls::Id>(Controls::Id::Reset) && NearRect(piece.rect, strip, 1e-9) ? 1 : 0;
+        }
+        CHECK_MSG(matched == 4, "round restart's box, outside it");
+    }
+    // Nothing held: all twenty breathe.
+    Adjust::Scene scene;
+    scene.unlocked = true;
+    scene.ticks = 12;
+    for (const Adjust::Piece& piece : Of(Adjust::Pieces(d.adjust, d.controls, d.hud, Controls::Tuning{}, view, kNoInsets, scene), Adjust::Element::Outline)) {
+        CHECK_MSG(piece.colour[3] == Adjust::OutlineAlphaByte(u, 12) && Near(std::min(piece.rect.size.x, piece.rect.size.y), 0.7, 1e-9), "with none held every outline is the breathing one");
+    }
+}
+
+// G3: ten thousand seeded gestures of every kind the editor has - drags at several paces, size and opacity steps, the lock, Restore - at random shapes and
+// with random safe areas, never leave a box outside the safe rectangle, two boxes meeting, or a tuning that does not read back the same. (The window is
+// not resized inside a run: a saved move is pulled in by the layout and left as stored, so boxes can meet after a resize - a limit, recorded.) Two hundred
+// runs of fifty gestures, each run on a view of its own; the same gestures every time (seeded).
+void TenThousandRandomGesturesNeverBreakTheLayout() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Controls::Rules& c = d.controls;
+    std::mt19937_64 rng(0x6D70193ULL);
+    const auto unit = [&rng]() { return std::uniform_real_distribution<double>(0.0, 1.0)(rng); };
+    const auto pick = [&rng](int n) { return std::uniform_int_distribution<int>(0, n - 1)(rng); };
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-adjust-fuzz";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+
+    long gestures = 0;
+    long drags = 0;
+    long grabs = 0;
+    long commits = 0;
+    long homings = 0;
+    long restores = 0;
+    long relocks = 0;
+    long files = 0;
+    long dragTicks = 0;
+    long badBoxes = 0;
+    long meetings = 0;
+    long badRoundTrips = 0;
+    long badFiles = 0;
+    long otherMoved = 0;
+    long notKept = 0;
+
+    // The invariants of a laid-out tuning: every box wholly inside the safe rectangle, no two boxes within the clearance of each other.
+    const auto invariants = [&](const Screen& s, const Controls::Tuning& tuning, const std::string& where) {
+        const std::array<Hud::Rect, 5> boxes = s.Boxes(tuning);
+        for (const Controls::Id id : Controls::kClaimOrder) {
+            if (!InsideSafe(boxes[Ix(id)], s)) {
+                ++badBoxes;
+                CHECK_MSG(false, where + ": " + Controls::KeyOf(id) + " is outside the safe rectangle: " + Show(boxes[Ix(id)]));
+            }
+        }
+        if (Adjust::AnyMeet(boxes, s.Clearance())) {
+            ++meetings;
+            CHECK_MSG(false, where + ": two boxes meet");
+        }
+    };
+
+    for (int run = 0; run < 200; ++run) {
+        const Aspect& aspect = kAspects[static_cast<std::size_t>(pick(9))];
+        Controls::Insets insets;
+        if (unit() < 0.5) insets = Controls::Insets{unit() * 24.0, unit() * 24.0, unit() * 24.0, unit() * 24.0};
+        const Screen s(aspect.ratio, insets);
+        Pad pad(s);
+        if (unit() < 0.5) pad.tuning = SizedTuning(4 + pick(11));
+        pad.unlocked = false;
+        const std::string runName = "run " + std::to_string(run) + " " + aspect.name;
+        for (int g = 0; g < 50; ++g) {
+            ++gestures;
+            const std::string where = runName + " gesture " + std::to_string(g);
+            const Controls::Tuning before = pad.tuning;
+            const int kind = pick(100);
+            if (kind < 70) {
+                // A drag. Open the lock first, as a player does (a tile is a gesture of its own).
+                if (!pad.unlocked) pad.unlocked = Adjust::Act(Adjust::Widget::Lock, c, pad.tuning, false, &s.field).unlocked;
+                ++drags;
+                const Controls::Id id = Controls::kClaimOrder[static_cast<std::size_t>(pick(5))];
+                const Hud::Rect box = pad.Shown(id);
+                // Mostly a press inside the control's box; sometimes anywhere on the view (a widget, empty space, another control).
+                const glm::dvec2 press = unit() < 0.8 ? box.min + glm::dvec2(unit(), unit()) * box.size : glm::dvec2(unit() * s.view.x, unit() * s.view.y);
+                const double paces[] = {1.0, 7.0, 40.0, 300.0};
+                const double pace = paces[pick(4)];
+                const Adjust::Step down = pad.Press(press);
+                const bool grabbed = down.grabbed.has_value();
+                grabs += grabbed ? 1 : 0;
+                glm::dvec2 at = press;
+                const int legs = 1 + pick(2);
+                for (int leg = 0; leg < legs; ++leg) {
+                    // Mostly a wander near the press, sometimes across the view (and past its edges).
+                    const glm::dvec2 to = unit() < 0.35 ? glm::dvec2(-40.0 + unit() * (s.view.x + 80.0), -40.0 + unit() * (s.view.y + 80.0))
+                                                         : at + glm::dvec2(unit() - 0.5, unit() - 0.5) * 120.0;
+                    const double length = glm::length(to - at);
+                    const int n = std::max(1, static_cast<int>(std::ceil(length / pace)));
+                    for (int i = 1; i <= n; ++i) {
+                        const Adjust::Step step = pad.Move(at + (to - at) * (static_cast<double>(i) / static_cast<double>(n)));
+                        ++dragTicks;
+                        if (grabbed && (i % 4 == 0 || i == n)) {
+                            const std::array<Hud::Rect, 5> boxes = s.Boxes(step.tuning);
+                            for (const Controls::Id each : Controls::kClaimOrder) {
+                                if (!InsideSafe(boxes[Ix(each)], s)) {
+                                    ++badBoxes;
+                                    CHECK_MSG(false, where + ": mid-drag " + Controls::KeyOf(each) + " is outside the safe rectangle");
+                                }
+                            }
+                            if (Adjust::AnyMeet(boxes, s.Clearance())) {
+                                ++meetings;
+                                CHECK_MSG(false, where + ": mid-drag two boxes meet");
+                            }
+                        }
+                    }
+                    at = to;
+                }
+                const Adjust::Step up = pad.Release(at);
+                commits += up.commit ? 1 : 0;
+                if (grabbed) {
+                    // Only the grabbed control may have changed, and the tuning in force changed iff the release said to keep it.
+                    for (const Controls::Id each : Controls::kClaimOrder) {
+                        if (each != *down.grabbed && !NearPoint(MoveOf(pad.tuning, each), MoveOf(before, each), 0.0)) ++otherMoved;
+                    }
+                    if (up.commit == Adjust::SameKept(pad.tuning, before)) ++notKept;
+                } else if (!Adjust::SameKept(pad.tuning, before)) {
+                    ++notKept;
+                }
+            } else if (kind < 80) {
+                const Adjust::Widget widget = unit() < 0.5 ? Adjust::Widget::SizeMinus : Adjust::Widget::SizePlus;
+                const Adjust::Outcome out = Adjust::Act(widget, c, pad.tuning, pad.unlocked, &s.field);
+                if (out.acted) {
+                    const Controls::Tuning plain = before.SizeStepped(c, widget == Adjust::Widget::SizePlus ? 1 : -1);
+                    homings += Adjust::SameKept(out.tuning, plain) ? 0 : 1;
+                    pad.tuning = out.tuning;
+                    pad.unlocked = out.unlocked;
+                    relocks += out.unlocked ? 0 : 1;
+                    CHECK_MSG(!pad.unlocked, where + ": a size step re-locks");
+                }
+            } else if (kind < 88) {
+                const Adjust::Outcome out = Adjust::Act(unit() < 0.5 ? Adjust::Widget::OpacityMinus : Adjust::Widget::OpacityPlus, c, pad.tuning, pad.unlocked, &s.field);
+                if (out.acted) {
+                    CHECK_MSG(out.unlocked == pad.unlocked && !Adjust::SameKept(out.tuning, pad.tuning), where + ": an opacity step changes the opacity and keeps the lock");
+                    for (const Controls::Id each : Controls::kClaimOrder) {
+                        if (!NearPoint(MoveOf(out.tuning, each), MoveOf(pad.tuning, each), 0.0)) ++otherMoved;
+                    }
+                    pad.tuning = out.tuning;
+                }
+            } else if (kind < 94) {
+                pad.unlocked = Adjust::Act(Adjust::Widget::Lock, c, pad.tuning, pad.unlocked, &s.field).unlocked;
+            } else {
+                const Adjust::Outcome out = Adjust::Act(Adjust::Widget::Restore, c, pad.tuning, pad.unlocked, &s.field);
+                if (out.acted) {
+                    ++restores;
+                    pad.tuning = out.tuning;
+                    pad.unlocked = out.unlocked;
+                    CHECK_MSG(!pad.unlocked && !Adjust::HasMove(pad.tuning), where + ": Restore clears the moves and re-locks");
+                }
+            }
+            invariants(s, pad.tuning, where);
+            // The tuning is valid as it stands, and reads back the same from its text.
+            if (!Adjust::SameKept(pad.tuning.Clamped(c), pad.tuning)) {
+                ++badRoundTrips;
+                CHECK_MSG(false, where + ": the tuning is not valid as it stands");
+            }
+            {
+                Supersonic::Json::Value parsed;
+                std::string why;
+                const std::string text = pad.tuning.ToJson(c);
+                if (!Supersonic::Json::Parse(text, parsed, why) || !Adjust::SameKept(Controls::Tuning::ReadFrom(parsed, c), pad.tuning)) {
+                    ++badRoundTrips;
+                    CHECK_MSG(false, where + ": the tuning does not read back the same from " + text);
+                }
+            }
+            // And through a file, the last gesture of every run: Store::Save, then Store::Open of the same directory.
+            if (g == 49) {
+                ++files;
+                Controls::Store store;
+                std::string error;
+                const bool opened = store.Open(dir.string(), c, error);
+                store.SetMode(Controls::Style::Modern);
+                store.SetTuning(pad.tuning);
+                const bool saved = store.Save(error);
+                Controls::Store again;
+                const bool reopened = again.Open(dir.string(), c, error);
+                if (!(opened && saved && reopened) || !Adjust::SameKept(again.SavedTuning(), pad.tuning)) {
+                    ++badFiles;
+                    CHECK_MSG(false, where + ": the file does not read back to the same tuning: " + again.Text());
+                }
+            }
+        }
+    }
+    std::filesystem::remove_all(dir, ec);
+    CHECK_MSG(gestures == 10000, "ten thousand gestures: " + std::to_string(gestures));
+    CHECK_MSG(badBoxes == 0 && meetings == 0 && badRoundTrips == 0 && badFiles == 0 && otherMoved == 0 && notKept == 0,
+              "no box outside the safe rectangle, no two boxes meeting, no tuning or file that fails to read back, no control moved by the drag of another, no release that kept what it should not: " +
+                  std::to_string(badBoxes) + ", " + std::to_string(meetings) + ", " + std::to_string(badRoundTrips) + ", " + std::to_string(badFiles) + ", " + std::to_string(otherMoved) + ", " + std::to_string(notKept));
+    // The fuzz exercised the editor: it is not a loop over nothing (the figures are far under what the seed gives).
+    CHECK_MSG(drags > 6000 && grabs > 2500 && commits > 1000 && restores > 50 && relocks > 300 && files == 200 && dragTicks > 20000,
+              "the gestures were drags " + std::to_string(drags) + ", grabs " + std::to_string(grabs) + ", kept " + std::to_string(commits) + ", Restores " + std::to_string(restores) + ", re-locks " +
+                  std::to_string(relocks) + ", files " + std::to_string(files) + ", drag ticks " + std::to_string(dragTicks) + "; sizes that sent controls home " + std::to_string(homings));
+}
+
 void runTests() {
     TheAdjustBlockIsWhatTheFileSays();
     TheWidgetColumnIsMagicRampagesInUnits();
@@ -1662,6 +2708,29 @@ void runTests() {
     TheEditorGlyphsAreEightPicturesOnOnePlate();
     TheEditorGlyphsFallBackTierByTier();
     WhatTheAdjustBlockRefuses();
+    // The drag (planning step 193, CTL-12).
+    TheDragDataIsWhatTheFileSays();
+    TheOverlapRuleIsMagicRampagesClearance();
+    ADragMovesTheBoxWithThePointersOffset();
+    ADragIsClampedWhollyInsideTheView();
+    ACandidateMeetingAnotherBoxIsRefusedAndTheControlStays();
+    ADragSlidesAlongAnObstacleInsteadOfStickingToIt();
+    AGapOfExactlyTheClearanceIsClearInBothDirectionsAndTheWalkStopsThere();
+    ACandidateMeetingAWidgetIsRefused();
+    AControlDroppedOnTheBackButtonIsRefused();
+    AGrabIsTheDrawnBoxNotTheHitRect();
+    AWidgetWinsWhereItCoversAControl();
+    ADeadEntryPressDoesNotGrab();
+    TheScreenAlwaysOpensLockedAndTheLockIsNeverSaved();
+    ADragCommitsOnceAtTheRelease();
+    NothingIsSavedIfTheSameAsLastSaved();
+    ALostFingerEndsAGrabWhereItStands();
+    ADragStepsOutOfAnObstacleItStartsInAndNeverGoesDeeper();
+    ASizeStepSendsHomeOnlyTheControlsThatNowMeet();
+    IfAnyPairStillMeetsEveryoneGoesHome();
+    RestoreAfterRealDragsClearsThemAllAndKeepsSizeAndOpacity();
+    TheHeldOutlineIsThickerAndSolidAndTheRestBreatheInTicks();
+    TenThousandRandomGesturesNeverBreakTheLayout();
 }
 
 } // namespace

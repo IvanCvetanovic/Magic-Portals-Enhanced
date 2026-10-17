@@ -520,7 +520,9 @@
         "ticks, never the wall clock.",
         "hit_frame_alpha_byte 34 (0x22) and hit_frame_thickness_units 0.5: DECODED spec 42 l.80 (Magic Rampage draws the hit rectangles too), design 3.3.2: each control's hit rectangle",
         "as a faint frame, from LayOut's own rectangles.",
-        "guide_thickness_units 0.7: PORT, design 3.3.2: a thin line across the preview at the character's row (census.character_row_units)."
+        "guide_thickness_units 0.7: PORT, design 3.3.2: a thin line across the preview at the character's row (census.character_row_units).",
+        "held_outline_thickness_units 1.0 and held_outline_alpha_byte 255 (planning step 193, CTL-12): PORT, design 3.3.2 ('1 unit and solid while held'): the outline of the",
+        "control a finger is dragging, in place of the breathing one - thicker and not fading, so the player sees which one the pointer has."
       ],
       "_guess": true,
       "outline_thickness_units": 0.7,
@@ -528,11 +530,25 @@
       "outline_swing_byte": 70,
       "outline_period_ticks": 48,
       "outline_rgb": [255, 255, 255],
+      "held_outline_thickness_units": 1.0,
+      "held_outline_alpha_byte": 255,
       "hit_frame_alpha_byte": 34,
       "hit_frame_thickness_units": 0.5,
       "hit_frame_rgb": [255, 255, 255],
       "guide_thickness_units": 0.7,
       "guide_rgba": [255, 215, 110, 170]
+    },
+
+    "drag": {
+      "_source": [
+        "step_units 0.5 (planning step 193, CTL-12): PORT. A drag moves the control toward the pointer in steps of at most this many units, the x component first and then",
+        "the y, and refuses a step that would meet another control (grown by clearance_px) or a widget, so the control cannot jump over a neighbour at any speed of the",
+        "pointer; the step that is refused is bisected, so it stops within a tenth of a unit of the clearance (a move is kept to a tenth, Controls::Tuning::kMoveSnap) and a",
+        "move of 1 unit a tick and one of 40 end on the same place. A step must be more than the tenth, or the walk would stand still in the rounding; an obstacle is wider",
+        "than a step, or a neighbour could be stepped over (the loader refuses a step under 0.2 or over 8: the smallest box is 18.2 units across)."
+      ],
+      "_guess": true,
+      "step_units": 0.5
     },
 
     "art": {

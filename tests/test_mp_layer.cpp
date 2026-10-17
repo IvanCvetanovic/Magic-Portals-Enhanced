@@ -31320,7 +31320,7 @@ void NoPointerReachesALevelWhileAdjustIsUp() {
         CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Adjust && layer.AdjustHeld() == AdjustUi::Widget::None, what + ": a press at " + Point(place) + " changes nothing of the screen");
         CHECK_MSG(layer.SimLevel() == nullptr && !layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{} && !layer.TouchSwallowed(), what + ": and no level, no contact role, no swallow");
     }
-    // A drag across the preview (a scheduled one) moves no control: dragging is a later step, and the moves are what they were.
+    // A drag across the preview (a scheduled one) moves no control while the lock is shut (it opens locked; the drag of planning step 193 is armed by it), and the moves are what they were.
     {
         const int T = layer.LayerTicks();
         layer.ScheduleDevDrag(T + 1, AdPreviewRect(layer, Controls::Id::Left).Centre() / layer.ViewPx(), glm::dvec2(0.5, 0.2), T + 20);
@@ -31984,6 +31984,451 @@ void TheAdjustScreenReadsTheOnePointerAndTwoTapsActInOrder() {
     CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.8 && layer.ControlsApplied().Opacity(rules) == 1.0, what + ": two taps due together both act: 0.8 and 1.0");
 }
 
+// ---- THE DRAG IN THE SCREEN (planning step 193, CTL-12) ------------------------------------------------------------------------------------------
+//
+// The adjustment screen's second half, through the real path: the pointer, the menu's ticks, the files. While the lock is open a press on a control's drawn box
+// grabs it and it follows the pointer by the offset it was grabbed with, inside the safe rectangle and clear of every other control and every widget; it is
+// KEPT once, at the release (the store's write count is what these read), and the next level starts with it. The pure walk is test_mp_adjust's.
+
+constexpr std::size_t AdIx(Controls::Id id) {
+    return static_cast<std::size_t>(id);
+}
+
+// The five boxes a tuning lays out on the layer's view.
+std::array<Hud::Rect, 5> AdBoxes(const MagicPortalsLayer& layer, const Controls::Tuning& tuning) {
+    return Controls::Boxes(layer.ControlsRules(), tuning, layer.ViewPx(), layer.ControlsInsets());
+}
+
+// A drag with the real pointer: down at `from`, the pointer to `to` at `pace` units a tick (the last tick on it), up there, and one tick of rest.
+void AdDrag(MagicPortalsLayer& layer, entt::registry& registry, const glm::dvec2& from, const glm::dvec2& to, double pace) {
+    tickWith(layer, registry, OsPx(from), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    const int n = std::max(1, static_cast<int>(std::ceil(glm::length(to - from) / pace)));
+    for (int i = 1; i <= n; ++i) tickWith(layer, registry, OsPx(from + (to - from) * (static_cast<double>(i) / static_cast<double>(n))), {MagicPortalsLayer::kTap}, {});
+    releaseWith(layer, registry, OsPx(to));
+    tickWith(layer, registry, kRest, {}, {});
+}
+
+// The flat quads of a frame that are white and opaque and 1 unit thick: a held control's outline.
+int AdHeldOutlineQuads(const MagicPortalsLayer& layer, const std::vector<ScreenOverlay::Quad>& frame) {
+    int found = 0;
+    for (const ScreenOverlay::Quad& quad : frame) {
+        if (!quad.texture.empty() || quad.color.r != 1.0f || quad.color.g != 1.0f || quad.color.b != 1.0f || quad.color.a != 1.0f) continue;
+        const Hud::Rect rect = OnView(layer, quad);
+        if (std::min(rect.size.x, rect.size.y) > 0.95 && std::min(rect.size.x, rect.size.y) < 1.05 && std::max(rect.size.x, rect.size.y) < 200.0) ++found;
+    }
+    return found;
+}
+
+void ADragMovesTheLiveBoxAndIsKeptOnceAtTheRelease() {
+    if (!OriginalArtIsThere("ADragMovesTheLiveBoxAndIsKeptOnceAtTheRelease")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "ADragMovesTheLiveBoxAndIsKeptOnceAtTheRelease";
+    const std::string saves = OsDir("adj-drag-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    OsRun run(OsPaths(saves, OsDir("adj-drag-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.ControlsStore().Persists() && layer.ControlsStore().SaveCount() == 0, what + ": a player's run on a saved Modern, nothing written yet");
+    if (!AdOpen(run, what)) return;
+    CHECK_MSG(!layer.AdjustUnlocked() && !layer.AdjustGrabbed(), what + ": the screen opens LOCKED, with nothing held");
+    const Hud::Rect start = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+
+    // Locked: a press on the arrow's box and a drag from it move nothing and keep nothing.
+    AdDrag(layer, registry, start.Centre(), start.Centre() + glm::dvec2(50.0, -50.0), 5.0);
+    CHECK_MSG(!AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsStore().SaveCount() == 0 && !layer.TuningEdited() && !layer.AdjustGrabbed(), what + ": locked, a drag moves nothing");
+
+    // Unlocked: the lock tile opens it, which saves nothing.
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    CHECK_MSG(layer.AdjustUnlocked() && layer.ControlsStore().SaveCount() == 0 && !layer.TuningEdited(), what + ": the lock opens and nothing is written");
+    const int sounds = OsSounds(layer, "menu_button");
+
+    // Down 10 right and 20 below the arrow's corner; walked to (+60, -90) of that, in twelve ticks.
+    const glm::dvec2 press = start.min + glm::dvec2(10.0, 20.0);
+    const glm::dvec2 target = press + glm::dvec2(60.0, -90.0);
+    tickWith(layer, registry, OsPx(press), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    CHECK_MSG(layer.AdjustGrabbed() == std::optional<Controls::Id>(Controls::Id::Left) && layer.AdjustUse() == AdjustUi::Use::Control && layer.AdjustHeld() == AdjustUi::Widget::None,
+              what + ": pressed on walk_left's box: it is grabbed, and no widget is held");
+    for (int i = 1; i <= 12; ++i) {
+        tickWith(layer, registry, OsPx(press + (target - press) * (static_cast<double>(i) / 12.0)), {MagicPortalsLayer::kTap}, {});
+        CHECK_MSG(layer.ControlsStore().SaveCount() == 0 && !AdjustUi::HasMove(layer.ControlsApplied()) && !layer.TuningEdited(),
+                  what + ": tick " + std::to_string(i) + " of the drag: nothing written, the tuning in force as it was");
+    }
+    const Controls::Tuning& shown = layer.AdjustShownTuning();
+    CHECK_MSG(NearD(shown.move[AdIx(Controls::Id::Left)].x, 60.0, 1e-9) && NearD(shown.move[AdIx(Controls::Id::Left)].y, -90.0, 1e-9), what + ": the screen is shown the move (60, -90)");
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const Hud::Rect want = Controls::DrawRect(AdBoxes(layer, shown)[AdIx(Controls::Id::Left)], rules.faceInset, layer.ModernImage(Controls::Id::Left).empty() ? 0.0 : layer.ModernBodyInset(Controls::Id::Left));
+        CHECK_MSG(AdQuad(frame, layer, layer.ModernImage(Controls::Id::Left), &want) >= 0, what + ": walk_left is drawn where the walk has it, " + ShowRect(want));
+        CHECK_MSG(AdHeldOutlineQuads(layer, frame) == 4, what + ": with the held outline - four solid strips 1 unit thick - round it: " + std::to_string(AdHeldOutlineQuads(layer, frame)));
+    }
+    releaseWith(layer, registry, OsPx(target));
+    CHECK_MSG(!layer.AdjustGrabbed() && layer.TuningEdited() && layer.ControlsStore().SaveCount() == 1, what + ": the release lets go and keeps it: one write");
+    CHECK_MSG(NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Left)].x, 60.0, 1e-9) && NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Left)].y, -90.0, 1e-9), what + ": the tuning in force is the move (60, -90)");
+    CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"move\":{\"walk_left\":[60,-90]}}}", what + ": the file says so: " + OsSavedFile(saves));
+    CHECK_MSG(OsSounds(layer, "menu_button") == sounds, what + ": a drag makes no button's noise");
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(AdHeldOutlineQuads(layer, MenuFrame(registry, layer)) == 0, what + ": and the held outline is gone");
+
+    // A second gesture that comes back to where it began keeps nothing (the store's write count and the file's bytes are the same).
+    {
+        const Hud::Rect moved = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+        const std::string before = OsSavedFile(saves);
+        tickWith(layer, registry, OsPx(moved.Centre()), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        for (int i = 1; i <= 8; ++i) tickWith(layer, registry, OsPx(moved.Centre() + glm::dvec2(3.0 * i, 2.0 * i)), {MagicPortalsLayer::kTap}, {});
+        for (int i = 7; i >= 0; --i) tickWith(layer, registry, OsPx(moved.Centre() + glm::dvec2(3.0 * i, 2.0 * i)), {MagicPortalsLayer::kTap}, {});
+        releaseWith(layer, registry, OsPx(moved.Centre()));
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(layer.ControlsStore().SaveCount() == 1 && OsSavedFile(saves) == before, what + ": a drag that came back keeps nothing: still one write, the same bytes");
+    }
+    // The lock is not in the file, and the screen opens locked again, whatever it was left as.
+    CHECK_MSG(OsSavedFile(saves).find("lock") == std::string::npos, what + ": the file says nothing of the lock");
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options && layer.ControlsStore().SaveCount() == 1, what + ": Back leaves with nothing more to write");
+    if (!AdOpen(layer, registry, what + ": reopened")) return;
+    CHECK_MSG(!layer.AdjustUnlocked() && !layer.AdjustGrabbed() && layer.ControlsStore().SaveCount() == 1, what + ": reopened it is locked again, and the move stands");
+}
+
+// A level starts with the layout the editor made: the moved control is claimed where the drag left it, and the place it left is the world's.
+void AMovedControlIsClaimedInPlayWhereTheDragLeftIt() {
+    if (!OriginalArtIsThere("AMovedControlIsClaimedInPlayWhereTheDragLeftIt")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "AMovedControlIsClaimedInPlayWhereTheDragLeftIt";
+    const std::string saves = OsDir("adj-play-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    OsRun run(OsPaths(saves, OsDir("adj-play-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    const Hud::Rect start = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+    const Hud::Rect right = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Right)];
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    AdDrag(layer, registry, start.Centre(), start.Centre() + glm::dvec2(100.0, -70.0), 9.0);
+    AdDrag(layer, registry, right.Centre(), right.Centre() + glm::dvec2(-60.0, -30.0), 9.0);
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 2 && AdjustUi::HasMove(layer.ControlsApplied()), what + ": two controls dragged, two writes");
+    const Hud::Rect left = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+    const Hud::Rect rightNow = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Right)];
+    CHECK_MSG(NearD(left.min.x - start.min.x, 100.0, 1e-9) && NearD(left.min.y - start.min.y, -70.0, 1e-9) && NearD(rightNow.min.x - right.min.x, -60.0, 1e-9) && NearD(rightNow.min.y - right.min.y, -30.0, 1e-9),
+              what + ": by exactly the pointer's travel");
+    // Out, to the main menu, and into 1-01.
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    MagicPortalsLayer::MenuButton button;
+    button.kind = Kind::Level;
+    button.world = 0;
+    button.level = layer.ChapterTable().Find("level0");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+    PtrRest(layer, registry, 100);
+    CloseTheLevelStartPopup(layer, registry); // a popup over the level would hold every claim
+    PtrRest(layer, registry, 30);
+    Hud::Rect inPlay;
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, inPlay) && SameRect(inPlay, left, 1e-6), what + ": the level's left arrow is the moved box: " + ShowRect(inPlay) + " against " + ShowRect(left));
+    CHECK_MSG(layer.ControlRect(PtrControl::Right, inPlay) && SameRect(inPlay, rightNow, 1e-6), what + ": and its right arrow");
+    CHECK_MSG(layer.ControlAt(left.Centre()) == PtrClaim(PtrControl::Left) && layer.ControlAt(rightNow.Centre()) == PtrClaim(PtrControl::Right), what + ": claimed where it is drawn");
+    CHECK_MSG(!layer.ControlAt(start.Centre()) && !layer.ControlAt(right.Centre()), what + ": and the places they left are the world's: " + PtrName(layer.ControlAt(start.Centre())) + ", " + PtrName(layer.ControlAt(right.Centre())));
+    CHECK_MSG(layer.ControlsRectsLine().find("controls: modern, walk_left") == 0, what + ": and the INFO line of the level says so: " + layer.ControlsRectsLine());
+    // The next run plays the same file.
+    OsRun again(OsPaths(saves, OsDir("adj-play-prisms-2")), what + ": the next run");
+    if (!again.ok) return;
+    CHECK_MSG(SameRect(AdBoxes(again.layer, again.layer.ControlsApplied())[AdIx(Controls::Id::Left)], left, 1e-6) && again.layer.ControlsLine() == "controls: modern (saved)", what + ": the next run reads the moves back");
+}
+
+// The pause's Resume button closes on a press; the pointer is still down over a control that the editor moved there, and it walks nobody until it is up (CTL-7's
+// swallow, on a layout the editor produced, kept in the file and read by a second run).
+void TheResumePressOverAMovedControlWalksNothing() {
+    if (!OriginalArtIsThere("TheResumePressOverAMovedControlWalksNothing")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "TheResumePressOverAMovedControlWalksNothing";
+    const std::string saves = OsDir("adj-resume-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    glm::dvec2 wanted(283.0, 96.0); // the box's top-left: clear of the opacity row's plus tile (its box ends at 282.03) and of Restore, over the Resume button's right side
+    {
+        OsRun run(OsPaths(saves, OsDir("adj-resume-prisms")), what + ": the editor");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (!AdOpen(run, what)) return;
+        const Hud::Rect start = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+        AdClick(layer, registry, AdjustUi::Widget::Lock);
+        // Two gestures, along the bottom and then up: a diagonal drag runs into the pocket the lock tile and the opacity row make (the control would be held
+        // against both), where one along each axis does not.
+        const glm::dvec2 grab = start.min + glm::dvec2(5.0, 5.0);
+        AdDrag(layer, registry, grab, grab + glm::dvec2(wanted.x - start.min.x, 0.0), 12.0);
+        const Hud::Rect along = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+        AdDrag(layer, registry, along.min + glm::dvec2(5.0, 5.0), along.min + glm::dvec2(5.0, 5.0 + wanted.y - along.min.y), 12.0);
+        const Hud::Rect got = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+        CHECK_MSG(NearD(got.min.x, 283.0, 0.06) && NearD(got.min.y, 96.0, 0.06) && layer.ControlsStore().SaveCount() == 2, what + ": the editor drops walk_left at (283, 96) and keeps it: " + ShowRect(got));
+        wanted = got.min;
+        const Hud::Rect tile = layer.AdjustLayout().At(AdjustUi::Widget::OpacityPlus).box;
+        CHECK_MSG(got.min.x >= tile.Max().x, what + ": past the plus tile's box, which the editor refuses");
+    }
+    // A second run, player-style, on the same folder: 4-2's level30 as the swallow's own case uses, the left arrow where the file put it.
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(OsPaths(saves, OsDir("adj-resume-prisms-2")), "level30");
+    if (!PtrReady(registry, layer, what)) return;
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.ControlsLine() == "controls: modern (saved)", what + ": the second run plays the file");
+    Hud::Rect arrow;
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, arrow) && NearD(arrow.min.x, wanted.x, 1e-6) && NearD(arrow.min.y, wanted.y, 1e-6), what + ": the left arrow is where the editor left it: " + ShowRect(arrow));
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), what + ": Escape pauses");
+    PtrRest(layer, registry, 120);
+    const glm::dvec2 point = glm::dvec2(arrow.min.x + 6.0, arrow.min.y + 16.0); // over the arrow's box, near its left edge
+    const std::optional<MagicPortals::Pause::Button> under = MagicPortals::Pause::ButtonAt(layer.PauseRules(), layer.PausedLevel(), layer.PauseSwitches(), layer.ViewPx(), layer.PauseClockMs(), point);
+    CHECK_MSG(under && *under == MagicPortals::Pause::Button::Resume && point.x >= arrow.min.x && point.y < arrow.Max().y, what + ": the point " + Point(point) + " is on the Resume button and inside the moved arrow's box");
+    const glm::vec2 pixel = PtrPixel(layer, point);
+    PtrHold(layer, registry, pixel, true);
+    CHECK_MSG(!layer.Paused(), what + ": the press on Resume resumes the level");
+    const double x0 = playerPx(registry, layer).x;
+    const MdShots shots = MdShotsOf(layer);
+    for (int tick = 0; tick < 40; ++tick) PtrHold(layer, registry, pixel, false);
+    CHECK_MSG(layer.TouchSwallowed() && layer.ControlAt(point) == PtrClaim(PtrControl::Left), what + ": the held pointer is over the arrow and its touch is swallowed");
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0) < 0.5, what + ": and he does not walk: " + PtrNum(playerPx(registry, layer).x - x0));
+    lift(layer, registry, pixel);
+    PtrRest(layer, registry, 2);
+    CHECK_MSG(!layer.TouchSwallowed() && MdFiredNothingSince(layer, shots), what + ": up, the swallow is over and the touch fired nothing");
+    const double x1 = playerPx(registry, layer).x;
+    for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+    CHECK_MSG(x1 - playerPx(registry, layer).x > 8.0, what + ": a fresh press on the moved arrow walks him left: " + PtrNum(x1 - playerPx(registry, layer).x));
+}
+
+void AControlDroppedOnTheBackButtonIsRefusedInTheScreen() {
+    if (!OriginalArtIsThere("AControlDroppedOnTheBackButtonIsRefusedInTheScreen")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "AControlDroppedOnTheBackButtonIsRefusedInTheScreen";
+    const std::string saves = OsDir("adj-backdrop-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    OsRun run(OsPaths(saves, OsDir("adj-backdrop-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    const Hud::Rect back = layer.AdjustLayout().At(AdjustUi::Widget::Back).box;
+    const Hud::Rect start = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+    const glm::dvec2 into = layer.AdjustLayout().At(AdjustUi::Widget::Back).face.Centre();
+    AdDrag(layer, registry, start.Centre(), glm::dvec2(start.Centre().x, into.y), 10.0);
+    const Hud::Rect box = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+    CHECK_MSG(AdjustUi::OverlapArea(box, back) == 0.0 && box.min.y >= back.Max().y && box.min.y - back.Max().y < 0.1 + 1e-6, what + ": dropped on Back's face, walk_left stands below it, to a tenth: " + ShowRect(box));
+    CHECK_MSG(NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Left)].y, -91.1, 1e-9), what + ": at (0, -91.1), the Python model's");
+    // Back is still Back: a click on it leaves.
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": and Back still leaves");
+}
+
+void ADragOnAFlagStartedRunChangesTheRunOnlyAndWritesNothing() {
+    if (!OriginalArtIsThere("ADragOnAFlagStartedRunChangesTheRunOnlyAndWritesNothing")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "ADragOnAFlagStartedRunChangesTheRunOnlyAndWritesNothing";
+    const std::string saves = OsDir("adj-flagdrag-saves");
+    OsRun run(OsPaths(saves, OsDir("adj-flagdrag-prisms"), std::string("modern,walk_left=10:-5")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(!layer.ControlsStore().Persists() && NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Left)].x, 10.0, 1e-9), what + ": a flag's run: a memory-only store, and the flag's move for walk_left");
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    const Hud::Rect right = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Right)];
+    AdDrag(layer, registry, right.Centre(), right.Centre() + glm::dvec2(0.0, -40.0), 8.0);
+    CHECK_MSG(layer.TuningEdited() && NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Right)].y, -40.0, 1e-9), what + ": the drag changed the run: walk_right is 40 up");
+    CHECK_MSG(NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Left)].x, 10.0, 1e-9) && NearD(layer.ControlsApplied().move[AdIx(Controls::Id::Left)].y, -5.0, 1e-9), what + ": on top of what was shown: the flag's move for walk_left stands");
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 0 && !ControlsFileExistsIn(saves), what + ": and nothing was written, and no controls.json appears");
+    // Restore clears the flag's move too, and it does not come back.
+    AdClick(layer, registry, AdjustUi::Widget::Restore);
+    CHECK_MSG(!AdjustUi::HasMove(layer.ControlsApplied()) && !layer.AdjustUnlocked(), what + ": Restore clears every move, the flag's included, and re-locks");
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    MagicPortalsLayer::MenuButton button;
+    button.kind = Kind::Level;
+    button.world = 0;
+    button.level = layer.ChapterTable().Find("level0");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+    PtrRest(layer, registry, 100);
+    CloseTheLevelStartPopup(layer, registry);
+    PtrRest(layer, registry, 30);
+    Hud::Rect arrow;
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, arrow) && SameRect(arrow, AdBoxes(layer, Controls::Tuning{})[AdIx(Controls::Id::Left)], 1e-6), what + ": the level starts with the screen's tuning: the base, not the flag's move");
+    CHECK_MSG(!ControlsFileExistsIn(saves) && layer.ControlsStore().SaveCount() == 0, what + ": and still nothing is written");
+}
+
+void AFingerHeldAcrossADragAndTheScreensCloseLeavesNoRecordStuck() {
+    if (!OriginalArtIsThere("AFingerHeldAcrossADragAndTheScreensCloseLeavesNoRecordStuck")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "AFingerHeldAcrossADragAndTheScreensCloseLeavesNoRecordStuck";
+    const std::string saves = OsDir("adj-heldclose-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    OsRun run(OsPaths(saves, OsDir("adj-heldclose-prisms"), std::nullopt, false, false, false), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    const Hud::Rect start = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+    // The finger grabs walk_left and drags it; the back key closes the screen with the finger STILL DOWN.
+    const glm::dvec2 press = start.Centre();
+    tickWith(layer, registry, OsPx(press), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    for (int i = 1; i <= 6; ++i) tickWith(layer, registry, OsPx(press + glm::dvec2(6.0 * i, -6.0 * i)), {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.AdjustGrabbed() == std::optional<Controls::Id>(Controls::Id::Left), what + ": the arrow is held and has moved");
+    const glm::vec2 here = OsPx(press + glm::dvec2(36.0, -36.0));
+    tickWith(layer, registry, here, {MagicPortalsLayer::kTap, MagicPortalsLayer::kBack}, {MagicPortalsLayer::kBack});
+    for (int tick = 0; tick < 4; ++tick) tickWith(layer, registry, here, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": the key left the screen with the finger still down");
+    CHECK_MSG(!layer.AdjustGrabbed() && layer.AdjustUse() == AdjustUi::Use::None && layer.AdjustHeld() == AdjustUi::Widget::None && layer.OptionsHeld() == OptionsUi::Widget::None, what + ": nothing is held, by either screen");
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 0 && !AdjustUi::HasMove(layer.ControlsApplied()) && !layer.TuningEdited(), what + ": and the unfinished gesture was not kept: no write, the arrow where it began");
+    CHECK_MSG(!layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{} && !layer.TouchSwallowed(), what + ": no controls contact, no role, no swallow");
+    // The finger lifts over Options (a place whose widgets it did not go down on): nothing is pressed.
+    releaseWith(layer, registry, here);
+    PtrRest(layer, registry, 5);
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options && layer.ControlsStyle() == Controls::Style::Modern && layer.OptionsHeld() == OptionsUi::Widget::None, what + ": its lift presses nothing in Options");
+    // Back into the screen: locked, nothing held, the arrow at home; and on to a level where a fresh press walks.
+    if (!AdOpen(layer, registry, what + ": reopened")) return;
+    CHECK_MSG(!layer.AdjustUnlocked() && !layer.AdjustGrabbed() && !AdjustUi::HasMove(layer.ControlsApplied()), what + ": reopened it is locked, with nothing held and nothing moved");
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    MagicPortalsLayer::MenuButton button;
+    button.kind = Kind::Level;
+    button.world = 0;
+    button.level = layer.ChapterTable().Find("level0");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+    PtrRest(layer, registry, 100);
+    CloseTheLevelStartPopup(layer, registry);
+    PtrRest(layer, registry, 30);
+    CHECK_MSG(!layer.TouchSwallowed() && !layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{}, what + ": in the level, with every finger up: no swallow, no split, no role");
+    const double x0 = playerPx(registry, layer).x;
+    const glm::vec2 right = PtrPixel(layer, AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Right)].Centre());
+    tickWith(layer, registry, right, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    for (int tick = 0; tick < 20; ++tick) tickWith(layer, registry, right, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(playerPx(registry, layer).x - x0 > 4.0, what + ": a fresh press on the right arrow walks him: " + PtrNum(playerPx(registry, layer).x - x0));
+}
+
+void ASizeStepSendsHomeInTheScreenAndRestoreClearsWhatDragsMade() {
+    if (!OriginalArtIsThere("ASizeStepSendsHomeInTheScreenAndRestoreClearsWhatDragsMade")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "ASizeStepSendsHomeInTheScreenAndRestoreClearsWhatDragsMade";
+    const std::string saves = OsDir("adj-home-saves");
+    // The arrows 12 apart at 0.7 (the clearance is 5.69) and 2.9 apart at 0.8; restart 20 to the left of its place meets nothing.
+    OsWrite(saves, "controls.json",
+            "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"move\":{\"walk_left\":[100,0],\"walk_right\":[-248.1,0],\"restart\":[-20,0]}}}");
+    OsRun run(OsPaths(saves, OsDir("adj-home-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    {
+        const std::array<Hud::Rect, 5> boxes = AdBoxes(layer, layer.ControlsApplied());
+        const double gap = boxes[AdIx(Controls::Id::Right)].min.x - boxes[AdIx(Controls::Id::Left)].Max().x;
+        CHECK_MSG(NearD(gap, 12.0, 0.06) && !AdjustUi::AnyMeet(boxes, AdjustUi::ClearanceUnits(rules, layer.ViewPx())), what + ": the file puts the arrows " + PtrNum(gap) + " apart, clear of each other");
+    }
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    CHECK_MSG(layer.AdjustUnlocked(), what + ": the lock is open");
+    // A size step: the arrows now meet, and go home; restart keeps its move. It re-locks and is one write.
+    AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.8 && !layer.AdjustUnlocked(), what + ": the size is 0.8 and the screen is locked again");
+    CHECK_MSG(AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsApplied().move[AdIx(Controls::Id::Left)] == glm::dvec2(0.0) && layer.ControlsApplied().move[AdIx(Controls::Id::Right)] == glm::dvec2(0.0) &&
+                  layer.ControlsApplied().move[AdIx(Controls::Id::Reset)] == glm::dvec2(-20.0, 0.0),
+              what + ": the two arrows went home and restart did not");
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 1 && OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":0.8,\"move\":{\"restart\":[-20,0]}}}", what + ": kept once: " + OsSavedFile(saves));
+    // The DEV drag, at 1 unit a tick and at 40: restart toward pause. Both end on the same place.
+    glm::dvec2 ends[2];
+    int slot = 0;
+    for (const double pace : {1.0, 40.0}) {
+        if (slot > 0) {
+            AdClick(layer, registry, AdjustUi::Widget::Restore);
+            CHECK_MSG(!AdjustUi::HasMove(layer.ControlsApplied()), what + ": Restore clears the move before the second drag");
+        }
+        AdClick(layer, registry, AdjustUi::Widget::Lock);
+        const Hud::Rect restart = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Reset)];
+        const glm::dvec2 view = layer.ViewPx();
+        const glm::dvec2 from = restart.Centre();
+        const glm::dvec2 to = from + glm::dvec2(80.0, 0.0);
+        const int T = layer.LayerTicks();
+        const int length = static_cast<int>(std::ceil(80.0 / pace));
+        layer.ScheduleDevDrag(T + 1, from / view, to / view, T + 1 + length);
+        for (int tick = 0; tick < length + 6; ++tick) tickWith(layer, registry, kRest, {}, {});
+        ends[slot] = layer.ControlsApplied().move[AdIx(Controls::Id::Reset)];
+        const std::array<Hud::Rect, 5> boxes = AdBoxes(layer, layer.ControlsApplied());
+        CHECK_MSG(!AdjustUi::AnyMeet(boxes, AdjustUi::ClearanceUnits(rules, view)), what + ": at " + PtrNum(pace) + " units a tick restart stops clear of pause");
+        ++slot;
+    }
+    CHECK_MSG(ends[0] == ends[1] && NearD(ends[0].x, 5.6, 1e-9) && NearD(ends[0].y, 0.0, 1e-9), what + ": 1 unit a tick and 40 end on the same place, (5.6, 0): " + Point(ends[0]) + " and " + Point(ends[1]));
+    // Restore: every move gone, the size kept, the screen locked, and the file is the choice and the size.
+    AdClick(layer, registry, AdjustUi::Widget::Restore);
+    CHECK_MSG(!AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsApplied().Size(rules) == 0.8 && !layer.AdjustUnlocked(), what + ": Restore clears every move, keeps 0.8 and re-locks");
+    CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":0.8}}", what + ": " + OsSavedFile(saves));
+    CHECK_MSG(!AdjustUi::Enabled(AdjustUi::Widget::Restore, rules, layer.ControlsApplied()), what + ": and Restore is inert again");
+}
+
+void ADragInTheScreenIsClampedAndReachesNoLevel() {
+    if (!OriginalArtIsThere("ADragInTheScreenIsClampedAndReachesNoLevel")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "ADragInTheScreenIsClampedAndReachesNoLevel";
+    MagicPortalsLayer::Paths paths = OsPaths(OsDir("adj-clamp-saves"), OsDir("adj-clamp-prisms"), std::string("modern,contacts=two"));
+    paths.controls.testInsets = Controls::Insets{9.0, 7.0, 5.0, 3.0}; // a safe area: the box is held inside it
+    OsRun run(paths, what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    const glm::dvec2 view = layer.ViewPx();
+    const Controls::Insets insets = layer.ControlsInsets();
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const Hud::Rect start = AdBoxes(layer, layer.ControlsApplied())[AdIx(id)];
+        // The pointer goes far beyond the corner of the view that is nearest the control, and is let go there.
+        const glm::dvec2 corner(start.Centre().x < view.x * 0.5 ? -300.0 : view.x + 300.0, start.Centre().y < view.y * 0.5 ? -300.0 : view.y + 300.0);
+        AdDrag(layer, registry, start.Centre(), corner, 30.0);
+        const Hud::Rect box = AdBoxes(layer, layer.ControlsApplied())[AdIx(id)];
+        const glm::dvec2 max = box.Max();
+        CHECK_MSG(box.min.x >= insets.left - 1e-9 && box.min.y >= insets.top - 1e-9 && max.x <= view.x - insets.right + 1e-9 && max.y <= view.y - insets.bottom + 1e-9,
+                  what + ": " + Controls::KeyOf(id) + " dragged past the corner stays inside the safe rectangle: " + ShowRect(box));
+        CHECK_MSG(layer.SimLevel() == nullptr && !layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{} && !layer.TouchSwallowed() && !layer.Paused() && !layer.PopupOpen(),
+                  what + ": and no level saw it: none is loaded, no role, no swallow");
+        CHECK_MSG(!AdjustUi::AnyMeet(AdBoxes(layer, layer.ControlsApplied()), AdjustUi::ClearanceUnits(layer.ControlsRules(), view)), what + ": and no two controls meet");
+    }
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Adjust, what + ": the screen is still up");
+}
+
+void ALoneEngineFingerOnAControlGrabsNothingInTheScreen() {
+    if (!OriginalArtIsThere("ALoneEngineFingerOnAControlGrabsNothingInTheScreen")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "ALoneEngineFingerOnAControlGrabsNothingInTheScreen";
+    OsRun run(OsPaths(OsDir("adj-lone-saves"), OsDir("adj-lone-prisms"), std::string("modern,contacts=two")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the run reads two fingers in a level");
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    CHECK_MSG(layer.AdjustUnlocked(), what + ": the lock is open");
+    const Hud::Rect box = AdBoxes(layer, layer.ControlsApplied())[AdIx(Controls::Id::Left)];
+    // A finger that is not the pointer (an engine contact of its own) goes down on the arrow's box, is dragged away and lifts: the screen reads the first
+    // finger only, as every menu does, so nothing is grabbed, moved or kept.
+    CtTicks(layer, registry, 4, CtPointer{}, {CtFinger{1, OsPx(box.Centre()), false}});
+    CHECK_MSG(!layer.AdjustGrabbed() && layer.AdjustUse() == AdjustUi::Use::None, what + ": a lone finger on the arrow's box grabs nothing");
+    CtTicks(layer, registry, 6, CtPointer{}, {CtFinger{1, OsPx(box.Centre() + glm::dvec2(40.0, -40.0)), false}});
+    CtTick(layer, registry, CtPointer{}, {CtFinger{1, OsPx(box.Centre() + glm::dvec2(40.0, -40.0)), true}});
+    CtTicks(layer, registry, 3, CtPointer{});
+    CHECK_MSG(!layer.AdjustGrabbed() && !AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsStore().SaveCount() == 0 && !layer.TuningEdited(), what + ": dragged, it moves nothing and keeps nothing");
+    CHECK_MSG(!layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{}, what + ": and takes no role");
+    // The pointer does.
+    AdDrag(layer, registry, box.Centre(), box.Centre() + glm::dvec2(40.0, -40.0), 8.0);
+    CHECK_MSG(AdjustUi::HasMove(layer.ControlsApplied()) && layer.TuningEdited(), what + ": the pointer drags it");
+}
+
 void runAdjustTests() {
     AdjustOpensFromOptionsAndTheEntryPressIsDead();
     TheAdjustButtonIsHiddenInClassic();
@@ -32002,6 +32447,16 @@ void runAdjustTests() {
     AnUnforcedPlayersEditsSurviveALayoutOfTheFlagsOwnKind();
     TheNextLevelStartLaysOutClaimsDrawsAndHintsWithTheLiveTuning();
     TheAdjustScreenReadsTheOnePointerAndTwoTapsActInOrder();
+    // The drag (planning step 193, CTL-12).
+    ADragMovesTheLiveBoxAndIsKeptOnceAtTheRelease();
+    AMovedControlIsClaimedInPlayWhereTheDragLeftIt();
+    TheResumePressOverAMovedControlWalksNothing();
+    AControlDroppedOnTheBackButtonIsRefusedInTheScreen();
+    ADragOnAFlagStartedRunChangesTheRunOnlyAndWritesNothing();
+    AFingerHeldAcrossADragAndTheScreensCloseLeavesNoRecordStuck();
+    ASizeStepSendsHomeInTheScreenAndRestoreClearsWhatDragsMade();
+    ADragInTheScreenIsClampedAndReachesNoLevel();
+    ALoneEngineFingerOnAControlGrabsNothingInTheScreen();
 }
 
 void runContactTests() {
