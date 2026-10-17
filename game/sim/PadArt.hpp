@@ -45,6 +45,17 @@ inline constexpr std::array<Glyph, kGlyphCount> kGlyphs = {Glyph::WalkLeft, Glyp
 // For a log line and a test's message.
 const char* NameOf(Glyph glyph);
 
+// The adjustment screen's pictures (planning step 192, CTL-11): eight, for its seven widgets - the lock has one for each of its states, as
+// Magic Rampage has two sprites for it. Drawn on the same plate as the six, but in a list of their own: test_mp_padart holds the six to the
+// plate's invariants (one shared alpha channel, six different pictures) and none of that is asked of these, whose open lock sits on a RED
+// plate (Magic Rampage's editing frame) and so shares a colour with no other.
+enum class EditorGlyph { SizeMinus, SizePlus, OpacityMinus, OpacityPlus, LockLocked, LockUnlocked, Restore, Back };
+inline constexpr std::size_t kEditorGlyphCount = 8;
+inline constexpr std::array<EditorGlyph, kEditorGlyphCount> kEditorGlyphs = {
+    EditorGlyph::SizeMinus,  EditorGlyph::SizePlus,    EditorGlyph::OpacityMinus, EditorGlyph::OpacityPlus,
+    EditorGlyph::LockLocked, EditorGlyph::LockUnlocked, EditorGlyph::Restore,      EditorGlyph::Back};
+const char* NameOf(EditorGlyph glyph);
+
 struct Rgb {
     std::uint8_t r = 0;
     std::uint8_t g = 0;
@@ -67,6 +78,9 @@ struct Pixel {
 inline constexpr Rgb kPlateFill{44, 47, 63};
 inline constexpr Rgb kPlateRim{205, 212, 232};
 inline constexpr Rgb kGlyphColour{244, 247, 255};
+// The open lock's plate: Magic Rampage's red "editing" frame, the colour of the lock while the controls can be moved.
+inline constexpr Rgb kEditingFill{150, 38, 22};
+inline constexpr Rgb kEditingRim{232, 120, 90};
 
 // The sizes that are drawn: below the smallest a glyph is a few pixels, above the largest a bitmap is megabytes; and the
 // largest margin that leaves a body (a quarter of the picture on each side keeps half of it). The margin is the layout's own
@@ -91,6 +105,10 @@ int BodyMarginPx(int size, double bodyInset);
 // The glyph at `size` with a transparent margin of `bodyInset` of it on each side. An empty bitmap, never a partial one,
 // for a size outside [kMinSize, kMaxSize] or an inset outside [0, kMaxBodyInset] (a NaN included).
 Bitmap Draw(Glyph glyph, int size, double bodyInset);
+
+// An editor glyph at `size` with a transparent margin of `bodyInset` of it on each side: the same rules, the same refusals and the same
+// plate (its body fills the picture less the margin) as Draw.
+Bitmap DrawEditor(EditorGlyph glyph, int size, double bodyInset);
 
 // The glyph that stands for a control. The gear is none's: it belongs to the Options entry, not to the five.
 Glyph GlyphOf(Controls::Id id);

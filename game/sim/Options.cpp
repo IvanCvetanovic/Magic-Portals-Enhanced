@@ -155,6 +155,20 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& 
         return fail();
     }
 
+    // The adjustment button.
+    if (!Object(options, "adjust_button", why, "options")) return fail();
+    const Json::Value& adjust = options["adjust_button"];
+    if (!Fraction(adjust, "at_screen", read.adjust.atScreen, why, "options.adjust_button") ||
+        !Size(adjust, "size_units", read.adjust.sizeUnits, why, "options.adjust_button") ||
+        !Text(adjust, "word", read.adjust.word, why, "options.adjust_button") ||
+        !Text(adjust, "font", read.adjust.font, why, "options.adjust_button") ||
+        !Positive(adjust, "units_per_font_px", read.adjust.unitsPerFontPx, why, "options.adjust_button") ||
+        !UiLayer::Read::Pair(adjust, "word_at_units", read.adjust.wordAtUnits, why, "options.adjust_button") ||
+        !ReadColour(adjust, "frame_rgba", read.adjust.frame, why, "options.adjust_button") ||
+        !Byte(adjust, "word_alpha_byte", read.adjust.wordAlphaByte, why, "options.adjust_button")) {
+        return fail();
+    }
+
     out = std::move(read);
     return true;
 }
@@ -182,6 +196,7 @@ std::optional<Controls::Style> StyleOf(Widget widget) {
         return Controls::Style::Classic;
     case Widget::None:
     case Widget::Back:
+    case Widget::Adjust: // the button that opens the adjustment screen chooses no style
         break;
     }
     return std::nullopt;
@@ -209,11 +224,18 @@ Hud::Rect TileRect(const Rules& rules, Controls::Style style, const glm::dvec2& 
     return Hud::Rect{centre - rules.tileSizeUnits * 0.5, rules.tileSizeUnits};
 }
 
-Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point) {
+Hud::Rect AdjustRect(const Rules& rules, const glm::dvec2& viewUnits) {
+    const glm::dvec2 centre = rules.adjust.atScreen * viewUnits;
+    return Hud::Rect{centre - rules.adjust.sizeUnits * 0.5, rules.adjust.sizeUnits};
+}
+
+Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point,
+                bool adjustShown) {
     if (Credits::BackHitRect(credits, viewUnits, stateMs).Contains(point)) return Widget::Back;
     for (const Controls::Style style : kTileStyles) {
         if (TileRect(rules, style, viewUnits).Contains(point)) return WidgetOf(style);
     }
+    if (adjustShown && AdjustRect(rules, viewUnits).Contains(point)) return Widget::Adjust;
     return Widget::None;
 }
 
@@ -234,7 +256,8 @@ std::array<Hud::Rect, 5> ThumbnailRects(const Rules& rules, const Controls::Rule
 }
 
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,
-                          const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held) {
+                          const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held,
+                          bool adjustShown) {
     std::vector<Piece> pieces;
     // The credits' background and back button, as the credits draw them: its first two pieces. (Its papyrus and its strip are the credits'.)
     for (const Credits::Piece& piece : Credits::Pieces(credits, viewUnits, stateMs, Credits::Scroll{}, held == Widget::Back)) {
@@ -306,6 +329,28 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
             word.tile = style;
             pieces.push_back(std::move(word));
         }
+    }
+    if (adjustShown) {
+        const Hud::Rect button = AdjustRect(rules, viewUnits);
+        const bool isHeld = held == Widget::Adjust;
+        const auto tinted = [&](Colour colour) {
+            if (!isHeld) return colour;
+            for (int i = 0; i < 3; ++i) colour[static_cast<std::size_t>(i)] = colour[static_cast<std::size_t>(i)] * pressTint / 255;
+            return colour;
+        };
+        Piece frame;
+        frame.element = Element::AdjustFrame;
+        frame.rect = button;
+        frame.colour = tinted(rules.adjust.frame);
+        pieces.push_back(std::move(frame));
+        Piece word;
+        word.element = Element::Word;
+        word.words = rules.adjust.word;
+        word.font = rules.adjust.font;
+        word.unitsPerFontPx = rules.adjust.unitsPerFontPx;
+        word.rect = Hud::Rect{button.min + rules.adjust.wordAtUnits, glm::dvec2(0.0)};
+        word.colour = tinted(Colour{255, 255, 255, rules.adjust.wordAlphaByte});
+        pieces.push_back(std::move(word));
     }
     return pieces;
 }

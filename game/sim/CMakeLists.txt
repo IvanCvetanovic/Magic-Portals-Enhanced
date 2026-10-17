@@ -6,6 +6,7 @@
 
 add_library(MagicPortalsSim STATIC
     Achievements.cpp
+    Adjust.cpp
     Art.cpp
     Boss.cpp
     Bounce.cpp

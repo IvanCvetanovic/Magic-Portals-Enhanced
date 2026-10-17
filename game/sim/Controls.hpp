@@ -495,6 +495,9 @@ public:
     bool Persists() const { return !m_path.empty(); }
     bool FromFile() const { return m_fromFile; }
     const std::string& Path() const { return m_path; }
+    // How many times Save has WRITTEN the file since Open (planning step 192): a save that found the bytes it wrote last, one that had
+    // nowhere to write, and one that failed are none of them a write. A read-only count, for "once per gesture" to be a number a test reads.
+    int SaveCount() const { return m_saves; }
 
 private:
     Rules m_rules;
@@ -503,6 +506,7 @@ private:
     std::string m_path;
     bool m_fromFile = false;
     std::string m_written; // the bytes this store last wrote, empty before the first Save
+    int m_saves = 0;       // how many times Save wrote the file
 };
 
 // ---- the layout ----------------------------------------------------------------------------------
@@ -655,6 +659,7 @@ struct Policy {
     bool classicClaims = false;       // CTL-6: the modern layout and draw with the CLASSIC claims, a test's variant
     Insets testInsets;                // CTL-6 and CTL-7: a test's safe-area insets, in units; none on a desktop
     std::string artDir;               // CTL-8: where Magic Rampage's pictures are looked for; empty: nowhere
+    std::string editorArtDir;         // CTL-11: where Magic Rampage's editor pictures (the adjustment screen's) are looked for; empty: nowhere
     bool withoutOriginalArt = false;  // CTL-8: a test's variant: the original's own corner sprites (the second tier) are not tried
     // CTL-10: a kept tuning a test injects IN PLACE OF the store's (the layer plays it as the player's file). A flag that carries a size, an
     // opacity or a move (FlagItems::Tunes) replaces it; one that carries only `preset=` / `arrows=`, or none, leaves it in force. Classic

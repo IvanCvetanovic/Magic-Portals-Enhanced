@@ -174,11 +174,70 @@ struct Sample {
     Rgb colour;
 };
 
-Sample SampleAt(Glyph glyph, V p) {
+// The plate every picture sits on, at one sample: nothing outside it, the glyph where `onGlyph`, else its rim or its fill.
+Sample PlateSample(V p, Rgb fill, Rgb rim, bool onGlyph) {
     const double plate = RoundBox(p, kBodyHalf, kPlateCorner);
     if (plate > 0.0) return {};
-    if (OnGlyph(glyph, p)) return {true, kGlyphColour};
-    return {true, plate > -kRimWidth ? kPlateRim : kPlateFill};
+    if (onGlyph) return {true, kGlyphColour};
+    return {true, plate > -kRimWidth ? rim : fill};
+}
+
+Sample SampleAt(Glyph glyph, V p) {
+    return PlateSample(p, kPlateFill, kPlateRim, OnGlyph(glyph, p));
+}
+
+// ---- the eight editor shapes ------------------------------------------------------------------------------------------
+
+// The padlock's body, and its shackle: a half ring on two legs when it is shut; lifted clear of the body, with only its right leg still
+// reaching it, when it is open.
+constexpr V kLockBodyCentre{0.0, 0.22};
+constexpr V kLockBodyHalf{0.40, 0.30};
+constexpr double kShackleRadius = 0.26;
+constexpr double kShackleHalfWidth = 0.075;
+
+bool LockBody(V p) {
+    return RoundBox(p - kLockBodyCentre, kLockBodyHalf, 0.07) <= 0.0;
+}
+
+bool ShutShackle(V p) {
+    const V centre{0.0, -0.08};
+    const bool arc = std::fabs(Length(p - centre) - kShackleRadius) <= kShackleHalfWidth && p.y <= centre.y;
+    const bool legs = std::fabs(std::fabs(p.x) - kShackleRadius) <= kShackleHalfWidth && p.y >= centre.y && p.y <= kLockBodyCentre.y - kLockBodyHalf.y;
+    return arc || legs;
+}
+
+bool OpenShackle(V p) {
+    const V centre{0.0, -0.28};
+    const bool arc = std::fabs(Length(p - centre) - kShackleRadius) <= kShackleHalfWidth && p.y <= centre.y;
+    const bool leg = std::fabs(p.x - kShackleRadius) <= kShackleHalfWidth && p.y >= centre.y && p.y <= kLockBodyCentre.y - kLockBodyHalf.y;
+    return arc || leg;
+}
+
+bool OnEditorGlyph(EditorGlyph glyph, V p) {
+    switch (glyph) {
+    case EditorGlyph::SizeMinus: // a small square: the size comes down
+        return RoundBox(p, {0.22, 0.22}, 0.06) <= 0.0;
+    case EditorGlyph::SizePlus: // a large one: it goes up
+        return RoundBox(p, {0.52, 0.52}, 0.10) <= 0.0;
+    case EditorGlyph::OpacityMinus: // an empty square: the controls fade
+        return std::fabs(RoundBox(p, {0.46, 0.46}, 0.10)) <= 0.06;
+    case EditorGlyph::OpacityPlus: // a full one: they firm
+        return RoundBox(p, {0.46, 0.46}, 0.10) <= 0.0;
+    case EditorGlyph::LockLocked:
+        return LockBody(p) || ShutShackle(p);
+    case EditorGlyph::LockUnlocked:
+        return LockBody(p) || OpenShackle(p);
+    case EditorGlyph::Restore:
+        return Restart(p);
+    case EditorGlyph::Back:
+        return Arrow(p);
+    }
+    return false;
+}
+
+Sample EditorSampleAt(EditorGlyph glyph, V p) {
+    const bool open = glyph == EditorGlyph::LockUnlocked;
+    return PlateSample(p, open ? kEditingFill : kPlateFill, open ? kEditingRim : kPlateRim, OnEditorGlyph(glyph, p));
 }
 
 constexpr int kGrid = 4; // samples a side of a pixel
@@ -213,7 +272,11 @@ int BodyMarginPx(int size, double bodyInset) {
     return static_cast<int>(std::lround(static_cast<double>(size) * bodyInset));
 }
 
-Bitmap Draw(Glyph glyph, int size, double bodyInset) {
+namespace {
+
+// Every picture of this file is rendered by this one function, from a sampler: `sample(p)` says what one sample at the body coordinate p is.
+template <class Sampler>
+Bitmap Render(int size, double bodyInset, const Sampler& sampleAt) {
     // Written so that a NaN fails the test and is refused.
     if (size < kMinSize || size > kMaxSize || !(bodyInset >= 0.0 && bodyInset <= kMaxBodyInset)) return {};
 
@@ -243,7 +306,7 @@ Bitmap Draw(Glyph glyph, int size, double bodyInset) {
             int sumB = 0;
             for (int sy = 0; sy < kGrid; ++sy) {
                 for (int sx = 0; sx < kGrid; ++sx) {
-                    const Sample sample = SampleAt(glyph, V{coordinate(kGrid * x + sx), coordinate(kGrid * y + sy)});
+                    const Sample sample = sampleAt(V{coordinate(kGrid * x + sx), coordinate(kGrid * y + sy)});
                     if (!sample.covered) continue;
                     ++covered;
                     sumR += sample.colour.r;
@@ -261,6 +324,38 @@ Bitmap Draw(Glyph glyph, int size, double bodyInset) {
         }
     }
     return bitmap;
+}
+
+} // namespace
+
+Bitmap Draw(Glyph glyph, int size, double bodyInset) {
+    return Render(size, bodyInset, [glyph](V p) { return SampleAt(glyph, p); });
+}
+
+Bitmap DrawEditor(EditorGlyph glyph, int size, double bodyInset) {
+    return Render(size, bodyInset, [glyph](V p) { return EditorSampleAt(glyph, p); });
+}
+
+const char* NameOf(EditorGlyph glyph) {
+    switch (glyph) {
+    case EditorGlyph::SizeMinus:
+        return "size_minus";
+    case EditorGlyph::SizePlus:
+        return "size_plus";
+    case EditorGlyph::OpacityMinus:
+        return "opacity_minus";
+    case EditorGlyph::OpacityPlus:
+        return "opacity_plus";
+    case EditorGlyph::LockLocked:
+        return "lock_locked";
+    case EditorGlyph::LockUnlocked:
+        return "lock_unlocked";
+    case EditorGlyph::Restore:
+        return "restore";
+    case EditorGlyph::Back:
+        return "back";
+    }
+    return "?";
 }
 
 Glyph GlyphOf(Controls::Id id) {

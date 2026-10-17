@@ -21,7 +21,8 @@ reference/magic-rampage/              ignored by the unanchored `reference/` lin
         sprites/...  extract.json     (21 files; extract.json says the package, each file's sha256, its role)
     controls/                         the five controls, 128 x 128 straight-alpha RGBA PNG
         walk_left.png walk_right.png restart.png pause.png clear_portals.png  manifest.json
-    editor/                           CTL-11 (`--stage editor`: "not yet", exits 2)
+    editor/                           the adjustment screen's eight pictures (`--stage editor`, CTL-11, planning Step 192), 128 x 128 straight-alpha RGBA PNG
+        size_minus.png size_plus.png opacity_minus.png opacity_plus.png lock_locked.png lock_unlocked.png restore.png back.png  manifest.json
 ```
 
 `assets/` is itself a valid `--assets` folder, so the original package (the `.xapk`, or another
@@ -81,8 +82,9 @@ the source decoded plainly, the maximum difference is 112, in RGB, in those 937 
   --show-toplevel` of the current directory, never a path computed from the script's own location;
 * a source of another size (an as-shipped sprite is never resampled to fit), a source whose body is
   not (14, 14, 114, 114), an output with a pixel of exact magenta, or with colour under alpha 0;
-* `--stage editor` and `--stage all`: "not yet: CTL-11" (exit 2). `--extract` already copies the
-  sprites that stage will read.
+* `--stage all` with an `--out`: it writes two folders, so the one `--out` is refused (exit 2); give a stage with it. Both
+  stages are derived and validated before either is written, so a stage that fails leaves the other, and the extracted
+  sprites, unwritten.
 
 It imports nothing but the standard library, numpy and Pillow, nothing from Penumbra (its helpers
 were copied and rewritten, after `make_mr_touch_art.py` there), and no default points outside this
@@ -110,10 +112,51 @@ tools/parity/.venv/Scripts/python -I tools/art/make_mr_controls.py --check      
   and pixels) and with `manifest.json` (sha256 of the file, sha256 of the pixels, the sources'
   sha256, the tool version). It exits 1 and names the output on any difference. A different Pillow
   version may resample differently: the manifest records the version it was made with.
-* Exit codes: 0 done or checked; 1 refused, failed or a difference; 2 usage, or a stage not built.
+* Exit codes: 0 done or checked; 1 refused, failed or a difference; 2 usage.
 * Tests: `tools/parity/.venv/Scripts/python -I -B -m pytest -q -p no:cacheprovider tools/art/tests`
-  (29; every fixture is built inside the tests, no Magic Rampage file is opened). Lint:
+  (38; every fixture is built inside the tests, no Magic Rampage file is opened). Lint:
   `tools/converter/.venv/Scripts/ruff check tools/art`. pytest is in the parity venv (9.1.1).
+
+## The editor stage: the adjustment screen's eight pictures (planning Step 192, CTL-11)
+
+`--stage editor` (or `--stage all`, which writes both folders) makes the pictures of the adjustment screen's seven widgets - the lock has one for each of its two states - into
+`reference/magic-rampage/editor/` (gitignored by the same `reference/` line), 128 x 128 straight-alpha RGBA, with a `manifest.json` of its own (`stage: "editor"`, `tool_version` 1). The sources are the nine editor
+sprites `--extract` already copied; each output is a frame and a symbol laid together **one to one - never resampled** - the symbol's own solid body (alpha >= 250) centred on the frame's, to a whole pixel (an odd
+difference rounds down, so the answer is the same on every machine), alpha-composited, colour under alpha 0 made black. The back button is the sprite as shipped.
+
+| Output | Sources (under the base APK's `assets/`) | Recipe | Body (alpha >= 250) | Margin |
+|---|---|---|---|---|
+| `size_minus.png` | `sprites/smaller-frame-bg.png` + `sprites/resize-symbol-shrink.png` | frame + symbol, 1:1 | (19, 19, 110, 110) | 18 px |
+| `size_plus.png` | `sprites/smaller-frame-bg.png` + `sprites/resize-symbol-enlarge.png` | the same | (19, 19, 110, 110) | 18 px |
+| `opacity_minus.png` | `sprites/smaller-frame-bg.png` + `sprites/adjust-symbol-transparent.png` | the same | (19, 19, 110, 110) | 18 px |
+| `opacity_plus.png` | `sprites/smaller-frame-bg.png` + `sprites/adjust-symbol-opaque.png` | the same | (19, 19, 110, 110) | 18 px |
+| `lock_locked.png` | `sprites/smaller-frame-bg.png` + `sprites/lock-locked.png` | the same | (19, 19, 110, 110) | 18 px |
+| `lock_unlocked.png` | `sprites/smaller-frame-red-bg.png` + `sprites/lock-unlocked.png` | the same, on the RED "editing" frame | (21, 21, 107, 107) | 21 px |
+| `restore.png` | `sprites/smaller-frame-bg.png` + `sprites/icon-restart-64.png` | the same (the icon with its own baked-in shadow, as shipped) | (19, 19, 110, 110) | 18 px |
+| `back.png` | `sprites/inventory-back-button.png` | as shipped | (15, 15, 113, 113) | 15 px |
+
+**Every output has a body of its own** and the manifest records it (`body`) with the margin the layout reads (`body_margin_px`: the smallest of the body's four sides, 18, 21 or 15, over 128): the stone frame's body is
+asymmetric (19 px on its left and top, 18 on its right and below), the red frame's is 21 on every side and the back button's 15. `controls.json`'s `adjust.art.mr.<glyph>.body_inset` is that margin over 128 (0.140625, 0.1640625,
+0.1171875) and a test of this tool's reads the data and fails when the two disagree. The layout draws each picture so that its body fills the widget's FACE (`Controls::DrawRect`), so a frame with a bigger margin is drawn bigger and
+the faces stay one size. `--check` re-derives the eight in memory and compares them with the files, the manifest's hashes and the bodies it records, and fails on a manifest of the other stage.
+
+**The first run of the editor stage (2026-10-17, Pillow 12.3.0)**, from the verbatim copy in `reference/magic-rampage/assets` (the sources' sha256 are in `assets/extract.json`):
+
+| Output | sha256 of the file | bytes | sha256 of the pixels (first 16) |
+|---|---|---|---|
+| `size_minus.png` | `f8644e1606d5fb4b9f5f9478a668ebd77f8c22e0fcfe865b5780bdcbb65741fa` | 8,073 | `9d4e06af54603d34` |
+| `size_plus.png` | `04a0179ec0ae3f92bbee0524f2818501392f71e629b72d88b287ebb760b16362` | 8,170 | `cc9218abc1207802` |
+| `opacity_minus.png` | `bdd7519a7bb56d00d04714b539ccbda50d14515f0dc13612c3f15d43d2a24374` | 7,966 | `7f0df2ceb6659f3c` |
+| `opacity_plus.png` | `37987e192e0c8e69e1b642f683753107ba5ab26236750e92a2e38754334ee8dc` | 7,752 | `2d1e55fb137e9efc` |
+| `lock_locked.png` | `95217835c0b9c5cfcc63a8ef11d496497b20db6e0bbe8ae37073c78f71141071` | 8,090 | `f79e64830fc6640c` |
+| `lock_unlocked.png` | `33f318965e89798ab3e32639dc3a6c96a0c121bf03aefd260038b1c250179250` | 8,540 | `9b487fd608f13409` |
+| `restore.png` | `0e19d486103faa8b17c729eb24001360f5111e4698710ddfb3f43b7cd0b23067` | 8,598 | `dc0038ac8941d565` |
+| `back.png` | `31c46c08885df81451b4e5377a96b7000377c0d70823ca8c2f4043173d83a1f6` | 8,808 | `13ddf18f4714e79f` |
+
+How the game reads them: **the same tiers as the five controls, resolved once, when the adjustment screen is first opened** (a run that never opens it reads no picture and writes no file). Tier one is the file in the folder `editor` BESIDE the
+controls' (`reference/magic-rampage/editor`; main.cpp sets `Paths::controls.editorArtDir` to `<--padart dir>/../editor`, so `--padart` moves both), accepted by the same rules as a control's (it exists, reads, is the size the editor manifest or
+128 x 128 says, and decodes: otherwise one WARN naming both sizes and the next tier); tier two is a glyph the game draws itself (`sim/PadArt`'s eight editor glyphs, written into the scratch directory as `adjust_<name>.png`); tier three is a flat
+quad on the widget's face. The INFO line says which tier each came from, once: `adjust art: size_minus=mr size_plus=mr opacity_minus=mr ...`.
 
 ## Numbers of the first run (2026-10-15, Pillow 12.3.0)
 

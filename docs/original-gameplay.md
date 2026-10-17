@@ -48,6 +48,12 @@ an enhancement of this port's, not a decoded behaviour, and is off for every dev
 (`docs/planning/2026-10-15-modern-controls.md`, planning steps 178 to 185). Where this document says
 what the pads do, it says what **Classic** does.
 
+**ENHANCEMENT (planning step 192).** The adjustment screen - reached from Options, only while the style in force is Modern,
+where the size and the opacity of the five modern controls are stepped and kept - is the same kind of thing: **modern controls are
+an enhancement of this port's, classic is the original.** The original has no options screen and no adjustable controls, so
+nothing on that screen is decoded and nothing in it is read by a classic run (a classic choice lays out, claims, draws and hints
+exactly as it did, whatever was kept for the modern style).
+
 **IDENTIFIER.** `ScreenPad` (`assets/ScreenPad.angelscript`), `setDirection`,
 `MainCharacter` (`assets/MainCharacter.angelscript`), `getMainCharacter`,
 `killMainCharacter`, `isCharacterDead`.

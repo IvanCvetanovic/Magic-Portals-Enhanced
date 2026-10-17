@@ -397,6 +397,244 @@
         "walk_rgba": [205, 212, 232, 255],
         "corner_rgba": [244, 247, 255, 255]
       }
+    },
+
+    "adjust_button": {
+      "_source": [
+        "at_screen [0.5, 0.84]: PORT, design 2.3: centred, under the two tiles (the Classic tile's rectangle ends at 0.62 x 256 + 24 = 182.7 units, this one begins at",
+        "0.84 x 256 - 18 = 197.0). size_units [160, 36]: PORT, as wide as a tile; at 5:4 it begins at x 80 and the back button ends at 76.8, so no widget meets it at any",
+        "supported aspect (held by a test).",
+        "word Adjust controls: PORT, the button's word, in the original's font. units_per_font_px 0.3: PORT, the tiles' words' own scale, so the word is 139 units wide to",
+        "its last glyph's edge, inside the 160. word_at_units [80, 18]: PORT, the word's centre from the button's top-left.",
+        "frame_rgba: PORT, the idle tile's plate. word_alpha_byte 255: PORT.",
+        "The button is drawn and claimed ONLY while the style in force is Modern (a classic run has nothing to adjust)."
+      ],
+      "_guess": true,
+      "at_screen": [0.5, 0.84],
+      "size_units": [160, 36],
+      "word": "Adjust controls",
+      "font": "Matura84_shadow.fnt",
+      "units_per_font_px": 0.3,
+      "word_at_units": [80, 18],
+      "frame_rgba": [34, 30, 52, 190],
+      "word_alpha_byte": 255
+    }
+  },
+
+  "adjust": {
+    "_about": [
+      "THE ADJUSTMENT SCREEN (planning step 192, CTL-11; design 3.1 to 3.6), read by sim/Adjust.LoadRules, STRICTLY and apart from the rest of this",
+      "file, as the `options` block is: sim/Controls.LoadRules does not read it, and a typo in it makes the modern controls unavailable with one",
+      "error line (design D9), never a classic run. An ENHANCEMENT: Magic Rampage's own adjust screen, converted by height (spec 42 l.52-63) and",
+      "drawn with the original's font. Sizes and offsets are px of Magic Rampage's 720 reference (reference.height_px), converted by height; a",
+      "row is a fraction of the view's height; a colour is r, g, b, a bytes. The character's row, which the guide is drawn at, is census.",
+      "character_row_units and the clearance the overlap rule uses is clearance_px: each has ONE source, above, and none is repeated here."
+    ],
+
+    "backdrop_rgba": [22, 19, 33, 255],
+    "_backdrop_rgba": "PORT, design 3.2: an opaque flat backdrop. The screen is its own state: no level is loaded under it and nothing of the main menu or Options shows through.",
+
+    "rows": {
+      "_source": [
+        "size 0.27, opacity 0.40, lock 0.57: DECODED spec 42 l.52-63, Magic Rampage's rows as fractions of the view's height (the rows' y at the port's 256-unit",
+        "view are 69.12, 102.40 and 145.92 units): the size row, the opacity row and the lock row. Each row is centred on the view's middle."
+      ],
+      "size": 0.27,
+      "opacity": 0.40,
+      "lock": 0.57
+    },
+
+    "tile": {
+      "_source": [
+        "box_px 102.4: DECODED spec 42 l.52-63 (128 px x 0.8): the box of a size or opacity tile, 36.409 units. offset_px 102: DECODED the same: a tile's centre is",
+        "this far from the view's middle, 36.267 units, the number between the two tiles.",
+        "face_inset 0.140625: MEASURED (tools/art, the editor manifest: the stone frame smaller-frame-bg.png has its solid body, alpha >= 250, at (19, 19, 110, 110)",
+        "of 128, so 18 px on its tightest side, 18 / 128): the part of a tile a tap hits and the picture's body fills. The box overlaps the next row's by",
+        "3.1 units at 5:4 (design 3.2's 36.41 over a 33.28 row pitch); the faces do not, and a test holds the faces apart at every aspect."
+      ],
+      "box_px": 102.4,
+      "offset_px": 102,
+      "face_inset": 0.140625
+    },
+
+    "lock": {
+      "_source": [
+        "box_px 140: DECODED spec 42 l.52-63: the lock and Restore tiles are 49.778 units square. offset_px 73.44: DECODED the same (0.72 x 102 px, 26.112",
+        "units): each tile's centre is this far from the view's middle, Restore on the right.",
+        "face_inset 0.140625: MEASURED, the same stone frame as the six tiles (see tile.face_inset)."
+      ],
+      "box_px": 140,
+      "offset_px": 73.44,
+      "face_inset": 0.140625
+    },
+
+    "back": {
+      "_source": [
+        "box_px 108.8: DECODED spec 42 l.52-63 (0.85 x 128 px), 38.684 units: the Back button's box.",
+        "face_inset 0.1171875: MEASURED (tools/art, the editor manifest: inventory-back-button.png has its solid body at (15, 15, 113, 113) of 128, 15 / 128).",
+        "gap_below_clear_px 16: the OWNER's decision of 2026-10-16 ('under the clear-portals preview control', top left) with Magic Rampage's own clearance",
+        "(clearance_px, DECODED spec 42 l.119, 16 px): Back's place is FIXED - its left edge is the layout's side margin from the safe rectangle's left and its",
+        "top is the layout's top margin, plus the LARGEST corner box (size 1.4), plus this gap, from the safe rectangle's top - so it clears clear_portals' box by",
+        "at least this at every size, aspect and inset, and never moves as the size is stepped."
+      ],
+      "box_px": 108.8,
+      "face_inset": 0.1171875,
+      "gap_below_clear_px": 16
+    },
+
+    "readout": {
+      "_source": [
+        "font Matura84_shadow.fnt: the original's, as every word of this port. units_per_font_px 0.4: PORT, design 3.2's '20 units tall': a digit of this font is",
+        "49 to 54 px tall, so 19.6 to 21.6 units. alpha_byte 255: PORT.",
+        "The words are the VALUE: n / 10 for the size, n / 5 for the opacity, one decimal ('0.7', '1.0'), digits and the point only - the tiles are the minus and the",
+        "plus. The widest, '0.4', is 40.8 units to its last glyph's edge, inside the 46.36 between the two tiles' faces (a test measures all twenty with the real font)."
+      ],
+      "_guess": true,
+      "font": "Matura84_shadow.fnt",
+      "units_per_font_px": 0.4,
+      "alpha_byte": 255
+    },
+
+    "inert": {
+      "_source": [
+        "alpha_byte 90: PORT, design 3.3.1 'alpha 90/255': a tile at its limit, and Restore with no move to clear, is drawn at this and does nothing."
+      ],
+      "_guess": true,
+      "alpha_byte": 90
+    },
+
+    "flat": {
+      "_source": [
+        "tile_rgba and unlocked_rgba: PORT, the last tier of a widget's picture (no Magic Rampage file, no drawn glyph): a flat quad on the widget's face, light",
+        "on the dark backdrop; the lock is the red one while it is unlocked."
+      ],
+      "_guess": true,
+      "tile_rgba": [205, 212, 232, 255],
+      "unlocked_rgba": [200, 60, 50, 255]
+    },
+
+    "unlocked": {
+      "_source": [
+        "outline_thickness_units 0.7, outline_alpha_byte 110, outline_swing_byte 70, outline_period_ticks 48: DECODED/adapted from design 3.3.2 (Magic Rampage wiggles the",
+        "boxes, B 2.2; no rotation is needed): a thin outline round each control's box, breathing between alpha 40 and 180 as a triangle over 48 ticks - the state's own",
+        "ticks, never the wall clock.",
+        "hit_frame_alpha_byte 34 (0x22) and hit_frame_thickness_units 0.5: DECODED spec 42 l.80 (Magic Rampage draws the hit rectangles too), design 3.3.2: each control's hit rectangle",
+        "as a faint frame, from LayOut's own rectangles.",
+        "guide_thickness_units 0.7: PORT, design 3.3.2: a thin line across the preview at the character's row (census.character_row_units)."
+      ],
+      "_guess": true,
+      "outline_thickness_units": 0.7,
+      "outline_alpha_byte": 110,
+      "outline_swing_byte": 70,
+      "outline_period_ticks": 48,
+      "outline_rgb": [255, 255, 255],
+      "hit_frame_alpha_byte": 34,
+      "hit_frame_thickness_units": 0.5,
+      "hit_frame_rgb": [255, 255, 255],
+      "guide_thickness_units": 0.7,
+      "guide_rgba": [255, 215, 110, 170]
+    },
+
+    "art": {
+      "_about": [
+        "The eight pictures of the seven widgets (the lock has one per state), each through the tiers the five controls use (design 4.2): Magic Rampage's own, read at run time",
+        "from the folder `editor` beside the controls' (tools/art/make_mr_controls.py --stage editor), a glyph the game draws itself (sim/PadArt) and writes into its scratch",
+        "directory, and last a flat quad. A file name is a bare file name (Controls::IsBareFileName), and no two pictures share one, in this block or with the controls'",
+        "generated pictures and the Options gear. Every picture is drawn so that its body fills the widget's face (Controls::DrawRect): a picture with a bigger margin",
+        "is drawn bigger and the faces stay the same size."
+      ],
+      "mr": {
+        "size_minus": {
+          "_source": [ "body_inset 0.140625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of size_minus.png is the stone frame (18 / 128) inset by this fraction of the picture on each side." ],
+          "file": "size_minus.png",
+          "body_inset": 0.140625
+        },
+        "size_plus": {
+          "_source": [ "body_inset 0.140625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of size_plus.png is the stone frame (18 / 128) inset by this fraction of the picture on each side." ],
+          "file": "size_plus.png",
+          "body_inset": 0.140625
+        },
+        "opacity_minus": {
+          "_source": [ "body_inset 0.140625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of opacity_minus.png is the stone frame (18 / 128) inset by this fraction of the picture on each side." ],
+          "file": "opacity_minus.png",
+          "body_inset": 0.140625
+        },
+        "opacity_plus": {
+          "_source": [ "body_inset 0.140625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of opacity_plus.png is the stone frame (18 / 128) inset by this fraction of the picture on each side." ],
+          "file": "opacity_plus.png",
+          "body_inset": 0.140625
+        },
+        "lock_locked": {
+          "_source": [ "body_inset 0.140625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of lock_locked.png is the stone frame (18 / 128) inset by this fraction of the picture on each side." ],
+          "file": "lock_locked.png",
+          "body_inset": 0.140625
+        },
+        "lock_unlocked": {
+          "_source": [ "body_inset 0.1640625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of lock_unlocked.png is the red frame (21 / 128) inset by this fraction of the picture on each side." ],
+          "file": "lock_unlocked.png",
+          "body_inset": 0.1640625
+        },
+        "restore": {
+          "_source": [ "body_inset 0.140625: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of restore.png is the stone frame (18 / 128) inset by this fraction of the picture on each side." ],
+          "file": "restore.png",
+          "body_inset": 0.140625
+        },
+        "back": {
+          "_source": [ "body_inset 0.1171875: MEASURED (tools/art --stage editor, the manifest's body_margin_px over 128): the solid body of back.png is the back button (15 / 128) inset by this fraction of the picture on each side." ],
+          "file": "back.png",
+          "body_inset": 0.1171875
+        }
+      },
+      "generated": {
+        "size_minus": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_size_minus.png",
+          "body_inset": 0.109375
+        },
+        "size_plus": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_size_plus.png",
+          "body_inset": 0.109375
+        },
+        "opacity_minus": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_opacity_minus.png",
+          "body_inset": 0.109375
+        },
+        "opacity_plus": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_opacity_plus.png",
+          "body_inset": 0.109375
+        },
+        "lock_locked": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_lock_locked.png",
+          "body_inset": 0.109375
+        },
+        "lock_unlocked": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_lock_unlocked.png",
+          "body_inset": 0.109375
+        },
+        "restore": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_restore.png",
+          "body_inset": 0.109375
+        },
+        "back": {
+          "_source": [ "body_inset 0.109375: PORT: sim/PadArt draws the editor glyphs with the controls' margin, so a tier change does not move a face." ],
+          "_guess": true,
+          "file": "adjust_back.png",
+          "body_inset": 0.109375
+        }
+      }
     }
   },
 

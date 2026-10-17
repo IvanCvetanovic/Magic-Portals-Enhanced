@@ -24,6 +24,26 @@
 > W - 79.36, 240.64 at 5:4 against the column's 214.47), so the Restore-tile clearances against the pair's top do not arise.) **CTL-11 must re-derive the editor's clearance numbers
 > with `CTL/arith2/editor_clearance.py` first, for the split arrows, and must place Back (or the preview) so that no widget covers a control.**
 
+> **AMENDMENT, 2026-10-17 (planning Step 192, CTL-11): THE ADJUSTMENT SCREEN'S BACK BUTTON STANDS AT THE TOP LEFT, UNDER THE CLEAR-PORTALS PREVIEW.** Step 186 split the walk arrows and put `walk_right` where this
+> design's Back was (bottom-right); the owner's assistant proposed, and on 2026-10-16 the owner accepted in chat ("proceed with your suggestion"), that **Back stands in the TOP-LEFT corner, BELOW the clear-portals preview control**, not at the design's
+> bottom-right. Back is a **fixed place**: its left is the layout's side margin (44 px = 15.644 units) and its top is the layout's top margin plus the LARGEST corner box (size 1.4: 57.344) plus Magic Rampage's own 16 px clearance (5.689), all from the safe
+> rectangle's corner: **top 78.677, box (15.644, 78.677)-(54.329, 117.362), 38.684 square (0.85 x 128 px)**, at 16:9 and every other aspect, and it never moves as the size is stepped. It clears clear_portals' box by **5.689 units (16 px) at size 1.4, the
+> least, and by 22.073 at the default size 0.7**, at every size, aspect and safe area (nine aspects x eleven sizes x four inset sets: the least is exactly 5.689). With the arrows in the corners no other default box meets Back at any size or aspect (the left
+> arrow's top, 176.64 at size 1.4, is 59.28 below Back's bottom, which a top and a bottom inset of less than 59.28 units between them keep).
+>
+> **Superseded by Step 192** (everything below describes the design as first written unless Step 192 says otherwise): **0.1**'s row "B 5 W1: editor Back at MR's top-left | overlaps the clear-portals preview ... Back goes to the bottom-right" (the overlap is real and it
+> is avoided by standing UNDER the preview, not by the bottom-right corner); **3.2**'s "Back bottom-right, box 38.68, inset 15.64", its table of clearances and its three numbers (the **5.83** of Restore against the pair's top, the **22.86** of `walk_right` at 16:9 and size 1.4,
+> and the pair's top **176.64**: they are the GROUPED pair's) and the paragraph under it; **3.5** L5's "Back moved off the clear preview"; **3.6** L-2's "Adjust's Back is bottom-right and returns to Options, which has nothing there" (Back is now inside Options' own credits-back
+> button's rectangle, so the return press is pinned to act on exactly one screen: `BackLeavesAdjustAndOptionsTakesNothingFromThePress`); **CTL-11**'s tests `AtSixteenNineTheLeastClearanceIsTwentyTwoPointEightSixAtSizeOnePointFour` and `RestoreClearsThePairByFivePointEightThreeAtSizeOnePointFour` (renamed
+> `AtSixteenNineTheLeastClearanceToTheTilesIsThirtyOnePointThreeSevenAtSizeOnePointFour` and `RestoreAndTheColumnClearTheSplitArrowsAtEverySizeAndAspect`), its G2 ("the clearance table of 3.2 equals the measured one to 0.01": the table is re-derived below and `out/parity/program/CTL/CTL11/editor_clearance.py` is
+> the contract) and its "fails if" line about Back at the top-left (it is now the DECISION: Back is moved off the clear button, under it); **6**'s **Q11** (answered by the owner's assistant's proposal, accepted: top-left, under the preview); and **Appendix A**'s last paragraph (its 5.83 and 22.86).
+>
+> **The re-derived clearances, the split arrows and Back at the top left** (`CTL/CTL11/editor_clearance.py`, Python arithmetic; a widget has a BOX, Magic Rampage's, and a FACE, the box shrunk by its frame's margin, which is what a tap hits; the table is of the BOXES, the larger). The column is W/2 +- 54.471 across and 50.916 to
+> 170.809 down at every aspect (rows at 0.27, 0.40 and 0.57 of the height; two rows' boxes overlap by 3.129 units and their faces are 7.111 apart). The least distance from a default control's box to the six tiles (Back apart), size 0.7 / size 1.4: 5:4 **overlaps** (restart against the size row's plus tile: -3.41 / -22.07); 4:3 7.25 / overlaps; 3:2 28.59 / overlaps (-4.18);
+> 16:10 41.39 / 8.62; **16:9 64.14 / 31.37**; 20:9 121.03 / 88.26; 21:9 135.25 / 102.49; 32:9 291.70 / 258.93; 2:1 92.59 / 59.82. The meetings: **restart's box meets the size row's plus tile at 5:4 at every size, from size 1.1 at 4:3, at size 1.4 at 3:2, and never at 16:10 and wider, and no other control's box meets any widget's box at any
+> size or aspect**; restart's box meets a widget's FACE (what a tap hits) from size 1.1 at 5:4 and from 1.2 at 4:3 only. No default control is wholly under a widget anywhere. The arrows stand in the corners: 26.169 units from the column at 5:4 and size 1.4 (93.72 at 16:9), so Restore's old "5.83 against the pair" does not arise (the column's bottom, 170.809, is 5.831 above the arrows' top
+> at size 1.4, in the middle of the screen against the corners). Widgets win every hit test in Adjust, and Restore recovers anything a widget covers.
+
 # CTL design: Magic Rampage's modernised controls for Magic Portals Enhanced (FINAL, second pass)
 
 Designer's final step plan, 2026-10-15, written after two independent reviews (`review1.md`: parity and regression; `review2.md`: player experience and design fidelity). Read-only role:

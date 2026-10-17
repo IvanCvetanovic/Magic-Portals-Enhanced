@@ -83,7 +83,38 @@ def restart_icon_array(halo: bool = True) -> np.ndarray:
     return array
 
 
+# What the tool measures of each editor sprite on the real package (alpha >= 250), as numbers: the test
+# paints stand-ins with exactly these solid bodies (and no Magic Rampage pixel).
+EDITOR_BODIES = {
+    "sprites/smaller-frame-bg.png": (128, (19, 19, 110, 110)),
+    "sprites/smaller-frame-red-bg.png": (128, (21, 21, 107, 107)),
+    "sprites/inventory-back-button.png": (128, (15, 15, 113, 113)),
+    "sprites/resize-symbol-shrink.png": (64, (10, 17, 47, 54)),
+    "sprites/resize-symbol-enlarge.png": (64, (13, 13, 51, 51)),
+    "sprites/adjust-symbol-transparent.png": (64, (15, 15, 49, 48)),
+    "sprites/adjust-symbol-opaque.png": (64, (15, 15, 49, 49)),
+    "sprites/lock-locked.png": (64, (13, 9, 51, 55)),
+    "sprites/lock-unlocked.png": (64, (13, 9, 51, 55)),
+}
+
+
+def editor_sprite_indices(size: int, body: tuple[int, int, int, int], ink: int) -> np.ndarray:
+    """A faint 3 px shadow, then the solid body, then a smaller square of `ink` in its middle."""
+    index = np.zeros((size, size), np.uint8)
+    left, top, right, bottom = body
+    index[max(0, top - 3):bottom + 3, max(0, left - 3):right + 3] = 1
+    index[top:bottom, left:right] = 3
+    index[top + 4:bottom - 4, left + 4:right - 4] = ink
+    return index
+
+
+def write_editor_sprites(root: Path) -> None:
+    for number, (member, (size, body)) in enumerate(EDITOR_BODIES.items()):
+        write_palette_png(root / member, editor_sprite_indices(size, body, 2 + 2 * (number % 2)))
+
+
 def write_package(root: Path, *, left: np.ndarray | None = None, halo: bool = True) -> Path:
+    write_editor_sprites(root)
     write_palette_png(root / "sprites/dpad-frame.png", frame_indices())
     write_palette_png(root / "sprites/dpad-left.png", left_indices() if left is None else left)
     write_palette_png(root / "sprites/dpad-right.png", right_indices())
@@ -524,12 +555,145 @@ def test_a_missing_source_is_reported_and_nothing_is_written(
     assert not (repo / "reference").exists()
 
 
-def test_the_editor_stage_is_not_yet(repo: Path, package: Path,
-                                     capsys: pytest.CaptureFixture[str]) -> None:
-    for stage in ("editor", "all"):
-        assert mr.main(["--assets", str(package), "--stage", stage]) == mr.EXIT_USAGE
-        assert "CTL-11" in capsys.readouterr().err
+# --- the editor stage ------------------------------------------------------------------------
+
+def test_the_editor_stage_writes_eight_pictures_each_with_its_own_body(
+        repo: Path, package: Path) -> None:
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--no-extract"]) == 0
+    out = repo / "reference/magic-rampage/editor"
+    names = ["size_minus.png", "size_plus.png", "opacity_minus.png", "opacity_plus.png",
+             "lock_locked.png", "lock_unlocked.png", "restore.png", "back.png"]
+    assert list(mr.EDITOR_OUTPUT_NAMES) == names
+    assert sorted(path.name for path in out.iterdir()) == sorted([*names, "manifest.json"])
+    manifest = json.loads((out / "manifest.json").read_text("utf-8"))
+    assert manifest["stage"] == "editor" and manifest["canvas"] == [128, 128]
+    assert "body_rect" not in manifest                    # no one body: each output has its own
+    bodies = {"lock_unlocked.png": [21, 21, 107, 107], "back.png": [15, 15, 113, 113]}
+    margins = {"lock_unlocked.png": 21, "back.png": 15}
+    for name in names:
+        entry = manifest["outputs"][name]
+        assert entry["size"] == [128, 128] and entry["mode"] == "RGBA"
+        assert entry["body"] == bodies.get(name, [19, 19, 110, 110]), name
+        assert entry["body_margin_px"] == margins.get(name, 18), name
+        image = Image.open(out / name)
+        assert image.mode == "RGBA" and image.size == (128, 128)
+        assert not mr.has_magenta(np.asarray(image))
+    # the controls were not written, and the folder is the controls' sibling
+    assert not (repo / "reference/magic-rampage/controls").exists()
+
+
+def test_the_margin_is_the_smallest_side_of_the_body() -> None:
+    assert mr.margin_px((19, 19, 110, 110)) == 18          # 128 - 110 = 18 on the right and below
+    assert mr.margin_px((21, 21, 107, 107)) == 21
+    assert mr.margin_px((15, 15, 113, 113)) == 15
+    assert mr.margin_px(mr.BODY_RECT) == 14
+    assert mr.margin_px((30, 10, 100, 120)) == 8
+
+
+def test_a_symbol_is_laid_over_its_frame_one_to_one_body_to_body(package: Path) -> None:
+    pack = mr.FolderPackage(package)
+    outputs = {output.name: output for output in mr.derive_editor(pack)}
+    frame = mr.load(pack, mr.FRAME_STONE)
+    symbol = mr.load(pack, mr.SYMBOL_LOCKED)
+    # the symbol's body (13, 9, 51, 55) has the middle (32, 32), the frame's (19, 19, 110, 110) has
+    # (129 // 2, 129 // 2) = (64, 64): the canvas sits at (32, 32), with no resampling
+    expected = frame.copy()
+    expected.alpha_composite(symbol, (32, 32))
+    assert np.array_equal(np.asarray(outputs["lock_locked.png"].image),
+                          np.asarray(mr.straight_rgba(expected)))
+    # an as-shipped output is the sprite itself, pixel for pixel
+    back = mr.load(pack, mr.BACK_BUTTON)
+    assert np.array_equal(np.asarray(outputs["back.png"].image), np.asarray(back))
+    assert outputs["back.png"].recipe == mr.RECIPE_AS_SHIPPED
+    assert outputs["restore.png"].recipe == mr.RECIPE_TILE
+    # the red frame has its own body, and the unlocked symbol is centred on THAT one
+    assert outputs["lock_unlocked.png"].body == mr.RED_BODY
+    assert mr.body_rect(np.asarray(outputs["lock_unlocked.png"].image)) == mr.RED_BODY
+
+
+def test_placing_a_symbol_refuses_one_that_does_not_fit_or_has_no_body() -> None:
+    frame = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
+    with pytest.raises(mr.ToolError, match="no solid body"):
+        mr.place_centred_on_bodies(frame, mr.STONE_BODY, Image.new("RGBA", (64, 64), (9, 9, 9, 100)))
+    big = Image.new("RGBA", (64, 64), (9, 9, 9, 255))
+    with pytest.raises(mr.ToolError, match="does not fit"):
+        mr.place_centred_on_bodies(frame, (0, 0, 20, 20), big)
+
+
+def test_the_editor_stage_refuses_an_out_that_git_does_not_ignore(
+        repo: Path, package: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # only the controls' folder and the sprites' are ignored: the editor's default is not
+    (repo / ".gitignore").write_text("reference/magic-rampage/controls/\nreference/magic-rampage/assets/\n")
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--no-extract"]) == mr.EXIT_FAILED
+    assert "ignored" in capsys.readouterr().err
     assert not (repo / "reference").exists()
+    tracked = repo / "tracked-editor"
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--out", str(tracked),
+                    "--no-extract"]) == mr.EXIT_FAILED
+    assert not tracked.exists()
+
+
+def test_all_writes_both_stages_and_refuses_one_out_for_two(
+        repo: Path, package: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert mr.main(["--assets", str(package), "--stage", "all", "--out", "reference/x"]) == mr.EXIT_USAGE
+    assert "--out" in capsys.readouterr().err
+    assert not (repo / "reference").exists()
+    assert mr.main(["--assets", str(package), "--stage", "all"]) == 0
+    controls = repo / "reference/magic-rampage/controls"
+    editor = repo / "reference/magic-rampage/editor"
+    assert (controls / "walk_left.png").is_file() and (editor / "size_minus.png").is_file()
+    assert json.loads((controls / "manifest.json").read_text("utf-8"))["stage"] == "controls"
+    assert json.loads((editor / "manifest.json").read_text("utf-8"))["stage"] == "editor"
+    # the controls' manifest keeps its shape: one body for the five, and no per-output margin
+    controls_manifest = json.loads((controls / "manifest.json").read_text("utf-8"))
+    assert controls_manifest["body_rect"] == [14, 14, 114, 114]
+    assert all("body_margin_px" not in entry for entry in controls_manifest["outputs"].values())
+    assert mr.main(["--stage", "all", "--check"]) == 0
+
+
+def test_a_stage_that_fails_leaves_the_other_unwritten(repo: Path, package: Path,
+                                                       capsys: pytest.CaptureFixture[str]) -> None:
+    write_palette_png(package / "sprites/lock-locked.png", frame_indices())        # 128 px, not 64
+    assert mr.main(["--assets", str(package), "--stage", "all", "--no-extract"]) == mr.EXIT_FAILED
+    assert "lock-locked.png" in capsys.readouterr().err
+    assert not (repo / "reference/magic-rampage/controls").exists()
+    assert not (repo / "reference/magic-rampage/editor").exists()
+
+
+def test_editor_check_reproduces_and_catches_a_tampered_picture(
+        repo: Path, package: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--no-extract"]) == 0
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--check"]) == 0
+    target = repo / "reference/magic-rampage/editor/restore.png"
+    image = np.array(Image.open(target).convert("RGBA"))
+    image[60, 60] = (1, 2, 3, 255)
+    Image.fromarray(image).save(target)
+    capsys.readouterr()
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--check"]) == mr.EXIT_FAILED
+    assert "restore.png" in capsys.readouterr().out
+    # a manifest of the other stage is not this stage's
+    manifest_path = repo / "reference/magic-rampage/editor/manifest.json"
+    manifest = json.loads(manifest_path.read_text("utf-8"))
+    manifest_path.write_text(json.dumps({**manifest, "stage": "controls"}))
+    assert mr.main(["--assets", str(package), "--stage", "editor", "--check"]) == mr.EXIT_FAILED
+
+
+def test_validate_holds_each_output_to_its_own_body() -> None:
+    frame = frame_image()                                                        # body (14, 14, 114, 114)
+    mr.validate(mr.Output("a.png", mr.RECIPE_TILE, ("x",), frame, BODY))
+    with pytest.raises(mr.ToolError, match="solid body"):
+        mr.validate(mr.Output("b.png", mr.RECIPE_TILE, ("x",), frame, mr.STONE_BODY))
+
+
+def test_the_editor_names_match_what_controls_json_asks_for() -> None:
+    """controls.json's adjust.art.mr names each glyph's file and its body_inset: the margin this tool
+    measured, over 128. The data is the layout's, the tool is the art's, and they must say one thing."""
+    data = json.loads((Path(__file__).resolve().parents[3] / "game/data/controls.json").read_text("utf-8"))
+    entries = data["adjust"]["art"]["mr"]
+    files = {entry["file"]: entry["body_inset"] for key, entry in entries.items() if not key.startswith("_")}
+    assert sorted(files) == sorted(mr.EDITOR_OUTPUT_NAMES)
+    for spec in mr.EDITOR_SPECS:
+        assert files[spec.name] == mr.margin_px(spec.body) / mr.CANVAS, spec.name
 
 
 # --- the glyphs ------------------------------------------------------------------------------

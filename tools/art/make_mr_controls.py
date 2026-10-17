@@ -11,6 +11,8 @@ question Q2). This file holds code only: no image, no base64 of one, no byte of 
     python -I tools/art/make_mr_controls.py --assets <folder holding the base APK's assets/>
     python -I tools/art/make_mr_controls.py --xapk   <Magic+Rampage_7.8.7_APKPure.xapk>
     python -I tools/art/make_mr_controls.py --check          (re-derive and compare; writes nothing)
+    python -I tools/art/make_mr_controls.py --stage editor   (the adjustment screen's glyphs, CTL-11)
+    python -I tools/art/make_mr_controls.py --stage all      (both, each into its own default folder)
 
 Run it with tools/parity/.venv (Pillow and numpy), from inside this repository: the repository root
 is `git rev-parse --show-toplevel` of the current directory, never a path computed from this file.
@@ -35,6 +37,23 @@ The "body" is the solid 100 x 100 square (alpha >= 250) inside the 14 px soft sh
 sprite carries: (14, 14, 114, 114). The layout reads its insets from that rect, so every output has
 it, and a source that does not is refused.
 
+THE EDITOR STAGE (--stage editor, CTL-11) writes into reference/magic-rampage/editor, 128 x 128
+straight-alpha RGBA with a manifest.json of its own, the pictures of the adjustment screen's seven
+widgets (and the lock's second state):
+  size_minus.png     sprites/smaller-frame-bg.png + sprites/resize-symbol-shrink.png
+  size_plus.png      sprites/smaller-frame-bg.png + sprites/resize-symbol-enlarge.png
+  opacity_minus.png  sprites/smaller-frame-bg.png + sprites/adjust-symbol-transparent.png
+  opacity_plus.png   sprites/smaller-frame-bg.png + sprites/adjust-symbol-opaque.png
+  lock_locked.png    sprites/smaller-frame-bg.png + sprites/lock-locked.png
+  lock_unlocked.png  sprites/smaller-frame-red-bg.png + sprites/lock-unlocked.png
+  restore.png        sprites/smaller-frame-bg.png + sprites/icon-restart-64.png
+  back.png           sprites/inventory-back-button.png as shipped
+A symbol is laid over its frame 1:1 (never resampled), its own solid body centred on the frame's, to
+a whole pixel. Each output records its OWN body rect in the manifest (the frames' bodies differ:
+the stone frame's is (19, 19, 110, 110), the red one's (21, 21, 107, 107), Back's (15, 15, 113, 113)),
+and the margin the layout reads is the smallest of its four sides; controls.json's
+adjust.art.mr.<glyph>.body_inset is that margin over 128, which a test of this tool's checks.
+
 THE OUTPUT FOLDER IS REFUSED unless `git check-ignore` reports every file about to be written as
 ignored: the five images and the manifest in --out, and the extracted sprites in
 reference/magic-rampage/assets (reference/ is ignored, by the existing unanchored line in
@@ -44,7 +63,7 @@ a refusal writes nothing.
 The helpers (straight_rgba, the restyle, the disc dilation, the shadow) follow the ones in
 Penumbra's tools/art/make_mr_touch_art.py: copied and rewritten here, never imported, and nothing
 here points at that repository. Exit codes: 0 done (or --check passed), 1 refused / failed /
---check found a difference, 2 usage or a stage that does not exist yet.
+--check found a difference, 2 usage.
 """
 
 from __future__ import annotations
@@ -79,6 +98,8 @@ EXTRACT_MANIFEST_NAME = "extract.json"
 STAGE_CONTROLS = "controls"
 STAGE_EDITOR = "editor"
 STAGE_ALL = "all"
+STAGES = (STAGE_CONTROLS, STAGE_EDITOR)           # what "all" is
+DEFAULT_EDITOR_OUT = pathlib.PurePosixPath("reference/magic-rampage/editor")
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -119,6 +140,7 @@ RECIPE_AS_SHIPPED = "as_shipped"
 RECIPE_RESTART = "frame_plus_restyled_icon"
 RECIPE_PAUSE = "frame_plus_drawn_bars"
 RECIPE_CLEAR = "frame_plus_drawn_ring_and_x"
+RECIPE_TILE = "frame_plus_symbol_one_to_one"
 
 RECIPES = {
     RECIPE_AS_SHIPPED: "the sprite as shipped: straight RGBA, colour under alpha 0 made black, "
@@ -135,6 +157,9 @@ RECIPES = {
                   f"with an X inside it (arms to +-{CROSS_REACH} px, {CROSS_STROKE} px stroke, "
                   f"round ends) drawn here in the same restyle, concentric, centred on the body "
                   f"{BODY_RECT}",
+    RECIPE_TILE: "the frame as shipped, then the symbol as shipped laid over it 1:1 (never "
+                 "resampled), its own solid body centred on the frame's solid body to a whole "
+                 "pixel (an odd difference rounds down); alpha-composited, straight RGBA",
 }
 
 
@@ -142,8 +167,8 @@ class ToolError(Exception):
     """A refusal or a failure the user is told about; main() turns it into exit 1."""
 
 
-class NotYet(Exception):
-    """A stage that is named but not built; main() turns it into exit 2."""
+class UsageError(Exception):
+    """Arguments that do not go together; main() turns it into exit 2."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -160,19 +185,51 @@ DPAD_LEFT = Sprite("sprites/dpad-left.png", ROLE_CONTROL, (CANVAS, CANVAS))
 DPAD_RIGHT = Sprite("sprites/dpad-right.png", ROLE_CONTROL, (CANVAS, CANVAS))
 ICON_RESTART = Sprite("sprites/icon-restart-64.png", ROLE_CONTROL, (64, 64))
 
+# The editor stage's sources (CTL-11). The frames and the back button are 128 px squares, the symbols 64.
+FRAME_STONE = Sprite("sprites/smaller-frame-bg.png", ROLE_EDITOR, (CANVAS, CANVAS))
+FRAME_RED = Sprite("sprites/smaller-frame-red-bg.png", ROLE_EDITOR, (CANVAS, CANVAS))
+SYMBOL_SHRINK = Sprite("sprites/resize-symbol-shrink.png", ROLE_EDITOR, (64, 64))
+SYMBOL_ENLARGE = Sprite("sprites/resize-symbol-enlarge.png", ROLE_EDITOR, (64, 64))
+SYMBOL_TRANSPARENT = Sprite("sprites/adjust-symbol-transparent.png", ROLE_EDITOR, (64, 64))
+SYMBOL_OPAQUE = Sprite("sprites/adjust-symbol-opaque.png", ROLE_EDITOR, (64, 64))
+SYMBOL_LOCKED = Sprite("sprites/lock-locked.png", ROLE_EDITOR, (64, 64))
+SYMBOL_UNLOCKED = Sprite("sprites/lock-unlocked.png", ROLE_EDITOR, (64, 64))
+BACK_BUTTON = Sprite("sprites/inventory-back-button.png", ROLE_EDITOR, (CANVAS, CANVAS))
+
+# The solid body (alpha >= 250) of each frame, MEASURED on the sprites of Magic Rampage 7.8.7 with this
+# tool's own body_rect, and recorded in the manifest of the editor stage. The frames differ, and so do
+# the margins the layout draws round them (adjust.art.mr in controls.json).
+STONE_BODY = (19, 19, 110, 110)
+RED_BODY = (21, 21, 107, 107)
+BACK_BODY = (15, 15, 113, 113)
+
+
+@dataclasses.dataclass(frozen=True)
+class EditorSpec:
+    name: str
+    frame: Sprite
+    symbol: Sprite | None      # None: the frame IS the output, as shipped (the back button)
+    body: tuple[int, int, int, int]
+
+
+EDITOR_SPECS = (
+    EditorSpec("size_minus.png", FRAME_STONE, SYMBOL_SHRINK, STONE_BODY),
+    EditorSpec("size_plus.png", FRAME_STONE, SYMBOL_ENLARGE, STONE_BODY),
+    EditorSpec("opacity_minus.png", FRAME_STONE, SYMBOL_TRANSPARENT, STONE_BODY),
+    EditorSpec("opacity_plus.png", FRAME_STONE, SYMBOL_OPAQUE, STONE_BODY),
+    EditorSpec("lock_locked.png", FRAME_STONE, SYMBOL_LOCKED, STONE_BODY),
+    EditorSpec("lock_unlocked.png", FRAME_RED, SYMBOL_UNLOCKED, RED_BODY),
+    EditorSpec("restore.png", FRAME_STONE, ICON_RESTART, STONE_BODY),
+    EditorSpec("back.png", BACK_BUTTON, None, BACK_BODY),
+)
+EDITOR_OUTPUT_NAMES = tuple(spec.name for spec in EDITOR_SPECS)
+
 # What --extract copies, verbatim: the controls' sources, the editor stage's (CTL-11: the seven
 # tiles' frames and symbols, and Back), and a few spares an owner's choice might want later.
 SPRITES = (
     FRAME, DPAD_LEFT, DPAD_RIGHT, ICON_RESTART,
-    Sprite("sprites/smaller-frame-bg.png", ROLE_EDITOR),
-    Sprite("sprites/smaller-frame-red-bg.png", ROLE_EDITOR),
-    Sprite("sprites/resize-symbol-shrink.png", ROLE_EDITOR),
-    Sprite("sprites/resize-symbol-enlarge.png", ROLE_EDITOR),
-    Sprite("sprites/adjust-symbol-transparent.png", ROLE_EDITOR),
-    Sprite("sprites/adjust-symbol-opaque.png", ROLE_EDITOR),
-    Sprite("sprites/lock-locked.png", ROLE_EDITOR),
-    Sprite("sprites/lock-unlocked.png", ROLE_EDITOR),
-    Sprite("sprites/inventory-back-button.png", ROLE_EDITOR),
+    FRAME_STONE, FRAME_RED, SYMBOL_SHRINK, SYMBOL_ENLARGE, SYMBOL_TRANSPARENT, SYMBOL_OPAQUE,
+    SYMBOL_LOCKED, SYMBOL_UNLOCKED, BACK_BUTTON,
     Sprite("sprites/pause-pad-button.png", ROLE_SPARE),
     Sprite("sprites/icon-quit-64.png", ROLE_SPARE),
     Sprite("sprites/hd/portal-duel-icon.png", ROLE_SPARE),
@@ -435,6 +492,7 @@ class Output:
     recipe: str
     sources: tuple[str, ...]
     image: Image.Image
+    body: tuple[int, int, int, int] = BODY_RECT      # the solid body this output must have
 
 
 def as_shipped(sprite: Image.Image) -> Image.Image:
@@ -463,6 +521,57 @@ def derive(package: Package) -> list[Output]:
     return outputs
 
 
+def place_centred_on_bodies(frame: Image.Image, frame_body: tuple[int, int, int, int],
+                            symbol: Image.Image) -> Image.Image:
+    """The symbol laid over the frame 1:1, the middle of its own solid body on the middle of the
+    frame's, to a whole pixel (an odd difference rounds down, so the answer is the same on every
+    machine). The symbol's canvas must lie wholly inside the frame."""
+    symbol_body = body_rect(np.asarray(symbol))
+    if symbol_body == (0, 0, 0, 0):
+        raise ToolError("a symbol has no solid body (no pixel of alpha >= 250) to centre")
+    x = (frame_body[0] + frame_body[2]) // 2 - (symbol_body[0] + symbol_body[2]) // 2
+    y = (frame_body[1] + frame_body[3]) // 2 - (symbol_body[1] + symbol_body[3]) // 2
+    if x < 0 or y < 0 or x + symbol.width > frame.width or y + symbol.height > frame.height:
+        raise ToolError(f"a {symbol.width} x {symbol.height} symbol does not fit the frame at ({x}, {y})")
+    out = frame.copy()
+    out.alpha_composite(symbol, (x, y))
+    return straight_rgba(out)
+
+
+def derive_editor(package: Package) -> list[Output]:
+    """The eight editor pictures, in memory, each validated against its own body; nothing touches disk."""
+    outputs = []
+    for spec in EDITOR_SPECS:
+        frame = load(package, spec.frame)
+        if spec.symbol is None:
+            outputs.append(Output(spec.name, RECIPE_AS_SHIPPED, (spec.frame.member,),
+                                  as_shipped(frame), spec.body))
+            continue
+        image = place_centred_on_bodies(frame, spec.body, load(package, spec.symbol))
+        outputs.append(Output(spec.name, RECIPE_TILE, (spec.frame.member, spec.symbol.member),
+                              image, spec.body))
+    for output in outputs:
+        validate(output)
+    return outputs
+
+
+def margin_px(body: tuple[int, int, int, int]) -> int:
+    """The transparent margin the layout reads: the smallest of the four sides of the body."""
+    return min(body[0], body[1], CANVAS - body[2], CANVAS - body[3])
+
+
+def derive_stage(stage: str, package: Package) -> list[Output]:
+    return derive(package) if stage == STAGE_CONTROLS else derive_editor(package)
+
+
+def output_names(stage: str) -> tuple[str, ...]:
+    return OUTPUT_NAMES if stage == STAGE_CONTROLS else EDITOR_OUTPUT_NAMES
+
+
+def default_out(stage: str) -> pathlib.PurePosixPath:
+    return DEFAULT_OUT if stage == STAGE_CONTROLS else DEFAULT_EDITOR_OUT
+
+
 def validate(output: Output) -> None:
     image = output.image
     if image.mode != "RGBA" or image.size != (CANVAS, CANVAS):
@@ -473,8 +582,8 @@ def validate(output: Output) -> None:
         raise ToolError(f"{output.name} has a pixel of exact magenta (255, 0, 255)")
     if (array[:, :, :3][array[:, :, 3] == 0] != 0).any():
         raise ToolError(f"{output.name} has colour under alpha 0")
-    if body_rect(array) != BODY_RECT:
-        raise ToolError(f"{output.name}: its solid body is {body_rect(array)}, not {BODY_RECT}: "
+    if body_rect(array) != output.body:
+        raise ToolError(f"{output.name}: its solid body is {body_rect(array)}, not {output.body}: "
                         f"not Magic Rampage {MR_VERSION}'s art")
 
 
@@ -488,16 +597,16 @@ def pixels_sha256(image: Image.Image) -> str:
     return sha256_of(np.asarray(image).tobytes())
 
 
-def build_manifest(package: Package, outputs: list[Output], encoded: dict[str, bytes]) -> dict:
+def build_manifest(package: Package, outputs: list[Output], encoded: dict[str, bytes],
+                   stage: str = STAGE_CONTROLS) -> dict:
     used = sorted({member for output in outputs for member in output.sources})
-    return {
+    manifest = {
         "tool": "tools/art/make_mr_controls.py",
         "tool_version": TOOL_VERSION,
         "pillow": PILLOW_VERSION,
-        "stage": STAGE_CONTROLS,
+        "stage": stage,
         "package": package.describe(),
         "canvas": [CANVAS, CANVAS],
-        "body_rect": list(BODY_RECT),
         "sources": {member: {"sha256": sha256_of(package.read(member)),
                              "bytes": len(package.read(member))} for member in used},
         "outputs": {
@@ -514,6 +623,13 @@ def build_manifest(package: Package, outputs: list[Output], encoded: dict[str, b
             } for output in outputs
         },
     }
+    if stage == STAGE_CONTROLS:
+        manifest["body_rect"] = list(BODY_RECT)
+    else:
+        # Every editor picture has a body of its own; the layout's margin is the smallest side of it.
+        for output in outputs:
+            manifest["outputs"][output.name]["body_margin_px"] = margin_px(output.body)
+    return manifest
 
 
 def dump_json(data: dict) -> bytes:
@@ -590,18 +706,25 @@ def extract_targets(dest: pathlib.Path) -> list[pathlib.Path]:
 
 # --- --check ---------------------------------------------------------------------------------
 
-def check(out: pathlib.Path, package: Package) -> int:
+def check(out: pathlib.Path, package: Package, stage: str = STAGE_CONTROLS) -> int:
     """Re-derive in memory and compare with the files and the manifest. Writes nothing."""
     manifest_path = out / MANIFEST_NAME
     if not manifest_path.is_file():
         print(f"FAIL no {manifest_path}: run the tool first")
         return EXIT_FAILED
     manifest = json.loads(manifest_path.read_text("utf-8"))
-    outputs = derive(package)
+    outputs = derive_stage(stage, package)
     problems: list[str] = []
     if manifest.get("tool_version") != TOOL_VERSION:
         problems.append(f"manifest tool_version is {manifest.get('tool_version')}, "
                         f"the tool's is {TOOL_VERSION}")
+    if manifest.get("stage", STAGE_CONTROLS) != stage:
+        problems.append(f"the manifest is the {manifest.get('stage')} stage's, not the {stage} stage's")
+    for output in outputs:
+        recorded_body = manifest.get("outputs", {}).get(output.name, {}).get("body")
+        if recorded_body is not None and list(output.body) != list(recorded_body):
+            problems.append(f"{output.name}: the manifest says its body is {recorded_body}, the tool "
+                            f"expects {list(output.body)}")
     recorded = manifest.get("outputs", {})
     if set(recorded) != {output.name for output in outputs}:
         problems.append(f"the manifest lists {sorted(recorded)}, the tool makes "
@@ -652,26 +775,44 @@ def open_package(args: argparse.Namespace, root: pathlib.Path) -> Package:
                     f"{DEFAULT_ASSETS}, does not exist yet (the first run with a package fills it)")
 
 
+def write_stage(stage: str, out: pathlib.Path, package: Package, outputs: list[Output]) -> None:
+    """One stage's images and its manifest, from outputs already derived and validated."""
+    encoded = {output.name: encode_png(output.image) for output in outputs}
+    manifest = build_manifest(package, outputs, encoded, stage)
+    out.mkdir(parents=True, exist_ok=True)
+    for output in outputs:
+        (out / output.name).write_bytes(encoded[output.name])
+        entry = manifest["outputs"][output.name]
+        print(f"  {output.name:18s} {output.image.width}x{output.image.height} RGBA  "
+              f"{entry['bytes']:5d} bytes  sha256 {entry['sha256'][:16]}  "
+              f"body {tuple(entry['body'])}")
+    (out / MANIFEST_NAME).write_bytes(dump_json(manifest))   # last: its presence says it finished
+    print(f"wrote {len(outputs)} images and {MANIFEST_NAME} into {out}")
+
+
 def run(args: argparse.Namespace) -> int:
-    if args.stage != STAGE_CONTROLS:
-        raise NotYet(f"--stage {args.stage}: not yet: CTL-11 (the editor glyphs); "
-                     f"use --stage {STAGE_CONTROLS}")
+    stages = STAGES if args.stage == STAGE_ALL else (args.stage,)
+    if args.out and len(stages) > 1:
+        raise UsageError("--out names one folder, and --stage all writes two: give --stage controls or "
+                         f"--stage editor with it (the defaults are {DEFAULT_OUT} and {DEFAULT_EDITOR_OUT})")
     root = repo_root(pathlib.Path.cwd())
-    out = pathlib.Path(args.out).resolve() if args.out else root / DEFAULT_OUT
+    outs = {stage: (pathlib.Path(args.out).resolve() if args.out else root / default_out(stage))
+            for stage in stages}
     if args.check:
-        return check(out, open_package(args, root))
+        package = open_package(args, root)
+        return max(check(outs[stage], package, stage) for stage in stages)
 
     # The sprites always go to the one fixed folder, whatever --out is: a stray --out must not
     # scatter Magic Rampage's art into out/ (the converter's output) or reference/extracted/
     # (the port's _ORIGINAL), and the extract has a single place to look for.
     assets_dest = root / DEFAULT_ASSETS
-    targets = [out / name for name in (*OUTPUT_NAMES, MANIFEST_NAME)]
+    targets = [outs[stage] / name for stage in stages for name in (*output_names(stage), MANIFEST_NAME)]
     # The destination is checked before the package is opened, and before anything is built.
     refuse_unignored(root, targets + (extract_targets(assets_dest) if args.extract else []))
     package = open_package(args, root)
-    outputs = derive(package)
-    encoded = {output.name: encode_png(output.image) for output in outputs}
-    manifest = build_manifest(package, outputs, encoded)
+    # Every stage is derived and validated before anything is written: a stage that fails leaves
+    # nothing of the other, and no sprite, written.
+    derived = {stage: derive_stage(stage, package) for stage in stages}
 
     copy_sprites = args.extract and not (isinstance(package, FolderPackage)
                                          and package.root == assets_dest.resolve())
@@ -682,15 +823,8 @@ def run(args: argparse.Namespace) -> int:
                  if record["missing_spares"] else ""))
     elif args.extract:
         print(f"the package is {assets_dest} itself: nothing to extract")
-    out.mkdir(parents=True, exist_ok=True)
-    for output in outputs:
-        (out / output.name).write_bytes(encoded[output.name])
-        entry = manifest["outputs"][output.name]
-        print(f"  {output.name:18s} {output.image.width}x{output.image.height} RGBA  "
-              f"{entry['bytes']:5d} bytes  sha256 {entry['sha256'][:16]}  "
-              f"body {tuple(entry['body'])}")
-    (out / MANIFEST_NAME).write_bytes(dump_json(manifest))   # last: its presence says it finished
-    print(f"wrote {len(outputs)} images and {MANIFEST_NAME} into {out}")
+    for stage in stages:
+        write_stage(stage, outs[stage], package, derived[stage])
     return EXIT_OK
 
 
@@ -705,9 +839,11 @@ def build_parser() -> argparse.ArgumentParser:
     where.add_argument("--xapk", help=f"Magic Rampage {MR_VERSION}'s .xapk (read only)")
     parser.add_argument("--stage", choices=(STAGE_CONTROLS, STAGE_EDITOR, STAGE_ALL),
                         default=STAGE_CONTROLS,
-                        help="controls (default); editor and all are not yet: CTL-11")
-    parser.add_argument("--out", help=f"where to write the five images and the manifest; default "
-                                      f"{DEFAULT_OUT} under the repository root. Refused unless "
+                        help="controls (the five buttons, default), editor (the adjustment screen's "
+                             "eight pictures, CTL-11) or all (both, each into its own default folder)")
+    parser.add_argument("--out", help=f"where to write the images and the manifest of ONE stage; "
+                                      f"default {DEFAULT_OUT} (controls) or {DEFAULT_EDITOR_OUT} "
+                                      "(editor) under the repository root. Refused unless "
                                       "git reports it ignored. Whatever it is, the sprites are "
                                       f"extracted into {DEFAULT_ASSETS} (also checked), never "
                                       "beside it.")
@@ -724,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return run(args)
-    except NotYet as note:
+    except UsageError as note:
         print(f"make_mr_controls: {note}", file=sys.stderr)
         return EXIT_USAGE
     except ToolError as error:

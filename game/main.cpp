@@ -48,6 +48,20 @@
 #define MAGICPORTALS_PADART_DIR ""
 #endif
 
+namespace {
+
+// Where Magic Rampage's editor pictures (the adjustment screen's eight, tools/art --stage editor) are looked for: the folder `editor` BESIDE the
+// controls' (reference/magic-rampage/editor beside reference/magic-rampage/controls), so --padart moves both and the build is told one place.
+// Empty where there is no controls folder to be beside: "nowhere". (An anonymous namespace: it is a path rule of this file, and only main asks it.)
+std::string EditorArtDirBeside(const std::string& padArtDir) {
+    if (padArtDir.empty()) return {};
+    std::filesystem::path controls = std::filesystem::path(padArtDir).lexically_normal();
+    if (!controls.has_filename()) controls = controls.parent_path(); // "<dir>/" names <dir>
+    return (controls.parent_path() / "editor").string();
+}
+
+} // namespace
+
 // The engine commit this build was configured against (game/CMakeLists.txt), for the log's first line. A definition of THIS file alone,
 // for the same reason. "unknown" where git was not there to ask.
 #ifndef MAGICPORTALS_ENGINE_COMMIT
@@ -640,7 +654,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    developer's run (--fixed-step, --route, --visit-levels) is classic\n"
                   << "                    and has no Options button, unless the flag says otherwise\n"
                   << "  --padart <dir>    the folder of Magic Rampage's five control pictures a modern run\n"
-                  << "                    tries first, an absolute path (default " << padArtDir << ")\n"
+                  << "                    tries first, an absolute path (default " << padArtDir << ");\n"
+                  << "                    the adjustment screen's eight are in the folder `editor` beside it\n"
                   << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
                   << "  --data <dir>      Enhanced's data directory (default " << paths.data << ")\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json), the sound and music\n"
@@ -747,6 +762,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         // After the move, which replaces the whole struct: the command line has no word for the folder in
         // ResolvePolicy, so it is set here. Classic never reads it.
         paths.controls.artDir = padArtDir;
+        paths.controls.editorArtDir = EditorArtDirBeside(padArtDir);
         // A size or an opacity must sit on the grids controls.json names (planning step 187, CTL-10): a capture that asked for size=1.45 would
         // otherwise play the base look and say so only in a log, so the flag is refused here, with the usage, like any other bad item. A table
         // that will not read is not this check's business: the layer says why modern is unavailable, and a classic run never meets it.

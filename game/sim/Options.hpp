@@ -68,6 +68,20 @@ struct Rules {
         Colour walk{};
         Colour corner{};
     } thumbnail;
+
+    // The button that opens the adjustment screen (planning step 192, CTL-11): under the two tiles, drawn and claimed only while the style in
+    // force is Modern. A placed rectangle (a fraction of the screen for its centre, units for its size), a word in the original's font on
+    // a plate.
+    struct AdjustButton {
+        glm::dvec2 atScreen{0.5};
+        glm::dvec2 sizeUnits{0.0};
+        std::string word;
+        std::string font;
+        double unitsPerFontPx = 0.0;
+        glm::dvec2 wordAtUnits{0.0}; // the word's centre from the button's top-left
+        Colour frame{};
+        int wordAlphaByte = 255;
+    } adjust;
 };
 
 // controls.json's `options` block. `controls` is the table the file's `art.generated` names were read into: the gear's file must not be
@@ -91,8 +105,9 @@ Entry EntryAt(const Rules& rules, const UiLayer::Rules& layer, const MenuState::
 // ---- the screen ------------------------------------------------------------------------------------------------
 
 // What a touch can be on. The back button is the credits': 64 x 64 at the left edge's middle, a place no main-menu button occupies, so
-// the press that returns cannot also press one.
-enum class Widget { None, Back, ModernTile, ClassicTile };
+// the press that returns cannot also press one. `Adjust` is the button under the tiles that opens the adjustment screen: a widget only
+// while the style in force is Modern (WidgetAt and Pieces are told).
+enum class Widget { None, Back, ModernTile, ClassicTile, Adjust };
 
 Widget WidgetOf(Controls::Style style);
 // The style a tile chooses; none for a widget that is not a tile.
@@ -119,9 +134,14 @@ Press Follow(Touch& touch, bool pressed, bool released, bool touching, Widget on
 // A tile's rectangle on a view.
 Hud::Rect TileRect(const Rules& rules, Controls::Style style, const glm::dvec2& viewUnits);
 
+// The adjustment button's rectangle on a view.
+Hud::Rect AdjustRect(const Rules& rules, const glm::dvec2& viewUnits);
+
 // The widget a point is on: the back button where its entrance has it (Credits::BackHitRect), else the tile whose rectangle holds it
-// (closed on every edge, as Hud::Rect::Contains), else none. The two kinds cannot overlap at any supported aspect (a test holds it).
-Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point);
+// (closed on every edge, as Hud::Rect::Contains), else - only where `adjustShown` - the adjustment button, else none. The kinds cannot
+// overlap at any supported aspect (a test holds it), so the order is not a rule. A button that is not shown is not claimed.
+Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point,
+                bool adjustShown = false);
 
 // The five controls of a style as a tile's thumbnail shows them: the pure layout of that style on a reference view (the thumbnail's own
 // shape, `referenceHeightUnits` tall), scaled into the thumbnail's rectangle. `tuning` is the modern look in force.
@@ -135,7 +155,8 @@ enum class Element {
     TileFrame,     // a flat quad
     ThumbnailBase, // a flat quad
     ThumbnailControl, // a flat quad, one of the five
-    Word           // words
+    Word,          // words
+    AdjustFrame    // a flat quad: the adjustment button's plate
 };
 
 struct Piece {
@@ -152,8 +173,10 @@ struct Piece {
 
 // Every picture of the screen `stateMs` after its first frame, in drawing order: the credits' background, its back button (at its bounce
 // and press tint), the title, then each tile - frame, thumbnail base, the five controls, its word. The tile of `chosen` is lit; the widget
-// `held` (a touch went down on it and is still inside it) is drawn at the press tint.
+// `held` (a touch went down on it and is still inside it) is drawn at the press tint. Where `adjustShown`, the adjustment button (its plate
+// and its word) comes last.
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,
-                          const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held);
+                          const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held,
+                          bool adjustShown = false);
 
 } // namespace MagicPortals::Options

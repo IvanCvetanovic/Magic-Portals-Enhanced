@@ -2445,9 +2445,10 @@ void WhatIsRefused() {
     std::vector<Path> paths;
     Path prefix;
     Collect(root, prefix, paths);
-    // The `options` block is the Options screen's, read by Options::LoadRules and refused key by key in test_mp_options; this table is
-    // Controls::LoadRules', which leaves that block to it (a key it does not know is ignored), so it is not in this table.
-    paths.erase(std::remove_if(paths.begin(), paths.end(), [](const Path& path) { return path.front() == "options"; }), paths.end());
+    // The `options` block is the Options screen's, read by Options::LoadRules and refused key by key in test_mp_options, and the `adjust` block is the
+    // adjustment screen's (planning step 192), read by Adjust::LoadRules and refused key by key in test_mp_adjust; this table is Controls::LoadRules',
+    // which leaves both blocks to them (a key it does not know is ignored), so neither is in this table.
+    paths.erase(std::remove_if(paths.begin(), paths.end(), [](const Path& path) { return path.front() == "options" || path.front() == "adjust"; }), paths.end());
     CHECK_MSG(paths.size() > 100, "the file has " + std::to_string(paths.size()) + " keys of the table");
 
     // The shipped file loads, and so does its own rewrite through the writer used below (so a refusal is the edit's, not the writer's).
@@ -3583,6 +3584,53 @@ void AMemoryOnlyStoreWritesNothing() {
     CHECK(store.Open("", rules, error) && !store.Mode());
 }
 
+// The number of times Save WROTE the file (planning step 192): what "once per gesture" is read by. A save that finds the bytes it wrote last, one that has nowhere
+// to write and one that fails are none of them a write; a gesture repeated is one.
+void TheStoreCountsItsWrites() {
+    const StoreClean clean;
+    const Controls::Rules rules = LoadModern();
+    std::string error;
+    {
+        // Memory-only: never a write, however often it is asked.
+        Controls::Store memory;
+        CHECK(memory.Open("", rules, error) && memory.SaveCount() == 0);
+        memory.SetMode(Controls::Style::Modern);
+        CHECK(memory.Save(error) && memory.Save(error) && memory.SaveCount() == 0);
+    }
+    const std::filesystem::path dir = StoreDir("count");
+    Controls::Store store;
+    CHECK_MSG(store.Open(dir.string(), rules, error) && store.SaveCount() == 0, "a store opened on a directory with no file has written nothing");
+    // The first save is a write; the same bytes again are not.
+    store.SetMode(Controls::Style::Modern);
+    CHECK_MSG(store.Save(error) && store.SaveCount() == 1, "the first save is one write");
+    CHECK_MSG(store.Save(error) && store.Save(error) && store.SaveCount() == 1, "the same bytes again are not a write: " + std::to_string(store.SaveCount()));
+    // A tuning that differs is one, and a repeat of it is not.
+    Controls::Tuning tuning;
+    tuning.sizeSteps = 9;
+    store.SetTuning(tuning.Clamped(rules));
+    CHECK_MSG(store.Save(error) && store.SaveCount() == 2, "a new size is a second write");
+    store.SetTuning(tuning.Clamped(rules));
+    CHECK_MSG(store.Save(error) && store.SaveCount() == 2, "the same size again is none");
+    // Back to the bytes it wrote first is a write: the count is of writes, not of distinct texts.
+    store.SetTuning(Controls::Tuning{});
+    CHECK_MSG(store.Save(error) && store.SaveCount() == 3 && StoreRead(dir / Controls::kStoreFileName) == store.Text(), "back to the default is a third write");
+    // A save that fails is not a write (the file is a directory: nothing can replace it), and is retried by the next.
+    {
+        const std::filesystem::path blocked = StoreDir("count-blocked");
+        std::error_code ec;
+        std::filesystem::create_directories(blocked / Controls::kStoreFileName, ec);
+        Controls::Store failing;
+        std::string why;
+        CHECK_MSG(!failing.Open(blocked.string(), rules, why) && !why.empty(), "a controls.json that is a directory does not read");
+        failing.SetMode(Controls::Style::Classic);
+        CHECK_MSG(!failing.Save(error) && !error.empty() && failing.SaveCount() == 0, "and its save fails and is not counted: " + error);
+        std::filesystem::remove(blocked / Controls::kStoreFileName, ec);
+        CHECK_MSG(failing.Save(error) && failing.SaveCount() == 1, "the obstruction gone, the next save writes, once");
+    }
+    // Opening again starts a new count.
+    CHECK_MSG(store.Open(dir.string(), rules, error) && store.SaveCount() == 0, "Open starts the count again");
+}
+
 void ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity() {
     const StoreClean clean;
     const Controls::Rules rules = LoadModern();
@@ -4074,6 +4122,7 @@ void runTests() {
     AMissingFileIsTheShippedDefault();
     AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave();
     AMemoryOnlyStoreWritesNothing();
+    TheStoreCountsItsWrites();
     ALayoutNumberFromAnotherVersionDropsMovesAndKeepsSizeAndOpacity();
     ASaveThatCannotBeMadeSaysSoAndLeavesNothingHalfWritten();
     TheSwitchesStoreIsNotTouched();

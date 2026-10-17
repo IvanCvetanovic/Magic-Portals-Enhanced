@@ -30843,6 +30843,1167 @@ void AWorldFingerTapsAHelpBlockWhileAnArrowIsHeld() {
     CHECK_MSG(CtFired(layer) == fired0, what + ": and fired no portal: " + std::to_string(CtFired(layer) - fired0));
 }
 
+// ---- THE ADJUSTMENT SCREEN (planning step 192, CTL-11) ---------------------------------------------------------------------------------------
+//
+// A menu state entered from Options, as Options is from the main menu, while the style in force is Modern: no level is loaded under it, readInput is not
+// called, and no pointer reaches a level. It shows the five controls as the level draws them (clear-portals forced shown by the screen's own flag) and seven
+// widgets; what it changes is the tuning the layer lays out, claims and draws with from the next level on, which the first edit takes over from the flag.
+// Every case drives the real path - the pointer, the menu's ticks, the files - and needs the original's art only to reach the menus and to look at what they draw.
+
+namespace AdjustUi = MagicPortals::Adjust;
+
+glm::dvec2 AdButtonCentre(const MagicPortalsLayer& layer) {
+    return OptionsUi::AdjustRect(layer.OptionsRules(), layer.ViewPx()).Centre();
+}
+
+glm::dvec2 AdFaceCentre(const MagicPortalsLayer& layer, AdjustUi::Widget widget) {
+    return layer.AdjustLayout().At(widget).face.Centre();
+}
+
+// Options opened, then the Adjust button clicked: the state opens on the next tick under its black.
+bool AdOpen(MagicPortalsLayer& layer, entt::registry& registry, const std::string& what) {
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": from Options");
+    CHECK_MSG(layer.AdjustAvailable(), what + ": the Adjust button is there (Modern is the style in force)");
+    OsClickAt(layer, registry, AdButtonCentre(layer));
+    PtrRest(layer, registry, 5);
+    const bool there = layer.MenuScreen() == MagicPortalsLayer::Screen::Adjust;
+    CHECK_MSG(there, what + ": the button opens the adjustment screen");
+    return there;
+}
+
+bool AdOpen(OsRun& run, const std::string& what) {
+    return OsOpenOptions(run, what) && AdOpen(run.layer, run.registry, what);
+}
+
+void AdClick(MagicPortalsLayer& layer, entt::registry& registry, AdjustUi::Widget widget) {
+    OsClickAt(layer, registry, AdFaceCentre(layer, widget));
+}
+
+// The rectangle a control's preview picture is drawn into, from the layer's own tuning and tier.
+Hud::Rect AdPreviewRect(const MagicPortalsLayer& layer, Controls::Id id) {
+    const Hud::Rect box = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), layer.ViewPx(), layer.ControlsInsets())[ArtAt(id)];
+    return Controls::DrawRect(box, layer.ControlsRules().faceInset, layer.ModernImage(id).empty() ? 0.0 : layer.ModernBodyInset(id));
+}
+
+// The rectangle a widget's picture is drawn into: its face with the picture's margin.
+Hud::Rect AdTileRect(const MagicPortalsLayer& layer, AdjustUi::Widget widget) {
+    const AdjustUi::Tile& tile = layer.AdjustLayout().At(widget);
+    const std::optional<AdjustUi::Picture> picture = AdjustUi::PictureOf(widget, layer.AdjustUnlocked());
+    return Controls::DrawRect(tile.box, tile.faceInset, picture && !layer.AdjustImage(*picture).empty() ? layer.AdjustBodyInset(*picture) : 0.0);
+}
+
+// The first quad of a frame whose texture is `image` (and whose rectangle is `rect`, when asked): its index, or -1.
+int AdQuad(const std::vector<ScreenOverlay::Quad>& frame, const MagicPortalsLayer& layer, const std::string& image, const Hud::Rect* rect = nullptr) {
+    for (std::size_t i = 0; i < frame.size(); ++i) {
+        if (frame[i].texture != image) continue;
+        if (rect == nullptr || SameRect(OnView(layer, frame[i]), *rect, 1e-3)) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+int AdFlatCount(const std::vector<ScreenOverlay::Quad>& frame) {
+    int flat = 0;
+    for (const ScreenOverlay::Quad& quad : frame) flat += quad.texture.empty() ? 1 : 0;
+    return flat;
+}
+
+// A scores.json with a gold medal on every level of the four chapters, so that every level is open (a level of the grid is pressed from the menu only
+// where the save has opened it): a hand-made file in the case's own saves directory, never the owner's.
+void AdSeedEveryLevel(const std::string& saves) {
+    std::string text = "{\"version\":1,\"scores\":[";
+    for (int world = 0; world < 4; ++world) {
+        for (int level = 0; level < 32; ++level) {
+            text += std::string(world == 0 && level == 0 ? "" : ",") + "{\"world\":" + std::to_string(world) + ",\"level\":" + std::to_string(level) + ",\"medal\":3}";
+        }
+    }
+    OsWrite(saves, "scores.json", text + "]}");
+}
+
+// A tuning of a size (and, where asked, an opacity) in steps, made valid on the rules.
+Controls::Tuning SizedTuningFor(const Controls::Rules& rules, int sizeSteps, int opacitySteps = 0) {
+    Controls::Tuning tuning;
+    tuning.sizeSteps = sizeSteps;
+    if (opacitySteps > 0) tuning.opacitySteps = opacitySteps;
+    return tuning.Clamped(rules);
+}
+
+// A hand-written file, in the shape a player or an older build left it (the layout number is the arrangement's, 2).
+const std::string kAdSizedFile = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6}}";
+const std::string kAdMovedFile =
+    "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[10,-5],\"pause\":[-4,3]}}}";
+
+// ---- opening it ---------------------------------------------------------------------------------------------------------------------------------
+
+void AdjustOpensFromOptionsAndTheEntryPressIsDead() {
+    if (!OriginalArtIsThere("AdjustOpensFromOptionsAndTheEntryPressIsDead")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    const std::string what = "AdjustOpensFromOptionsAndTheEntryPressIsDead";
+    const std::string saves = OsDir("adj-open-saves");
+    OsRun run(OsPaths(saves, OsDir("adj-open-prisms"), std::string("modern")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.AdjustAvailable() && !layer.AdjustArtResolved(), what + ": a modern run; its pictures are not resolved before the screen is opened");
+    if (!OsOpenOptions(run, what)) return;
+    // The button: shown where the style is Modern, claimed at its place, held at the press tint, and the screen opens on the RELEASE, one tick later.
+    const glm::vec2 px = OsPx(AdButtonCentre(layer));
+    const int soundsBefore = OsSounds(layer, "menu_button");
+    tickWith(layer, registry, px, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    CHECK_MSG(layer.OptionsHeld() == OptionsUi::Widget::Adjust && layer.MenuScreen() == Screen::Options, what + ": pressed, the button is held and Options is still up");
+    for (int tick = 0; tick < 10; ++tick) tickWith(layer, registry, px, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Options && layer.OptionsHeld() == OptionsUi::Widget::Adjust, what + ": held on for ten ticks, it opens nothing");
+    releaseWith(layer, registry, px);
+    CHECK_MSG(layer.MenuScreen() == Screen::Options && layer.OptionsHeld() == OptionsUi::Widget::None, what + ": the release asks for the screen, it is not up yet");
+    CHECK_MSG(OsSounds(layer, "menu_button") - soundsBefore == 1, what + ": and makes the menu button's noise once");
+    // It opens on the next tick, and the pointer is HELD there: a press still down that this screen did not see go down. It is dead until it lifts.
+    const glm::vec2 plus = OsPx(AdFaceCentre(layer, AdjustUi::Widget::SizePlus));
+    tickWith(layer, registry, plus, {MagicPortalsLayer::kTap}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Adjust, what + ": the next tick is the adjustment screen");
+    CHECK_MSG(!layer.AdjustUnlocked() && layer.SimLevel() == nullptr, what + ": it opens LOCKED, with no level loaded under it");
+    CHECK_MSG(layer.AdjustTouchDead() && layer.AdjustHeld() == AdjustUi::Widget::None, what + ": a touch held as it opens, over the size tile, is dead: nothing is held");
+    for (int tick = 0; tick < 4; ++tick) tickWith(layer, registry, plus, {MagicPortalsLayer::kTap}, {});
+    releaseWith(layer, registry, plus);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.ControlsApplied().Size(layer.ControlsRules()) == 0.7 && !layer.TuningEdited() && OsSounds(layer, "menu_button") - soundsBefore == 1, what + ": its release pressed nothing: the size is 0.7, no sound beyond the entry's");
+    CHECK_MSG(!layer.AdjustTouchDead(), what + ": and the lift ended the death");
+    // A fresh press on the same tile is a press.
+    AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+    CHECK_MSG(layer.ControlsApplied().Size(layer.ControlsRules()) == 0.8 && layer.TuningEdited(), what + ": a fresh press steps the size to 0.8");
+    // The press that opened it took nothing else of Options: the style, the file.
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && !ControlsFileExistsIn(saves), what + ": the style is as it was and (a forced run) nothing is written");
+}
+
+void TheAdjustButtonIsHiddenInClassic() {
+    if (!OriginalArtIsThere("TheAdjustButtonIsHiddenInClassic")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    const std::string what = "TheAdjustButtonIsHiddenInClassic";
+    const std::string saves = OsDir("adj-hidden-saves");
+    OsWrite(saves, "controls.json", kOsClassicFile);
+    OsRun run(OsPaths(saves, OsDir("adj-hidden-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Classic && layer.OptionsAvailable() && !layer.AdjustAvailable(), what + ": a player's run that chose Classic: Options exists, Adjust does not");
+    if (!OsOpenOptions(run, what)) return;
+    const std::vector<ScreenOverlay::Quad> shown = MenuFrame(registry, layer);
+    // Not drawn: the Options screen of planning step 185 - fourteen flat quads after the back button - and not claimed: a press at its place does nothing.
+    CHECK_MSG(AdFlatCount(shown) == 14, what + ": hidden, it draws nothing: fourteen flat quads, as step 185's screen had: " + std::to_string(AdFlatCount(shown)));
+    const OptionsUi::Widget under = OptionsUi::WidgetAt(layer.OptionsRules(), layer.CreditsRules(), layer.ViewPx(), layer.MenuStateMs(), AdButtonCentre(layer), layer.AdjustAvailable());
+    CHECK_MSG(under == OptionsUi::Widget::None, what + ": and nothing is under its place");
+    OsClickAt(layer, registry, AdButtonCentre(layer));
+    PtrRest(layer, registry, 5);
+    CHECK_MSG(layer.MenuScreen() == Screen::Options && layer.OptionsHeld() == OptionsUi::Widget::None && !layer.AdjustArtResolved(), what + ": a click at its place opens nothing");
+    // Choosing Modern shows it: one flat quad more (its plate) and its word's letters; and it is claimed.
+    OsClick(run, OsTileCentre(layer, Controls::Style::Modern));
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.AdjustAvailable(), what + ": the Modern tile makes it available");
+    const std::vector<ScreenOverlay::Quad> modern = MenuFrame(registry, layer);
+    CHECK_MSG(AdFlatCount(modern) == 15 && modern.size() > shown.size() + 10, what + ": drawn, it is a plate and a word more: " + std::to_string(AdFlatCount(modern)) + " flat, " + std::to_string(modern.size()) + " quads");
+    // Its word is laid out inside its plate.
+    {
+        const Hud::Rect plate = OptionsUi::AdjustRect(layer.OptionsRules(), layer.ViewPx());
+        int inside = 0;
+        for (const ScreenOverlay::Quad& quad : modern) {
+            if (quad.texture.find("Matura84_shadow") == std::string::npos) continue;
+            if (plate.Contains(OnView(layer, quad).Centre())) ++inside;
+        }
+        CHECK_MSG(inside >= 14, what + ": at least the fourteen letters of its word are in the plate: " + std::to_string(inside));
+    }
+    // And Classic hides it again, and releases the claim.
+    OsClick(run, OsTileCentre(layer, Controls::Style::Classic));
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Classic && !layer.AdjustAvailable() && AdFlatCount(MenuFrame(registry, layer)) == 14, what + ": Classic hides it again");
+    OsClickAt(layer, registry, AdButtonCentre(layer));
+    PtrRest(layer, registry, 5);
+    CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": and a click at its place opens nothing again");
+    CHECK_MSG(OsSavedFile(saves) == kOsClassicFile, what + ": and the file says Classic, as it did");
+}
+
+// ---- the size and the opacity, kept once per gesture -------------------------------------------------------------------------------------------
+
+void ASizeTapMovesTheLiveButtonsAndIsKept() {
+    if (!OriginalArtIsThere("ASizeTapMovesTheLiveButtonsAndIsKept")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "ASizeTapMovesTheLiveButtonsAndIsKept";
+    const std::string saves = OsDir("adj-size-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    {
+        OsRun run(OsPaths(saves, OsDir("adj-size-prisms")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const Controls::Rules& rules = layer.ControlsRules();
+        CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.ControlsStore().Persists() && layer.ControlsStore().SaveCount() == 0, what + ": a player's run on a saved Modern; nothing written yet");
+        if (!AdOpen(run, what)) return;
+        const int menuSounds = OsSounds(layer, "menu_button");
+        // The preview is the layout in force: each control's picture in the rectangle the tuning puts it in.
+        {
+            const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+            for (const Controls::Id id : Controls::kClaimOrder) {
+                const Hud::Rect want = AdPreviewRect(layer, id);
+                CHECK_MSG(AdQuad(frame, layer, layer.ModernImage(id), &want) >= 0, what + ": " + Controls::KeyOf(id) + " is previewed at " + ShowRect(want));
+            }
+        }
+        // ONE tap, one step, one save.
+        AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+        CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.8 && layer.ControlsApplied().SizeStepsIn(rules) == 8, what + ": the plus tile steps the size to 0.8");
+        CHECK_MSG(layer.ControlsStore().SaveCount() == 1 && OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":0.8}}", what + ": and is saved at once, as one write: " + OsSavedFile(saves));
+        CHECK_MSG(OsSounds(layer, "menu_button") - menuSounds == 1, what + ": with the menu button's noise once");
+        {
+            const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+            for (const Controls::Id id : Controls::kClaimOrder) {
+                const Hud::Rect want = AdPreviewRect(layer, id);
+                CHECK_MSG(AdQuad(frame, layer, layer.ModernImage(id), &want) >= 0, what + ": " + Controls::KeyOf(id) + " moved with it, to " + ShowRect(want));
+            }
+            // The readout between the size tiles says 0.8: three letters of the original's font on the size row.
+            int onRow = 0;
+            for (const ScreenOverlay::Quad& quad : frame) {
+                if (quad.texture.find("Matura84_shadow") != std::string::npos && NearD(OnView(layer, quad).Centre().y, 69.12, 14.0)) ++onRow;
+            }
+            CHECK_MSG(onRow == 3, what + ": the size row's readout is three glyphs ('0.8'): " + std::to_string(onRow));
+        }
+        // Not per frame: a second of ticks writes nothing more.
+        PtrRest(layer, registry, 60);
+        CHECK_MSG(layer.ControlsStore().SaveCount() == 1, what + ": a second of resting writes nothing: " + std::to_string(layer.ControlsStore().SaveCount()));
+        // Each tap is a save, each a gesture: 0.9, 0.8 and 0.7 again (and 0.7 is the default, so the file is the choice alone).
+        AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+        AdClick(layer, registry, AdjustUi::Widget::SizeMinus);
+        AdClick(layer, registry, AdjustUi::Widget::SizeMinus);
+        CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.7 && layer.ControlsStore().SaveCount() == 4 && OsSavedFile(saves) == kOsModernFile, what + ": four taps, four saves, and the default again is the file of a player who never touched a slider: " + OsSavedFile(saves));
+        // The opacity: 0.2 steps down in four taps; the fifth is at the limit - inert: no change, no save, no noise.
+        for (int i = 0; i < 4; ++i) AdClick(layer, registry, AdjustUi::Widget::OpacityMinus);
+        CHECK_MSG(layer.ControlsApplied().Opacity(rules) == 1.0 / 5.0 && layer.ControlsStore().SaveCount() == 8, what + ": four opacity taps take it to 0.2, four more saves");
+        const int sounds = OsSounds(layer, "menu_button");
+        AdClick(layer, registry, AdjustUi::Widget::OpacityMinus);
+        CHECK_MSG(layer.ControlsApplied().Opacity(rules) == 0.2 && layer.ControlsStore().SaveCount() == 8 && OsSounds(layer, "menu_button") == sounds, what + ": a tap at the limit changes nothing, saves nothing and makes no noise");
+        CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"opacity\":0.2}}", what + ": " + OsSavedFile(saves));
+        // The preview's alpha follows: 24 of 255 for an arrow.
+        {
+            const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+            const int at = AdQuad(frame, layer, layer.ModernImage(Controls::Id::Left));
+            CHECK_MSG(at >= 0 && NearD(frame[static_cast<std::size_t>(at < 0 ? 0 : at)].color.a, 24.0 / 255.0, 1e-4), what + ": and the arrow is previewed at 24 of 255");
+        }
+        // Up to 1.2 for the next steps (five plus taps from 0.7), the opacity back to 0.6 (three plus taps).
+        for (int i = 0; i < 5; ++i) AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+        for (int i = 0; i < 2; ++i) AdClick(layer, registry, AdjustUi::Widget::OpacityPlus);
+        CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.2 && layer.ControlsApplied().Opacity(rules) == 3.0 / 5.0, what + ": 1.2 and 0.6");
+        CHECK_MSG(OsSavedFile(saves) == kAdSizedFile, what + ": the file is the size and the opacity as the design writes them: " + OsSavedFile(saves));
+        // Back, and Back, into a level: THE LIVE TUNING is what the level lays out, claims and draws.
+        AdClick(layer, registry, AdjustUi::Widget::Back);
+        PtrRest(layer, registry, 40);
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": Back leaves for Options");
+        OsClick(run, OsBackCentre(layer));
+        PtrRest(layer, registry, 60);
+        MagicPortalsLayer::MenuButton button;
+        button.kind = Kind::Level;
+        button.world = 0;
+        button.level = layer.ChapterTable().Find("level0");
+        CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+        PtrRest(layer, registry, 80);
+        Hud::Rect left;
+        const Hud::Rect want = Controls::Boxes(rules, SizedTuningFor(rules, 12), layer.ViewPx(), layer.ControlsInsets())[ArtAt(Controls::Id::Left)];
+        CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && SameRect(left, want, 1e-6), what + ": the level's left arrow is the 1.2 box the screen set: " + ShowRect(left) + " against " + ShowRect(want));
+        CHECK_MSG(layer.ControlsRectsLine().find("controls: modern, walk_left") == 0, what + ": and the level's INFO line says so: " + layer.ControlsRectsLine());
+    }
+    // And the next RUN plays what was kept.
+    {
+        OsRun run(OsPaths(saves, OsDir("adj-size-prisms-2")), what + ": the next run");
+        if (!run.ok) return;
+        const Controls::Rules& rules = run.layer.ControlsRules();
+        CHECK_MSG(run.layer.ControlsApplied().Size(rules) == 1.2 && run.layer.ControlsApplied().Opacity(rules) == 0.6 && run.layer.ControlsLine() == "controls: modern (saved)", what + ": the next run plays 1.2 and 0.6, from the file");
+    }
+}
+
+void TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes() {
+    if (!OriginalArtIsThere("TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes";
+    const std::string saves = OsDir("adj-lock-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    OsRun run(OsPaths(saves, OsDir("adj-lock-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    CHECK_MSG(!layer.AdjustUnlocked(), what + ": it opens locked");
+    // The lock tile opens it: a red plate and an open padlock, the cues of a drag appear, and nothing is saved.
+    const std::vector<ScreenOverlay::Quad> locked = MenuFrame(registry, layer);
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    CHECK_MSG(layer.AdjustUnlocked() && layer.ControlsStore().SaveCount() == 0 && !layer.TuningEdited(), what + ": the lock opens, and nothing is saved");
+    const std::vector<ScreenOverlay::Quad> open = MenuFrame(registry, layer);
+    CHECK_MSG(AdFlatCount(open) - AdFlatCount(locked) == 41, what + ": unlocked, 41 flat quads more: 20 hit-frame strips, 20 outline strips and the guide: " + std::to_string(AdFlatCount(open) - AdFlatCount(locked)));
+    // The guide: across the whole view at the character's row, 206.
+    {
+        bool guide = false;
+        for (const ScreenOverlay::Quad& quad : open) {
+            const Hud::Rect rect = OnView(layer, quad);
+            guide = guide || (quad.texture.empty() && NearD(rect.size.x, layer.ViewPx().x, 1e-3) && NearD(rect.Centre().y, 206.0, 1e-3) && NearD(rect.size.y, 0.7, 1e-3));
+        }
+        CHECK_MSG(guide, what + ": a 0.7-unit line across the view at y 206 is drawn");
+    }
+    // The outlines breathe in the state's own ticks: every sample is the function of the state's tick, twenty strips each, and the alpha is not always one.
+    {
+        const AdjustUi::Rules& rules = layer.AdjustRules();
+        std::set<int> seen;
+        for (int sample = 0; sample < 9; ++sample) {
+            const int want = AdjustUi::OutlineAlphaByte(rules.unlocked, layer.MenuStateTicks());
+            seen.insert(want);
+            int outlines = 0;
+            for (const ScreenOverlay::Quad& quad : MenuFrame(registry, layer)) {
+                if (quad.texture.empty() && std::fabs(static_cast<double>(quad.color.a) - static_cast<double>(want) / 255.0) < 1e-4 && quad.color.r == 1.0f && quad.color.g == 1.0f && quad.color.b == 1.0f) ++outlines;
+            }
+            CHECK_MSG(outlines == 20, what + ": twenty outline strips at the breath's alpha for tick " + std::to_string(layer.MenuStateTicks()) + " (" + std::to_string(want) + "): " + std::to_string(outlines));
+            PtrRest(layer, registry, 7);
+        }
+        CHECK_MSG(seen.size() >= 4u, what + ": over 63 ticks the outlines were at " + std::to_string(seen.size()) + " different alphas: they breathe");
+    }
+    // An opacity step does NOT re-lock; a size step DOES.
+    AdClick(layer, registry, AdjustUi::Widget::OpacityMinus);
+    CHECK_MSG(layer.AdjustUnlocked() && layer.ControlsApplied().Opacity(layer.ControlsRules()) == 0.8, what + ": an opacity step leaves it open");
+    AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+    CHECK_MSG(!layer.AdjustUnlocked() && layer.ControlsApplied().Size(layer.ControlsRules()) == 0.8, what + ": a size step re-locks");
+    CHECK_MSG(!OsSavedFile(saves).empty() && OsSavedFile(saves).find("lock") == std::string::npos && OsSavedFile(saves).find("unlock") == std::string::npos, what + ": the file never says anything of the lock: " + OsSavedFile(saves));
+    // Left and entered again: locked.
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    CHECK_MSG(layer.AdjustUnlocked(), what + ": open again");
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    if (!AdOpen(layer, registry, what + ": reopened")) return;
+    CHECK_MSG(!layer.AdjustUnlocked(), what + ": the screen always opens locked, whatever it was left as");
+}
+
+// ---- leaving it ----------------------------------------------------------------------------------------------------------------------------------
+
+void TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved() {
+    if (!OriginalArtIsThere("TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    for (const bool byKey : {false, true}) {
+        const std::string what = std::string("TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved: ") + (byKey ? "the back key" : "the back button");
+        const std::string saves = OsDir("adj-leave-saves");
+        // A controls.json that is a DIRECTORY: it cannot be read (the defaults are kept, one warning) and no write can replace it, so a save fails and the
+        // tuning stays UNSAVED until the obstruction is gone.
+        std::error_code ec;
+        std::filesystem::create_directories(std::filesystem::path(saves) / "controls.json", ec);
+        OsRun run(OsPaths(saves, OsDir("adj-leave-prisms")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (!OsOpenOptions(run, what)) return;
+        OsClick(run, OsTileCentre(layer, Controls::Style::Modern));
+        CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.ControlsStore().SaveCount() == 0, what + ": Modern is chosen, and the save of it failed");
+        if (!AdOpen(layer, registry, what)) return;
+        AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+        CHECK_MSG(layer.ControlsApplied().Size(layer.ControlsRules()) == 0.8 && layer.TuningUnsaved() && layer.ControlsStore().SaveCount() == 0, what + ": a step is live and is UNSAVED (the write failed)");
+        // The obstruction goes; leaving commits what is unsaved.
+        std::filesystem::remove(std::filesystem::path(saves) / "controls.json", ec);
+        const int sounds = OsSounds(layer, "menu_button");
+        if (byKey) {
+            pressBack(layer, registry);
+            tickWith(layer, registry, kRest, {}, {});
+        } else {
+            tickWith(layer, registry, OsPx(AdFaceCentre(layer, AdjustUi::Widget::Back)), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+            CHECK_MSG(layer.AdjustHeld() == AdjustUi::Widget::Back && layer.MenuScreen() == Screen::Adjust, what + ": pressed, Back is held and the screen is up");
+            releaseWith(layer, registry, OsPx(AdFaceCentre(layer, AdjustUi::Widget::Back)));
+            tickWith(layer, registry, kRest, {}, {});
+        }
+        CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": the next tick is Options");
+        CHECK_MSG(!layer.TuningUnsaved() && layer.ControlsStore().SaveCount() == 1, what + ": the unsaved tuning was written on the way out, once");
+        CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":0.8}}", what + ": " + OsSavedFile(saves));
+        CHECK_MSG(OsSounds(layer, "menu_button") - sounds == (byKey ? 0 : 1), what + ": the button's own noise, the key's none (as the credits' are)");
+    }
+    // Opened and left with NO edit: nothing is written - a hand-written file keeps its own bytes.
+    {
+        const std::string what = "TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved: nothing edited";
+        const std::string saves = OsDir("adj-noedit-saves");
+        const std::string handWritten = "{ \"version\": 1, \"controls\": { \"mode\": \"modern\", \"layout\": 2, \"size\": 1.2 }, \"extra\": true }";
+        OsWrite(saves, "controls.json", handWritten);
+        OsRun run(OsPaths(saves, OsDir("adj-noedit-prisms")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (!AdOpen(run, what)) return;
+        AdClick(layer, registry, AdjustUi::Widget::Lock);
+        AdClick(layer, registry, AdjustUi::Widget::Lock);
+        AdClick(layer, registry, AdjustUi::Widget::Restore);
+        AdClick(layer, registry, AdjustUi::Widget::Back);
+        PtrRest(layer, registry, 40);
+        CHECK_MSG(layer.MenuScreen() == Screen::Options && layer.ControlsStore().SaveCount() == 0 && !layer.TuningEdited(), what + ": back in Options with nothing written, nothing edited");
+        CHECK_MSG(OsSavedFile(saves) == handWritten, what + ": the hand-written file is byte for byte as it was: " + OsSavedFile(saves));
+    }
+    // A key HELD as the screen opens is not a close; the press that follows is.
+    {
+        const std::string what = "TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved: a held key";
+        OsRun run(OsPaths(OsDir("adj-key-saves"), OsDir("adj-key-prisms"), std::string("modern")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (!OsOpenOptions(run, what)) return;
+        OsClickAt(layer, registry, AdButtonCentre(layer));
+        // The key is down (held, not pressed) from the tick the screen opens, for a while.
+        for (int tick = 0; tick < 8; ++tick) tickWith(layer, registry, kRest, {MagicPortalsLayer::kBack}, {});
+        CHECK_MSG(layer.MenuScreen() == Screen::Adjust, what + ": a key held across the opening is not a close");
+        tickWith(layer, registry, kRest, {}, {});
+        pressBack(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": a press of it is");
+    }
+}
+
+void BackLeavesAdjustAndOptionsTakesNothingFromThePress() {
+    if (!OriginalArtIsThere("BackLeavesAdjustAndOptionsTakesNothingFromThePress")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    const std::string what = "BackLeavesAdjustAndOptionsTakesNothingFromThePress";
+    OsRun run(OsPaths(OsDir("adj-return-saves"), OsDir("adj-return-prisms"), std::string("modern")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    // Adjust's Back stands where the credits' own back button (Options') stands, in part: the same press must not reach both screens.
+    const glm::dvec2 backFace = AdFaceCentre(layer, AdjustUi::Widget::Back);
+    const Hud::Rect optionsBack = CreditsUi::BackHitRect(layer.CreditsRules(), layer.ViewPx(), 1.0e9);
+    CHECK_MSG(optionsBack.Contains(backFace), what + ": Adjust's Back face " + Point(backFace) + " is inside Options' back button " + ShowRect(optionsBack) + " (so the pin has something to pin)");
+    const int menuSounds = OsSounds(layer, "menu_button");
+    const std::string lineBefore = layer.ControlsLine();
+    OsClickAt(layer, registry, backFace);
+    CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": Back leaves for Options: " + std::to_string(static_cast<int>(layer.MenuScreen())));
+    PtrRest(layer, registry, 20);
+    CHECK_MSG(layer.MenuScreen() == Screen::Options && layer.OptionsHeld() == OptionsUi::Widget::None, what + ": and Options is still up, nothing held: the press was Adjust's alone");
+    CHECK_MSG(OsSounds(layer, "menu_button") - menuSounds == 1, what + ": one noise, the Back button's: " + std::to_string(OsSounds(layer, "menu_button") - menuSounds));
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.ControlsLine() == lineBefore, what + ": Options chose nothing from it");
+    // The same press, made again at the same place, is a NEW press, and acts on the screen it is made on: Options' back button.
+    OsClickAt(layer, registry, backFace);
+    PtrRest(layer, registry, 5);
+    CHECK_MSG(layer.MenuScreen() == Screen::Main, what + ": a fresh press there leaves Options for the main menu: a press acts on exactly one screen");
+    // And the main menu took nothing of it (and its buttons' entrance is let to finish before the entry is pressed again).
+    PtrRest(layer, registry, 80);
+    CHECK_MSG(layer.MenuScreen() == Screen::Main && layer.SoundOn() && layer.MusicOn() && layer.MainMenuHeld() == 0u && !layer.OptionsEntryHeld(), what + ": nothing of the main menu was pressed");
+    // The key's way back is the same: Escape from Adjust is Adjust's, and the next screen is untouched.
+    if (!OsOpenOptions(run, what + ": again")) return;
+    if (!AdOpen(layer, registry, what + ": again")) return;
+    pressBack(layer, registry);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": the key leaves Adjust for Options");
+    PtrRest(layer, registry, 10);
+    CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": and Options does not take the same key press");
+}
+
+// ---- no level, no pointer for one ------------------------------------------------------------------------------------------------------------------
+
+void NoPointerReachesALevelWhileAdjustIsUp() {
+    if (!OriginalArtIsThere("NoPointerReachesALevelWhileAdjustIsUp")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "NoPointerReachesALevelWhileAdjustIsUp";
+    OsRun run(OsPaths(OsDir("adj-noptr-saves"), OsDir("adj-noptr-prisms"), std::string("modern,contacts=two")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.TwoContactsOn(), what + ": a run that reads two fingers in a level");
+    if (!AdOpen(run, what)) return;
+    CHECK_MSG(layer.SimLevel() == nullptr && !layer.Paused() && !layer.PopupOpen(), what + ": no level is loaded under the screen, no pause, no popup");
+    const Controls::Tuning applied = layer.ControlsApplied();
+    const int sounds = OsSounds(layer, "menu_button");
+    // A press on each preview control, on the walk arrows' places (where a level would walk) and on the world (where a level would shoot): nothing.
+    std::vector<glm::dvec2> places;
+    for (const Controls::Id id : Controls::kClaimOrder) places.push_back(AdPreviewRect(layer, id).Centre());
+    places.push_back(glm::dvec2(layer.ViewPx().x * 0.5, 225.0)); // below the column: the world
+    places.push_back(glm::dvec2(300.0, 30.0));
+    for (const glm::dvec2& place : places) {
+        const glm::vec2 px = OsPx(place);
+        for (int tick = 0; tick < 6; ++tick) {
+            tickWith(layer, registry, px, {MagicPortalsLayer::kTap}, tick == 0 ? std::vector<std::string>{MagicPortalsLayer::kTap} : std::vector<std::string>{});
+        }
+        releaseWith(layer, registry, px);
+        tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Adjust && layer.AdjustHeld() == AdjustUi::Widget::None, what + ": a press at " + Point(place) + " changes nothing of the screen");
+        CHECK_MSG(layer.SimLevel() == nullptr && !layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{} && !layer.TouchSwallowed(), what + ": and no level, no contact role, no swallow");
+    }
+    // A drag across the preview (a scheduled one) moves no control: dragging is a later step, and the moves are what they were.
+    {
+        const int T = layer.LayerTicks();
+        layer.ScheduleDevDrag(T + 1, AdPreviewRect(layer, Controls::Id::Left).Centre() / layer.ViewPx(), glm::dvec2(0.5, 0.2), T + 20);
+        for (int tick = 0; tick < 30; ++tick) tickWith(layer, registry, kRest, {}, {});
+        CHECK_MSG(AdjustUi::SameKept(layer.ControlsApplied(), applied) && !AdjustUi::HasMove(layer.ControlsApplied()) && !layer.TuningEdited(), what + ": a drag across the preview moves nothing and edits nothing");
+    }
+    CHECK_MSG(OsSounds(layer, "menu_button") == sounds, what + ": and not one noise: a press on a control or the world is not a button's");
+    CHECK_MSG(layer.SimLevel() == nullptr, what + ": still no level");
+}
+
+void AFingerHeldAcrossOpeningAndClosingAdjustLeavesNoRecordStuck() {
+    if (!OriginalArtIsThere("AFingerHeldAcrossOpeningAndClosingAdjustLeavesNoRecordStuck")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    for (const bool heldIntoTheLevel : {false, true}) {
+        const std::string what = std::string("AFingerHeldAcrossOpeningAndClosingAdjustLeavesNoRecordStuck: ") + (heldIntoTheLevel ? "still held into the level" : "lifted before the level");
+        OsRun run(OsPaths(OsDir("adj-finger-saves"), OsDir("adj-finger-prisms"), std::string("modern,contacts=two")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        if (!AdOpen(run, what)) return;
+        // The pointer goes down on the left arrow's place IN the preview and stays down while the screen is left (the key), through Options, to the main menu.
+        const glm::vec2 arrow = OsPx(AdPreviewRect(layer, Controls::Id::Left).Centre());
+        tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap, MagicPortalsLayer::kBack}, {MagicPortalsLayer::kBack});
+        for (int tick = 0; tick < 4; ++tick) tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap}, {});
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": the key left the screen with the pointer still down");
+        CHECK_MSG(layer.AdjustHeld() == AdjustUi::Widget::None && layer.OptionsHeld() == OptionsUi::Widget::None && !layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{},
+                  what + ": no widget held, no controls contact, no role");
+        // Down to the main menu by Options' key, and into a level by the grid's own button.
+        tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap, MagicPortalsLayer::kBack}, {MagicPortalsLayer::kBack});
+        for (int tick = 0; tick < 3; ++tick) tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap}, {});
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main, what + ": and Options' key took it on to the main menu");
+        if (!heldIntoTheLevel) {
+            releaseWith(layer, registry, arrow);
+            PtrRest(layer, registry, 60);
+        }
+        MagicPortalsLayer::MenuButton button;
+        button.kind = Kind::Level;
+        button.world = 0;
+        button.level = layer.ChapterTable().Find("level0");
+        CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+        double x0 = 0.0;
+        if (heldIntoTheLevel) {
+            // The finger is STILL on the arrow's place as the level begins to read fingers: a finger the level did not see go down works nothing.
+            for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap}, {});
+            x0 = playerPx(registry, layer).x;
+            for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, arrow, {MagicPortalsLayer::kTap}, {});
+            CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0) < 0.5, what + ": a finger down since before the level does not walk him: " + PtrNum(playerPx(registry, layer).x - x0));
+            releaseWith(layer, registry, arrow);
+            PtrRest(layer, registry, 30);
+        } else {
+            PtrRest(layer, registry, 60);
+            x0 = playerPx(registry, layer).x;
+            PtrRest(layer, registry, 40);
+        }
+        CHECK_MSG(!layer.TouchSwallowed() && !layer.ContactsSplit() && layer.ContactRolesNow() == Controls::ContactRoles{}, what + ": with every finger up there is no swallow, no split, no role");
+        CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0) < 0.5, what + ": and he stands where he stood: " + PtrNum(playerPx(registry, layer).x - x0));
+        // A fresh press on the arrow still works (nothing was left half done).
+        const glm::vec2 right = PtrPixel(layer, Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), layer.ViewPx(), layer.ControlsInsets())[ArtAt(Controls::Id::Right)].Centre());
+        tickWith(layer, registry, right, {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+        for (int tick = 0; tick < 20; ++tick) tickWith(layer, registry, right, {MagicPortalsLayer::kTap}, {});
+        CHECK_MSG(playerPx(registry, layer).x - x0 > 4.0, what + ": a fresh press on the right arrow walks him: " + PtrNum(playerPx(registry, layer).x - x0));
+    }
+}
+
+// ---- the preview is never a level's -------------------------------------------------------------------------------------------------------------
+
+void AdjustDrawsAllFiveControlsWhateverTheLastLevelHad() {
+    if (!OriginalArtIsThere("AdjustDrawsAllFiveControlsWhateverTheLastLevelHad")) return;
+    const ControlsScratchGuard scratch;
+    using Screen = MagicPortalsLayer::Screen;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "AdjustDrawsAllFiveControlsWhateverTheLastLevelHad";
+    const std::string fiveSaves = OsDir("adj-five-saves");
+    AdSeedEveryLevel(fiveSaves);
+    MagicPortalsLayer::Paths paths = OsPaths(fiveSaves, OsDir("adj-five-prisms"), std::string("modern"));
+    paths.controls.testInsets = Controls::Insets{9.0, 7.0, 5.0, 3.0}; // a safe area: the screen is laid out inside it, as the level is
+    OsRun run(paths, what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    // The last level was a WEIGHTLESS one: no walk arrows, and no portal alive, so no clear-portals button either.
+    MagicPortalsLayer::MenuButton button;
+    button.kind = Kind::Level;
+    button.world = 3;
+    button.level = layer.ChapterTable().Find("level1c");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 4-02 (weightless) loads");
+    PtrRest(layer, registry, 100);
+    CloseTheLevelStartPopup(layer, registry);
+    PtrRest(layer, registry, 30);
+    Hud::Rect rect;
+    CHECK_MSG(layer.SimLevel() != nullptr && !layer.ControlRect(PtrControl::Left, rect) && !layer.ControlRect(PtrControl::Right, rect) && !layer.ControlRect(PtrControl::Clear, rect) && layer.ControlRect(PtrControl::Reset, rect),
+              what + ": in it the level draws restart and pause and no arrow and no clear");
+    // From the level to Options, with the keys: the pause, Levels, back, back, the entry.
+    press(layer, registry, MagicPortalsLayer::kBack);
+    PtrRest(layer, registry, 80);
+    const glm::vec2 levels = PtrPixel(layer, OsPausePoint(layer, MagicPortals::Pause::Button::Levels));
+    tap(layer, registry, levels);
+    lift(layer, registry, levels);
+    PtrRest(layer, registry, 80);
+    for (int step = 0; step < 2; ++step) {
+        pressBack(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        PtrRest(layer, registry, 80);
+    }
+    CHECK_MSG(layer.MenuScreen() == Screen::Main, what + ": the main menu");
+    OsClickAt(layer, registry, OsEntryCentre(layer));
+    PtrRest(layer, registry, 5);
+    if (!AdOpen(layer, registry, what)) return;
+    CHECK_MSG(layer.SimLevel() == nullptr, what + ": no level is loaded under the screen");
+    const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+    // ALL FIVE are drawn, in the rectangles the layout puts them in under this safe area, at the HUD's own alpha, whatever the last level had.
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const Hud::Rect want = AdPreviewRect(layer, id);
+        const int at = AdQuad(frame, layer, layer.ModernImage(id), &want);
+        CHECK_MSG(at >= 0, what + ": " + Controls::KeyOf(id) + " is drawn at " + ShowRect(want));
+        if (at >= 0) CHECK_MSG(NearD(frame[static_cast<std::size_t>(at)].color.a, 120.0 / 255.0, 1e-4), what + ": " + Controls::KeyOf(id) + " at the HUD's 120 of 255");
+    }
+    // The safe area moved the boxes in (the layout is the level's own): the left arrow's box is 9 units in from the left and 3 up from the bottom margin.
+    {
+        const Controls::Insets insets = layer.ControlsInsets();
+        CHECK_MSG(insets.left == 9.0 && insets.top == 7.0 && insets.right == 5.0 && insets.bottom == 3.0, what + ": the layer's insets are the injected ones");
+        const Hud::Rect left = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), layer.ViewPx(), insets)[ArtAt(Controls::Id::Left)];
+        CHECK_MSG(NearD(left.min.x, 9.0 + 44.0 / kOsPxPerUnit, 1e-9), what + ": the left arrow's box is the 44 px margin inside the safe area: " + ShowRect(left));
+        // Back stands in the same safe rectangle's corner, by the same rule: its place is the layout's own BackBox.
+        const Hud::Rect back = layer.AdjustLayout().At(AdjustUi::Widget::Back).box;
+        CHECK_MSG(SameRect(back, AdjustUi::BackBox(layer.AdjustRules(), layer.ControlsRules(), layer.ViewPx(), insets), 1e-9) && NearD(back.min.x, 9.0 + 44.0 / kOsPxPerUnit, 1e-9), what + ": Back is the safe rectangle's corner's, by the same margin: " + ShowRect(back));
+        const Hud::Rect clear = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), layer.ViewPx(), insets)[ArtAt(Controls::Id::Clear)];
+        CHECK_MSG(back.min.y - clear.Max().y >= 16.0 / kOsPxPerUnit - 1e-9, what + ": and clears the clear preview's box by 16 px or more under it");
+    }
+    // The seven widgets are drawn: each picture where its face is.
+    for (const AdjustUi::Widget widget : AdjustUi::kWidgets) {
+        const Hud::Rect want = AdTileRect(layer, widget);
+        const std::optional<AdjustUi::Picture> picture = AdjustUi::PictureOf(widget, false);
+        CHECK_MSG(picture && AdQuad(frame, layer, layer.AdjustImage(*picture), &want) >= 0, what + ": " + AdjustUi::NameOf(widget) + " is drawn at " + ShowRect(want));
+    }
+    // The preview flag stayed on the screen: leave, and play 1-01 - no portal alive, so no clear-portals button, shown or claimed.
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    CHECK_MSG(layer.MenuScreen() == Screen::Main, what + ": the main menu again");
+    button.world = 0;
+    button.level = layer.ChapterTable().Find("level0");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+    PtrRest(layer, registry, 100);
+    const Hud::Rect clearBox = Controls::Boxes(layer.ControlsRules(), layer.ControlsApplied(), layer.ViewPx(), layer.ControlsInsets())[ArtAt(Controls::Id::Clear)];
+    CHECK_MSG(!layer.ControlRect(PtrControl::Clear, rect) && !layer.ControlAt(clearBox.Centre()), what + ": the preview's forced clear-portals did not reach the level: none is shown, and its place is not a control's");
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, rect) && layer.ControlRect(PtrControl::Right, rect), what + ": and the arrows are there");
+}
+
+// ---- the readouts, with the real font ------------------------------------------------------------------------------------------------------------
+
+void TheReadoutsFitBetweenTheTilesWithTheRealFont() {
+    if (!OriginalArtIsThere("TheReadoutsFitBetweenTheTilesWithTheRealFont")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "TheReadoutsFitBetweenTheTilesWithTheRealFont";
+    OsRun run(OsPaths(OsDir("adj-read-saves"), OsDir("adj-read-prisms"), std::string("modern")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    const Controls::Rules& rules = layer.ControlsRules();
+    const glm::dvec2 view = layer.ViewPx();
+    const AdjustUi::Layout layout = layer.AdjustLayout();
+    // The room between the size and opacity tiles' FACES, which is where the number is read.
+    const double left = layout.At(AdjustUi::Widget::SizeMinus).face.Max().x;
+    const double right = layout.At(AdjustUi::Widget::SizePlus).face.min.x;
+    CHECK_MSG(NearD(right - left, 46.364, 0.01), what + ": 46.364 units between the faces: " + PtrNum(right - left));
+    // What the screen draws on a row: the letters of the original's font whose centre is on the row.
+    const auto readout = [&](double row, std::string& text) {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        double lo = 1e9;
+        double hi = -1e9;
+        double top = 1e9;
+        double bottom = -1e9;
+        int glyphs = 0;
+        for (const ScreenOverlay::Quad& quad : frame) {
+            if (quad.texture.find("Matura84_shadow") == std::string::npos) continue;
+            const Hud::Rect rect = OnView(layer, quad);
+            if (std::fabs(rect.Centre().y - row) > 16.0) continue;
+            ++glyphs;
+            lo = std::min(lo, rect.min.x);
+            hi = std::max(hi, rect.Max().x);
+            top = std::min(top, rect.min.y);
+            bottom = std::max(bottom, rect.Max().y);
+        }
+        text = std::to_string(glyphs);
+        return glm::dvec4(lo, hi, top, bottom);
+    };
+    double widest = 0.0;
+    int sizes = 0;
+    int opacities = 0;
+    // The size, 0.7 down to 0.4, up to 1.4: twenty-one steps; each reading is three glyphs inside the faces' gap, about 20 units tall.
+    const auto check = [&](const std::string& name, double row) {
+        std::string glyphs;
+        const glm::dvec4 box = readout(row, glyphs);
+        CHECK_MSG(glyphs == "3", what + ": " + name + " is three glyphs: " + glyphs);
+        CHECK_MSG(box.x >= left && box.y <= right, what + ": " + name + " stands between the faces (" + PtrNum(box.x) + " to " + PtrNum(box.y) + " of " + PtrNum(left) + " to " + PtrNum(right) + ")");
+        CHECK_MSG(box.w - box.z > 19.0 && box.w - box.z < 23.0, what + ": " + name + " is about 20 units tall: " + PtrNum(box.w - box.z));
+        CHECK_MSG(NearD((box.x + box.y) * 0.5, view.x * 0.5, 3.0), what + ": " + name + " is centred on the middle");
+        widest = std::max(widest, box.y - box.x);
+        return;
+    };
+    check("size 0.7", 69.12);
+    ++sizes;
+    for (int i = 0; i < 3; ++i) {
+        AdClick(layer, registry, AdjustUi::Widget::SizeMinus);
+        check("size " + std::to_string(layer.ControlsApplied().SizeStepsIn(rules)) + " / 10", 69.12);
+        ++sizes;
+    }
+    for (int i = 0; i < 10; ++i) {
+        AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+        check("size " + std::to_string(layer.ControlsApplied().SizeStepsIn(rules)) + " / 10", 69.12);
+        ++sizes;
+    }
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.4 && sizes == 14, what + ": 0.7 -> 0.4 -> 1.4 walked: " + std::to_string(sizes) + " readings");
+    check("opacity 1.0", 102.4);
+    ++opacities;
+    for (int i = 0; i < 4; ++i) {
+        AdClick(layer, registry, AdjustUi::Widget::OpacityPlus);
+        check("opacity " + std::to_string(layer.ControlsApplied().OpacityStepsIn(rules)) + " / 5", 102.4);
+        ++opacities;
+    }
+    for (int i = 0; i < 8; ++i) {
+        AdClick(layer, registry, AdjustUi::Widget::OpacityMinus);
+        check("opacity " + std::to_string(layer.ControlsApplied().OpacityStepsIn(rules)) + " / 5", 102.4);
+        ++opacities;
+    }
+    CHECK_MSG(layer.ControlsApplied().Opacity(rules) == 0.2 && opacities == 13, what + ": 1.0 -> 1.8 -> 0.2 walked: " + std::to_string(opacities) + " readings");
+    CHECK_MSG(widest > 33.0 && widest < 46.364, what + ": the widest reading ('0.4' or '0.2') is " + PtrNum(widest) + " units to its last glyph's edge: inside the 46.364");
+}
+
+// ---- the pictures, tier by tier ------------------------------------------------------------------------------------------------------------------
+
+void TheEditorGlyphsFallBackTierByTier() {
+    if (!OriginalArtIsThere("TheEditorGlyphsFallBackTierByTier")) return;
+    const ControlsScratchGuard scratch;
+    const std::string kKeys[8] = {"size_minus", "size_plus", "opacity_minus", "opacity_plus", "lock_locked", "lock_unlocked", "restore", "back"};
+    const auto adjustFilesIn = [](const std::filesystem::path& dir) {
+        int found = 0;
+        for (const std::string& name : ArtFilesIn(dir)) found += name.rfind("adjust_", 0) == 0 ? 1 : 0;
+        return found;
+    };
+    // 1. TIER ONE: all eight of Magic Rampage's own, 128 x 128, read at run time from the folder `editor`.
+    {
+        const std::string what = "TheEditorGlyphsFallBackTierByTier: all eight files";
+        ArtCase art("adj-tier-mr");
+        const std::filesystem::path editor = art.root / "editor";
+        for (const std::string& key : kKeys) CHECK_MSG(ArtWritePng(editor / (key + ".png"), 128, 128), "the stand-in for " + key + ".png is written");
+        MagicPortalsLayer::Paths paths = OsPaths(OsDir("adj-tier-saves-1"), art.prisms.string(), std::string("modern"));
+        paths.controls.editorArtDir = editor.string();
+        OsRun run(paths, what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(!layer.AdjustArtResolved() && layer.AdjustArtLine().empty() && adjustFilesIn(art.prisms) == 0, what + ": before the screen is opened: nothing resolved, nothing said, no glyph file");
+        if (!AdOpen(run, what)) return;
+        CHECK_MSG(layer.AdjustArtResolved() && layer.AdjustArtLine() == "adjust art: size_minus=mr size_plus=mr opacity_minus=mr opacity_plus=mr lock_locked=mr lock_unlocked=mr restore=mr back=mr", what + ": the line says Magic Rampage's, eight times: " + layer.AdjustArtLine());
+        CHECK_MSG(layer.AdjustArtWarnings().empty() && layer.AdjustArtFilesWritten() == 0 && adjustFilesIn(art.prisms) == 0, what + ": no warning, and no glyph file is written");
+        for (const AdjustUi::Picture picture : AdjustUi::kPictures) {
+            const std::string key = AdjustUi::KeyOf(picture);
+            CHECK_MSG(layer.AdjustImage(picture) == (editor / (key + ".png")).string() && layer.AdjustSource(picture) == Controls::ArtSource(Controls::ArtTier::MagicRampage), what + ": " + key + " is the file in the editor folder");
+            CHECK_MSG(layer.AdjustBodyInset(picture) == layer.AdjustRules().mr[static_cast<std::size_t>(picture)]->bodyInset, what + ": with the margin the data says");
+        }
+        // Drawn into the face by that margin: the red frame's body is smaller in its sprite, so its sprite is drawn bigger than the others'.
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(run.registry, layer);
+        const Hud::Rect stone = AdTileRect(layer, AdjustUi::Widget::SizePlus);
+        const Hud::Rect face = layer.AdjustLayout().At(AdjustUi::Widget::SizePlus).face;
+        CHECK_MSG(AdQuad(frame, layer, layer.AdjustImage(AdjustUi::Picture::SizePlus), &stone) >= 0 && stone.size.x > face.size.x, what + ": a picture is drawn into its face grown by the margin: " + ShowRect(stone));
+        CHECK_MSG(NearD(stone.size.x, face.size.x / (1.0 - 2.0 * 0.140625), 1e-6), what + ": exactly face / (1 - 2 x 0.140625)");
+        // Resolved ONCE: leaving and entering again resolves nothing again and says nothing twice.
+        const std::string line = layer.AdjustArtLine();
+        AdClick(layer, run.registry, AdjustUi::Widget::Back);
+        PtrRest(layer, run.registry, 40);
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": Options");
+        if (!AdOpen(layer, run.registry, what + ": again")) return;
+        CHECK_MSG(layer.AdjustArtLine() == line && layer.AdjustArtWarnings().empty(), what + ": the second opening resolves nothing and says nothing");
+    }
+    // 2. A MIX: three files missing fall to the glyph the game draws, written into prisms; and a file of the wrong size, one that is not a picture, and one
+    // whose manifest entry says it is another size.
+    {
+        const std::string what = "TheEditorGlyphsFallBackTierByTier: a mix";
+        ArtCase art("adj-tier-mix");
+        const std::filesystem::path editor = art.root / "editor";
+        CHECK(ArtWritePng(editor / "size_minus.png", 128, 128) && ArtWritePng(editor / "size_plus.png", 96, 96) && ArtWritePng(editor / "opacity_minus.png", 96, 96) && ArtWritePng(editor / "restore.png", 128, 128) &&
+              ArtWritePng(editor / "back.png", 128, 128) && ArtWriteText(editor / "lock_locked.png", "this is not a picture"));
+        // opacity_minus.png is 96 x 96 and the manifest says so: accepted. size_plus.png is 96 x 96 and nothing says so: refused with a warning. lock_locked.png
+        // is text: refused. opacity_plus.png and lock_unlocked.png are not there: nothing is said of them.
+        CHECK(ArtWriteText(editor / "manifest.json", "{\"canvas\": [128, 128], \"outputs\": {\"opacity_minus.png\": {\"size\": [96, 96]}}}"));
+        MagicPortalsLayer::Paths paths = OsPaths(OsDir("adj-tier-saves-2"), art.prisms.string(), std::string("modern"));
+        paths.controls.editorArtDir = editor.string();
+        OsRun run(paths, what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        if (!AdOpen(run, what)) return;
+        CHECK_MSG(layer.AdjustArtLine() == "adjust art: size_minus=mr size_plus=generated opacity_minus=mr opacity_plus=generated lock_locked=generated lock_unlocked=generated restore=mr back=mr", what + ": the tiers: " + layer.AdjustArtLine());
+        int mentions = 0;
+        int sizeWarning = 0;
+        int readWarning = 0;
+        for (const std::string& warning : layer.AdjustArtWarnings()) {
+            ++mentions;
+            sizeWarning += warning.find("size_plus: Magic Rampage's picture is 96 x 96 px, and 128 x 128 is what the manifest and the layout say") != std::string::npos ? 1 : 0;
+            readWarning += warning.find("lock_locked: Magic Rampage's picture exists and cannot be read") != std::string::npos ? 1 : 0;
+        }
+        CHECK_MSG(mentions == 2 && sizeWarning == 1 && readWarning == 1, what + ": two warnings: the wrong size and the file that is not a picture, and none for the two that are not there: " + std::to_string(mentions));
+        CHECK_MSG(layer.AdjustArtFilesWritten() == 4 && adjustFilesIn(art.prisms) == 4, what + ": the four glyphs the game drew are written into prisms: " + std::to_string(layer.AdjustArtFilesWritten()));
+        for (const char* key : {"size_plus", "opacity_plus", "lock_locked", "lock_unlocked"}) {
+            const std::optional<AdjustUi::Picture> picture = AdjustUi::PictureOfKey(key);
+            CHECK_MSG(picture && ArtIsAPng(layer.AdjustImage(*picture)) && layer.AdjustImage(*picture).find((std::string("adjust_") + key + ".png")) != std::string::npos &&
+                          layer.AdjustBodyInset(*picture) == 0.109375,
+                      what + ": " + key + " is a PNG the game drew, with the controls' margin");
+        }
+        CHECK_MSG(ArtCountTemporaries(art.prisms) == 0, what + ": and nothing half-written is left");
+    }
+    // 3. TIER TWO ALONE: no folder named; and TIER THREE: no folder and nowhere to write - a flat quad on the face.
+    {
+        const std::string what = "TheEditorGlyphsFallBackTierByTier: no files";
+        ArtCase art("adj-tier-gen");
+        MagicPortalsLayer::Paths paths = OsPaths(OsDir("adj-tier-saves-3"), art.prisms.string(), std::string("modern"));
+        paths.controls.editorArtDir = std::string(); // nowhere to look
+        {
+            OsRun run(paths, what);
+            if (!run.ok) return;
+            MagicPortalsLayer& layer = run.layer;
+            if (!AdOpen(run, what)) return;
+            CHECK_MSG(layer.AdjustArtLine() == "adjust art: size_minus=generated size_plus=generated opacity_minus=generated opacity_plus=generated lock_locked=generated lock_unlocked=generated restore=generated back=generated",
+                      what + ": eight glyphs: " + layer.AdjustArtLine());
+            CHECK_MSG(layer.AdjustArtWarnings().empty() && layer.AdjustArtFilesWritten() == 8 && adjustFilesIn(art.prisms) == 8, what + ": eight files written, no warning");
+            // Unlocking shows the open padlock, a picture of its own.
+            AdClick(layer, run.registry, AdjustUi::Widget::Lock);
+            const Hud::Rect lockRect = AdTileRect(layer, AdjustUi::Widget::Lock);
+            CHECK_MSG(AdQuad(MenuFrame(run.registry, layer), layer, layer.AdjustImage(AdjustUi::Picture::LockUnlocked), &lockRect) >= 0, what + ": the open padlock is drawn on the lock's face");
+        }
+        // A second run on the same folder finds the files already there and makes none.
+        {
+            OsRun again(paths, what + ": again");
+            if (!again.ok) return;
+            if (!AdOpen(again, what + ": again")) return;
+            CHECK_MSG(again.layer.AdjustArtFilesWritten() == 0 && again.layer.AdjustArtLine().find("=generated") != std::string::npos, what + ": a second run finds them there and writes none");
+        }
+        // No prisms either: a flat quad on each face.
+        MagicPortalsLayer::Paths bare = OsPaths(OsDir("adj-tier-saves-4"), std::string(), std::string("modern"));
+        bare.controls.editorArtDir = std::string();
+        OsRun flat(bare, what + ": nowhere to write");
+        if (!flat.ok) return;
+        MagicPortalsLayer& layer = flat.layer;
+        if (!AdOpen(flat, what + ": nowhere to write")) return;
+        CHECK_MSG(layer.AdjustArtLine() == "adjust art: size_minus=flat size_plus=flat opacity_minus=flat opacity_plus=flat lock_locked=flat lock_unlocked=flat restore=flat back=flat" && layer.AdjustArtFilesWritten() == 0,
+                  what + ": every picture is a flat quad: " + layer.AdjustArtLine());
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(flat.registry, layer);
+        for (const AdjustUi::Widget widget : AdjustUi::kWidgets) {
+            const Hud::Rect face = layer.AdjustLayout().At(widget).face;
+            bool drawn = false;
+            for (const ScreenOverlay::Quad& quad : frame) drawn = drawn || (quad.texture.empty() && SameRect(OnView(layer, quad), face, 1e-3));
+            CHECK_MSG(drawn, what + ": " + AdjustUi::NameOf(widget) + " is a flat quad on its face " + ShowRect(face));
+        }
+        // A tile with nothing to do is drawn at 90 of 255 (Restore, at the defaults); the others whole.
+        {
+            const Hud::Rect restoreFace = layer.AdjustLayout().At(AdjustUi::Widget::Restore).face;
+            const Hud::Rect sizeFace = layer.AdjustLayout().At(AdjustUi::Widget::SizePlus).face;
+            float restoreAlpha = -1.0f;
+            float sizeAlpha = -1.0f;
+            for (const ScreenOverlay::Quad& quad : frame) {
+                if (!quad.texture.empty()) continue;
+                if (SameRect(OnView(layer, quad), restoreFace, 1e-3)) restoreAlpha = quad.color.a;
+                if (SameRect(OnView(layer, quad), sizeFace, 1e-3)) sizeAlpha = quad.color.a;
+            }
+            CHECK_MSG(NearD(restoreAlpha, 90.0 / 255.0, 1e-4) && NearD(sizeAlpha, 1.0, 1e-4), what + ": Restore is dimmed to 90 of 255 and the size tile whole: " + PtrNum(restoreAlpha) + ", " + PtrNum(sizeAlpha));
+        }
+        // And while the lock is open its flat quad is the red one.
+        AdClick(layer, flat.registry, AdjustUi::Widget::Lock);
+        const Hud::Rect lockFace = layer.AdjustLayout().At(AdjustUi::Widget::Lock).face;
+        bool red = false;
+        for (const ScreenOverlay::Quad& quad : MenuFrame(flat.registry, layer)) {
+            red = red || (quad.texture.empty() && SameRect(OnView(layer, quad), lockFace, 1e-3) && NearD(quad.color.r, 200.0 / 255.0, 1e-4) && NearD(quad.color.g, 60.0 / 255.0, 1e-4));
+        }
+        CHECK_MSG(red, what + ": the open lock is the red flat quad");
+    }
+}
+
+// ---- the tuning the screen edits ------------------------------------------------------------------------------------------------------------------
+
+void TheFlagsTuningIsShownAtAttachAndTheFirstEditDropsIt() {
+    if (!OriginalArtIsThere("TheFlagsTuningIsShownAtAttachAndTheFirstEditDropsIt")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "TheFlagsTuningIsShownAtAttachAndTheFirstEditDropsIt";
+    // A player's file holds other numbers: a forced run ignores it, reads none and writes none.
+    const std::string saves = OsDir("adj-flag-saves");
+    OsWrite(saves, "controls.json", kAdMovedFile);
+    OsRun run(OsPaths(saves, OsDir("adj-flag-prisms"), std::string("modern,size=1.4,opacity=1.8,walk_left=10:-5")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    // FLAG PRECEDENCE AT ATTACH: the flag's tuning is what is in force, the file's is not read.
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.4 && layer.ControlsApplied().Opacity(rules) == 1.8 && layer.ControlsApplied().move[ArtAt(Controls::Id::Left)] == glm::dvec2(10.0, -5.0), what + ": at attach the flag's tuning is in force: 1.4, 1.8 and walk_left (10, -5)");
+    CHECK_MSG(layer.ControlsApplied().move[ArtAt(Controls::Id::Menu)] == glm::dvec2(0.0) && !layer.ControlsStore().Persists() && layer.ControlsTuningLine().find("from the flag") != std::string::npos, what + ": not the file's pause move, and the store is memory-only: " + layer.ControlsTuningLine());
+    CHECK_MSG(!layer.TuningEdited() && AdjustUi::HasMove(layer.ControlsApplied()), what + ": nothing edited yet, and a move exists (Restore is live)");
+    if (!AdOpen(run, what)) return;
+    // THE SCREEN SHOWS THE FLAG'S TUNING.
+    {
+        const std::vector<ScreenOverlay::Quad> frame = MenuFrame(registry, layer);
+        const Hud::Rect want = AdPreviewRect(layer, Controls::Id::Left);
+        CHECK_MSG(AdQuad(frame, layer, layer.ModernImage(Controls::Id::Left), &want) >= 0, what + ": the preview shows the flag's tuning: the left arrow at " + ShowRect(want));
+    }
+    // THE FIRST EDIT DROPS THE FLAG'S TUNING: it applies on top of what the screen was showing (1.8 -> 1.6), and the size and the move stay.
+    AdClick(layer, registry, AdjustUi::Widget::OpacityMinus);
+    CHECK_MSG(layer.TuningEdited() && layer.ControlsApplied().Opacity(rules) == 1.6 && layer.ControlsApplied().Size(rules) == 1.4 && layer.ControlsApplied().move[ArtAt(Controls::Id::Left)] == glm::dvec2(10.0, -5.0),
+              what + ": the edit is 1.8 -> 1.6 on top of what was shown: size 1.4 and the move stay");
+    // RESTORE after the drop: the moves go and STAY gone (a re-apply from the flag would bring them back), the size and the opacity are kept.
+    CHECK_MSG(AdjustUi::Enabled(AdjustUi::Widget::Restore, rules, layer.ControlsApplied()), what + ": Restore is enabled by the flag's move");
+    AdClick(layer, registry, AdjustUi::Widget::Restore);
+    CHECK_MSG(!AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsApplied().Size(rules) == 1.4 && layer.ControlsApplied().Opacity(rules) == 1.6, what + ": Restore cleared the move and kept the size and the opacity");
+    AdClick(layer, registry, AdjustUi::Widget::SizeMinus);
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.3 && !AdjustUi::HasMove(layer.ControlsApplied()), what + ": and a later edit does not bring the flag's move back: size 1.3");
+    CHECK_MSG(!AdjustUi::Enabled(AdjustUi::Widget::Restore, rules, layer.ControlsApplied()), what + ": Restore is inert again");
+    // A FLAG RUN'S FILE: byte for byte as it was, and no save was made; with no file, none appears.
+    CHECK_MSG(OsSavedFile(saves) == kAdMovedFile && layer.ControlsStore().SaveCount() == 0 && !layer.TuningUnsaved(), what + ": the seeded controls.json is byte for byte as it was, and no save was made");
+    // THE NEXT LEVEL STARTS WITH THE LIVE TUNING.
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    MagicPortalsLayer::MenuButton button;
+    button.kind = Kind::Level;
+    button.world = 0;
+    button.level = layer.ChapterTable().Find("level0");
+    CHECK_MSG(button.level >= 0 && layer.PressMenu(registry, button), what + ": 1-01 loads");
+    PtrRest(layer, registry, 80);
+    Hud::Rect left;
+    const Hud::Rect want = Controls::Boxes(rules, SizedTuningFor(rules, 13, 8), layer.ViewPx(), layer.ControlsInsets())[ArtAt(Controls::Id::Left)];
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, left) && SameRect(left, want, 1e-6), what + ": the level lays out 1.3 with no move, not the flag's 1.4 and (10, -5): " + ShowRect(left) + " against " + ShowRect(want));
+    CHECK_MSG(OsSavedFile(saves) == kAdMovedFile, what + ": and the seeded file is still as it was");
+    // WITH NO FILE: none appears, whatever is edited.
+    {
+        const std::string clean = OsDir("adj-flag-clean");
+        OsRun again(OsPaths(clean, OsDir("adj-flag-prisms-2"), std::string("modern,size=1.1")), what + ": no file");
+        if (!again.ok) return;
+        if (!AdOpen(again, what + ": no file")) return;
+        AdClick(again.layer, again.registry, AdjustUi::Widget::SizePlus);
+        AdClick(again.layer, again.registry, AdjustUi::Widget::OpacityMinus);
+        CHECK_MSG(again.layer.ControlsApplied().Size(again.layer.ControlsRules()) == 1.2 && !ControlsFileExistsIn(clean) && again.layer.ControlsStore().SaveCount() == 0, what + ": a flag run that edits writes no controls.json");
+    }
+}
+
+void ThePresetOfTheFlagIsNeverDroppedByAnEdit() {
+    if (!OriginalArtIsThere("ThePresetOfTheFlagIsNeverDroppedByAnEdit")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "ThePresetOfTheFlagIsNeverDroppedByAnEdit";
+    OsRun run(OsPaths(OsDir("adj-preset-saves"), OsDir("adj-preset-prisms"), std::string("modern,preset=mr")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    CHECK_MSG(layer.ControlsApplied().preset == std::optional<Controls::Preset>(Controls::Preset::Mr) && layer.ControlsApplied().Size(rules) == 1.0, what + ": the look is mr: 1.0 is the default");
+    if (!AdOpen(run, what)) return;
+    // Down to 0.9 and up again: the look is still mr, 1.0 is its own default again (nothing kept), and never uniform's 0.7.
+    AdClick(layer, registry, AdjustUi::Widget::SizeMinus);
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.9 && layer.ControlsApplied().preset == std::optional<Controls::Preset>(Controls::Preset::Mr) && layer.ControlsApplied().sizeSteps == std::optional<int>(9), what + ": 0.9, still preset=mr, kept as 9");
+    CHECK_MSG(!layer.ControlsStore().SavedTuning().preset && !layer.ControlsStore().SavedTuning().arrows, what + ": the store never holds the look");
+    AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.0 && !layer.ControlsApplied().sizeSteps && layer.ControlsApplied().preset == std::optional<Controls::Preset>(Controls::Preset::Mr),
+              what + ": back up it is 1.0, the look's own default, nothing kept, and the look is still mr");
+    // The preview is the mr look's: the arrow's box is the 1.0 size one (45.511 units).
+    const Hud::Rect box = Controls::Boxes(rules, layer.ControlsApplied(), layer.ViewPx(), layer.ControlsInsets())[ArtAt(Controls::Id::Left)];
+    CHECK_MSG(NearD(box.size.x, 45.5111, 1e-3), what + ": and the arrow is 45.51 units across: " + PtrNum(box.size.x));
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 0, what + ": (a forced run writes nothing)");
+}
+
+void RestoreClearsTheFilesMovesAndKeepsSizeAndOpacityAndReLocks() {
+    if (!OriginalArtIsThere("RestoreClearsTheFilesMovesAndKeepsSizeAndOpacityAndReLocks")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "RestoreClearsTheFilesMovesAndKeepsSizeAndOpacityAndReLocks";
+    const std::string saves = OsDir("adj-restore-saves");
+    OsWrite(saves, "controls.json", kAdMovedFile);
+    OsRun run(OsPaths(saves, OsDir("adj-restore-prisms")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.2 && layer.ControlsApplied().Opacity(rules) == 0.6 && AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsLine() == "controls: modern (saved)", what + ": the player's file is in force, with its two moves");
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::Lock);
+    CHECK_MSG(layer.AdjustUnlocked(), what + ": opened");
+    AdClick(layer, registry, AdjustUi::Widget::Restore);
+    CHECK_MSG(!layer.AdjustUnlocked() && !AdjustUi::HasMove(layer.ControlsApplied()) && layer.ControlsApplied().Size(rules) == 1.2 && layer.ControlsApplied().Opacity(rules) == 0.6, what + ": Restore re-locks, clears the moves and keeps 1.2 and 0.6");
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 1 && OsSavedFile(saves) == kAdSizedFile, what + ": one save: the file is the size and the opacity alone: " + OsSavedFile(saves));
+    // Restore with nothing to restore is inert: no save, no noise.
+    const int sounds = OsSounds(layer, "menu_button");
+    AdClick(layer, registry, AdjustUi::Widget::Restore);
+    CHECK_MSG(layer.ControlsStore().SaveCount() == 1 && OsSounds(layer, "menu_button") == sounds, what + ": a second Restore does nothing");
+}
+
+void AnUnforcedPlayersEditsSurviveALayoutOfTheFlagsOwnKind() {
+    if (!OriginalArtIsThere("AnUnforcedPlayersEditsSurviveALayoutOfTheFlagsOwnKind")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "AnUnforcedPlayersEditsSurviveALayoutOfTheFlagsOwnKind";
+    // The test seam (Paths::controls.tuning) is a kept tuning a case hands the layer in place of the store's: the first edit drops it too, and what is then saved
+    // is the screen's, on top of what it showed.
+    const std::string saves = OsDir("adj-seam-saves");
+    OsWrite(saves, "controls.json", kOsModernFile);
+    MagicPortalsLayer::Paths paths = OsPaths(saves, OsDir("adj-seam-prisms"));
+    Controls::Tuning seam;
+    seam.sizeSteps = 11;
+    seam.move[ArtAt(Controls::Id::Reset)] = glm::dvec2(-6.0, 6.0);
+    paths.controls.tuning = seam;
+    OsRun run(paths, what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const Controls::Rules& rules = layer.ControlsRules();
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 1.1 && layer.ControlsApplied().move[ArtAt(Controls::Id::Reset)] == glm::dvec2(-6.0, 6.0) && layer.ControlsTuningLine().find("the test seam") != std::string::npos, what + ": the seam is in force: " + layer.ControlsTuningLine());
+    if (!AdOpen(run, what)) return;
+    AdClick(layer, registry, AdjustUi::Widget::OpacityPlus);
+    CHECK_MSG(layer.TuningEdited() && layer.ControlsApplied().Size(rules) == 1.1 && layer.ControlsApplied().Opacity(rules) == 1.2 && layer.ControlsApplied().move[ArtAt(Controls::Id::Reset)] == glm::dvec2(-6.0, 6.0), what + ": the edit applies on top of the seam's tuning");
+    CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.1,\"opacity\":1.2,\"move\":{\"restart\":[-6,6]}}}", what + ": and what is kept is the screen's: " + OsSavedFile(saves));
+    AdClick(layer, registry, AdjustUi::Widget::Restore);
+    CHECK_MSG(!AdjustUi::HasMove(layer.ControlsApplied()) && OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.1,\"opacity\":1.2}}", what + ": Restore clears the seam's move for good: " + OsSavedFile(saves));
+}
+
+// ---- the menus read one pointer: Adjust joins them --------------------------------------------------------------------------------------------------
+
+// The first glyph of 1-21's "move the camera around" on the view, and the level it is drawn in: what a level lays the hint out with.
+double AdHintLeft(MagicPortalsLayer& layer, entt::registry& registry) {
+    for (int tick = 0; tick < TicksOf(3500.0); ++tick) tickWith(layer, registry, kRest, {}, {});
+    double left = 1e9;
+    int glyphs = 0;
+    for (const ScreenOverlay::Quad& quad : HudFrame(registry, layer)) {
+        if (quad.texture.find("Matura84_shadow") == std::string::npos) continue;
+        left = std::min(left, OnView(layer, quad).min.x);
+        ++glyphs;
+    }
+    return glyphs > 10 ? left : -1.0;
+}
+
+// THE NEXT LEVEL START uses the live tuning: it lays out, claims, draws and hints with what the screen set - and a run that then chose Classic reads none of it.
+void TheNextLevelStartLaysOutClaimsDrawsAndHintsWithTheLiveTuning() {
+    if (!OriginalArtIsThere("TheNextLevelStartLaysOutClaimsDrawsAndHintsWithTheLiveTuning")) return;
+    const ControlsScratchGuard scratch;
+    using Kind = MagicPortalsLayer::MenuButton::Kind;
+    const std::string what = "TheNextLevelStartLaysOutClaimsDrawsAndHintsWithTheLiveTuning";
+    const auto load = [](MagicPortalsLayer& layer, entt::registry& registry, const char* level) {
+        MagicPortalsLayer::MenuButton button;
+        button.kind = Kind::Level;
+        button.world = 0;
+        button.level = layer.ChapterTable().Find(level);
+        const bool ok = button.level >= 0 && layer.PressMenu(registry, button);
+        CHECK_MSG(ok, std::string(level) + " loads");
+        return ok;
+    };
+    // The control run: the default tuning, 1-21.
+    double defaultLeft = -1.0;
+    {
+        const std::string savesA = OsDir("adj-next-saves-a");
+        AdSeedEveryLevel(savesA);
+        OsRun run(OsPaths(savesA, OsDir("adj-next-prisms-a"), std::string("modern")), what + ": the default");
+        if (!run.ok) return;
+        if (!load(run.layer, run.registry, "level20")) return;
+        defaultLeft = AdHintLeft(run.layer, run.registry);
+        CHECK_MSG(NearD(defaultLeft, 50.0, 1.5), what + ": at the default size the hint begins at the classic 50, clear of the 0.7 arrow: " + PtrNum(defaultLeft));
+        // A point the 1.4 arrow will cover and the 0.7 one does not: the world's.
+        CHECK_MSG(!run.layer.ControlAt(glm::dvec2(70.0, 190.0)), what + ": (70, 190) is the world's at the default size");
+    }
+    // The edited run: seven plus taps take the size to 1.4, then two Backs and a level.
+    const std::string savesB = OsDir("adj-next-saves-b");
+    AdSeedEveryLevel(savesB);
+    OsRun run(OsPaths(savesB, OsDir("adj-next-prisms-b"), std::string("modern")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    if (!AdOpen(run, what)) return;
+    for (int i = 0; i < 7; ++i) AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+    CHECK_MSG(layer.ControlsApplied().Size(layer.ControlsRules()) == 1.4, what + ": the size is 1.4");
+    AdClick(layer, registry, AdjustUi::Widget::Back);
+    PtrRest(layer, registry, 40);
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    if (!load(layer, registry, "level20")) return;
+    const double left = AdHintLeft(layer, registry);
+    const Controls::Rules& rules = layer.ControlsRules();
+    const Hud::Rect want = Controls::Boxes(rules, SizedTuningFor(rules, 14), layer.ViewPx(), layer.ControlsInsets())[ArtAt(Controls::Id::Left)];
+    Hud::Rect arrow;
+    CHECK_MSG(layer.ControlRect(PtrControl::Left, arrow) && SameRect(arrow, want, 1e-6) && NearD(arrow.size.x, 63.7156, 1e-3), what + ": the level LAYS OUT the 1.4 arrow, 63.72 units: " + ShowRect(arrow));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(70.0, 190.0)) == std::optional<PtrControl>(PtrControl::Left), what + ": it CLAIMS what the 1.4 arrow covers: (70, 190)");
+    {
+        const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+        const Hud::Rect drawn = Controls::DrawRect(want, rules.faceInset, layer.ModernImage(Controls::Id::Left).empty() ? 0.0 : layer.ModernBodyInset(Controls::Id::Left));
+        CHECK_MSG(AdQuad(frame, layer, layer.ModernImage(Controls::Id::Left), &drawn) >= 0, what + ": it DRAWS the picture in the 1.4 arrow's rectangle " + ShowRect(drawn));
+    }
+    CHECK_MSG(left > 0.0 && NearD(left - defaultLeft, 79.36 - 50.0, 1.5), what + ": and the 1-21 HINT is laid out clear of it: it begins " + PtrNum(left - defaultLeft) + " units right of where it did at the default (79.36 - 50)");
+    // CLASSIC reads none of it: chosen in Options from a level, the next level has the original's pads and no modern rectangles line.
+    press(layer, registry, MagicPortalsLayer::kBack);
+    PtrRest(layer, registry, 80);
+    const glm::vec2 levels = PtrPixel(layer, OsPausePoint(layer, MagicPortals::Pause::Button::Levels));
+    tap(layer, registry, levels);
+    lift(layer, registry, levels);
+    PtrRest(layer, registry, 80);
+    for (int step = 0; step < 2; ++step) {
+        pressBack(layer, registry);
+        tickWith(layer, registry, kRest, {}, {});
+        PtrRest(layer, registry, 80);
+    }
+    OsClickAt(layer, registry, OsEntryCentre(layer));
+    PtrRest(layer, registry, 5);
+    CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Options, what + ": Options, from the level");
+    OsClick(run, OsTileCentre(layer, Controls::Style::Classic));
+    CHECK_MSG(layer.ControlsStyle() == Controls::Style::Classic && !layer.AdjustAvailable(), what + ": Classic is chosen, and Adjust goes");
+    OsClick(run, OsBackCentre(layer));
+    PtrRest(layer, registry, 60);
+    if (!load(layer, registry, "level0")) return;
+    PtrRest(layer, registry, 100);
+    Hud::Rect classic;
+    CHECK_MSG(layer.ControlsRectsLine().empty() && layer.ControlRect(PtrControl::Left, classic), what + ": the next level says no modern rectangles");
+    const Hud::Rect pad = Controls::ClassicWalkFrame(layer.HudRules(), Controls::Id::Left, layer.ViewPx(), 1.0e9).rect;
+    CHECK_MSG(SameRect(classic, pad, 1e-6) && NearD(classic.size.x, 64.0, 1e-9), what + ": its left pad is the original's, 64 units flush in the corner: " + ShowRect(classic));
+    const std::vector<ScreenOverlay::Quad> frame = HudFrame(registry, layer);
+    CHECK_MSG(IndexOfImage(frame, layer.HudRules().pads.leftSprite) >= 0 && MdQuadOf(frame, layer.ModernImage(Controls::Id::Left)) < 0, what + ": drawn with the original's sprite, and not the glyph");
+    CHECK_MSG(!layer.ControlAt(glm::dvec2(70.0, 190.0)).has_value(), what + ": and (70, 190) is outside the classic disc: the world's, whatever the 1.4 said");
+}
+
+void TheAdjustScreenReadsTheOnePointerAndTwoTapsActInOrder() {
+    if (!OriginalArtIsThere("TheAdjustScreenReadsTheOnePointerAndTwoTapsActInOrder")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "TheAdjustScreenReadsTheOnePointerAndTwoTapsActInOrder";
+    OsRun run(OsPaths(OsDir("adj-one-saves"), OsDir("adj-one-prisms"), std::string("modern")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the run reads two fingers in a level");
+    if (!AdOpen(run, what)) return;
+    const Controls::Rules& rules = layer.ControlsRules();
+    const glm::dvec2 view = layer.ViewPx();
+    // A lone engine finger on the size tile, down, held and up: nothing, in a menu.
+    CtTicks(layer, registry, 4, CtPointer{}, {CtFinger{1, OsPx(AdFaceCentre(layer, AdjustUi::Widget::SizePlus)), false}});
+    CtTicks(layer, registry, 3, CtPointer{});
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.7 && !layer.ContactsSplit() && !layer.TuningEdited(), what + ": a lone engine finger on a tile changes nothing: Adjust reads the pointer");
+    // The pointer on the same tile does.
+    AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.8, what + ": the pointer steps the size");
+    // Two scheduled taps, the second due as the first comes up: they act in order - the size to 0.9 first, then the opacity down.
+    const int T = layer.LayerTicks();
+    layer.ScheduleDevTap(T + 1, AdFaceCentre(layer, AdjustUi::Widget::SizePlus) / view, T + 2);
+    layer.ScheduleDevTap(T + 2, AdFaceCentre(layer, AdjustUi::Widget::OpacityMinus) / view, T + 3);
+    bool sizeFirst = false;
+    bool opacityFirst = false;
+    for (int tick = 0; tick < 12; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const bool size = layer.ControlsApplied().Size(rules) == 0.9;
+        const bool opacity = layer.ControlsApplied().Opacity(rules) == 0.8;
+        if (size && !opacity) sizeFirst = true;
+        if (opacity && !size) opacityFirst = true;
+    }
+    CHECK_MSG(sizeFirst && !opacityFirst && layer.ControlsApplied().Size(rules) == 0.9 && layer.ControlsApplied().Opacity(rules) == 0.8, what + ": the size stepped before the opacity, and both did");
+    // Two taps due on the SAME tick are spent one at a time, in the order they were asked for: both act.
+    const int U = layer.LayerTicks();
+    layer.ScheduleDevTap(U + 1, AdFaceCentre(layer, AdjustUi::Widget::SizeMinus) / view, U + 2);
+    layer.ScheduleDevTap(U + 1, AdFaceCentre(layer, AdjustUi::Widget::OpacityPlus) / view, U + 2);
+    for (int tick = 0; tick < 14; ++tick) tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.8 && layer.ControlsApplied().Opacity(rules) == 1.0, what + ": two taps due together both act: 0.8 and 1.0");
+}
+
+void runAdjustTests() {
+    AdjustOpensFromOptionsAndTheEntryPressIsDead();
+    TheAdjustButtonIsHiddenInClassic();
+    ASizeTapMovesTheLiveButtonsAndIsKept();
+    TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes();
+    TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved();
+    BackLeavesAdjustAndOptionsTakesNothingFromThePress();
+    NoPointerReachesALevelWhileAdjustIsUp();
+    AFingerHeldAcrossOpeningAndClosingAdjustLeavesNoRecordStuck();
+    AdjustDrawsAllFiveControlsWhateverTheLastLevelHad();
+    TheReadoutsFitBetweenTheTilesWithTheRealFont();
+    TheEditorGlyphsFallBackTierByTier();
+    TheFlagsTuningIsShownAtAttachAndTheFirstEditDropsIt();
+    ThePresetOfTheFlagIsNeverDroppedByAnEdit();
+    RestoreClearsTheFilesMovesAndKeepsSizeAndOpacityAndReLocks();
+    AnUnforcedPlayersEditsSurviveALayoutOfTheFlagsOwnKind();
+    TheNextLevelStartLaysOutClaimsDrawsAndHintsWithTheLiveTuning();
+    TheAdjustScreenReadsTheOnePointerAndTwoTapsActInOrder();
+}
+
 void runContactTests() {
     AFingerOnAnArrowWalksWhateverOrderTheFingersWentDownIn();
     ACornerPressSurvivesAnotherFingerComingAndGoing();
@@ -30984,6 +32145,8 @@ void runModernTests() {
     AnUnforcedClassicRunPlaysTheClassicClaimsAndHud();
     // A second finger (planning step 191).
     runContactTests();
+    // The adjustment screen (planning step 192).
+    runAdjustTests();
 }
 
 // ---- a level the port cannot load, a start it cannot make, and a save it cannot read (planning step 189) ----------------------------------

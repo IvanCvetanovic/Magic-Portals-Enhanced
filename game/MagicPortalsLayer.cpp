@@ -91,6 +91,7 @@ constexpr const char* kControlsTuningPrefix = "controls: tuning from ";
 constexpr const char* kTuningFromFlag = "the flag";
 constexpr const char* kTuningFromFile = "controls.json";
 constexpr const char* kTuningFromSeam = "the test seam";
+constexpr const char* kTuningFromScreen = "the adjustment screen";
 
 // Markers - buttons, crystals, the exit, portals - stand in front of the bodies.
 constexpr float kMarkerZ = 0.5f;
@@ -557,6 +558,17 @@ void MagicPortalsLayer::resolveControls() {
     m_optionsRules = Options::Rules{};
     m_optionsReady = false;
     m_optionsEntryImage.clear();
+    m_adjustRules = Adjust::Rules{};
+    m_adjustReady = false;
+    m_adjust = AdjustScreen{};
+    m_adjustArt.fill(AdjustArt{});
+    m_adjustArtLine.clear();
+    m_adjustArtWarnings.clear();
+    m_adjustArtResolved = false;
+    m_adjustArtFilesWritten = 0;
+    m_tuningEdited = false;
+    m_editedTuning = Controls::Tuning{};
+    m_tuningUnsaved = false;
 
     // The feature does not exist in this run (design 2.1): a bare layer, a developer's run, --controls
     // classic. Nothing is read, so a table that will not read cannot touch such a run. Only the flag
@@ -584,11 +596,15 @@ void MagicPortalsLayer::resolveControls() {
         // The Options screen's block (planning step 185) is part of the feature: without it there is no way to choose, and a table that is
         // half there is not played.
         m_controlsError = "modern controls are unavailable: " + why;
+    } else if (!Adjust::LoadRules(file, m_controlsRules, m_optionsRules, m_adjustRules, why)) {
+        // And the adjustment screen's (planning step 192): Options offers it, so a block that is half there is not played either.
+        m_controlsError = "modern controls are unavailable: " + why;
     }
     if (!m_controlsError.empty()) {
         // Not ready means no table at all, never half of one.
         m_controlsRules = Controls::Rules{};
         m_optionsRules = Options::Rules{};
+        m_adjustRules = Adjust::Rules{};
         SUPERSONIC_LOG_ERROR("Magic Portals") << m_controlsError << std::endl;
         m_controlsLine = kControlsClassicUnavailable;
         SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
@@ -597,6 +613,7 @@ void MagicPortalsLayer::resolveControls() {
 
     m_modernReady = true;
     m_optionsReady = true;
+    m_adjustReady = true;
     // What the player chose in Options and kept: opened beside the switches' store (OnAttach), from the same save directory - and in
     // memory only where the policy forbids saving (a forced style: `--controls modern` is a capture's flag, it writes nothing and ignores
     // the file) or the run has no directory. A file that will not read is said once and the defaults kept; it is written over at the next
@@ -609,25 +626,12 @@ void MagicPortalsLayer::resolveControls() {
     }
     const std::optional<Controls::Style> saved = m_controlsStore.Mode();
     m_controlsStyle = Controls::ResolveStyle(policy, saved, m_controlsRules.defaultMode);
-    // THE TUNING THE LAYOUT IS LAID OUT WITH (planning step 187, CTL-10). Whichever style the run starts in, because the Options screen can
-    // switch a classic start to Modern and the level that follows must play the tuning the player kept; classic's own code never reads it.
-    // A flag that carries a size, an opacity or a move REPLACES what the player kept - it does not merge with it - so a capture that asks for
-    // `size=1.2` has the base opacity and no moves whatever the file holds. Without such a key the kept tuning is in force: a test's seam
-    // (`Paths::controls.tuning`, in place of the store's) or what controls.json held. `preset=` and `arrows=` are the look and the arrangement:
-    // a capture's, taken from the flag every time and never kept. The store is never handed any of it - it holds what the player kept, so a choice
-    // made in Options under a flag cannot write the flag's numbers (and a flag's run has a memory-only store in any case).
-    const Controls::FlagItems& flag = policy.flag;
+    // THE TUNING THE LAYOUT IS LAID OUT WITH (planning step 187, CTL-10; pulled out into tuningInForce in step 192, so that the adjustment screen can
+    // change it while the layer runs). Whichever style the run starts in, because the Options screen can switch a classic start to Modern and the
+    // level that follows must play the tuning the player kept; classic's own code never reads it. At attach nothing has been edited, so it is the
+    // flag's (a size, an opacity or a move REPLACES what the player kept, never merges), else the kept one, with the flag's look and arrangement.
     const char* tuningFrom = kTuningFromFlag;
-    Controls::Tuning applied;
-    if (flag.Tunes()) {
-        applied = m_controlsTuning;
-    } else {
-        tuningFrom = policy.tuning ? kTuningFromSeam : kTuningFromFile;
-        applied = policy.tuning ? policy.tuning->Clamped(m_controlsRules) : m_controlsStore.SavedTuning();
-        applied.preset = m_controlsTuning.preset;
-        applied.arrows = m_controlsTuning.arrows;
-    }
-    m_controlsApplied = applied.Clamped(m_controlsRules);
+    m_controlsApplied = tuningInForce(tuningFrom).Clamped(m_controlsRules);
     // WHY the style is what it is: the flag when there was one (it forces its style, a hand-built
     // `{available, forced = Classic}` policy included), otherwise the shipped default.
     const bool modern = m_controlsStyle == Controls::Style::Modern;
@@ -641,16 +645,7 @@ void MagicPortalsLayer::resolveControls() {
     SUPERSONIC_LOG_INFO("Magic Portals") << m_controlsLine << std::endl;
     // What differs from the base, in the player's words, so that a capture's log and a player's say which numbers they played. Composed
     // for every run that can play modern and said when it does: at attach, or at the first switch to Modern in Options.
-    if (!m_controlsApplied.IsDefault(m_controlsRules)) {
-        std::ostringstream tuning;
-        tuning << kControlsTuningPrefix << tuningFrom << ": size " << m_controlsApplied.Size(m_controlsRules) << ", opacity "
-               << m_controlsApplied.Opacity(m_controlsRules);
-        for (const Controls::Id id : Controls::kClaimOrder) {
-            const glm::dvec2 move = m_controlsApplied.move[static_cast<std::size_t>(id)];
-            if (move.x != 0.0 || move.y != 0.0) tuning << ", " << Controls::KeyOf(id) << " moved (" << move.x << ", " << move.y << ")";
-        }
-        m_controlsTuningLine = tuning.str();
-    }
+    if (!m_controlsApplied.IsDefault(m_controlsRules)) m_controlsTuningLine = describeTuning(tuningFrom);
     if (modern) {
         sayControlsTuning();
         // The pictures the five controls are drawn with, once for the run. A run that starts classic has none yet: it resolves them at the
@@ -685,6 +680,73 @@ void MagicPortalsLayer::saveControls() {
     if (std::string why; !m_controlsStore.Save(why)) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "controls not saved: " << why << std::endl;
     }
+}
+
+Controls::Tuning MagicPortalsLayer::tuningInForce(const char*& from) const {
+    const Controls::Policy& policy = m_paths.controls;
+    // THE SCREEN'S, once an edit has been made on it: the first edit DROPPED whatever the flag or the seam had put in force (an edit applies on top of
+    // the tuning the screen was showing, and from then on the screen's tuning is the live one). Recomputing it from the store instead would make every
+    // edit invisible in a run started with `--controls modern,size=...` and leave the flag's tuning standing after Restore.
+    if (m_tuningEdited) {
+        from = kTuningFromScreen;
+        return m_editedTuning;
+    }
+    // The flag's, when it carries a size, an opacity or a move: it REPLACES what a player kept, it does not merge with it, so a capture that asks for
+    // `size=1.2` has the base opacity and no moves whatever the file holds.
+    if (policy.flag.Tunes()) {
+        from = kTuningFromFlag;
+        return m_controlsTuning;
+    }
+    // Else the kept one: a test's seam (`Paths::controls.tuning`, in place of the store's) or what controls.json held, with the flag's look (`preset=`) and
+    // arrangement (`arrows=`), which are a capture's, taken from the flag every time and never kept. The store is never handed any of it - it holds what
+    // the player kept, so a choice made in Options under a flag cannot write the flag's numbers (and a flag's run has a memory-only store in any case).
+    from = policy.tuning ? kTuningFromSeam : kTuningFromFile;
+    Controls::Tuning kept = policy.tuning ? policy.tuning->Clamped(m_controlsRules) : m_controlsStore.SavedTuning();
+    kept.preset = m_controlsTuning.preset;
+    kept.arrows = m_controlsTuning.arrows;
+    return kept;
+}
+
+void MagicPortalsLayer::applyTuning() {
+    const char* from = kTuningFromFlag;
+    m_controlsApplied = tuningInForce(from).Clamped(m_controlsRules);
+}
+
+std::string MagicPortalsLayer::describeTuning(const char* from) const {
+    std::ostringstream tuning;
+    tuning << kControlsTuningPrefix << from << ": size " << m_controlsApplied.Size(m_controlsRules) << ", opacity "
+           << m_controlsApplied.Opacity(m_controlsRules);
+    for (const Controls::Id id : Controls::kClaimOrder) {
+        const glm::dvec2 move = m_controlsApplied.move[static_cast<std::size_t>(id)];
+        if (move.x != 0.0 || move.y != 0.0) tuning << ", " << Controls::KeyOf(id) << " moved (" << move.x << ", " << move.y << ")";
+    }
+    return tuning.str();
+}
+
+void MagicPortalsLayer::editTuning(const Controls::Tuning& next) {
+    // The FIRST edit drops the flag's (or the seam's) tuning: from here on tuningInForce answers the screen's. `next` came from what the screen was
+    // showing, so it already carries the flag's look and arrangement, and is not made again from the store (whose SetTuning strips both).
+    m_tuningEdited = true;
+    m_editedTuning = next.Clamped(m_controlsRules);
+    m_controlsStore.SetTuning(m_editedTuning);
+    applyTuning();
+    SUPERSONIC_LOG_INFO("Magic Portals") << (m_controlsApplied.IsDefault(m_controlsRules) ? std::string(kControlsTuningPrefix) + kTuningFromScreen + ": the base look"
+                                                                                           : describeTuning(kTuningFromScreen))
+                                         << std::endl;
+    // ONE save per gesture: a tile is a gesture. A forced style has a memory-only store, which writes nothing.
+    saveTuning();
+}
+
+bool MagicPortalsLayer::saveTuning() {
+    // The tuning alone: never the mode, which a player who has not chosen one does not have (saveControls writes both).
+    std::string why;
+    if (m_controlsStore.Save(why)) {
+        m_tuningUnsaved = false;
+        return true;
+    }
+    m_tuningUnsaved = true;
+    SUPERSONIC_LOG_WARN("Magic Portals") << "controls not saved: " << why << std::endl;
+    return false;
 }
 
 namespace {
@@ -773,9 +835,38 @@ bool WriteWhole(const std::filesystem::path& target, const std::string& bytes, b
 
 } // namespace
 
-void MagicPortalsLayer::warnModernArt(const std::string& text) {
-    m_modernArtWarnings.push_back(text);
+void MagicPortalsLayer::warnArt(std::vector<std::string>& into, const std::string& text) {
+    into.push_back(text);
     SUPERSONIC_LOG_WARN("Magic Portals") << text << std::endl;
+}
+
+void MagicPortalsLayer::warnModernArt(const std::string& text) {
+    warnArt(m_modernArtWarnings, text);
+}
+
+bool MagicPortalsLayer::usableMagicRampageFile(const std::string& name, const std::string& file, const glm::ivec2& want,
+                                               std::vector<std::string>& warnings) {
+    std::error_code ec;
+    // A picture that is not there is the usual case on every machine without the owner's folder, and says nothing.
+    if (!std::filesystem::is_regular_file(file, ec)) return false;
+    const glm::dvec2 size = imageSizePx(file);
+    if (size == glm::dvec2(0.0)) {
+        warnArt(warnings, name + ": Magic Rampage's picture exists and cannot be read, so the next tier is used: " + file);
+        return false;
+    }
+    // A picture of another size would be drawn mis-scaled with no word said (a canvas dropped in by hand), so it is not used.
+    if (glm::ivec2(size) != want) {
+        warnArt(warnings, name + ": Magic Rampage's picture is " + std::to_string(static_cast<int>(size.x)) + " x " +
+                              std::to_string(static_cast<int>(size.y)) + " px, and " + std::to_string(want.x) + " x " + std::to_string(want.y) +
+                              " is what the manifest and the layout say, so the next tier is used: " + file);
+        return false;
+    }
+    // A header that reads and a size that is right say nothing of the data: a cut file would win this tier and be drawn as a dark square.
+    if (!DecodesAsAPicture(file)) {
+        warnArt(warnings, name + ": Magic Rampage's picture has a readable header and its data cannot be decoded, so the next tier is used: " + file);
+        return false;
+    }
+    return true;
 }
 
 void MagicPortalsLayer::resolveModernImages() {
@@ -827,28 +918,9 @@ bool MagicPortalsLayer::pickMagicRampagePicture(Control control, const Controls:
         m_controlsRules.art[static_cast<std::size_t>(Controls::ArtTier::MagicRampage)][static_cast<std::size_t>(control)];
     if (!entry) return false;
     const std::filesystem::path file = std::filesystem::path(m_paths.controls.artDir) / entry->file;
-    std::error_code ec;
-    // A picture that is not there is the usual case on every machine without the owner's folder, and says nothing.
-    if (!std::filesystem::is_regular_file(file, ec)) return false;
-    const std::string name = Controls::KeyOf(control);
-    const glm::dvec2 size = imageSizePx(file.string());
-    if (size == glm::dvec2(0.0)) {
-        warnModernArt(name + ": Magic Rampage's picture exists and cannot be read, so the next tier is used: " + file.string());
-        return false;
-    }
-    // A picture of another size would be drawn mis-scaled with no word said (a canvas dropped in by hand), so it is not used.
     const int fallbackPx = static_cast<int>(std::lround(m_controlsRules.boxPx));
-    const glm::ivec2 want = Controls::ExpectedArtSize(manifest, entry->file, fallbackPx);
-    if (glm::ivec2(size) != want) {
-        warnModernArt(name + ": Magic Rampage's picture is " + std::to_string(static_cast<int>(size.x)) + " x " +
-                      std::to_string(static_cast<int>(size.y)) + " px, and " + std::to_string(want.x) + " x " + std::to_string(want.y) +
-                      " is what the manifest and the layout say, so the next tier is used: " + file.string());
-        return false;
-    }
-    // A header that reads and a size that is right say nothing of the data: a cut file would win this tier and be drawn as a dark square.
-    if (!DecodesAsAPicture(file.string())) {
-        warnModernArt(name + ": Magic Rampage's picture has a readable header and its data cannot be decoded, so the next tier is used: " +
-                      file.string());
+    if (!usableMagicRampageFile(Controls::KeyOf(control), file.string(), Controls::ExpectedArtSize(manifest, entry->file, fallbackPx),
+                                m_modernArtWarnings)) {
         return false;
     }
     out.image = file.string();
@@ -943,6 +1015,95 @@ void MagicPortalsLayer::resolveOptionsEntry() {
     }
     if (wrote) ++m_modernArtFilesWritten;
     m_optionsEntryImage = target.string();
+}
+
+namespace {
+
+// The glyph the game draws for an adjustment picture: one function over the two enumerations, which list the same eight in the same order.
+PadArt::EditorGlyph EditorGlyphOf(Adjust::Picture picture) {
+    switch (picture) {
+    case Adjust::Picture::SizeMinus:
+        return PadArt::EditorGlyph::SizeMinus;
+    case Adjust::Picture::SizePlus:
+        return PadArt::EditorGlyph::SizePlus;
+    case Adjust::Picture::OpacityMinus:
+        return PadArt::EditorGlyph::OpacityMinus;
+    case Adjust::Picture::OpacityPlus:
+        return PadArt::EditorGlyph::OpacityPlus;
+    case Adjust::Picture::LockLocked:
+        return PadArt::EditorGlyph::LockLocked;
+    case Adjust::Picture::LockUnlocked:
+        return PadArt::EditorGlyph::LockUnlocked;
+    case Adjust::Picture::Restore:
+        return PadArt::EditorGlyph::Restore;
+    case Adjust::Picture::Back:
+        return PadArt::EditorGlyph::Back;
+    }
+    return PadArt::EditorGlyph::Back;
+}
+
+} // namespace
+
+void MagicPortalsLayer::resolveAdjustImages() {
+    // THE ADJUSTMENT SCREEN'S PICTURES (planning step 192), the three tiers the five controls use after the original's own, tried in this order for each of
+    // the eight and resolved ONCE for the run, when the screen first opens: Magic Rampage's own picture in the folder `editor` beside the controls' (read
+    // at run time, never committed: tools/art --stage editor makes it), the glyph sim/PadArt draws and the layer writes into Paths::prisms, and last a flat
+    // quad on the widget's face. A run that never opens the screen makes no file and reads no picture. The log says which tier each came from, once.
+    m_adjustArt.fill(AdjustArt{});
+    m_adjustArtLine.clear();
+    m_adjustArtWarnings.clear();
+    const std::string& editorDir = m_paths.controls.editorArtDir;
+    const int boxPx = static_cast<int>(std::lround(m_controlsRules.boxPx));
+    Controls::ArtManifest manifest;
+    if (!editorDir.empty()) {
+        std::string why;
+        const std::filesystem::path file = std::filesystem::path(editorDir) / kMagicRampageManifest;
+        if (!Controls::ReadArtManifest(file.string(), manifest, why)) {
+            manifest = Controls::ArtManifest{};
+            warnArt(m_adjustArtWarnings, "Magic Rampage's editor picture manifest could not be read, so every picture is held to " + std::to_string(boxPx) +
+                                             " x " + std::to_string(boxPx) + " px: " + why);
+        }
+    }
+    std::string line = "adjust art:";
+    for (const Adjust::Picture picture : Adjust::kPictures) {
+        AdjustArt& art = m_adjustArt[static_cast<std::size_t>(picture)];
+        const std::string name = Adjust::KeyOf(picture);
+        const auto& mr = m_adjustRules.mr[static_cast<std::size_t>(picture)];
+        const auto& generated = m_adjustRules.generated[static_cast<std::size_t>(picture)];
+        if (!editorDir.empty() && mr) {
+            const std::filesystem::path file = std::filesystem::path(editorDir) / mr->file;
+            if (usableMagicRampageFile(name, file.string(), Controls::ExpectedArtSize(manifest, mr->file, boxPx), m_adjustArtWarnings)) {
+                art.image = file.string();
+                art.source = Controls::ArtTier::MagicRampage;
+                art.bodyInset = mr->bodyInset;
+            }
+        }
+        if (art.image.empty() && !m_paths.prisms.empty() && generated) {
+            const PadArt::Bitmap bitmap = PadArt::DrawEditor(EditorGlyphOf(picture), boxPx, generated->bodyInset);
+            std::string bytes;
+            if (bitmap.Empty() || !EncodePng(bitmap, bytes)) {
+                warnArt(m_adjustArtWarnings, "the adjustment screen's " + name + " could not be drawn at " + std::to_string(boxPx) + " px: it is a flat quad");
+            } else {
+                std::error_code ec;
+                std::filesystem::create_directories(m_paths.prisms, ec);
+                // generated->file is a bare file name (Adjust::LoadRules refused any other), so this stays inside prisms.
+                const std::filesystem::path target = m_paths.prisms / generated->file;
+                bool wrote = false;
+                if (!WriteWhole(target, bytes, wrote)) {
+                    warnArt(m_adjustArtWarnings, "the adjustment screen's picture could not be written: " + target.string() + " - it is a flat quad");
+                } else {
+                    if (wrote) ++m_adjustArtFilesWritten;
+                    art.image = target.string();
+                    art.source = Controls::ArtTier::Generated;
+                    art.bodyInset = generated->bodyInset;
+                }
+            }
+        }
+        line += " " + name + "=" + Controls::NameOf(art.source);
+    }
+    m_adjustArtLine = line;
+    SUPERSONIC_LOG_INFO("Magic Portals") << m_adjustArtLine << std::endl;
+    m_adjustArtResolved = true;
 }
 
 void MagicPortalsLayer::OnDetach(entt::registry& registry) {
@@ -3417,7 +3578,7 @@ void MagicPortalsLayer::layOutMenu() {
     // The loading screen has no button; credits, the dashboard and Options say what a touch
     // is on themselves (sim/Credits.hpp, sim/Dashboard.hpp, sim/Options.hpp).
     if (m_screen == Screen::Loading || m_screen == Screen::Credits || m_screen == Screen::Achievements ||
-        m_screen == Screen::Options) {
+        m_screen == Screen::Options || m_screen == Screen::Adjust) {
         return;
     }
     if (m_screen == Screen::Main) {
@@ -3530,7 +3691,8 @@ void MagicPortalsLayer::buildMenu(entt::registry& registry) {
     // menu, credits and the dashboard, which EmitMenu draws, backgrounds and all,
     // in display values.
     if (m_screen == Screen::Finished || m_screen == Screen::Dead || m_screen == Screen::Main ||
-        m_screen == Screen::Credits || m_screen == Screen::Achievements || m_screen == Screen::Options) {
+        m_screen == Screen::Credits || m_screen == Screen::Achievements || m_screen == Screen::Options ||
+        m_screen == Screen::Adjust) {
         return;
     }
     if (m_screen == Screen::Loading) {
@@ -3645,8 +3807,10 @@ void MagicPortalsLayer::openDead(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
-    // Options exists only in a run in which the feature does (OptionsAvailable): anywhere else it is not a screen there is.
+    // Options exists only in a run in which the feature does (OptionsAvailable): anywhere else it is not a screen there is. The adjustment screen
+    // exists only where Options does and the style in force is Modern: a classic run has nothing to adjust.
     if (screen == Screen::Options && !OptionsAvailable()) return;
+    if (screen == Screen::Adjust && !AdjustAvailable()) return;
     // A level and a menu are never both in the registry.
     unloadLevel(registry);
     m_loaded = false;
@@ -3688,6 +3852,15 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         m_optionsTouch = Options::Touch{};
         loadUiFont(m_optionsRules.title.font);
         loadUiFont(m_optionsRules.wordFont);
+        loadUiFont(m_optionsRules.adjust.font);
+    }
+    if (changed && screen == Screen::Adjust) {
+        // A FRESH screen: locked (it always opens locked, and the lock is never saved), with no touch followed - and the press that opened it spent until
+        // it lifts (design 3.3.7). The readouts are in the original's font.
+        m_adjust = AdjustScreen{};
+        m_adjust.touch.dead = true;
+        loadUiFont(m_adjustRules.readout.font);
+        if (!m_adjustArtResolved) resolveAdjustImages();
     }
     if (changed && screen == Screen::Achievements) {
         // ScoreDashboard::preLoop: a fresh list at the top, and what the save has
@@ -3880,6 +4053,10 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, const ScriptClock::St
     }
     if (m_screen == Screen::Options) {
         optionsInput(registry);
+        return;
+    }
+    if (m_screen == Screen::Adjust) {
+        adjustInput(registry);
         return;
     }
     if (m_screen == Screen::Achievements) {
@@ -4265,8 +4442,10 @@ void MagicPortalsLayer::optionsInput(entt::registry& registry) {
     }
     const Touch touch = touchThisTick(registry);
     const glm::dvec2 view = MenuBoxPx();
-    const Options::Widget on =
-        touch.over ? Options::WidgetAt(m_optionsRules, m_creditsRules, view, m_menuClock.ms, touch.atView) : Options::Widget::None;
+    // The button under the tiles that opens the adjustment screen is a widget only while the style in force is Modern: hidden, it is not claimed.
+    const bool adjustShown = AdjustAvailable();
+    const Options::Widget on = touch.over ? Options::WidgetAt(m_optionsRules, m_creditsRules, view, m_menuClock.ms, touch.atView, adjustShown)
+                                          : Options::Widget::None;
     // Button::update's rule, as the menus follow it (Options::Follow): the touch that went down on a widget works it only while it is inside
     // it, and it acts on the release inside the widget it went down on. A press that begins elsewhere and slides onto a tile does nothing.
     const bool touching = touch.pressed || (touch.held && !touch.released);
@@ -4279,9 +4458,57 @@ void MagicPortalsLayer::optionsInput(entt::registry& registry) {
         m_pendingMenu.screen = Screen::Main;
         return;
     }
+    if (press.widget == Options::Widget::Adjust) {
+        // The screen opens on the next tick, as every state does, under its own black; the press is spent here.
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = Screen::Adjust;
+        return;
+    }
     // A tile: the run plays that style from the next level load, and the choice is kept. Pressing the lit one is a choice too, and is kept -
     // a player who chose Classic keeps it when the shipped default changes.
     if (const std::optional<Controls::Style> style = Options::StyleOf(press.widget)) chooseControlsStyle(*style);
+}
+
+Adjust::Layout MagicPortalsLayer::AdjustLayout() const {
+    return Adjust::LayOut(m_adjustRules, m_controlsRules, MenuBoxPx(), ControlsInsets());
+}
+
+void MagicPortalsLayer::adjustInput(entt::registry& registry) {
+    using Supersonic::Input;
+    // Back and the back key: Options, on the next tick, committing what is unsaved. A key HELD while the screen opens is not a close: the back key is an
+    // edge (TickWasPressed), so only a press made here leaves.
+    if (Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) {
+        leaveAdjust();
+        return;
+    }
+    // The ONE pointer, as every menu reads it (touchThisTick: the first finger, and the fingers forgotten): never the level's reading, which is for a
+    // level's input alone.
+    const Touch touch = touchThisTick(registry);
+    const Adjust::Layout layout = AdjustLayout();
+    const Adjust::Widget on = touch.over ? Adjust::WidgetAt(layout, touch.atView) : Adjust::Widget::None;
+    const bool touching = touch.pressed || (touch.held && !touch.released);
+    // Button::update's rule, strictly inside: a widget acts on the release inside the one the touch went down on; the press that opened the screen is
+    // spent until it lifts.
+    const Adjust::Press press = Adjust::Follow(m_adjust.touch, touch.pressed, touch.released, touching, on);
+    if (!press.happened) return;
+    const Adjust::Outcome outcome = Adjust::Act(press.widget, m_controlsRules, m_controlsApplied, m_adjust.unlocked);
+    // A widget at its limit, and Restore with nothing to restore, are inert: they do nothing and make no noise.
+    if (!outcome.acted) return;
+    // getButtonSoundName: the credits' back button's own noise, for every widget.
+    latch("menu_button");
+    m_adjust.unlocked = outcome.unlocked;
+    // ONE save per gesture: a tile is one. The first edit also drops the flag's tuning (editTuning).
+    if (outcome.tuningChanged) editTuning(outcome.tuning);
+    if (outcome.leave) leaveAdjust();
+}
+
+void MagicPortalsLayer::leaveAdjust() {
+    // COMMITTING WHAT IS UNSAVED: a save that failed at its gesture is tried once more here. Nothing else is written - a screen opened and left with no
+    // edit writes nothing (the store would otherwise rewrite a hand-written file in its own shape).
+    if (m_tuningUnsaved) saveTuning();
+    m_adjust.touch = Adjust::Touch{};
+    m_pendingMenu.kind = PendingMenu::Kind::Screen;
+    m_pendingMenu.screen = Screen::Options;
 }
 
 void MagicPortalsLayer::dashboardInput(entt::registry& registry) {
@@ -4362,6 +4589,7 @@ bool MagicPortalsLayer::menuStateUp() const {
     case Screen::Credits:
     case Screen::Achievements:
     case Screen::Options:
+    case Screen::Adjust:
         return true;
     case Screen::None:
     case Screen::Finished:
@@ -4545,7 +4773,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         if (OptionsAvailable()) {
             for (const Options::Piece& piece :
                  Options::Pieces(m_optionsRules, m_creditsRules, m_controlsRules, m_hudRules, m_controlsApplied, view, m_menuClock.ms,
-                                 m_controlsStyle, m_optionsTouch.held)) {
+                                 m_controlsStyle, m_optionsTouch.held, AdjustAvailable())) {
                 const glm::vec4 colour(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
                                        static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
                 switch (piece.element) {
@@ -4570,8 +4798,74 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 case Options::Element::TileFrame:
                 case Options::Element::ThumbnailBase:
                 case Options::Element::ThumbnailControl:
+                case Options::Element::AdjustFrame:
                     add(piece.rect, std::string(), colour);
                     break;
+                }
+            }
+        }
+        add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
+        return;
+    }
+    if (m_screen == Screen::Adjust) {
+        // THE ADJUSTMENT SCREEN (planning step 192): the flat backdrop, the five controls as the level draws them (the layout the level plays, the pictures
+        // this run resolved, clear-portals forced shown), the lock's cues while it is open, the seven widgets over all of it, and the state's black.
+        if (AdjustAvailable()) {
+            Adjust::Scene scene;
+            scene.unlocked = m_adjust.unlocked;
+            scene.held = m_adjust.touch.held;
+            scene.ticks = m_menuClock.ticks;
+            scene.pressTintByte = m_creditsRules.state.pressTintByte;
+            for (const Adjust::Piece& piece :
+                 Adjust::Pieces(m_adjustRules, m_controlsRules, m_hudRules, m_controlsApplied, view, ControlsInsets(), scene)) {
+                const glm::vec4 flat(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
+                                     static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
+                switch (piece.element) {
+                case Adjust::Element::Backdrop:
+                case Adjust::Element::HitFrame:
+                case Adjust::Element::Outline:
+                case Adjust::Element::Guide:
+                    add(piece.rect, std::string(), flat);
+                    break;
+                case Adjust::Element::Preview: {
+                    // As the level draws a control: its picture in the rectangle derived from the box (so its body fills the box's face), or, with no
+                    // picture, a flat quad on the face in the plate's rim colour.
+                    const ModernArt& art = m_modernArt[static_cast<std::size_t>(*piece.control)];
+                    const Hud::Rect picture = Controls::DrawRect(piece.rect, piece.faceInset, art.image.empty() ? 0.0 : art.bodyInset);
+                    const float alpha = static_cast<float>(piece.alpha);
+                    if (art.image.empty()) {
+                        const PadArt::Rgb rim = PadArt::kPlateRim;
+                        add(picture, std::string(),
+                            glm::vec4(static_cast<float>(rim.r) / 255.0f, static_cast<float>(rim.g) / 255.0f, static_cast<float>(rim.b) / 255.0f, alpha));
+                    } else {
+                        add(picture, art.image, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
+                    }
+                    break;
+                }
+                case Adjust::Element::Tile: {
+                    // A widget's picture: the tier the run resolved, drawn so that its body fills the widget's face, at the press tint and at the inert
+                    // alpha where it does nothing; with no picture, a flat quad on the face.
+                    const AdjustArt& art = m_adjustArt[static_cast<std::size_t>(piece.picture)];
+                    const Hud::Rect picture = Controls::DrawRect(piece.rect, piece.faceInset, art.image.empty() ? 0.0 : art.bodyInset);
+                    const float alpha = static_cast<float>(piece.alpha);
+                    if (art.image.empty()) {
+                        add(picture, std::string(), glm::vec4(flat.r, flat.g, flat.b, flat.a * alpha));
+                    } else {
+                        const float grey = static_cast<float>(piece.tintByte) / 255.0f;
+                        add(picture, art.image, glm::vec4(grey, grey, grey, alpha));
+                    }
+                    break;
+                }
+                case Adjust::Element::Readout: {
+                    const Supersonic::BitmapFont* font = uiFont(piece.font);
+                    if (font == nullptr) break;
+                    const auto& pages = font->Pages();
+                    for (const Hud::Glyph& glyph : Hud::LayOutText(*font, piece.words, piece.rect.min, piece.unitsPerFontPx)) {
+                        if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+                        add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], flat, glyph.uvOffset, glyph.uvOffset + glyph.uvScale);
+                    }
+                    break;
+                }
                 }
             }
         }
@@ -13303,7 +13597,9 @@ MagicPortalsLayer::Touch MagicPortalsLayer::levelTouchThisTick(const entt::regis
 void MagicPortalsLayer::resetWorldRecords() {
     // Every record of "the touch" that the world's finger feeds: they were fed by a finger that is not the one feeding them now, and a record
     // left standing would let the new finger's release finish what the old one began (a shot aimed from the old finger's press, a pan that
-    // jumps by the distance between the two fingers). The menus' own records are not here: a menu reads one finger and never takes this path.
+    // jumps by the distance between the two fingers). The menus' own records are not here: a menu reads one finger and never takes this path. THE ADJUSTMENT
+    // SCREEN'S (m_adjust, planning step 192) is one of those: its touch is a record of the ONE pointer, made fresh when the screen opens and never fed by
+    // the world's finger. A record that the world's finger feeds is added to this list and nowhere else.
     m_shotTouch = Portals::TouchTrack{};
     m_handTouch = Portals::TouchTrack{};
     m_cameraTouch = Camera::TouchRecord{};

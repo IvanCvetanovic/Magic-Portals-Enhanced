@@ -49,6 +49,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/MenuState.hpp"
 #include "sim/Motion.hpp"
 #include "sim/Notificator.hpp"
+#include "sim/Adjust.hpp"
 #include "sim/Options.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Pause.hpp"
@@ -247,7 +248,7 @@ public:
     // (Enhanced's ui2 spec, D7) - and both are drawn through the screen
     // overlay on the view, as the pause is (sim/LevelEnd.hpp). Everything that
     // treats a screen as "the level is gone" has to name both.
-    enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Options, Finished, Dead };
+    enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Options, Adjust, Finished, Dead };
 
     // A button the menu drew, in the menu's pixel box (MenuBoxPx). Kept as
     // data so a click is tested against exactly what was drawn, and so a test
@@ -1353,6 +1354,38 @@ public:
     bool OptionsEntryHeld() const { return m_menuTouch.optionsHeld; }
     Options::Widget OptionsHeld() const { return m_optionsTouch.held; }
 
+    // ---- the adjustment screen (planning step 192, CTL-11) -------------------------------------------------------
+    //
+    // A menu state entered from Options, as Options is from the main menu, and only while the style in force is Modern: no level is loaded under
+    // it, readInput is not called, and no pointer reaches a level. It shows the five controls as they will stand (the layout the level plays, clear-
+    // portals forced shown) and seven widgets - size and opacity stepped, the lock, Restore and Back - and what it changes is the tuning the layer
+    // lays out, claims and draws with from the next level on (ControlsApplied). It reads the FIRST finger only, as every menu does.
+    //
+    // Where the button that opens it is drawn and claimed: Options shows it only while the style in force is Modern (a classic run has nothing to adjust).
+    bool AdjustAvailable() const { return OptionsAvailable() && playsModern(); }
+    const Adjust::Rules& AdjustRules() const { return m_adjustRules; }
+    // The widgets on the menu's view, as the screen lays them out this tick.
+    Adjust::Layout AdjustLayout() const;
+    // The widget the held touch went down on and is still inside (the press tint), the lock (the screen opens locked; never saved), and whether the
+    // press that opened the screen is still down and spent.
+    Adjust::Widget AdjustHeld() const { return m_adjust.touch.held; }
+    bool AdjustUnlocked() const { return m_adjust.unlocked; }
+    bool AdjustTouchDead() const { return m_adjust.touch.dead; }
+    // The picture each widget is drawn with, resolved ONCE when the screen first opens (Magic Rampage's file in the folder `editor`, the glyph the game
+    // draws and writes, a flat quad), its tier and margin, the INFO line the resolution said (`adjust art: size_minus=mr ...`), every WARN it said, and
+    // how many glyph files it made.
+    const std::string& AdjustImage(Adjust::Picture picture) const { return m_adjustArt[static_cast<std::size_t>(picture)].image; }
+    Controls::ArtSource AdjustSource(Adjust::Picture picture) const { return m_adjustArt[static_cast<std::size_t>(picture)].source; }
+    double AdjustBodyInset(Adjust::Picture picture) const { return m_adjustArt[static_cast<std::size_t>(picture)].bodyInset; }
+    const std::string& AdjustArtLine() const { return m_adjustArtLine; }
+    const std::vector<std::string>& AdjustArtWarnings() const { return m_adjustArtWarnings; }
+    bool AdjustArtResolved() const { return m_adjustArtResolved; }
+    int AdjustArtFilesWritten() const { return m_adjustArtFilesWritten; }
+    // THE TUNING IN FORCE, after the screen has been used. The first edit made on the screen DROPS whatever the flag (or a test's seam) put in force:
+    // from then on the tuning is the screen's, and the next level starts with it. Whether a save is still owed (a write that failed): Back retries it.
+    bool TuningEdited() const { return m_tuningEdited; }
+    bool TuningUnsaved() const { return m_tuningUnsaved; }
+
     // The no-portal sign's rectangle on the view as the last tick left it, in
     // design units; false in a level that places none.
     bool NoPortalSignRect(Hud::Rect& out) const;
@@ -1839,6 +1872,10 @@ private:
     // The Options screen's touch: a tile acts on a release inside it after a press inside it, the back button and the back key go to the
     // main menu on the next tick (planning step 185).
     void optionsInput(entt::registry& registry);
+    // The adjustment screen's touch (planning step 192): a widget acts on a release strictly inside its face after a press strictly inside it; Back and
+    // the back key leave for Options on the next tick, committing what is unsaved.
+    void adjustInput(entt::registry& registry);
+    void leaveAdjust();
     // The dashboard's touch, wheel and tick (ScoreDashboard::loop, DashboardLayer).
     void dashboardInput(entt::registry& registry);
     // openState(world, level), from the dashboard's start button.
@@ -3126,6 +3163,13 @@ private:
     CreditsTouch m_creditsTouch;
     // Options (planning step 185): the one touch the screen follows, as the credits follow theirs (Options::Follow).
     Options::Touch m_optionsTouch;
+    // THE ADJUSTMENT SCREEN (planning step 192): its one touch and its lock. A record of a touch that this screen keeps lives HERE and is made fresh when the
+    // screen opens; it is not one of the WORLD's records (resetWorldRecords lists those by hand), because a menu reads one finger and never the level's.
+    struct AdjustScreen {
+        Adjust::Touch touch;
+        bool unlocked{false}; // the lock: the screen always opens locked, and it is never saved
+    };
+    AdjustScreen m_adjust;
     // The dashboard: its rules, the rows it opened with, and its scroll and buttons.
     Dashboard::Rules m_dashboardRules;
     Dashboard::Board m_dashboardBoard;
@@ -3389,6 +3433,43 @@ private:
     bool m_optionsReady{false};
     std::string m_optionsEntryImage;
     void resolveOptionsEntry();
+    // controls.json's `adjust` block (sim/Adjust), read after and outside the chain like the rest of the file.
+    Adjust::Rules m_adjustRules;
+    bool m_adjustReady{false};
+    // Each widget's picture, resolved ONCE per run - when the screen first opens, so a run that never opens it makes no file - through the four tiers
+    // the five controls use: Magic Rampage's file in the folder `editor`, the glyph the game draws and writes (sim/PadArt), a flat quad. By Adjust::Picture.
+    struct AdjustArt {
+        std::string image;
+        Controls::ArtSource source;
+        double bodyInset{0.0};
+    };
+    std::array<AdjustArt, Adjust::kPictureCount> m_adjustArt;
+    std::string m_adjustArtLine;
+    std::vector<std::string> m_adjustArtWarnings;
+    bool m_adjustArtResolved{false};
+    int m_adjustArtFilesWritten{0};
+    void resolveAdjustImages();
+    // Whether a Magic Rampage picture is usable at `want` pixels - there, readable, the size the manifest says, and decoding - and, if it is there and not
+    // usable, one WARN saying why (`name` is what the warning calls it). The check the five controls' tier and the adjustment screen's both make.
+    bool usableMagicRampageFile(const std::string& name, const std::string& file, const glm::ivec2& want, std::vector<std::string>& warnings);
+    // One WARN, logged and kept in `into` (a test cannot read the log).
+    void warnArt(std::vector<std::string>& into, const std::string& text);
+    // `controls: tuning from <where>: size 1.4, opacity 1.8, walk_left moved (10, 10)` for the applied tuning: what a log says it played.
+    std::string describeTuning(const char* from) const;
+    // THE TUNING IN FORCE (planning step 187's block, pulled out in step 192 so it can run again while the layer runs): the screen's, once an edit has been
+    // made on the adjustment screen; else the flag's, when it carries a size, an opacity or a move; else the kept one (a test's seam, or controls.json's);
+    // always with the flag's look and arrangement. `from` says which, for the INFO line.
+    Controls::Tuning tuningInForce(const char*& from) const;
+    // Recomputes the applied tuning from tuningInForce.
+    void applyTuning();
+    // An edit made on the adjustment screen: the first one drops the flag's (or the seam's) tuning, the edit is what the screen shows from then on, the
+    // store keeps it and it is saved ONCE (a gesture). `next` was made from ControlsApplied(), so it carries the flag's look and arrangement.
+    void editTuning(const Controls::Tuning& next);
+    // Saves the tuning alone (never the mode: a player who never chose one has none written). True when it is on disk or the store has nowhere to put it.
+    bool saveTuning();
+    bool m_tuningEdited{false};
+    Controls::Tuning m_editedTuning;
+    bool m_tuningUnsaved{false};
     // The style a tile chose: the run plays it from the next level load on, the pictures of the modern tiers are resolved if this is the
     // first time the run is modern, and the choice is kept (saveControls). Never touches a level: none is loaded while Options is up.
     void chooseControlsStyle(Controls::Style style);

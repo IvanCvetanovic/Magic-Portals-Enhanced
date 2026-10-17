@@ -1036,6 +1036,7 @@ bool Store::Open(const std::string& directory, const Rules& rules, std::string& 
     m_path.clear();
     m_fromFile = false;
     m_written.clear();
+    m_saves = 0;
     error.clear();
 
     if (directory.empty()) return true;
@@ -1102,6 +1103,7 @@ bool Store::Save(std::string& error) {
     // next Save tries again with the bytes it still holds.
     if (!Files::WriteAtomic(m_path, text, Files::WriteOptions{}, error)) return false;
     m_written = text;
+    ++m_saves;
     return true;
 }
 

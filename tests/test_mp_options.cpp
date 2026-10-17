@@ -190,6 +190,16 @@ void TheOptionsBlockIsWhatTheFileSays() {
     CHECK_MSG((o.thumbnail.background == Options::Colour{16, 14, 26, 255}), "a dark ground");
     CHECK_MSG((o.thumbnail.walk == Options::Colour{205, 212, 232, 255}) && (o.thumbnail.corner == Options::Colour{244, 247, 255, 255}), "the arrows and the corner buttons in two lights");
 
+    // The adjustment button (planning step 192): under the tiles, a tile as wide, a word in the tiles' own scale.
+    CHECK_MSG(o.adjust.atScreen == glm::dvec2(0.5, 0.84) && o.adjust.sizeUnits == glm::dvec2(160.0, 36.0), "the Adjust button is centred at (0.5, 0.84), 160 x 36");
+    CHECK_MSG(o.adjust.word == "Adjust controls" && o.adjust.font == "Matura84_shadow.fnt" && o.adjust.unitsPerFontPx == 0.3 && o.adjust.wordAtUnits == glm::dvec2(80.0, 18.0), "its word, in the tiles' font at 0.3, centred in it");
+    CHECK_MSG((o.adjust.frame == Options::Colour{34, 30, 52, 190}) && o.adjust.wordAlphaByte == 255, "on the idle tile's plate");
+    {
+        // "Adjust controls" is 459 font px of advance (Matura84_shadow), 137.7 units at 0.3: it fits the 160 with 10 to spare each side.
+        const double half = 459.0 * o.adjust.unitsPerFontPx * 0.5;
+        CHECK_MSG(o.adjust.wordAtUnits.x - half > 8.0 && o.adjust.wordAtUnits.x + half < o.adjust.sizeUnits.x - 8.0, "the word clears the button's edges by at least 8 units");
+    }
+
     // The word fits where it stands: the longest word, Modern, is 236 font px of advance (Matura84_shadow), 70.8 units at 0.3.
     const double thumbRight = o.thumbnail.atUnits.x + o.thumbnail.sizeUnits.x;
     for (const auto& [word, advance] : {std::pair<const char*, double>{"Modern", 236.0}, {"Classic", 217.0}}) {
@@ -647,6 +657,96 @@ void TheThumbnailsAreTheTwoLayoutsScaled() {
     }
 }
 
+
+// ---- the adjustment button -----------------------------------------------------------------------------------------------------------------
+
+void TheAdjustButtonIsUnderTheTilesAndClearOfEveryOtherWidgetAtEveryAspect() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    constexpr double kTitleHalfWidth = 70.0;
+    constexpr double kTitleHalfHeight = 21.0;
+    for (const Aspect& aspect : kAspects) {
+        const glm::dvec2 view = ViewOf(aspect.ratio);
+        const Hud::Rect whole{glm::dvec2(0.0), view};
+        const std::string at = std::string(aspect.name) + ": ";
+        const Hud::Rect button = Options::AdjustRect(d.options, view);
+        CHECK_MSG(button.size == glm::dvec2(160.0, 36.0) && NearPoint(button.Centre(), glm::dvec2(view.x * 0.5, 0.84 * kHeight)), at + "the Adjust button is 160 x 36 and centred at 0.84 of the height: " + Show(button));
+        CHECK_MSG(Inside(button, whole), at + "and on the screen");
+        // Under both tiles, a gap between (the Classic tile ends at 182.72, the button begins at 197.04).
+        const Hud::Rect modern = Options::TileRect(d.options, Controls::Style::Modern, view);
+        const Hud::Rect classic = Options::TileRect(d.options, Controls::Style::Classic, view);
+        CHECK_MSG(button.min.y > classic.Max().y && classic.Max().y > modern.Max().y && button.min.y - classic.Max().y > 14.0, at + "under the Classic tile by more than 14 units: " + Num(button.min.y - classic.Max().y));
+        // Clear of every other widget by more than a unit: the back button at the largest its bounce draws it, the tiles, the title, the main menu's entry slot.
+        Hud::Rect back = Credits::BackHitRect(d.credits, view, kSettled);
+        for (double ms = 700.0; ms <= 1300.0; ms += 20.0) {
+            for (const Credits::Piece& piece : Credits::Pieces(d.credits, view, ms, Credits::Scroll{}, false)) {
+                if (piece.element != Credits::Element::Back) continue;
+                const glm::dvec2 lo = glm::min(back.min, piece.rect.min);
+                const glm::dvec2 hi = glm::max(back.Max(), piece.rect.Max());
+                back = Hud::Rect{lo, hi - lo};
+            }
+        }
+        const glm::dvec2 titleCentre = d.options.title.atScreen * view;
+        const Hud::Rect title{titleCentre - glm::dvec2(kTitleHalfWidth, kTitleHalfHeight), glm::dvec2(2.0 * kTitleHalfWidth, 2.0 * kTitleHalfHeight)};
+        const Options::Entry entry = Options::EntryAt(d.options, d.menu.layer, d.menu.state, view, kSettled, false);
+        struct Other {
+            const char* name;
+            const Hud::Rect* rect;
+        };
+        const std::array<Other, 5> others = {{{"the back button", &back}, {"the Modern tile", &modern}, {"the Classic tile", &classic}, {"the title", &title}, {"the main menu's entry slot", &entry.rect}}};
+        for (const Other& other : others) {
+            CHECK_MSG(Gap(button, *other.rect) > 1.0, at + "the Adjust button is clear of " + other.name + " by more than a unit: " + Num(Gap(button, *other.rect)));
+        }
+    }
+    // Its word fits (459 font px of advance at 0.3 is 137.7 units, in a 160-wide button).
+    CHECK(459.0 * Data().options.adjust.unitsPerFontPx < Data().options.adjust.sizeUnits.x - 16.0);
+}
+
+void TheAdjustButtonIsClaimedAndDrawnOnlyWhereItIsShown() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    for (const Aspect& aspect : kAspects) {
+        const glm::dvec2 view = ViewOf(aspect.ratio);
+        const std::string at = std::string(aspect.name) + ": ";
+        const Hud::Rect button = Options::AdjustRect(d.options, view);
+        const auto on = [&](const glm::dvec2& point, bool shown) { return Options::WidgetAt(d.options, d.credits, view, kSettled, point, shown); };
+        // Shown, it is a widget; the default (not shown) is the Options screen of planning step 185, with nothing under the place.
+        CHECK_MSG(on(button.Centre(), true) == Options::Widget::Adjust, at + "shown, its centre is the Adjust button");
+        CHECK_MSG(on(button.Centre(), false) == Options::Widget::None && Options::WidgetAt(d.options, d.credits, view, kSettled, button.Centre()) == Options::Widget::None,
+                  at + "hidden, there is nothing there - and nothing is the default, as it was");
+        CHECK_MSG(on(button.min, true) == Options::Widget::Adjust && on(button.Max(), true) == Options::Widget::Adjust && on(button.min - glm::dvec2(1e-6, 0.0), true) == Options::Widget::None,
+                  at + "its edges are closed, as every widget's here");
+        // The other widgets are as they were, with the button shown or not.
+        const Hud::Rect modern = Options::TileRect(d.options, Controls::Style::Modern, view);
+        CHECK_MSG(on(modern.Centre(), true) == Options::Widget::ModernTile && on(modern.Centre(), false) == Options::Widget::ModernTile, at + "a tile is a tile either way");
+        CHECK_MSG(!Options::StyleOf(Options::Widget::Adjust), at + "the Adjust button chooses no style");
+    }
+    // What it draws: two more pieces (the plate and the word), last, and none where it is hidden.
+    const glm::dvec2 view = ViewOf(16.0 / 9.0);
+    const Controls::Tuning tuning;
+    const std::vector<Options::Piece> hidden = Options::Pieces(d.options, d.credits, d.controls, d.hud, tuning, view, kSettled, Controls::Style::Modern, Options::Widget::None);
+    const std::vector<Options::Piece> hiddenAgain = Options::Pieces(d.options, d.credits, d.controls, d.hud, tuning, view, kSettled, Controls::Style::Modern, Options::Widget::None, false);
+    const std::vector<Options::Piece> shown = Options::Pieces(d.options, d.credits, d.controls, d.hud, tuning, view, kSettled, Controls::Style::Modern, Options::Widget::None, true);
+    CHECK_MSG(hidden.size() == hiddenAgain.size() && shown.size() == hidden.size() + 2u, "two pieces more where it is shown: " + std::to_string(hidden.size()) + " and " + std::to_string(shown.size()));
+    for (const Options::Piece& piece : hidden) CHECK_MSG(piece.element != Options::Element::AdjustFrame, "no plate where it is hidden");
+    if (shown.size() == hidden.size() + 2u) {
+        const Options::Piece& plate = shown[shown.size() - 2];
+        const Options::Piece& word = shown.back();
+        CHECK_MSG(plate.element == Options::Element::AdjustFrame && NearPoint(plate.rect.min, Options::AdjustRect(d.options, view).min) && plate.rect.size == glm::dvec2(160.0, 36.0) && plate.colour == (Options::Colour{34, 30, 52, 190}), "the plate is the button's rectangle in the idle plate's colour");
+        CHECK_MSG(word.element == Options::Element::Word && word.words == "Adjust controls" && NearPoint(word.rect.min, Options::AdjustRect(d.options, view).min + glm::dvec2(80.0, 18.0)) && word.unitsPerFontPx == 0.3 && word.font == "Matura84_shadow.fnt" && word.colour[3] == 255 && !word.tile,
+                  "the word is centred in it, in the original's font, and belongs to no tile");
+        for (std::size_t i = 0; i < hidden.size(); ++i) CHECK_MSG(shown[i].element == hidden[i].element && NearPoint(shown[i].rect.min, hidden[i].rect.min), "everything before it is as it was");
+    }
+    // Held, the plate and the word are tinted by the press tint, and a held tile leaves them alone.
+    const std::vector<Options::Piece> held = Options::Pieces(d.options, d.credits, d.controls, d.hud, tuning, view, kSettled, Controls::Style::Modern, Options::Widget::Adjust, true);
+    if (held.size() == shown.size() && held.size() >= 2u) {
+        const int tint = d.credits.state.pressTintByte;
+        CHECK_MSG(held[held.size() - 2].colour[0] == 34 * tint / 255 && held.back().colour[0] == 255 * tint / 255 && held.back().colour[3] == 255, "a held Adjust button is at the press tint, its word's alpha unchanged");
+        const std::vector<Options::Piece> tileHeld = Options::Pieces(d.options, d.credits, d.controls, d.hud, tuning, view, kSettled, Controls::Style::Modern, Options::Widget::ModernTile, true);
+        CHECK_MSG(tileHeld.size() == shown.size() && tileHeld[tileHeld.size() - 2].colour == shown[shown.size() - 2].colour, "a held tile leaves the button as it was");
+    }
+}
+
 // ---- what the block refuses -------------------------------------------------------------------------------------------------------------
 
 using Path = std::vector<std::string>;
@@ -872,6 +972,22 @@ void WhatTheOptionsBlockRefuses() {
         {{"options", "tile", "thumbnail", "background_rgba"}, "[1, 2, 3, 400]", false},
         {{"options", "tile", "thumbnail", "walk_rgba"}, "[]", false},
         {{"options", "tile", "thumbnail", "corner_rgba"}, "null", false},
+        {{"options", "adjust_button", "at_screen"}, "[0.5, 1.5]", false},
+        {{"options", "adjust_button", "at_screen"}, "[0.5, 0.9]", true},
+        {{"options", "adjust_button", "size_units"}, "[160, 0]", false},
+        {{"options", "adjust_button", "size_units"}, "[-1, 36]", false},
+        {{"options", "adjust_button", "size_units"}, "[170, 40]", true},
+        {{"options", "adjust_button", "word"}, "\"\"", false},
+        {{"options", "adjust_button", "word"}, "\"Adjust\"", true},
+        {{"options", "adjust_button", "font"}, "\"\"", false},
+        {{"options", "adjust_button", "units_per_font_px"}, "0", false},
+        {{"options", "adjust_button", "units_per_font_px"}, "-0.3", false},
+        {{"options", "adjust_button", "word_at_units"}, "[80]", false},
+        {{"options", "adjust_button", "frame_rgba"}, "[1, 2, 3]", false},
+        {{"options", "adjust_button", "frame_rgba"}, "[1, 2, 3, 256]", false},
+        {{"options", "adjust_button", "word_alpha_byte"}, "300", false},
+        {{"options", "adjust_button", "word_alpha_byte"}, "-1", false},
+        {{"options", "adjust_button"}, "5", false},
         {{"options", "tile"}, "5", false},
         {{"options", "tile", "thumbnail"}, "\"x\"", false},
         {{"options", "entry"}, "[]", false},
@@ -925,6 +1041,8 @@ void runTests() {
     ATileIsPressedByADownAndUpInsideOnly();
     TheChosenTileIsLit();
     TheThumbnailsAreTheTwoLayoutsScaled();
+    TheAdjustButtonIsUnderTheTilesAndClearOfEveryOtherWidgetAtEveryAspect();
+    TheAdjustButtonIsClaimedAndDrawnOnlyWhereItIsShown();
     WhatTheOptionsBlockRefuses();
 }
 

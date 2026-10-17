@@ -257,6 +257,13 @@ add_mp_test(test_mp_padart)
 # controls.json (from MP_TEST_PORTDATA when a mutation test sets it), so it never skips.
 add_mp_test(test_mp_options)
 
+# The adjustment screen (planning step 192, CTL-11): sim/Adjust, the `adjust` block of controls.json and the editor pictures sim/PadArt draws - the seven
+# widgets (a box and a face each) at every window shape, Back's fixed place under the clear-portals preview and its clearances (the numbers of
+# out/parity/program/CTL/CTL11/editor_clearance.py), the tile arithmetic (limits, the size chain, re-lock, Restore), the strict-inside press, the readouts, the
+# unlocked cues, the preview, the eight glyphs, and the strict reading of the block. Pure; it reads only the port's own ui.json and controls.json (from
+# MP_TEST_PORTDATA when a mutation test sets it), so it never skips.
+add_mp_test(test_mp_adjust)
+
 # How a level ends: the finished and lost screens and the HUD going - ui.json's
 # level_end and sim/LevelEnd's arithmetic, pinned against Enhanced's ui2 spec.
 # Pure, reading only the port's own committed data, so it never skips.
