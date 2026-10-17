@@ -182,6 +182,16 @@ bool Whole(const Json::Value& block, const char* key, int lo, int hi, int& out, 
     return true;
 }
 
+bool Flag(const Json::Value& block, const char* key, bool& out, std::string& why, const std::string& where) {
+    const Json::Value& value = block[key];
+    if (!value.IsBool()) {
+        why = Named(where, key) + " is missing or not true or false";
+        return false;
+    }
+    out = value.AsBool();
+    return true;
+}
+
 bool Text(const Json::Value& block, const char* key, std::string& out, std::string& why, const std::string& where) {
     const Json::Value& value = block[key];
     if (!value.IsString() || value.AsString().empty()) {
@@ -649,6 +659,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return fail();
     }
 
+    if (!Object(root, "input", why, "") || !Flag(root["input"], "two_contacts", read.twoContacts, why, "input")) return fail();
+
     if (!Object(root, "pressed", why, "") || !Whole(root["pressed"], "boost_byte", 0, 255, read.pressedBoostByte, why, "pressed") ||
         !Object(root, "ring", why, "") || !Num(root["ring"], "size_over_box", 1e-9, kBig, read.ringSizeOverBox, why, "ring") ||
         !Object(root, "hint", why, "") || !Num(root["hint"], "margin_units", 0.0, kBig, read.hintMarginUnits, why, "hint")) {
@@ -788,7 +800,7 @@ bool ArtHalfDressed(const ArtSources& sources) {
 // ---- the tuning ------------------------------------------------------------------------------------------
 
 bool FlagItems::Any() const {
-    return preset || arrows || Tunes();
+    return preset || arrows || twoContacts || Tunes();
 }
 
 bool FlagItems::Tunes() const {
@@ -921,6 +933,7 @@ const char* FlagUsage() {
         std::string text = std::string("--controls <classic|modern>[,key=value...]  keys: ") + TuningKey::kPreset + "=";
         for (const Preset preset : kPresets) text += std::string(preset == kPresets.front() ? "" : "|") + NameOf(preset);
         text += std::string(", ") + TuningKey::kArrows + "=" + NameOf(Arrows::Split) + "|" + NameOf(Arrows::Grouped);
+        text += std::string(", ") + TuningKey::kContacts + "=" + TuningKey::kContactsOne + "|" + TuningKey::kContactsTwo;
         text += std::string(", ") + TuningKey::kSize + "=<n>, " + TuningKey::kOpacity + "=<n>, and a move as <key>=<dx>:<dy> for ";
         for (const Id id : kClaimOrder) text += std::string(id == kClaimOrder.front() ? "" : ", ") + KeyOf(id);
         return text;
@@ -955,6 +968,10 @@ bool Tuning::ParseFlag(const std::string& items, FlagItems& out, std::string& er
             const auto arrows = ArrowsOfName(value);
             if (!arrows) return refuse("'" + value + "' is not an arrangement");
             read.arrows = arrows;
+        } else if (key == TuningKey::kContacts) {
+            if (read.twoContacts) return refuse("contacts is given twice");
+            if (value != TuningKey::kContactsOne && value != TuningKey::kContactsTwo) return refuse("'" + value + "' is not one or two");
+            read.twoContacts = value == TuningKey::kContactsTwo;
         } else if (key == TuningKey::kSize || key == TuningKey::kOpacity) {
             std::optional<double>& slot = key == TuningKey::kSize ? read.size : read.opacity;
             if (slot) return refuse(key + " is given twice");
@@ -1291,6 +1308,62 @@ double HintLeft(Style style, const Rules& rules, const Layout& layout, const Hin
     }
     if (!meets) return row.classicLeft;
     return std::min(clear, viewUnits.x - row.extent - rules.hintMarginUnits);
+}
+
+// ---- two contacts (planning step 191) ---------------------------------------------------------------------------
+
+namespace {
+
+bool IsLive(const std::vector<LiveContact>& live, int id) {
+    if (id == kNoContact) return false;
+    for (const LiveContact& contact : live) {
+        if (contact.id == id) return true;
+    }
+    return false;
+}
+
+} // namespace
+
+ContactRoles AssignContacts(const std::vector<LiveContact>& live, const ContactRoles& before) {
+    ContactRoles roles;
+    if (live.empty()) return roles;
+    // One finger is the world's, and the controls' when it is on a control: the combined reading the layer always had. (A finger left
+    // from last tick that held the controls role is NOT kept here: with nobody else down, where it is now is what it is.)
+    if (live.size() == 1) {
+        roles.world = live.front().id;
+        if (live.front().onControl) roles.controls = live.front().id;
+        return roles;
+    }
+    // The controls finger: the one that held the role and is still down, else the first that is on a control.
+    if (IsLive(live, before.controls)) {
+        roles.controls = before.controls;
+    } else {
+        for (const LiveContact& contact : live) {
+            if (contact.onControl) {
+                roles.controls = contact.id;
+                break;
+            }
+        }
+    }
+    // The world finger: neither the controls' nor on a control. The one that held the role and still qualifies keeps it.
+    const auto candidate = [&live, &roles](int id) {
+        if (id == roles.controls) return false;
+        for (const LiveContact& contact : live) {
+            if (contact.id == id) return !contact.onControl;
+        }
+        return false;
+    };
+    if (candidate(before.world)) {
+        roles.world = before.world;
+    } else {
+        for (const LiveContact& contact : live) {
+            if (candidate(contact.id)) {
+                roles.world = contact.id;
+                break;
+            }
+        }
+    }
+    return roles;
 }
 
 // ---- which style a run plays --------------------------------------------------------------------------------

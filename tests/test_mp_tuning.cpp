@@ -211,7 +211,12 @@ void TheFlagsValuesAreParsedExactly() {
     CHECK(EngineTuning::ParsePerfLog("5", s) && s == 5.0f);
     CHECK(EngineTuning::ParsePerfLog("0.5", s) && s == 0.5f);
     CHECK(EngineTuning::ParsePerfLog("3600", s) && s == 3600.0f);
-    for (const char* text : {"", "0", "-1", "3601", "nan", "inf", "5s", "abc", " 5", "1e9"}) {
+    CHECK(EngineTuning::ParsePerfLog("12.25", s) && s == 12.25f);
+    CHECK(EngineTuning::ParsePerfLog("0.001", s) && s == 0.001f);
+    // A plain decimal number and nothing strtod would also take: a hexadecimal float, an exponent, a bare or doubled point, a sign, white space, a digit that is
+    // not an ASCII one (planning step 191; `--perf-log 0x10` used to be accepted, with a comment that said "exactly a number").
+    for (const char* text : {"", "0", "-1", "3601", "nan", "inf", "5s", "abc", " 5", "1e9", "0x10", "0X10", "0x1p3", "1e2", "1E2", "2e0", ".5", "5.", "1.2.3", "+5", "-5", "5 ",
+                             "5\t", "1,5", "1_0", "0.0", "00", "3600.5"}) {
         s = -1.0f;
         CHECK_MSG(!EngineTuning::ParsePerfLog(text, s) && s == -1.0f, std::string("seconds are above 0 and at most 3600, not '") + text + "'");
     }

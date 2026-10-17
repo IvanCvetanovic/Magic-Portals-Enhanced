@@ -448,6 +448,25 @@ void OnlyAPlayersRunMayOpenAMessageBox() {
               "the flags together are unattended");
 }
 
+// The box a run that stopped on an error shows (planning step 191; the rule was main.cpp's own and no suite reached it): none for a run nobody is at,
+// and for a player's run one that says what happened and names the log ONLY if the log was written - a path handed over before the file sink opened
+// would send a player to a file that is not there.
+void TheFatalBoxNamesTheLogOnlyIfItWasWritten() {
+    const std::string reason = "the level could not be started";
+    const std::string log = "C:\\Users\\someone\\AppData\\Local\\Temp\\magicportals.log";
+    CHECK_MSG(MagicPortals::FatalText(reason, log, false).empty() && MagicPortals::FatalText(reason, "", false).empty(),
+              "a run nobody is at opens no box, with a log or without");
+    const std::string written = MagicPortals::FatalText(reason, log, true);
+    CHECK_MSG(written.find(reason) != std::string::npos, "a player's box says what happened: " + written);
+    CHECK_MSG(written.find("The details are in the log:") != std::string::npos && written.find(log) != std::string::npos,
+              "and names the log that was written: " + written);
+    const std::string unwritten = MagicPortals::FatalText(reason, "", true);
+    CHECK_MSG(unwritten.find(reason) != std::string::npos, "with no log written it still says what happened: " + unwritten);
+    CHECK_MSG(unwritten.find("log") == std::string::npos && unwritten.find("details") == std::string::npos,
+              "and names no log, there being none: " + unwritten);
+    CHECK_MSG(written.rfind(unwritten, 0) == 0 && written.size() > unwritten.size(), "the log line is an addition to the same text");
+}
+
 void runTests() {
     AWriteReplacesInOneStepAndLeavesNoTemporary();
     AWriteThatCannotBeDoneSaysSoAndThrowsNothing();
@@ -459,6 +478,7 @@ void runTests() {
     AFileIsReadWholeOrSaidNot();
     ABadFileIsMovedToTheFirstFreeName();
     OnlyAPlayersRunMayOpenAMessageBox();
+    TheFatalBoxNamesTheLogOnlyIfItWasWritten();
 }
 
 } // namespace

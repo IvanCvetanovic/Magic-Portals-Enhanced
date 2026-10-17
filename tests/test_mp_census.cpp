@@ -314,7 +314,7 @@ Controls::Tuning Look(Controls::Arrows arrows, Controls::Preset preset, std::opt
 }
 
 // The two arrangements of the walk arrows the golden records (planning step 186): `split` ships, `grouped` is planning step 180's, kept as an alternative.
-constexpr std::array<Controls::Arrows, 2> kArrangements = {Controls::Arrows::Split, Controls::Arrows::Grouped};
+constexpr const auto& kArrangements = Controls::kArrangements; // the module's list (it was a copy here, planning step 191)
 
 // What the walk arrows' hit rectangles are, as the zones the census judges: grouped, ONE (the two tile into a single rectangle, which the census
 // assumes and counts when it does not); split, TWO, far apart, each its own. The names are the golden's keys.

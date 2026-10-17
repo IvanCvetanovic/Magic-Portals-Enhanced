@@ -102,8 +102,17 @@ bool ParseShadowMaps(const std::string& text, std::uint32_t& out) {
 }
 
 bool ParsePerfLog(const std::string& text, float& out) {
-    // strtod skips leading white space and accepts a sign; a flag is exactly a number.
-    if (text.empty() || std::isspace(static_cast<unsigned char>(text[0])) != 0 || text[0] == '+') return false;
+    // A flag is exactly a plain decimal number: digits, then at most one '.' and more digits. strtod alone would also take white space, a sign,
+    // a hexadecimal float ("0x10") and an exponent ("1e2"), none of which the flag's help text means (planning step 191).
+    std::size_t at = 0;
+    while (at < text.size() && text[at] >= '0' && text[at] <= '9') ++at;
+    if (at == 0) return false;
+    if (at < text.size() && text[at] == '.') {
+        const std::size_t fraction = ++at;
+        while (at < text.size() && text[at] >= '0' && text[at] <= '9') ++at;
+        if (at == fraction) return false;
+    }
+    if (at != text.size()) return false;
     char* end = nullptr;
     const double value = std::strtod(text.c_str(), &end);
     if (end == nullptr || *end != '\0' || !std::isfinite(value) || !(value > 0.0) || value > static_cast<double>(kPerfLogMaxSeconds)) {

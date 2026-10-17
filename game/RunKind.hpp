@@ -12,6 +12,8 @@
 
 #include "core/LaunchOptions.hpp"
 
+#include <string>
+
 namespace MagicPortals {
 
 // The developer's flags of THIS port, which main takes out of the command line before the engine's parser sees it (the engine's
@@ -29,9 +31,11 @@ struct DevFlags {
 // unattended run is for a developer flag to be missing from this list.
 //
 // It is also the port's ONE definition of "a player-style run" for everything else that must differ for a person (planning step 190):
-// the engine's per-frame watch of every file for a developer's hot reload, and the layer's per-frame sprite log, are off for an attended
-// run and stay on for every other (sim/EngineTuning, game/data/engine.json). The measurement flags of that step (--shadow-maps,
-// --sprites-only, --asset-watching, --sprite-report, --perf-log) are NOT in DevFlags: they change what a run costs, not who is at it.
+// the engine's per-frame watch of every file for a developer's hot reload is off for an attended run and stays on for every other
+// (sim/EngineTuning, game/data/engine.json). The layer's per-frame sprite log is the same table's second switch, and is ON for both kinds of
+// run as shipped (its measurement found nothing to gain), which `--sprite-report off` or the table turns off. The measurement flags of that
+// step (--shadow-maps, --sprites-only, --asset-watching, --sprite-report, --perf-log) are NOT in DevFlags: they change what a run costs, not
+// who is at it.
 inline bool AttendedRun(const Supersonic::LaunchOptions& engine, const DevFlags& dev) {
     const bool engineUnattended = engine.maxFrames > 0 || engine.fixedDelta > 0.0f || engine.hidden ||
                                   !engine.screenshotPath.empty() || !engine.screenshotUiPath.empty() ||
@@ -39,6 +43,16 @@ inline bool AttendedRun(const Supersonic::LaunchOptions& engine, const DevFlags&
                                   !engine.replayPath.empty() || engine.importAssets;
     const bool portUnattended = dev.saves || dev.route || dev.visit || dev.scripted || dev.lightMasksOff;
     return !engineUnattended && !portUnattended;
+}
+
+// The text of the message box a run that stopped on an error shows, or empty where it shows none (planning step 191; the rule was main.cpp's own
+// and no suite could reach it). Only an attended run opens a box, and the box names the log only if the log was WRITTEN: `logPath` is empty
+// until the file sink really opened, and a box that sent a player to a file that is not there would be worse than one that names none.
+inline std::string FatalText(const std::string& what, const std::string& logPath, bool attended) {
+    if (!attended) return {};
+    std::string text = std::string("Magic Portals stopped because of an error:\n\n") + what;
+    if (!logPath.empty()) text += "\n\nThe details are in the log:\n" + logPath;
+    return text;
 }
 
 } // namespace MagicPortals

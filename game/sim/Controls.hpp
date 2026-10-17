@@ -28,6 +28,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -243,6 +244,10 @@ struct Rules {
     } hit;
 
     ActOn cornerActOn = ActOn::Release;
+    // input.two_contacts (planning step 191, CTL-14): under the modern controls a second finger reaches the controls and the world through
+    // the layer's one pointer path - a thumb on an arrow keeps walking while another finger shoots, aims or pans. The classic style never
+    // reads it and stays one pointer. `contacts=one|two` in the flag overrides it for a run.
+    bool twoContacts = false;
     double clearancePx = 0.0;
 
     Grid size;
@@ -331,6 +336,10 @@ bool ArtHalfDressed(const ArtSources& sources);
 namespace TuningKey {
 inline constexpr const char* kPreset = "preset";
 inline constexpr const char* kArrows = "arrows";
+// `contacts=one|two`: whether a second finger is read (planning step 191). A capture's or a test's choice, never kept.
+inline constexpr const char* kContacts = "contacts";
+inline constexpr const char* kContactsOne = "one";
+inline constexpr const char* kContactsTwo = "two";
 inline constexpr const char* kSize = "size";
 inline constexpr const char* kOpacity = "opacity";
 inline constexpr const char* kMove = "move";
@@ -345,13 +354,16 @@ inline constexpr const char* kControls = "controls";
 struct FlagItems {
     std::optional<Preset> preset;
     std::optional<Arrows> arrows;
+    // `contacts=two` (true) or `contacts=one` (false): overrides controls.json's input.two_contacts for the run. Like `preset=` and
+    // `arrows=` it is a capture's choice and not a tuning.
+    std::optional<bool> twoContacts;
     std::optional<double> size;
     std::optional<double> opacity;
     std::array<std::optional<glm::dvec2>, 5> move; // by Id
 
     bool Any() const;
     // A key of the TUNING was given: a size, an opacity or a move. `preset=` and `arrows=` are the look and the arrangement, a capture's
-    // choice of where the controls stand, not something a player kept. A flag that Tunes() REPLACES the tuning a player kept (the layer
+    // choice of where the controls stand, not something a player kept; `contacts=` is a capture's choice of how many fingers are read. A flag that Tunes() REPLACES the tuning a player kept (the layer
     // lays out with the flag's tuning alone, never a merge); one that does not leaves the kept tuning in force.
     bool Tunes() const;
 };
@@ -426,6 +438,9 @@ const char* FlagUsage();
 // The file, inside whichever directory the game was handed: its own file and its own store, beside scores.json, audio.json and
 // achievements.json, not a third key of audio.json (which Switches::Store rewrites from the two members it knows).
 inline constexpr const char* kStoreFileName = "controls.json";
+// The same name in the port's DATA directory (portData + kDataFile): the table LoadRules reads. The layer and main both read it, and now say it once
+// (planning step 191; main had its own copy, and a rename in one place made main's grid check skip without a word).
+inline constexpr const char* kDataFile = "/controls.json";
 
 // The style a player chose in Options, and the tuning they made, kept between runs:
 //
@@ -584,6 +599,40 @@ struct HintRow {
 };
 double HintLeft(Style style, const Rules& rules, const Layout& layout, const HintRow& row, const glm::dvec2& viewUnits,
                 const std::array<bool, 5>& shown);
+
+// ---- two contacts (planning step 191, CTL-14) ----------------------------------------------------------
+
+// The fingers a tick has, as the layer lists them: its one pointer first (the mouse, or the first finger), then the others in the
+// order the device gave them. `id` is the layer's own number for the finger, stable for as long as it stays down.
+inline constexpr int kNoContact = -1;
+struct LiveContact {
+    int id = kNoContact;
+    // Its place this tick is on a control the layer SHOWS, by the modern claim (the hit rectangles). Asked of the finger's own place, so a
+    // finger that slides onto an arrow is on it and one that slides off is not.
+    bool onControl = false;
+};
+
+// Which finger works what. `controls` works the walk arrows and the corner buttons; `world` works everything else a touch does - a
+// shot, the camera's pan, a handle, a lift, a help block. With ONE finger down the same finger is both, as it is without this module,
+// and the layer reads it exactly as it always did.
+struct ContactRoles {
+    int controls = kNoContact;
+    int world = kNoContact;
+    bool operator==(const ContactRoles& other) const { return controls == other.controls && world == other.world; }
+    bool operator!=(const ContactRoles& other) const { return !(*this == other); }
+};
+
+// The roles of this tick's fingers, given the roles of the last tick. Pure.
+//
+//   * No finger: neither role. ONE finger: it is the world's, and the controls' when it is on a control.
+//   * Two or more. The controls finger is the one that held the role last tick and is still down (it BEGAN on a control, or slid onto
+//     one, and it keeps the role wherever it goes until it is up); else the first finger that is on a control now; else none.
+//     The world finger is the one that held the role last tick and is still down, else the first finger that is neither the controls'
+//     nor on a control; else none. A finger left over - a second one on a control while the controls finger is down, a third anywhere,
+//     a second in the world while the world finger is down - has no role: it is ignored, and what it does reaches nothing.
+// A finger that held no role when it went down and has none now takes one only by becoming the first candidate, so a finger that
+// began on a control (and was ignored) and slides off it into the world becomes the world's when the world is free.
+ContactRoles AssignContacts(const std::vector<LiveContact>& live, const ContactRoles& before);
 
 // ---- which style a run plays -------------------------------------------------------------------------
 

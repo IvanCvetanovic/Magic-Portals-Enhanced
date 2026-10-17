@@ -62,9 +62,6 @@ constexpr const char* kLogFile = "magicportals.log";
 constexpr const char* kPreviousLogFile = "magicportals.prev.log";
 // The game's name: the manifest's title, the user data directory's and the message box's.
 constexpr const char* kTitle = "Magic Portals";
-// The modern controls' table, in the port's data directory (the layer reads the same file): main reads it only to refuse a flag whose size or
-// opacity is off its grid.
-constexpr const char* kControlsDataFile = "/controls.json";
 
 // The last run's log moved to `previous`, replacing the one before. Renamed
 // first; copied where the rename is refused, as Windows refuses it while
@@ -110,11 +107,8 @@ int ReportFatal(const std::string& what, const FatalContext& context) noexcept {
         // The log writes an error to stderr as well as to the file sink, so there is no line of our own for stderr.
         SUPERSONIC_LOG_ERROR("Magic Portals") << "fatal: " << what << std::endl;
         Supersonic::Log::CloseFileSink();
-        if (context.attended) {
-            std::string text = std::string("Magic Portals stopped because of an error:\n\n") + what;
-            if (!context.logPath.empty()) text += "\n\nThe details are in the log:\n" + context.logPath;
-            ShowFatalDialog(text);
-        }
+        const std::string text = MagicPortals::FatalText(what, context.logPath, context.attended);
+        if (!text.empty()) ShowFatalDialog(text);
     } catch (...) {
         // Nothing more can be said; the exit code still is.
     }
@@ -217,6 +211,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // HUD control, a help block, or the portal shot - a torch lit by a capture. The
     // shot leaves on the RELEASE, as the original's does (placement.json `release`):
     // `--tap 247,141@60` goes down on tick 60, comes up on 61, and fires on 61.
+    // Taps go one at a time - the next goes down after the last has come up - except under `--controls modern` with two contacts on
+    // (controls.json input.two_contacts, `contacts=` in the flag), where they overlap, each a finger of its own (planning step 191).
     struct Tap {
         int tick = 0;
         int releaseTick = 0;
@@ -666,7 +662,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    or at pixel x,y of 1280x720, for a capture that opens or closes a\n"
                   << "                    popup, presses a menu's button or, in play, does what a touch\n"
                   << "                    there does: a HUD control, a help block or a portal shot, which\n"
-                  << "                    leaves on the release tick; repeatable\n"
+                  << "                    leaves on the release tick; repeatable. Taps go one at a time,\n"
+                  << "                    except under --controls modern with two contacts on, where they\n"
+                  << "                    overlap, each a finger (one held on an arrow, another shooting)\n"
                   << "  --drag <x,y>:<x,y>@<tick>-<release>\n"
                   << "                    DEV: a touch down at the first pixel of 1280x720 on <tick>,\n"
                   << "                    moved evenly to the second and let go there on <release>, for a\n"
@@ -710,7 +708,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    reload of a texture a developer saved); off in a player's run\n"
                   << "  --sprite-report <on|off>\n"
                   << "                    DEV: the layer's per-frame walk over its sprites that logs one\n"
-                  << "                    crossing the view's edge; off in a player's run, G dumps all\n"
+                  << "                    crossing the view's edge; on as shipped (engine.json turns it\n"
+                  << "                    off for a run), and G dumps all whatever this says\n"
                   << "  --perf-log <seconds>\n"
                   << "                    DEV: the engine's frame statistics (fps, median, 95th percentile,\n"
                   << "                    worst, the split of the frame) in the log every <seconds>\n";
@@ -755,7 +754,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             MagicPortals::Controls::Rules rules;
             MagicPortals::Controls::Tuning tuning;
             std::string why;
-            if (MagicPortals::Controls::LoadRules(paths.portData + kControlsDataFile, rules, why) &&
+            if (MagicPortals::Controls::LoadRules(paths.portData + MagicPortals::Controls::kDataFile, rules, why) &&
                 !MagicPortals::Controls::Tuning::FromFlag(paths.controls.flag, rules, tuning, why)) {
                 std::cerr << "--controls: " << why << "; " << MagicPortals::Controls::FlagUsage() << "\n";
                 return EXIT_FAILURE;

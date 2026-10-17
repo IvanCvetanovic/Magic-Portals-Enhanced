@@ -74,7 +74,6 @@ constexpr const char* kNoMusicFlag = "no_music";
 // (planning steps 181 and 182). Whoever greps a capture's log for `controls: modern` (the design's N1)
 // finds the attach line (which style, and why) and, once per level start, the rectangles' line
 // (kControlsModernRectsPrefix): both begin with the words the grep names.
-constexpr const char* kControlsFile = "/controls.json";
 constexpr const char* kControlsClassicFlag = "controls: classic (--controls classic)";
 constexpr const char* kControlsModernFlag = "controls: modern (--controls modern)";
 constexpr const char* kControlsClassicDefault = "controls: classic (the shipped default)";
@@ -574,7 +573,7 @@ void MagicPortalsLayer::resolveControls() {
     // A run that can play modern needs the table and the flag's keys on the table's grids. Either
     // failing costs the modern controls and the run plays classic, with one error that says why.
     std::string why;
-    const std::string file = m_paths.portData + kControlsFile;
+    const std::string file = m_paths.portData + Controls::kDataFile;
     if (!Controls::LoadRules(file, m_controlsRules, why)) {
         // `why` names the file and the key, as LoadRules says them.
         m_controlsError = "modern controls are unavailable: " + why;
@@ -1301,6 +1300,10 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_pressedLook.reset();
     m_levelSawPress = false;
     m_swallowUntilUp = false;
+    // And what the layer remembers of the fingers (planning step 191, round R): a finger still down across the load is not one the new level
+    // saw go down, whatever the ticks between said - the memory would let a second finger that rests on a control inherit the controls
+    // with a press the level never saw.
+    forgetFingers();
     // And the camera's record of it: a touch still held into the next level is
     // taken up there where it is, and moves nothing until it moves.
     m_cameraTouch = Camera::TouchRecord{};
@@ -9504,18 +9507,24 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // real cursor rests - so a scheduled tap reaches each of the three exactly
     // as a real press at the same point does. Reading it twice would press and
     // release a scheduled tap inside one tick.
-    Touch touch = touchThisTick(registry);
+    Touch touch = levelTouchThisTick(registry);
+    // TWO FINGERS (planning step 191, CTL-14): the touch above is the WORLD's finger - the camera's pan, a handle, a lift, a help block, the shot.
+    // The controls are worked by `ctl`: this very touch while one finger is down or the controls and the world share a finger, and another
+    // finger's when one is held on a control and another is in the world (`split`). Nothing below differs from before while `split` is false.
+    const Touch ctl = m_controlsTouch;
+    const bool split = m_split;
     // THE SWALLOW (planning step 183; modern claims only: the classic discs are small and flush in the corners, and the test variant with the
     // classic claims must stay the classic simulation to the last tick). Read straight after the touch, before anything below can return.
     // A touch the level saw go down is the level's; one that is held and whose press the level never saw - the pause's Resume, a popup's
     // close, an end screen's button, a finger still down across a load: every one of them clears `m_levelSawPress` - is swallowed until it
     // is up or off the game, so that a press that did something else cannot walk him from under whatever it was on.
     const bool modernClaims = playsModern() && !claimsClassic();
+    // It follows the finger that works the controls: another finger's press must not end the swallow of this one, nor be swallowed by it.
     if (modernClaims) {
-        if (!touch.over || !touch.held) {
+        if (!ctl.over || !ctl.held) {
             m_levelSawPress = false;
             m_swallowUntilUp = false;
-        } else if (touch.pressed) {
+        } else if (ctl.pressed) {
             m_levelSawPress = true;
             m_swallowUntilUp = false;
         } else if (!m_levelSawPress) {
@@ -9600,24 +9609,34 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     // (or off the game) ends it. The data can ask for the press instead (controls.json corner.act_on); the test variant
     // with the classic claims acts on the press as classic does.
     const bool actsOnRelease = playsModern() && !claimsClassic() && m_controlsRules.cornerActOn == Controls::ActOn::Release;
-    const std::optional<Control> began = touch.pressed ? std::nullopt : m_pressedControl;
-    if (touch.pressed || !touch.held || !touch.over) m_pressedControl.reset();
+    // The controls' own touch: the world's while it is the same finger (then m_handTouch is its record of the release, as ever), else the
+    // controls finger's, with a record of its own because m_handTouch follows the other.
+    Portals::TouchRelease ctlRelease;
+    if (split) {
+        ctlRelease = Portals::TrackTouch(m_controlsTrack, ctl.pressed, ctl.held, ctl.released, ctl.over, ctl.atView, ctl.atPx);
+    } else {
+        m_controlsTrack = Portals::TouchTrack{};
+    }
+    const Touch controlsNow = split ? ctl : touch;
+    const Portals::TouchRelease& controlsRelease = split ? ctlRelease : handRelease;
+    const std::optional<Control> began = controlsNow.pressed ? std::nullopt : m_pressedControl;
+    if (controlsNow.pressed || !controlsNow.held || !controlsNow.over) m_pressedControl.reset();
     // On the tick a touch comes up every reader takes the last point it was HELD at (above). A press that went down on a
     // corner button spent the shot's record, so the release tick's own point is the raw one: read where it was last held.
-    Touch claimTouch = touch;
-    if (actsOnRelease && handRelease.released) {
-        claimTouch.atView = handRelease.atView;
-        claimTouch.atPx = handRelease.atPx;
+    Touch claimTouch = controlsNow;
+    if (actsOnRelease && controlsRelease.released) {
+        claimTouch.atView = controlsRelease.atView;
+        claimTouch.atPx = controlsRelease.atPx;
     }
     const ControlButton* under = controlUnderPointer(claimTouch);
-    const bool held = touch.held;
-    const bool pressed = touch.pressed;
+    const bool held = controlsNow.held;
+    const bool pressed = controlsNow.pressed;
 
     // A HELP BLOCK takes a touch that goes down on it - no portal, no control -
     // and opens its popup when that touch comes up; the popup stops the level on
     // this tick, as the pause control does. The controls are asked first: they
     // are GameLayer's buttons, which the block's disabled touches do not reach.
-    if (under == nullptr && helpBlockInput(registry, touch)) return direction;
+    if (!split && under == nullptr && helpBlockInput(registry, touch)) return direction;
 
     if (under != nullptr) {
         // Read before the switch: a restart unloads the controls `under` points into.
@@ -9628,7 +9647,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         bool act = pressed;
         if (actsOnRelease) {
             if (isCorner && pressed && held) m_pressedControl = kind;
-            act = isCorner && handRelease.released && (pressed || began == kind);
+            act = isCorner && controlsRelease.released && (pressed || began == kind);
         }
         switch (kind) {
         // HELD, not tapped: a walk button is leaned on, and IsDown is what a
@@ -9683,9 +9702,16 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // then on the button and fires nothing (PortalManager::isValidPoint). Clear
         // hides itself as it clears, so without this its touch would come up on
         // nothing and fire into the corner.
-        if (pressed && kind != Control::Left && kind != Control::Right) m_shotTouch = Portals::TouchTrack{};
-        return direction;
+        if (!split) {
+            if (pressed && kind != Control::Left && kind != Control::Right) m_shotTouch = Portals::TouchTrack{};
+            return direction;
+        }
+        // TWO FINGERS: this one worked a control and the world's goes on below, with its own record (m_shotTouch is not this finger's to
+        // spend). Not after a restart or the pause just worked: the first has replaced the level and the second has stopped it.
+        if (isCorner && act && kind != Control::Clear) return direction;
     }
+    // The world's help block, with the controls worked.
+    if (split && helpBlockInput(registry, touch)) return direction;
 
     // A pointer over a panel or another window is not the game's - and a tap a
     // capture scheduled owns the pointer whatever the real cursor is doing, which
@@ -9753,7 +9779,8 @@ void MagicPortalsLayer::reportSprites(entt::registry& registry) {
     const glm::vec2 viewMax(camera.position.x + halfWidth, camera.position.y + halfHeight);
 
     // THE WALK is the per-frame cost: a pass over every sprite for lines that are only read in a developer's log (planning step 190, PA-12).
-    // A person's run skips it (Paths::spriteReport); G's full dump still asks for it, and the dropped-draw alarm below is kept either way.
+    // A run whose engine.json table (sprite_report) or --sprite-report says off skips it (Paths::spriteReport; the shipped table says on, for every run);
+    // G's full dump still asks for it, and the dropped-draw alarm below is kept either way.
     const bool walk = m_paths.spriteReport || m_dumpRequested;
     if (walk) m_onScreenLast.resize(m_sprites.size(), char{0});
 
@@ -13026,6 +13053,7 @@ void MagicPortalsLayer::openPause(entt::registry& registry) {
     m_pressedLook.reset();
     m_levelSawPress = false;
     m_swallowUntilUp = false;
+    forgetFingers();
     // And so is the camera's record of it, which the pause does not follow: a touch
     // still held when the level resumes is taken up there.
     m_cameraTouch = Camera::TouchRecord{};
@@ -13133,6 +13161,7 @@ void MagicPortalsLayer::ScheduleDevTap(int tick, std::optional<glm::dvec2> viewF
     tap.releaseTick = std::max(releaseTick, tick + 1);
     tap.onHelpBlock = !viewFraction.has_value();
     tap.viewFraction = viewFraction.value_or(glm::dvec2(0.0));
+    tap.serial = m_devSerial++;
     m_devTaps.push_back(tap);
 }
 
@@ -13142,12 +13171,83 @@ void MagicPortalsLayer::ScheduleDevDrag(int tick, const glm::dvec2& from, const 
     tap.releaseTick = std::max(releaseTick, tick + 1);
     tap.viewFraction = from;
     tap.toFraction = to;
+    tap.serial = m_devSerial++;
     m_devTaps.push_back(tap);
 }
 
-MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& registry) {
+MagicPortalsLayer::DevTapStep MagicPortalsLayer::stepDevTap(DevTap& tap, const glm::dvec2& view, const glm::dvec2& viewportPx,
+                                                            Touch& touch, const AdmitTap& admit) {
+    if (tap.tick > m_ticks) return DevTapStep::NotDue;
+    glm::dvec2 at = tap.viewFraction * view;
+    if (tap.toFraction && tap.pressed) {
+        // A drag, at an even pace from where it went down to where it is let go.
+        const double span = static_cast<double>(std::max(tap.releaseTick - tap.pressedTick, 1));
+        const double along = std::clamp(static_cast<double>(m_ticks - tap.pressedTick) / span, 0.0, 1.0);
+        at = (tap.viewFraction + (*tap.toFraction - tap.viewFraction) * along) * view;
+    }
+    if (tap.onHelpBlock) {
+        // Only a block the view shows: a player cannot touch one off the
+        // screen. A tap with none is dropped, so it does not hold the pointer
+        // for the rest of the run.
+        const std::vector<Hud::Rect> rects = HelpBlockRects();
+        if (!rects.empty()) at = rects.front().Centre();
+        if (rects.empty() || at.x < 0.0 || at.y < 0.0 || at.x > view.x || at.y > view.y) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "DEV tap on tick " << m_ticks
+                                                 << " dropped: no help block on the view" << std::endl;
+            return DevTapStep::Dropped;
+        }
+    }
+    touch.over = true;
+    touch.atView = at;
+    touch.atPx = at / view * viewportPx;
+    // A tap that would go down on a control or in the world while another finger holds that place waits for it to be free, as a scheduled tap
+    // always has (planning step 191, round R): only taps on different roles overlap. Nothing of the tap is touched, so it goes down later as if
+    // it had been asked for then - its release a tick after its press, a drag its full length.
+    if (!tap.pressed && admit && !admit(touch)) return DevTapStep::Waits;
+    if (!tap.pressed) {
+        tap.pressed = true;
+        tap.viewFraction = at / view;
+        tap.onHelpBlock = false; // released where it went down
+        touch.pressed = true;
+        touch.held = true;
+        // Its release is counted from the tick it went down on, which may be
+        // later than the one it asked for; a drag keeps its length.
+        const int late = std::max(m_ticks - tap.tick, 0);
+        tap.releaseTick = std::max(tap.releaseTick + (tap.toFraction ? late : 0), m_ticks + 1);
+        tap.pressedTick = m_ticks;
+        SUPERSONIC_LOG_INFO("Magic Portals") << "DEV tap down on tick " << m_ticks << " at (" << at.x << ", "
+                                             << at.y << ") units" << std::endl;
+        return DevTapStep::Pressed;
+    }
+    if (m_ticks < tap.releaseTick) {
+        // Held where it went down, until its release tick.
+        touch.held = true;
+        return DevTapStep::Held;
+    }
+    touch.released = true;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "DEV tap up on tick " << m_ticks << std::endl;
+    return DevTapStep::Released;
+}
+
+MagicPortalsLayer::Touch MagicPortalsLayer::realPointerThisTick(const entt::registry& registry) {
     using Supersonic::Input;
     Touch touch;
+    const glm::dvec2 view = ViewPx();
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    if (viewport == nullptr || !viewport->pointerOverGame) return touch;
+    const glm::vec2 size = viewport->Size();
+    if (size.x <= 0.0f || size.y <= 0.0f) return touch;
+    const glm::vec2 local = viewport->ToLocal(Input::MousePosition());
+    touch.over = true;
+    touch.atPx = glm::dvec2(local);
+    touch.atView = glm::dvec2(local / size) * view;
+    touch.pressed = Input::TickWasPressed(kTap);
+    touch.released = Input::TickWasReleased(kTap);
+    touch.held = Input::IsDown(kTap);
+    return touch;
+}
+
+MagicPortalsLayer::Touch MagicPortalsLayer::pointerThisTick(const entt::registry& registry) {
     const glm::dvec2 view = ViewPx();
     const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
     // A scheduled tap's place in the VIEWPORT's pixels, which is what a real
@@ -13161,67 +13261,285 @@ MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& 
     // DEV ONLY first: a scheduled tap is pressed on its tick and released on the
     // next, where it stood.
     for (auto it = m_devTaps.begin(); it != m_devTaps.end();) {
-        if (it->tick > m_ticks) {
+        Touch touch;
+        const DevTapStep step = stepDevTap(*it, view, viewportPx, touch);
+        if (step == DevTapStep::NotDue) {
             ++it;
             continue;
         }
-        glm::dvec2 at = it->viewFraction * view;
-        if (it->toFraction && it->pressed) {
-            // A drag, at an even pace from where it went down to where it is let go.
-            const double span = static_cast<double>(std::max(it->releaseTick - it->pressedTick, 1));
-            const double along = std::clamp(static_cast<double>(m_ticks - it->pressedTick) / span, 0.0, 1.0);
-            at = (it->viewFraction + (*it->toFraction - it->viewFraction) * along) * view;
+        if (step == DevTapStep::Dropped) {
+            it = m_devTaps.erase(it);
+            continue;
         }
-        if (it->onHelpBlock) {
-            // Only a block the view shows: a player cannot touch one off the
-            // screen. A tap with none is dropped, so it does not hold the pointer
-            // for the rest of the run.
-            const std::vector<Hud::Rect> rects = HelpBlockRects();
-            if (!rects.empty()) at = rects.front().Centre();
-            if (rects.empty() || at.x < 0.0 || at.y < 0.0 || at.x > view.x || at.y > view.y) {
-                SUPERSONIC_LOG_WARN("Magic Portals") << "DEV tap on tick " << m_ticks
-                                                     << " dropped: no help block on the view" << std::endl;
+        if (step == DevTapStep::Released) m_devTaps.erase(it);
+        return touch;
+    }
+    return realPointerThisTick(registry);
+}
+
+bool MagicPortalsLayer::twoContactsOn() const {
+    // The modern controls only, and not the test variant that claims with the classic rules (it must stay the classic simulation to the last tick).
+    // The flag's `contacts=` beats the data, so a capture can read one finger on a run the data would read two on.
+    return playsModern() && !claimsClassic() && m_paths.controls.flag.twoContacts.value_or(m_controlsRules.twoContacts);
+}
+
+MagicPortalsLayer::Touch MagicPortalsLayer::touchThisTick(const entt::registry& registry) {
+    // ONE finger. Every screen but a level's own input reads it: a menu, the loading screen and a popup have no controls for a second finger
+    // to work, and a scheduled tap there is spent one at a time and in order, as they always were. It also forgets the fingers, so that a level
+    // that takes the tick again after one of these finds a gap and swallows a finger still down (planning step 191, round R: these screens used
+    // to take the two-finger reading, which dropped the press of a tap that touched another and left a stale memory behind a popup).
+    m_split = false;
+    m_fingers = FingerMemory{};
+    m_controlsTouch = pointerThisTick(registry);
+    return m_controlsTouch;
+}
+
+MagicPortalsLayer::Touch MagicPortalsLayer::levelTouchThisTick(const entt::registry& registry) {
+    // One finger: the classic style, the switch off, or the test variant that claims classic. Today's code, and nothing of the below.
+    if (!twoContactsOn()) return touchThisTick(registry);
+    return fingersThisTick(registry);
+}
+
+void MagicPortalsLayer::resetWorldRecords() {
+    // Every record of "the touch" that the world's finger feeds: they were fed by a finger that is not the one feeding them now, and a record
+    // left standing would let the new finger's release finish what the old one began (a shot aimed from the old finger's press, a pan that
+    // jumps by the distance between the two fingers). The menus' own records are not here: a menu reads one finger and never takes this path.
+    m_shotTouch = Portals::TouchTrack{};
+    m_handTouch = Portals::TouchTrack{};
+    m_cameraTouch = Camera::TouchRecord{};
+    m_handleHitPx.reset();
+    m_helpTouch = HelpTouch{};
+}
+
+void MagicPortalsLayer::forgetFingers() {
+    // What was down, and the controls finger's release record, are forgotten by a load and by the pause: a finger still down when the level
+    // next reads the fingers is one it did not see go down (swallowed at the controls, starts no shot), exactly as the one-finger rule has it.
+    m_fingers = FingerMemory{};
+    m_controlsTrack = Portals::TouchTrack{};
+    m_split = false;
+}
+
+void MagicPortalsLayer::engineFingers(const entt::registry& registry, bool gap, std::vector<Finger>& out) {
+    using Supersonic::Input;
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    if (viewport == nullptr || !viewport->pointerOverGame) return;
+    const glm::vec2 size = viewport->Size();
+    if (size.x <= 0.0f || size.y <= 0.0f) return;
+    const glm::dvec2 view = ViewPx();
+    // Whether this layer remembers the finger, and whether its press is still owed (it was found down and the roles could not take it).
+    const auto wasDown = [this](int id, bool& owed) {
+        for (const Finger& finger : m_fingers.down) {
+            if (finger.id != id) continue;
+            owed = finger.owed;
+            return true;
+        }
+        return false;
+    };
+    // The pointer is one of the engine's contacts (the mouse is contact 0 on a desktop; the Android backend makes the first finger the mouse),
+    // and it is read by the code that always read it, so it is not read twice: the contact that stands where the mouse stands, while the
+    // pointer is in play. Every other contact is a finger of its own.
+    bool pointerStillToSkip = Input::IsDown(kTap) || Input::TickWasPressed(kTap) || Input::TickWasReleased(kTap);
+    const glm::vec2 mouse = Input::MousePosition();
+    std::vector<int> listed;
+    const int count = Input::ContactCount();
+    for (int index = 0; index < count; ++index) {
+        const Supersonic::Contact contact = Input::GetContact(index);
+        if (contact.id < 0) continue;
+        if (pointerStillToSkip && contact.position == mouse) {
+            pointerStillToSkip = false;
+            continue;
+        }
+        // The engine reports a lifted contact for the frame it lifted in, and a frame can run several ticks: a lift is this layer's once, the
+        // tick it finds the finger still down in its own memory. A finger it never saw down is not a release.
+        bool owed = false;
+        const bool remembered = wasDown(contact.id, owed);
+        const bool known = remembered && !owed;
+        const bool lifted = contact.phase == Supersonic::ContactPhase::Ended;
+        if (lifted && !remembered) continue;
+        const glm::vec2 local = viewport->ToLocal(contact.position);
+        Touch touch;
+        touch.over = true;
+        touch.atPx = glm::dvec2(local);
+        touch.atView = glm::dvec2(local / size) * view;
+        // Its press is the tick this layer first finds it down - not the engine's Began, which a frame with no tick would let pass - and
+        // a finger found already down after a gap (a pause, a load) was not seen to go down. A press that was OWED last tick is delivered now
+        // (and its release with it, if the finger has lifted since: a tap shorter than the tick it waited).
+        touch.pressed = !known && !gap;
+        touch.held = !lifted;
+        touch.released = lifted;
+        out.push_back(Finger{contact.id, touch});
+        listed.push_back(contact.id);
+    }
+    // A finger that was down and is no longer listed has lifted between two ticks: it comes up where it was last seen.
+    for (const Finger& was : m_fingers.down) {
+        if (was.id < 0 || was.id >= kDevFingerBase) continue;
+        if (std::find(listed.begin(), listed.end(), was.id) != listed.end()) continue;
+        Touch touch = was.touch;
+        touch.pressed = was.owed; // a press still owed is delivered with the release: the tap happens now
+        touch.held = false;
+        touch.released = true;
+        out.push_back(Finger{was.id, touch});
+    }
+}
+
+MagicPortalsLayer::Touch MagicPortalsLayer::fingersThisTick(const entt::registry& registry) {
+    const glm::dvec2 view = ViewPx();
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    const glm::dvec2 viewportPx = viewport != nullptr && viewport->Size().x > 0.0f && viewport->Size().y > 0.0f
+                                      ? glm::dvec2(viewport->Size())
+                                      : glm::dvec2(1280.0, 720.0);
+    // A tick that did not step the fingers - a pause, a load, a menu that reads nothing - is a gap: what was down is forgotten, so a finger
+    // that is still down after it is one this layer did not see go down (it is swallowed at the controls and starts no shot).
+    const bool gap = m_ticks != m_fingers.tick + 1;
+    const bool wasSplit = !gap && m_split;
+    if (gap) {
+        m_fingers = FingerMemory{};
+        m_controlsTrack = Portals::TouchTrack{};
+    }
+    m_fingers.tick = m_ticks;
+
+    // THE FINGERS, in order: the scheduled taps, those already down first and then those going down now (a scheduled tap owns the pointer on
+    // its ticks, so while one is in play the real pointer and the engine's contacts are not read), else the real pointer and then the engine's
+    // other contacts.
+    std::vector<Finger> fingers;
+    Touch pointer;
+    // A tap going down now goes down only if it can hold a role beside the fingers already listed (the roles of last tick kept): else it waits
+    // for the finger that holds that place to be gone - two taps due on one tick, or one due on the tick another comes up, go down in order
+    // as they always did, and only taps on a control and in the world overlap. A first listed finger is always admitted.
+    const AdmitTap admit = [this, &fingers](const Touch& where) {
+        std::vector<Controls::LiveContact> live;
+        live.reserve(fingers.size() + 1);
+        for (const Finger& finger : fingers) live.push_back(Controls::LiveContact{finger.id, controlUnderPointer(finger.touch) != nullptr});
+        constexpr int kCandidate = kDevFingerBase - 1;
+        live.push_back(Controls::LiveContact{kCandidate, controlUnderPointer(where) != nullptr});
+        const Controls::ContactRoles would = Controls::AssignContacts(live, m_fingers.roles);
+        return would.controls == kCandidate || would.world == kCandidate;
+    };
+    for (const bool goingDown : {false, true}) {
+        for (auto it = m_devTaps.begin(); it != m_devTaps.end();) {
+            if (it->pressed == goingDown) {
+                ++it;
+                continue;
+            }
+            Touch touch;
+            const DevTapStep step = stepDevTap(*it, view, viewportPx, touch, goingDown ? admit : AdmitTap{});
+            if (step == DevTapStep::NotDue || step == DevTapStep::Waits) {
+                ++it;
+                continue;
+            }
+            if (step == DevTapStep::Dropped) {
                 it = m_devTaps.erase(it);
                 continue;
             }
+            fingers.push_back(Finger{kDevFingerBase + it->serial, touch});
+            it = step == DevTapStep::Released ? m_devTaps.erase(it) : std::next(it);
         }
-        touch.over = true;
-        touch.atView = at;
-        touch.atPx = at / view * viewportPx;
-        if (!it->pressed) {
-            it->pressed = true;
-            it->viewFraction = at / view;
-            it->onHelpBlock = false; // released where it went down
-            touch.pressed = true;
-            touch.held = true;
-            // Its release is counted from the tick it went down on, which may be
-            // later than the one it asked for; a drag keeps its length.
-            const int late = std::max(m_ticks - it->tick, 0);
-            it->releaseTick = std::max(it->releaseTick + (it->toFraction ? late : 0), m_ticks + 1);
-            it->pressedTick = m_ticks;
-            SUPERSONIC_LOG_INFO("Magic Portals") << "DEV tap down on tick " << m_ticks << " at (" << at.x << ", "
-                                                 << at.y << ") units" << std::endl;
-        } else if (m_ticks < it->releaseTick) {
-            // Held where it went down, until its release tick.
-            touch.held = true;
-        } else {
-            touch.released = true;
-            SUPERSONIC_LOG_INFO("Magic Portals") << "DEV tap up on tick " << m_ticks << std::endl;
-            m_devTaps.erase(it);
-        }
-        return touch;
     }
-    if (viewport == nullptr || !viewport->pointerOverGame) return touch;
-    const glm::vec2 size = viewport->Size();
-    if (size.x <= 0.0f || size.y <= 0.0f) return touch;
-    const glm::vec2 local = viewport->ToLocal(Input::MousePosition());
-    touch.over = true;
-    touch.atPx = glm::dvec2(local);
-    touch.atView = glm::dvec2(local / size) * view;
-    touch.pressed = Input::TickWasPressed(kTap);
-    touch.released = Input::TickWasReleased(kTap);
-    touch.held = Input::IsDown(kTap);
-    return touch;
+    if (!fingers.empty()) {
+        pointer = fingers.front().touch;
+    } else {
+        pointer = realPointerThisTick(registry);
+        // The pointer's press edge is latched and spent by the tick it was owed on: a press the roles could not take is delivered here, once.
+        bool pointerOwed = false;
+        for (const Finger& was : m_fingers.down) pointerOwed = pointerOwed || (was.id == kPointerFinger && was.owed);
+        if (pointerOwed && (pointer.held || pointer.released)) pointer.pressed = true;
+        if (pointer.pressed || pointer.held || pointer.released) fingers.push_back(Finger{kPointerFinger, pointer});
+        engineFingers(registry, gap, fingers);
+    }
+
+    // THE ROLES. A finger is on a control by the modern claim, at its own place this tick.
+    std::vector<Controls::LiveContact> live;
+    live.reserve(fingers.size());
+    for (const Finger& finger : fingers) live.push_back(Controls::LiveContact{finger.id, controlUnderPointer(finger.touch) != nullptr});
+    const bool multi = fingers.size() >= 2;
+    const Controls::ContactRoles roles = Controls::AssignContacts(live, m_fingers.roles);
+    const auto find = [&fingers](int id) -> const Finger* {
+        for (const Finger& finger : fingers) {
+            if (finger.id == id) return &finger;
+        }
+        return nullptr;
+    };
+    // A finger that went down this tick and finds the role it would take held by a finger that COMES UP this very tick: the holder's release is
+    // this tick's to read, so the newcomer's press cannot be given a role now. It is not seen to go down: it is remembered as owing its press,
+    // which is delivered on the next tick it is read - when it is alone, or the holder is gone. (A finger that goes down while the role is held
+    // by one that STAYS down is another matter: it is ignored whole, as the design has it, and owes nothing. A scheduled tap never owes: it
+    // waits, in stepDevTap, and goes down when it can.)
+    std::vector<int> owedIds;
+    if (multi) {
+        for (const Finger& finger : fingers) {
+            if (!finger.touch.pressed || !finger.touch.held || finger.id >= kDevFingerBase) continue;
+            if (finger.id == roles.controls || finger.id == roles.world) continue;
+            const Finger* holder = find(controlUnderPointer(finger.touch) != nullptr ? roles.controls : roles.world);
+            if (holder != nullptr && holder->touch.released) owedIds.push_back(finger.id);
+        }
+    }
+    const auto owes = [&owedIds](int id) { return std::find(owedIds.begin(), owedIds.end(), id) != owedIds.end(); };
+
+    Touch world;
+    Touch controls;
+    int controlsId = Controls::kNoContact;
+    if (!multi) {
+        // With one finger down (or none) both readings are that finger, exactly as the one-pointer layer read it - a hover included.
+        world = fingers.empty() ? pointer : fingers.front().touch;
+        controls = world;
+        controlsId = fingers.empty() ? Controls::kNoContact : fingers.front().id;
+        m_split = false;
+    } else {
+        const Finger* worldFinger = find(roles.world);
+        const Finger* controlsFinger = find(roles.controls);
+        // A world with no finger is no touch at all; a controls reading with no controls finger is the world's, which is not on a control.
+        world = worldFinger != nullptr ? worldFinger->touch : Touch{};
+        controls = controlsFinger != nullptr ? controlsFinger->touch : world;
+        controlsId = controlsFinger != nullptr ? roles.controls : roles.world;
+        m_split = controlsFinger != nullptr && roles.controls != roles.world;
+    }
+
+    // WHOSE PRESS THE LEVEL SAW: per finger, for the swallow of the finger that works the controls.
+    std::vector<int> sawPress;
+    const auto sawBefore = [this](int id) {
+        return std::find(m_fingers.sawPress.begin(), m_fingers.sawPress.end(), id) != m_fingers.sawPress.end();
+    };
+    for (const Finger& finger : fingers) {
+        const bool known = std::any_of(m_fingers.down.begin(), m_fingers.down.end(),
+                                       [&finger](const Finger& d) { return d.id == finger.id && !d.owed; });
+        if (known ? sawBefore(finger.id) : finger.touch.pressed) sawPress.push_back(finger.id);
+    }
+
+    // THE FEEDS CHANGE. Only while two fingers are down or were on the last tick: with one, no record is ever reset and the layer reads it as ever.
+    if (multi || m_fingers.multi) {
+        // The controls finger's record of its press (the corner buttons act on the release inside the button it went down on) crosses a change of
+        // reading with it: while it is the only finger, m_handTouch is its record; while another is the world's, m_controlsTrack is.
+        if (m_split && !wasSplit && roles.controls != Controls::kNoContact && roles.controls == m_fingers.roles.controls) m_controlsTrack = m_handTouch;
+        // The world's records follow the world finger and start over when it is another.
+        if (roles.world != m_fingers.roles.world) resetWorldRecords();
+        if (!m_split && wasSplit && roles.world != Controls::kNoContact && roles.world == m_fingers.roles.controls) m_handTouch = m_controlsTrack;
+        // The swallow, the pressed corner button and the controls' release record follow the finger that works the controls.
+        if (controlsId != m_fingers.feed) {
+            m_levelSawPress = std::find(sawPress.begin(), sawPress.end(), controlsId) != sawPress.end();
+            m_swallowUntilUp = false;
+            m_pressedControl.reset();
+            m_controlsTrack = Portals::TouchTrack{};
+        }
+    }
+    if (multi && roles != m_fingers.roles) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << "fingers on tick " << m_ticks << ": " << fingers.size() << " down, controls finger "
+                                             << roles.controls << ", world finger " << roles.world << std::endl;
+    }
+
+    m_fingers.down.clear();
+    m_fingers.sawPress.clear();
+    for (const Finger& finger : fingers) {
+        if (!finger.touch.held) continue;
+        Finger kept = finger;
+        kept.owed = owes(finger.id);
+        m_fingers.down.push_back(kept);
+        if (!kept.owed && std::find(sawPress.begin(), sawPress.end(), finger.id) != sawPress.end()) m_fingers.sawPress.push_back(finger.id);
+    }
+    m_fingers.roles = roles;
+    m_fingers.feed = controlsId;
+    m_fingers.multi = multi;
+    m_controlsTouch = controls;
+    return world;
 }
 
 bool MagicPortalsLayer::helpBlockInput(entt::registry& registry, const Touch& touch) {
@@ -13300,6 +13618,7 @@ void MagicPortalsLayer::openPopup(entt::registry& registry, const Popup::Class& 
     m_pressedLook.reset();
     m_levelSawPress = false;
     m_swallowUntilUp = false;
+    forgetFingers();
     // Popup::Popup pauses g_timeManager (instructions 147..166).
     freezeWorld(registry);
     layOutControls();

@@ -283,7 +283,10 @@ says how.
       provenance, not in code
 - [ ] A port change has its Step in `docs/planning/2026-09-11-magic-portals-remaster.md`,
       with its gates
-- [ ] Input goes through the port's one pointer path: the mouse stands in for the
-      original's touch (README, *Run it*)
+- [ ] Input goes through the layer's pointer path: the mouse is contact 0 and stands in
+      for the original's touch; a second contact reaches the controls and the world
+      through that one path in the layer, and with one contact nothing differs from the
+      one-pointer game. Real multi-touch is replay-tested only: no touch build exists
+      (README, *Run it*)
 - [ ] Any new format knowledge is written into `docs/ethanon-formats.md` **with citations**
 - [ ] `DEVLOG.md` entry appended

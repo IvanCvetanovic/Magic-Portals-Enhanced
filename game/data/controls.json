@@ -74,11 +74,11 @@
 
     "presets": {
       "_source": [
-        "The three looks (design 1.1, Q3). size is the arrow's scale on Magic Rampage's grid; margin_bottom_px is the pair's margin to the",
-        "bottom edge. Chosen FROM THE CENSUS (design 1.9): at the default the pair's top must sit below the character's row (206 units).",
-        "uniform 0.7 / 44 px: the owner's 'same margin' literally, pair top 208.50, the recommended default.",
-        "balanced 0.8 / 34 px: a larger arrow, 10 px under the margin at the bottom, pair top 207.50.",
-        "mr 1.0 / 11 px: Magic Rampage's own arrow size (spec 42 l.74-76), pair top 206.58."
+        "The three looks (design 1.1, Q3). size is the arrow's scale on Magic Rampage's grid; margin_bottom_px is the arrows' margin to the",
+        "bottom edge. Chosen FROM THE CENSUS (design 1.9): at the default the arrows' top must sit below the character's row (206 units).",
+        "uniform 0.7 / 44 px: the owner's 'same margin' literally, arrows' top 208.50, the recommended default.",
+        "balanced 0.8 / 34 px: a larger arrow, 10 px under the margin at the bottom, arrows' top 207.50.",
+        "mr 1.0 / 11 px: Magic Rampage's own arrow size (spec 42 l.74-76), arrows' top 206.58."
       ],
       "_guess": true,
       "uniform": {
@@ -141,6 +141,18 @@
     ],
     "_guess": true,
     "act_on": "release"
+  },
+
+  "input": {
+    "_source": [
+      "two_contacts true: OWNER. The 2026-10-15 answer to Q0 was BOTH desktop and touch, and on 2026-10-16 he answered yes to amending the",
+      "one-pointer rule (planning step 191, CTL-14): under the modern controls a second finger reaches the controls and the world through the",
+      "layer's one pointer path, so a thumb held on an arrow keeps walking while another finger shoots, aims or pans. The classic style never",
+      "reads this key and stays one pointer; with one finger down nothing differs from before. A desktop mouse is one finger, so on a",
+      "desktop this changes nothing a player can see; a second finger exists only on a touch device (the engine's Android backend) or in a",
+      "replayed tick, and no touch build exists yet. `--controls modern,contacts=one|two` overrides it for a run."
+    ],
+    "two_contacts": true
   },
 
   "size": {

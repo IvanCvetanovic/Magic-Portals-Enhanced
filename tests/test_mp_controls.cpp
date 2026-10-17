@@ -2543,6 +2543,12 @@ void WhatIsRefused() {
         {{"hit", "grow_px", "pause"}, text("x"), false},
         {{"corner", "act_on"}, text("hold"), false},
         {{"corner", "act_on"}, text("press"), true},
+        // The switch for a second finger (planning step 191): a true or a false, nothing else, and the block has to be there.
+        {{"input", "two_contacts"}, Json::Value(false), true},
+        {{"input", "two_contacts"}, Json::Value(true), true},
+        {{"input", "two_contacts"}, text("true"), false},
+        {{"input", "two_contacts"}, number(1.0), false},
+        {{"input"}, number(1.0), false},
         {{"size", "step"}, number(0.3), false},
         {{"size", "step"}, number(0.0), false},
         {{"size", "max"}, number(1.45), false},
@@ -2623,6 +2629,9 @@ void WhatIsRefused() {
         CHECK(LoadScratch("m1.json", Write(Edit(root, Path{"layout", "margin_px", "side"}, 0, number(40.0))), r, why) && r.marginSidePx == 40.0);
         CHECK(LoadScratch("m2.json", Write(Edit(root, Path{"hit", "edge_reach_px"}, 0, number(0.0))), r, why) && r.hit.edgeReachPx == 0.0);
         CHECK(LoadScratch("m3.json", Write(Edit(root, Path{"hit", "grow_px", "walk_left"}, 0, number(16.0))), r, why) && r.hit.growPx[0] == 16.0 && r.hit.growPx[1] == 0.0);
+        // The shipped switch is on (the owner's answers of 2026-10-15 and 2026-10-16), and the file is read, not copied: false is false.
+        CHECK_MSG(LoadScratch("m4.json", Write(root), r, why) && r.twoContacts, "the shipped data reads two fingers: " + why);
+        CHECK_MSG(LoadScratch("m5.json", Write(Edit(root, Path{"input", "two_contacts"}, 0, Json::Value(false))), r, why) && !r.twoContacts, "and false is read as false: " + why);
     }
 
     // Not a document: nothing there, not an object, not JSON.
@@ -2874,8 +2883,8 @@ void TheFlagGrammar() {
           tuning.IsDefault(rules) && tuning.ToJson(rules) == "{}");
     CHECK(Controls::Tuning::FromFlag(Controls::FlagItems{}, rules, tuning, error) && !tuning.arrows && tuning.ArrowsIn(rules) == Controls::Arrows::Split);
     // The tuning FromFlag makes carries the flag's own keys and nothing else: it takes no saved tuning to merge with. That the flag REPLACES what was
-    // saved, rather than merging with it, is the caller's, and the step that opens the store (CTL-10) pins it; what is held here is that one key gives
-    // exactly one key.
+    // saved, rather than merging with it, is the caller's, and the layer's case pins it (planning step 187, AFlagTuningReplacesNeverMergesAndWritesNothing); what is
+    // held here is that one key gives exactly one key.
     Controls::FlagItems onlyOpacity;
     onlyOpacity.opacity = 0.6;
     Controls::Tuning fromFlag;
@@ -3368,7 +3377,7 @@ void ArtHalfDressedNeedsAMagicRampagePictureInAMix() {
 struct StoreClean {
     static void Run() {
         std::error_code ec;
-        const std::filesystem::path root = std::filesystem::temp_directory_path() / "supersonic-test-mp-controls";
+        const std::filesystem::path root = ScratchDir(); // the one name the suite's scratch has (it was spelt twice)
         std::filesystem::remove_all(root / "store", ec);
         std::filesystem::remove(root, ec); // only if nothing else of the suite is in it
     }
@@ -3442,7 +3451,7 @@ void ControlsStoreRoundTrips() {
     Controls::Store third;
     CHECK(third.Open(dir.string(), rules, error) && third.Mode() == std::optional<Controls::Style>(Controls::Style::Classic));
 
-    // A size, an opacity and a move already in the file are KEPT and written back unchanged beside the new mode (CTL-10 edits them, not this).
+    // A size, an opacity and a move already in the file are KEPT and written back unchanged beside the new mode (this case is about the mode; the tuning has its own, planning step 187).
     const std::string tuned = "{\"version\":1,\"controls\":{\"mode\":\"modern\",\"layout\":2,\"size\":1.2,\"opacity\":0.6,\"move\":{\"walk_left\":[2,-3.5],\"pause\":[-10,5]}}}";
     StoreWrite(file, tuned);
     Controls::Store keep;
@@ -3923,6 +3932,80 @@ void ASaveReplacesInOneStepAndNeverRemovesTheLiveFile() {
     CHECK_MSG(StoreEntries(dir) == std::vector<std::string>{"controls.json"}, "and no temporary was left by any of them");
 }
 
+// ---- two contacts (planning step 191, CTL-14) -------------------------------------------------------------------------------
+
+// Which finger works what, as a pure function of this tick's fingers (in the order the layer lists them: its pointer first) and of the roles the last tick
+// gave. The rules are in the header; each row is one of them, and the layer's cases (test_mp_layer) are what plays them.
+void AssignContactsTruthTable() {
+    using Controls::AssignContacts;
+    using Controls::ContactRoles;
+    using Controls::LiveContact;
+    constexpr int none = Controls::kNoContact;
+    const auto at = [](int id, bool onControl) { return LiveContact{id, onControl}; };
+    struct Row {
+        const char* why;
+        std::vector<LiveContact> live;
+        ContactRoles before;
+        ContactRoles want;
+    };
+    const std::vector<Row> rows = {
+        {"nobody down", {}, {}, {none, none}},
+        {"nobody down: the roles of the last tick are gone with their fingers", {}, {1, 2}, {none, none}},
+        {"one finger in the world is the world's alone", {at(1, false)}, {}, {none, 1}},
+        {"one finger on a control is both: it works the controls and is the world's", {at(1, true)}, {}, {1, 1}},
+        {"one finger that held the controls and is off its control now is the world's alone", {at(1, false)}, {1, 1}, {none, 1}},
+        {"two: the finger on a control works the controls, the other is the world's", {at(1, true), at(2, false)}, {}, {1, 2}},
+        {"two: the same whichever is listed first", {at(1, false), at(2, true)}, {}, {2, 1}},
+        {"two in the world: the first is the world's and the second has no role", {at(1, false), at(2, false)}, {}, {none, 1}},
+        {"two on controls: the first works the controls, the second has no role and the world is empty", {at(1, true), at(2, true)}, {}, {1, none}},
+        {"the controls finger keeps the role wherever it goes (it began on a control)", {at(1, false), at(2, false)}, {1, 2}, {1, 2}},
+        {"the world finger keeps the role over a finger listed before it", {at(1, false), at(2, false)}, {none, 2}, {none, 2}},
+        {"the world finger slides onto a control, the controls being free: it takes them, the other the world", {at(1, true), at(2, false)}, {none, 1}, {1, 2}},
+        {"the world finger slides onto a control while another holds them: it has no role, the world is empty", {at(1, true), at(2, true)}, {2, 1}, {2, none}},
+        {"the controls finger lifted: a finger on a control takes the role", {at(2, true), at(3, false)}, {1, 3}, {2, 3}},
+        {"the world finger lifted: the other finger in the world takes the role", {at(2, false), at(3, false)}, {none, 1}, {none, 2}},
+        {"three: a third has no role", {at(1, true), at(2, false), at(3, false)}, {}, {1, 2}},
+        {"from one to two: the lone finger was on a control (both); a second in the world takes the world", {at(1, true), at(2, false)}, {1, 1}, {1, 2}},
+        {"from one to two: the lone finger was in the world; a second on a control takes the controls and the first keeps the world", {at(1, false), at(2, true)}, {none, 1}, {2, 1}},
+    };
+    for (const Row& row : rows) {
+        const ContactRoles got = AssignContacts(row.live, row.before);
+        CHECK_MSG(got == row.want, std::string(row.why) + ": controls " + std::to_string(got.controls) + ", world " + std::to_string(got.world) + " (wanted " +
+                                       std::to_string(row.want.controls) + ", " + std::to_string(row.want.world) + ")");
+    }
+}
+
+// `contacts=one|two` is a capture's choice of how many fingers are read, like the look and the arrangement: it parses alone or among the rest, is not a
+// tuning, is refused on classic, and the shipped data reads two.
+void TheContactsKeyIsACapturesChoiceAndNotATuning() {
+    const Controls::Rules rules = LoadModern();
+    CHECK_MSG(rules.twoContacts, "the shipped data reads two fingers (input.two_contacts)");
+    Controls::FlagItems items;
+    std::string error;
+    CHECK(Controls::Tuning::ParseFlag("contacts=one", items, error) && items.twoContacts == std::optional<bool>(false) && items.Any() && !items.Tunes() && !items.preset && !items.arrows);
+    CHECK(Controls::Tuning::ParseFlag("contacts=two", items, error) && items.twoContacts == std::optional<bool>(true) && items.Any() && !items.Tunes());
+    CHECK(Controls::Tuning::ParseFlag("preset=mr,contacts=one,size=1.4", items, error) && items.twoContacts == std::optional<bool>(false) && items.preset == Controls::Preset::Mr && items.size == 1.4);
+    CHECK(Controls::Tuning::ParseFlag("size=1.4", items, error) && !items.twoContacts);
+    for (const char* text : {"contacts", "contacts=", "contacts=Two", "contacts=three", "contacts=1", "contacts=one,contacts=one", "contacts=two,contacts=one", "contact=one"}) {
+        Controls::FlagItems refused;
+        std::string why;
+        CHECK_MSG(!Controls::Tuning::ParseFlag(text, refused, why) && why.find("--controls") != std::string::npos, std::string("'") + text + "' is refused with the usage: " + why);
+    }
+    CHECK_MSG(std::string(Controls::FlagUsage()).find("contacts=one|two") != std::string::npos, std::string("the usage names the key: ") + Controls::FlagUsage());
+    // Applied: it tunes nothing, so a flag with only this key leaves the look and the kept tuning as they are, and nothing of it is ever written.
+    Controls::FlagItems only;
+    only.twoContacts = true;
+    Controls::Tuning tuning;
+    CHECK(Controls::Tuning::FromFlag(only, rules, tuning, error) && tuning.IsDefault(rules) && tuning.ToJson(rules) == "{}");
+    // Through the policy: modern carries it; classic takes no keys at all.
+    const Controls::Policy modern = Controls::ResolvePolicy("modern,contacts=one", false, false, false);
+    CHECK_MSG(modern.valid && modern.available && modern.flag.twoContacts == std::optional<bool>(false) && !modern.flag.Tunes(), "--controls modern,contacts=one resolves and carries the key: " + modern.error);
+    const Controls::Policy classic = Controls::ResolvePolicy("classic,contacts=one", false, false, false);
+    CHECK_MSG(!classic.valid && classic.error.find("classic takes no keys") != std::string::npos, "--controls classic,contacts=one is refused: " + classic.error);
+    const Controls::Policy none = Controls::ResolvePolicy("modern", false, false, false);
+    CHECK_MSG(none.valid && !none.flag.twoContacts && !none.flag.Any(), "with no key the data decides");
+}
+
 void runTests() {
     ClassicHitEqualsTheHudFunctionsEverywhere();
     ClassicFramesAreTheHudsRectsExactly();
@@ -4002,6 +4085,10 @@ void runTests() {
     AFileWithStrayLookKeysIsReadWithoutThem();
     TheFlagTunesOnlyWithASizeAnOpacityOrAMove();
     ASaveReplacesInOneStepAndNeverRemovesTheLiveFile();
+
+    // A second finger (planning step 191).
+    AssignContactsTruthTable();
+    TheContactsKeyIsACapturesChoiceAndNotATuning();
 }
 
 } // namespace

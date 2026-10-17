@@ -488,6 +488,73 @@ void AnUnreadableSwitchFileIsWrittenOver() {
     CHECK_MSG(reopened.SoundOn() && !reopened.MusicOn(), "the toggle wrote a good file over it");
 }
 
+// THE DIRTY FLAG'S TWO WAYS IN THAT NO CASE REACHED (planning step 191). Step 190's verifier could take either away with every check still green: (1) a level
+// already stored, whose medal is upgraded, sets it in Record's upgrade branch (the cases above only record NEW levels, and "a worse replay" cannot reach
+// the branch); (2) a Retry over a file that reads whole, with a medal pending, keeps the flag Load saved on the way in (aheadBefore), so that a write
+// that then fails leaves the store ahead of its file and the game's end tries again.
+void ADirtyFlagSurvivesAnUpgradeAndARetryOverAWholeFile() {
+    std::error_code ec;
+    std::string error;
+    {
+        const std::filesystem::path dir = Scratch("dirtyupgrade");
+        const std::filesystem::path file = dir / "scores.json";
+        {
+            Scores::Store first;
+            CHECK_MSG(first.Open(dir.string(), error), error);
+            CHECK(first.Record(0, 0, Scores::kBronze));
+            CHECK_MSG(first.Save(error), error);
+        }
+        Scores::Store store;
+        CHECK_MSG(store.Open(dir.string(), error) && store.WhatOpened() == Scores::Store::Opened::Read && store.Get(0, 0) == Scores::kBronze, error);
+        CHECK_MSG(!store.Dirty(), "a level stored at bronze, read whole: level with its file");
+        CHECK_MSG(store.Record(0, 0, Scores::kGold) && store.Get(0, 0) == Scores::kGold, "and the same level earned at gold is an upgrade");
+        CHECK_MSG(store.Dirty(), "which leaves the store ahead of its file - an upgrade is news, as a new level is");
+        std::filesystem::remove(file, ec);
+        std::filesystem::create_directories(file);
+        Put(file / "keep.txt", "kept");
+        CHECK_MSG(!store.Save(error) && !error.empty(), "the name blocked, the save is refused and says so: " + error);
+        CHECK_MSG(store.Dirty() && store.Get(0, 0) == Scores::kGold, "the store is still ahead, the gold still in memory");
+        std::filesystem::remove_all(file, ec);
+        CHECK_MSG(store.Save(error) && !store.Dirty(), "the way clear, the next save writes it: " + error);
+        Scores::Store reopened;
+        CHECK_MSG(reopened.Open(dir.string(), error) && reopened.Get(0, 0) == Scores::kGold, "and the file holds gold: " + error);
+    }
+#if defined(_WIN32)
+    {
+        // The file is out of reach when the store opens (a directory stands in for a lock); a medal is earned; the way clears with a WHOLE file in it, which a
+        // handle held open will not let the write replace. Retry reads the file (not news to it), merges, and the write is refused: the store is ahead.
+        const std::filesystem::path dir = Scratch("dirtyretry");
+        const std::filesystem::path file = dir / "scores.json";
+        std::filesystem::create_directories(file);
+        Put(file / "keep.txt", "kept");
+        Scores::Store store;
+        CHECK_MSG(!store.Open(dir.string(), error) && store.Waiting(), "the file is out of reach: the store waits");
+        CHECK(store.Record(0, 0, Scores::kGold));
+        CHECK_MSG(store.Dirty(), "a medal earned meanwhile");
+        std::filesystem::remove_all(file, ec);
+        {
+            Scores::Store other;
+            CHECK_MSG(other.Open(dir.string(), error), error);
+            CHECK(other.Record(1, 1, Scores::kSilver));
+            CHECK_MSG(other.Save(error), error);
+        }
+        const std::string before = ReadAll(file);
+        std::ifstream holder(file, std::ios::binary);
+        CHECK_MSG(holder.is_open(), "another handle holds the whole file open");
+        const bool retried = store.Retry(error);
+        CHECK_MSG(store.Get(1, 1) == Scores::kSilver && store.Get(0, 0) == Scores::kGold, "Retry merged what the file says with what the session earned");
+        // Where the platform refuses the replace (Windows, here) the write failed and the flag must say the store is ahead; where it allowed it, level.
+        CHECK_MSG(retried == !store.Dirty(), std::string("Retry says the store is level with its file exactly when it is: retried ") + (retried ? "true" : "false") + ", dirty " + (store.Dirty() ? "true" : "false"));
+        if (!retried) CHECK_MSG(store.Dirty() && ReadAll(file) == before, "the write refused: the store is ahead of its file, which is as it was: " + error);
+        holder.close();
+        CHECK_MSG(store.Save(error) && !store.Dirty(), "the handle gone, the next save writes the merge: " + error);
+        Scores::Store reopened;
+        CHECK_MSG(reopened.Open(dir.string(), error) && reopened.Get(0, 0) == Scores::kGold && reopened.Get(1, 1) == Scores::kSilver && reopened.Count() == 2,
+                  "and the file holds both: " + error);
+    }
+#endif
+}
+
 void runTests() {
     AnEmptyDirectoryTouchesNothing();
     AWorsePlayTakesNothingAway();
@@ -499,6 +566,7 @@ void runTests() {
     AnEmptyFileOrAnotherDocumentIsQuarantinedToo();
     AFileOutOfReachIsWaitedForNotQuarantined();
     ASaveThatFailedLeavesTheStoreAheadOfItsFileUntilOneWorks();
+    ADirtyFlagSurvivesAnUpgradeAndARetryOverAWholeFile();
 #if defined(_WIN32)
     AFileLockedByAnotherProgramIsMergedWhenItOpens();
 #endif

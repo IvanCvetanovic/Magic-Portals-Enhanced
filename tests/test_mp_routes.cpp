@@ -98,11 +98,15 @@ struct Options {
     std::optional<std::string> controls;  // --controls <classic|modern>: the controls census (planning step 182)
     bool classicClaims = false;           // --classic-claims: with modern, only the variant that claims classic
     std::optional<Controls::Arrows> arrows; // --arrows <split|grouped>: the arrangement of the walk arrows the census plays (planning step 186); none: the data's, split
+    std::optional<bool> twoContacts;        // --contacts <one|two>: whether the modern run reads a second finger (planning step 191); none: the data's (input.two_contacts)
 };
 
 // The flag the census plays modern under: `modern`, with the arrangement it was asked for. The shipped arrangement needs no key.
 std::string ModernFlag(const Options& options) {
-    return options.arrows ? std::string("modern,arrows=") + Controls::NameOf(*options.arrows) : std::string("modern");
+    std::string flag = "modern";
+    if (options.arrows) flag += std::string(",arrows=") + Controls::NameOf(*options.arrows);
+    if (options.twoContacts) flag += std::string(",") + Controls::TuningKey::kContacts + "=" + (*options.twoContacts ? Controls::TuningKey::kContactsTwo : Controls::TuningKey::kContactsOne);
+    return flag;
 }
 
 MagicPortalsLayer::Paths RoutePaths() {
@@ -401,6 +405,7 @@ struct Capture {
     Controls::Style style = Controls::Style::Classic;
     bool ready = false;
     std::optional<Controls::Arrows> arrows; // the arrangement of the walk arrows the layer actually laid out (planning step 187), when it plays modern
+    bool twoContacts = false;               // whether the layer read a second finger (planning step 191): the modern run with the data's switch on, never the classic-claims variant
 };
 
 // The touches of the plan that go down on `tick`, asked what the modern claim says of each (a tap at its place; a drag at every tick it is held),
@@ -547,6 +552,7 @@ Outcome Play(const Route::Plan& plan, const Options& options, const std::string&
         capture->style = layer.ControlsStyle();
         capture->ready = layer.ModernReady();
         if (capture->ready) capture->arrows = layer.ControlsApplied().ArrowsIn(layer.ControlsRules());
+        capture->twoContacts = layer.TwoContactsOn();
         if (classify) Classify(layer, plan, label, layer.LayerTicks() + 1, *capture);
     }
     while (!driver.Finished()) {
@@ -636,6 +642,7 @@ struct CensusTable {
     int modernIdenticalToTheEnd = 0;
     int modernDiverged = 0;
     std::optional<Controls::Arrows> played; // the arrangement the layer laid out, which every run of the census must agree on (planning step 187)
+    std::optional<bool> twoContacts;        // whether the modern run read a second finger (planning step 191): the census says which it played
 };
 
 // The arrangement a run played is the layer's own, not the one the flag was asked for: a data file whose default is grouped plays grouped under a flag with no
@@ -660,7 +667,8 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
     // (b) the modern layout and draw, the classic claims: identical to the reference, whole, with no exemption.
     Capture claims;
     const Outcome classicClaims = Play(plan, Options{}, label, ControlsPaths(ModernFlag(options), true), &claims, true);
-    const bool bPlayedModern = claims.style == Controls::Style::Modern && claims.ready;
+    // (And it reads ONE finger whatever the switch says: the variant must stay the classic simulation to the last tick.)
+    const bool bPlayedModern = claims.style == Controls::Style::Modern && claims.ready && !claims.twoContacts;
     CHECK_MSG(bPlayedModern, name + ": the classic-claims variant plays the MODERN layout (N1): style=" + Controls::NameOf(claims.style));
     NoteArrangement(name, "classic-claims", claims, options, table);
     std::string said;
@@ -690,8 +698,11 @@ void CensusRoute(const Route::Plan& plan, const Options& options, const std::str
     ++table.modernRan;
     Capture modern;
     const Outcome modernOutcome = Play(plan, Options{}, label, ControlsPaths(ModernFlag(options), false), &modern, false);
-    CHECK_MSG(modern.style == Controls::Style::Modern && modern.ready, name + ": the modern run plays the MODERN controls (N1): style=" + Controls::NameOf(modern.style));
+    // (And, when --contacts asked for one, it reads the fingers it was asked to: a census of "the switch off" that ran with it on proves nothing.)
+    CHECK_MSG(modern.style == Controls::Style::Modern && modern.ready && (!options.twoContacts || modern.twoContacts == *options.twoContacts),
+              name + ": the modern run plays the MODERN controls (N1): style=" + Controls::NameOf(modern.style) + ", two contacts " + (modern.twoContacts ? "on" : "off"));
     NoteArrangement(name, "modern", modern, options, table);
+    table.twoContacts = modern.twoContacts;
     const Swallowed* first = claims.swallowed.empty() ? nullptr : &claims.swallowed.front();
     const std::size_t safe = first != nullptr ? static_cast<std::size_t>(std::max(first->tick - 1, 0)) : std::max(ticks, modern.records.size());
     std::string saidModern;
@@ -772,6 +783,7 @@ ForcedList ReadForced(Controls::Arrows arrows) {
 void ReportCensus(const Options& options, const CensusTable& table) {
     std::map<std::string, int> perControl;
     for (const Swallowed& one : table.all) ++perControl[one.control];
+    if (table.twoContacts) std::printf("  the modern run reads %s (input.two_contacts / --contacts)\n", *table.twoContacts ? "two fingers" : "one finger");
     std::printf("  controls census, --controls %s%s: %d route(s); the classic claims were identical on %d; ", options.controls ? options.controls->c_str() : "?",
                 options.classicClaims ? " --classic-claims" : "", table.routesRun, table.classicClaimsIdentical);
     if (!options.classicClaims) {
@@ -925,8 +937,15 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
                 std::printf("test_mp_routes: --arrows wants split or grouped\n");
                 return 2;
             }
+        } else if (arg == "--contacts" && i + 1 < argc) {
+            const std::string which = argv[++i];
+            if (which != Controls::TuningKey::kContactsOne && which != Controls::TuningKey::kContactsTwo) {
+                std::printf("test_mp_routes: --contacts wants one or two\n");
+                return 2;
+            }
+            options.twoContacts = which == Controls::TuningKey::kContactsTwo;
         } else {
-            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--controls <classic|modern> [--classic-claims] [--arrows <split|grouped>]]\n");
+            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--controls <classic|modern> [--classic-claims] [--arrows <split|grouped>] [--contacts <one|two>]]\n");
             return 2;
         }
     }
@@ -944,6 +963,10 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
     }
     if (options.arrows && (!options.controls || *options.controls != "modern")) {
         std::printf("test_mp_routes: --arrows is the arrangement of --controls modern\n");
+        return 2;
+    }
+    if (options.twoContacts && (!options.controls || *options.controls != "modern")) {
+        std::printf("test_mp_routes: --contacts is the reading of fingers of --controls modern\n");
         return 2;
     }
     RunRoutes(options);

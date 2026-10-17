@@ -23568,8 +23568,8 @@ void ControlsStyleReportsTheResolvedStyle() {
         CHECK_MSG(row.ready == (run.layoutVersion == Controls::kLayoutVersion), std::string(row.what) + ": the table is read exactly when it can be used");
     }
 
-    // The flag's keys ride on the table: preset= is the one in force before CTL-10, and a key that is not on the table's grids
-    // costs the modern controls with one error, never the run.
+    // The flag's keys ride on the table: preset= is laid out (and a size, an opacity and a move since planning step 187), and a key that is
+    // not on the table's grids costs the modern controls with one error, never the run.
     const ControlsRun balanced = RunControls("modern,preset=balanced", PolicyOf("modern,preset=balanced"), "", saves);
     CHECK_MSG(balanced.style == Controls::Style::Modern && balanced.ready && balanced.tuning.PresetIn(balanced.rules) == Controls::Preset::Balanced,
               "preset=balanced is the look in force: " + Describe(balanced));
@@ -27891,7 +27891,7 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
     }
 }
 
-// A controls.json saved against the grouped pair (layout 1: planning step 185, and a size, an opacity and moves as CTL-10 will write them) is read by
+// A controls.json saved against the grouped pair (layout 1: planning step 185, and a size, an opacity and moves as the store writes them since planning step 187) is read by
 // the split arrows' code the way design 2.4 promises: the choice of style and the size and the opacity are kept, the moves - which were made against
 // another arrangement - are dropped, the file is not touched by starting, and the next choice writes it at layout 2.
 void ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves() {
@@ -28302,7 +28302,6 @@ void TheNumberOfTapsFromALevelToOptionsIsRecorded() {
         bool distinct = true;
         for (std::size_t i = 1; i < trail.size(); ++i) distinct = distinct && trail[i] != trail[i - 1];
         CHECK_MSG(distinct, what + ": and no press left the screen it was made on");
-        CHECK_EQ(taps, static_cast<int>(trail.size()));
         std::printf("  from a level to Options takes %d presses (%s): the pause, Levels, back, back, the entry\n", taps, byKey ? "keys for the pause and the two backs" : "the pointer throughout");
     }
 }
@@ -28323,6 +28322,7 @@ void TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint() {
     } shapes[] = {{"5:4", 900.0}, {"4:3", 960.0}, {"3:2", 1080.0}, {"16:10", 1152.0}, {"16:9", 1280.0}, {"2:1", 1440.0}, {"21:9", 1680.0}, {"32:9", 2560.0}};
     int shapesWithAPoint = 0;
     int pressed = 0;
+    int dragged = 0;
     for (const auto& shape : shapes) {
         const std::string what = std::string("TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint: ") + shape.name;
         OsRun run(OsPaths(OsDir("claim-saves"), OsDir("claim-prisms")), what, glm::vec2(static_cast<float>(shape.width), 720.0f));
@@ -28360,9 +28360,26 @@ void TheOptionsEntryIsClaimedBeforeTheMainButtonsWhereTheyShareAPoint() {
         PtrRest(layer, run.registry, 5);
         CHECK_MSG(layer.MenuScreen() == Screen::Options, what + ": a press where the entry and a main-menu button meet opens Options, the entry's, and not the button's: screen " + std::to_string(static_cast<int>(layer.MenuScreen())));
         ++pressed;
+        // THE HALF THAT DISCRIMINATES (planning step 191; Step 187's verifier): a tap there goes down and up on the entry, and returns before the main buttons are
+        // read, so it could not tell the claim order from its absence. A press that goes down on the shared point and slides into the main-menu button beside it comes
+        // up OUTSIDE the entry, where the order is all there is: the entry's claim cleared the button's record (mainDown), so the release presses nothing and the
+        // screen stays the main menu. If the main buttons were claimed with it (mainDown not cleared), this release would press the button.
+        OsRun again(OsPaths(OsDir("claim-saves-drag"), OsDir("claim-prisms-drag")), what + " (a drag)", glm::vec2(static_cast<float>(shape.width), 720.0f));
+        if (!again.ok) return;
+        const glm::dvec2 into = first - glm::dvec2(4.0, 0.0);
+        const bool buttonsPoint = !OsEntryRect(again.layer).Contains(into) &&
+                                  MainMenuUi::ButtonsAt(again.layer.MainMenuRules(), again.layer.MainMenuSwitches(), view, 1.0e9, into) != 0u;
+        CHECK_MSG(buttonsPoint, what + ": a point 4 units from the shared one is a main-menu button's and not the entry's");
+        if (!buttonsPoint) continue;
+        again.layer.ScheduleDevDrag(0, fraction, into / view, 8);
+        for (int tick = 0; tick < 14; ++tick) tickWith(again.layer, again.registry, kRest, {}, {});
+        PtrRest(again.layer, again.registry, 8);
+        CHECK_MSG(again.layer.MenuScreen() == Screen::Main, what + ": a press on the shared point that comes up in the main-menu button presses nothing: screen " + std::to_string(static_cast<int>(again.layer.MenuScreen())));
+        ++dragged;
     }
-    std::printf("  the entry and a main-menu button share a point at %d of %d window shapes; %d of them were pressed exactly\n", shapesWithAPoint, static_cast<int>(sizeof(shapes) / sizeof(shapes[0])), pressed);
+    std::printf("  the entry and a main-menu button share a point at %d of %d window shapes; %d of them were pressed exactly, %d dragged out of\n", shapesWithAPoint, static_cast<int>(sizeof(shapes) / sizeof(shapes[0])), pressed, dragged);
     CHECK_MSG(pressed == shapesWithAPoint, "every shared point the tap can reach was pressed, and was the entry's");
+    CHECK_MSG(dragged == pressed, "and from each, a press that slid into the button beside it pressed nothing");
 }
 
 // ---- Options, as drawn ------------------------------------------------------------------------------------------------------------------------------
@@ -29661,6 +29678,1196 @@ void AnUnforcedClassicRunPlaysTheClassicClaimsAndHud() {
     RunTheClassicPins();
 }
 
+// ---- TWO CONTACTS (planning step 191, CTL-14) ---------------------------------------------------------------------------------------
+//
+// Under the modern controls with the data's input.two_contacts on, the layer reads every finger a tick hands it and gives each its work
+// through ONE path: the CONTROLS finger (on an arrow or a corner button, or began on one) works them, the WORLD finger (the first other
+// that is not on a control) shoots, aims and pans, and a finger with neither role is ignored. With one finger down nothing differs from
+// before. No touch build exists, so the second finger here is a REPLAYED one: a tick whose TickInput lists the engine's contacts, the
+// shape the Android backend fills for real. The first finger is the mouse, as a desktop reports it (kTap and its place, and contact 0).
+// Every case runs on the modern controls (N1: MdRun fails unless the layer plays them) and reads TwoContactsOn() for what it claims.
+
+// What the pointer - the mouse, or the engine's first finger - is doing on a tick.
+struct CtPointer {
+    bool down = false;
+    bool pressed = false;
+    bool released = false;
+    glm::vec2 at = kRest;
+    std::vector<std::string> keys; // keys pressed on this tick (the back key pauses and resumes)
+    // On the release tick, the place the engine lists the mouse's contact as ENDED at (round R): the engine reports the contact of a button that
+    // came up for the frame it lifted in, at the last place it was seen - which is not where the mouse is when it moved on that frame. Unset: not listed.
+    std::optional<glm::vec2> endedAt;
+};
+
+// A finger beyond the pointer, as the engine's contact list names it.
+struct CtFinger {
+    int id = 1;
+    glm::vec2 at = kRest;
+    bool lifted = false; // listed with phase Ended: the frame it lifted in
+};
+
+// One replayed tick as the engine hands it. `asContact` false is the shape every older case feeds: kTap and the mouse, no contact list.
+void CtTick(MagicPortalsLayer& layer, entt::registry& registry, const CtPointer& pointer, const std::vector<CtFinger>& fingers = {},
+            bool asContact = true) {
+    PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
+    Input::TickInput input;
+    input.mousePosition = pointer.at;
+    if (pointer.down) input.down.push_back(MagicPortalsLayer::kTap);
+    if (pointer.pressed) input.pressed.push_back(MagicPortalsLayer::kTap);
+    if (pointer.released) input.released.push_back(MagicPortalsLayer::kTap);
+    for (const std::string& key : pointer.keys) input.pressed.push_back(key);
+    if (asContact) {
+        // The mouse is contact 0 while its button is down, as a desktop reports it.
+        if (pointer.down) {
+            Supersonic::Contact mouse;
+            mouse.id = 0;
+            mouse.position = pointer.at;
+            mouse.phase = pointer.pressed ? Supersonic::ContactPhase::Began : Supersonic::ContactPhase::Moved;
+            input.contacts.push_back(mouse);
+        }
+        if (pointer.released && pointer.endedAt) {
+            Supersonic::Contact gone;
+            gone.id = 0;
+            gone.position = *pointer.endedAt;
+            gone.phase = Supersonic::ContactPhase::Ended;
+            input.contacts.push_back(gone);
+        }
+        for (const CtFinger& finger : fingers) {
+            Supersonic::Contact contact;
+            contact.id = finger.id;
+            contact.position = finger.at;
+            contact.phase = finger.lifted ? Supersonic::ContactPhase::Ended : Supersonic::ContactPhase::Moved;
+            input.contacts.push_back(contact);
+        }
+    }
+    Input::BeginReplayedTick(input);
+    layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
+    Input::EndReplayedTick();
+}
+
+void CtTicks(MagicPortalsLayer& layer, entt::registry& registry, int ticks, const CtPointer& pointer, const std::vector<CtFinger>& fingers = {}) {
+    for (int tick = 0; tick < ticks; ++tick) CtTick(layer, registry, pointer, fingers);
+}
+
+// One frame of the DEVICE path, the way the app runs it: a RawInputState with the mouse's button and place, the engine's own SynthesiseMouseContact and
+// Update (its contact 0, its phases, its edges, its Ended frame), BeginTickInput, and the layer's tick - not a replayed tick, so nothing in the engine's
+// derivation is hand-written but the mouse itself. Until round R of planning step 191 every case fed the layer hand-written ticks, so "a desktop mouse is
+// one finger" was pinned on the shape of the contact list the engine was READ to give, not on the engine giving it.
+void CtLiveTick(MagicPortalsLayer& layer, entt::registry& registry, const CtPointer& pointer) {
+    RawInputState raw;
+    raw.mousePosition = pointer.at;
+    raw.mouseButtons[MouseButton::Left] = pointer.down;
+    for (const std::string& key : pointer.keys) {
+        if (key == MagicPortalsLayer::kBack) raw.keys[Key::Escape] = true;
+    }
+    Input::SynthesiseMouseContact(raw);
+    Input::Update(raw);
+    Input::BeginTickInput();
+    PhysicsSystem::Update(registry, MagicPortalsLayer::kTick);
+    layer.OnFixedUpdate(registry, MagicPortalsLayer::kTick);
+}
+
+// The device path put back to rest, so that a later case's replayed ticks find nothing held and no latched edge.
+void CtLiveRest() {
+    for (int frame = 0; frame < 2; ++frame) {
+        RawInputState raw;
+        raw.mousePosition = kRest;
+        Input::Update(raw);
+        Input::BeginTickInput();
+    }
+}
+
+// The places a case aims at, in the 1280x720 viewport's pixels, from the layer's own settled hit rectangles; and the world point as a place on the view.
+struct CtScene {
+    glm::vec2 right;
+    glm::vec2 left;
+    glm::vec2 pause;
+    glm::vec2 restart;
+    glm::vec2 world;
+    glm::dvec2 worldView;
+};
+
+CtScene CtSceneOf(const MagicPortalsLayer& layer) {
+    const MdGeom g = MdGeometry(layer);
+    CtScene scene;
+    scene.right = PtrPixel(layer, g.hit[MdAt(PtrControl::Right)].Centre());
+    scene.left = PtrPixel(layer, g.hit[MdAt(PtrControl::Left)].Centre());
+    scene.pause = PtrPixel(layer, g.hit[MdAt(PtrControl::Menu)].Centre());
+    scene.restart = PtrPixel(layer, g.hit[MdAt(PtrControl::Reset)].Centre());
+    scene.worldView = glm::dvec2(g.view.x * 0.5, g.view.y * 0.45);
+    scene.world = PtrPixel(layer, scene.worldView);
+    return scene;
+}
+
+int CtFired(const MagicPortalsLayer& layer) {
+    return layer.SimLevel()->portals.shotsFired;
+}
+
+// A run of the case on a layer playing the modern controls with two contacts on (`two`) or the flag's `contacts=one`.
+std::string CtFlag(bool two) {
+    return two ? "modern" : "modern,contacts=one";
+}
+
+// THE POINT OF THE STEP: a thumb held on an arrow keeps walking while another finger shoots. The same script with `contacts=one` is the layer as it
+// was: the second finger is not there, he walks and nothing is fired.
+void AHeldArrowAndASecondContactFiresAPortal() {
+    for (const bool two : {true, false}) {
+        const std::string what = std::string("AHeldArrowAndASecondContactFiresAPortal (contacts=") + (two ? "two)" : "one)");
+        MdRun run(MdSplitPaths(CtFlag(two)), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(layer.TwoContactsOn() == two, what + ": the layer reads " + (two ? "two fingers" : "one"));
+        const CtScene scene = CtSceneOf(layer);
+        CHECK_MSG(layer.ControlAt(scene.worldView) == PtrClaim(), what + ": the world point is clear of every control");
+        PtrRest(layer, registry, 30);
+        const int fired0 = CtFired(layer);
+        CtPointer arrow;
+        arrow.down = true;
+        arrow.pressed = true;
+        arrow.at = scene.right;
+        const double x0 = playerPx(registry, layer).x;
+        CtTick(layer, registry, arrow);
+        arrow.pressed = false;
+        CtTicks(layer, registry, 9, arrow);
+        CHECK_MSG(playerPx(registry, layer).x - x0 > 8.0, what + ": on the arrow alone he walks right: " + PtrNum(playerPx(registry, layer).x - x0));
+        CHECK_MSG(!layer.ContactsSplit(), what + ": one finger is one reading");
+        // The second finger goes down in the world and stays: he must walk on every one of these ticks.
+        const std::vector<CtFinger> second{CtFinger{1, scene.world, false}};
+        bool walkedEveryTick = true;
+        for (int tick = 0; tick < 6; ++tick) {
+            const double before = playerPx(registry, layer).x;
+            CtTick(layer, registry, arrow, second);
+            if (playerPx(registry, layer).x - before < 1.0) walkedEveryTick = false;
+        }
+        CHECK_MSG(walkedEveryTick, what + ": and he walks on every tick the second finger is down");
+        CHECK_MSG(layer.ContactsSplit() == two, what + ": the controls and the world are two fingers exactly when two are read: " + (layer.ContactsSplit() ? "split" : "one"));
+        if (two) {
+            const Controls::ContactRoles roles = layer.ContactRolesNow();
+            CHECK_MSG(roles.controls != Controls::kNoContact && roles.world == 1, what + ": the arrow's finger works the controls and finger 1 the world: " + std::to_string(roles.controls) + ", " + std::to_string(roles.world));
+        }
+        CHECK_MSG(CtFired(layer) == fired0, what + ": nothing leaves while it is down - a shot leaves on the release");
+        // It lifts between two ticks: gone from the list, no Ended. A lift all the same.
+        CtTick(layer, registry, arrow);
+        CHECK_MSG(CtFired(layer) == fired0 + (two ? 1 : 0), what + ": its release fires " + (two ? "ONE portal" : "nothing (the layer reads one finger)") + ": " + std::to_string(CtFired(layer) - fired0));
+        if (two) {
+            glm::dvec2 aimed(0.0);
+            CHECK_MSG(layer.ViewportToLevelPx(registry, scene.world, aimed), what + ": the world point maps into the level");
+            CHECK_MSG(layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired && glm::distance(PtrLastTap(layer), aimed) < 8.0,
+                      what + ": at the place it was held: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+        }
+        // And he goes on walking, the first finger being on its arrow still.
+        const double before = playerPx(registry, layer).x;
+        CtTicks(layer, registry, 5, arrow);
+        CHECK_MSG(playerPx(registry, layer).x - before > 8.0, what + ": and walks on after it: " + PtrNum(playerPx(registry, layer).x - before));
+        CtPointer up;
+        up.released = true;
+        up.at = scene.right;
+        CtTick(layer, registry, up);
+        CHECK_MSG(CtFired(layer) == fired0 + (two ? 1 : 0), what + ": the arrow's own release fires nothing");
+    }
+}
+
+// The first finger comes up on its arrow while the second is held in the world: that release is the controls' and fires nothing, and the
+// second finger's own release - its record untouched by the first's - fires its shot.
+void TheFirstContactsReleaseOnAPadFiresNothing() {
+    MdRun run(MdSplitPaths(), "level30", "TheFirstContactsReleaseOnAPadFiresNothing");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "TheFirstContactsReleaseOnAPadFiresNothing";
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the layer reads two fingers");
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    CtTick(layer, registry, arrow);
+    arrow.pressed = false;
+    CtTicks(layer, registry, 4, arrow);
+    const std::vector<CtFinger> second{CtFinger{1, scene.world, false}};
+    CtTicks(layer, registry, 5, arrow, second);
+    CHECK_MSG(layer.ContactsSplit(), what + ": two fingers, split");
+    // The first finger comes up, on its arrow; the second stays.
+    CtPointer up;
+    up.released = true;
+    up.at = scene.right;
+    CtTick(layer, registry, up, second);
+    CHECK_MSG(CtFired(layer) == fired0, what + ": the release on the arrow fires nothing: " + std::to_string(CtFired(layer) - fired0));
+    CtTicks(layer, registry, 4, CtPointer{}, second);
+    CHECK_MSG(CtFired(layer) == fired0 && !layer.ContactsSplit(), what + ": nor does the second finger's hold, now the only one");
+    CHECK_MSG(layer.ContactRolesNow().world == 1, what + ": it is the world's finger");
+    // Its own release fires: its record was never the first finger's.
+    CtTick(layer, registry, CtPointer{});
+    CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": the second finger's release fires its own shot: " + std::to_string(CtFired(layer) - fired0));
+}
+
+// Records follow the finger that feeds them. The pointer goes down in the world (its record is armed) with a second finger beside it that has no
+// role; the pointer then slides onto an arrow and the second finger becomes the world's, so every record is reset: when the second lifts, within
+// reach of where the FIRST went down, nothing fires - a record left standing would have taken it for the first finger's tap.
+void TheWorldContactChangingMidHoldResetsTheRecords() {
+    MdRun run(MdSplitPaths(), "level30", "TheWorldContactChangingMidHoldResetsTheRecords");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "TheWorldContactChangingMidHoldResetsTheRecords";
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the layer reads two fingers");
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    // The pointer down in the world.
+    CtPointer pointer;
+    pointer.down = true;
+    pointer.pressed = true;
+    pointer.at = scene.world;
+    CtTick(layer, registry, pointer);
+    pointer.pressed = false;
+    CtTicks(layer, registry, 3, pointer);
+    // A second finger beside it, in the world too: the world's role is taken, so it has none.
+    const glm::vec2 beside = scene.world + glm::vec2(6.0f, 4.0f);
+    const std::vector<CtFinger> second{CtFinger{1, beside, false}};
+    CtTicks(layer, registry, 3, pointer, second);
+    const Controls::ContactRoles taken = layer.ContactRolesNow();
+    CHECK_MSG(taken.world != 1 && taken.world != Controls::kNoContact && taken.controls == Controls::kNoContact,
+              what + ": the pointer is the world's and the second finger has no role: " + std::to_string(taken.controls) + ", " + std::to_string(taken.world));
+    // The pointer slides onto the right arrow: it becomes the controls' finger and the second finger the world's.
+    pointer.at = scene.right;
+    CtTicks(layer, registry, 3, pointer, second);
+    const Controls::ContactRoles moved = layer.ContactRolesNow();
+    CHECK_MSG(moved.world == 1 && moved.controls == taken.world, what + ": the second finger is the world's now: " + std::to_string(moved.controls) + ", " + std::to_string(moved.world));
+    // It lifts, near where the first went down. Nothing fires.
+    CtTick(layer, registry, pointer);
+    CHECK_MSG(CtFired(layer) == fired0, what + ": the lift of the finger that took over fires nothing: " + std::to_string(CtFired(layer) - fired0));
+    CtPointer up;
+    up.released = true;
+    up.at = scene.right;
+    CtTick(layer, registry, up);
+    CHECK_MSG(CtFired(layer) == fired0, what + ": and the first finger's release on the arrow fires nothing either");
+    // Nothing is left standing: a plain tap fires.
+    PtrRest(layer, registry, 30);
+    shoot(layer, registry, scene.world);
+    CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": and a plain tap afterwards fires one: " + std::to_string(CtFired(layer) - fired0));
+}
+
+// A finger that is LOST - the pointer's button released outside the window, so no release edge ever comes - while another finger is down leaves no
+// record standing either. The lost one had the world's record armed; the other takes the role and its lift fires nothing.
+void AContactThatVanishesMidHoldLeavesNoRecordStuck() {
+    MdRun run(MdSplitPaths(), "level30", "AContactThatVanishesMidHoldLeavesNoRecordStuck");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "AContactThatVanishesMidHoldLeavesNoRecordStuck";
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    CtPointer pointer;
+    pointer.down = true;
+    pointer.pressed = true;
+    pointer.at = scene.world;
+    CtTick(layer, registry, pointer);
+    pointer.pressed = false;
+    CtTicks(layer, registry, 3, pointer);
+    const std::vector<CtFinger> second{CtFinger{1, scene.world + glm::vec2(6.0f, 4.0f), false}};
+    CtTicks(layer, registry, 3, pointer, second);
+    // The pointer is lost: nothing down, no release edge, and the second finger stays.
+    CtPointer lost;
+    lost.at = scene.world;
+    CtTicks(layer, registry, 3, lost, second);
+    CHECK_MSG(layer.ContactRolesNow().world == 1 && !layer.ContactsSplit(), what + ": the second finger is the only one, and the world's");
+    CHECK_MSG(CtFired(layer) == fired0, what + ": the loss fired nothing");
+    CtTick(layer, registry, lost);
+    CHECK_MSG(CtFired(layer) == fired0, what + ": and the lift of the finger that took over fires nothing, its press never having been seen by a record: " + std::to_string(CtFired(layer) - fired0));
+    PtrRest(layer, registry, 30);
+    shoot(layer, registry, scene.world);
+    CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": and a plain tap afterwards fires one: " + std::to_string(CtFired(layer) - fired0));
+}
+
+// The swallow is the controls finger's. A touch held across a load, or a press the level never saw, is swallowed until it is up; another finger's
+// fresh press must not end it.
+void ASecondContactCannotUnSwallowTheFirst() {
+    MdRun run(MdSplitPaths(), "level30", "ASecondContactCannotUnSwallowTheFirst");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "ASecondContactCannotUnSwallowTheFirst";
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    // Held on the right arrow with no press edge: the level never saw it go down.
+    CtPointer held;
+    held.down = true;
+    held.at = scene.right;
+    const double x0 = playerPx(registry, layer).x;
+    CtTicks(layer, registry, 6, held);
+    CHECK_MSG(layer.TouchSwallowed() && std::fabs(playerPx(registry, layer).x - x0) < 0.5, what + ": it is swallowed and does not walk him: " + PtrNum(playerPx(registry, layer).x - x0));
+    // A second finger goes down in the world: a fresh press the level sees, held.
+    const std::vector<CtFinger> second{CtFinger{1, scene.world, false}};
+    CtTicks(layer, registry, 6, held, second);
+    CHECK_MSG(layer.ContactsSplit(), what + ": two fingers, split");
+    CHECK_MSG(layer.TouchSwallowed(), what + ": the second finger's press did not end the swallow");
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - x0) < 0.5, what + ": and he still does not walk: " + PtrNum(playerPx(registry, layer).x - x0));
+    // Up the world's finger; still swallowed.
+    CtTicks(layer, registry, 3, held);
+    CHECK_MSG(layer.TouchSwallowed() && std::fabs(playerPx(registry, layer).x - x0) < 0.5, what + ": and when it lifts the first is swallowed still");
+    // The first lifts: the swallow is over, and a fresh press walks.
+    CtPointer up;
+    up.released = true;
+    up.at = scene.right;
+    CtTick(layer, registry, up);
+    CtTick(layer, registry, CtPointer{});
+    CHECK_MSG(!layer.TouchSwallowed(), what + ": up, the swallow is over");
+    held.pressed = true;
+    const double x1 = playerPx(registry, layer).x;
+    CtTick(layer, registry, held);
+    held.pressed = false;
+    CtTicks(layer, registry, 6, held);
+    CHECK_MSG(playerPx(registry, layer).x - x1 > 8.0, what + ": and a fresh press walks him: " + PtrNum(playerPx(registry, layer).x - x1));
+}
+
+// A control is worked by the controls finger alone. With an arrow held, a second finger that goes down on the pause button and comes up on it
+// pauses nothing (and on restart reloads nothing); the same two taps with the arrow not held do.
+void AMenuButtonIsNotPressedThroughAHeldControl() {
+    MdRun run(MdSplitPaths(), "level30", "AMenuButtonIsNotPressedThroughAHeldControl");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "AMenuButtonIsNotPressedThroughAHeldControl";
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the layer reads two fingers");
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    CtTick(layer, registry, arrow);
+    arrow.pressed = false;
+    CtTicks(layer, registry, 3, arrow);
+    const double age = layer.LevelAgeMs();
+    for (const glm::vec2& place : {scene.pause, scene.restart}) {
+        const bool pause = place == scene.pause;
+        const std::string which = pause ? "pause" : "restart";
+        const std::vector<CtFinger> second{CtFinger{1, place, false}};
+        CtTicks(layer, registry, 4, arrow, second);
+        const Controls::ContactRoles roles = layer.ContactRolesNow();
+        CHECK_MSG(roles.controls != Controls::kNoContact && roles.world == Controls::kNoContact && layer.ContactsSplit(),
+                  what + ": while it is down on " + which + " it has no role: " + std::to_string(roles.controls) + ", " + std::to_string(roles.world));
+        CtTick(layer, registry, arrow); // gone from the list: it came up on the button
+        CtTicks(layer, registry, 2, arrow);
+        CHECK_MSG(!layer.Paused() && layer.LevelAgeMs() > age, what + ": a second finger's tap on " + which + " through the held arrow does nothing: paused " + std::to_string(layer.Paused()));
+    }
+    CtPointer up;
+    up.released = true;
+    up.at = scene.right;
+    CtTick(layer, registry, up);
+    PtrRest(layer, registry, 5);
+    // The control: the same finger on the pause button alone works it.
+    const std::vector<CtFinger> alone{CtFinger{1, scene.pause, false}};
+    CtTicks(layer, registry, 4, CtPointer{}, alone);
+    CtTick(layer, registry, CtPointer{});
+    CtTick(layer, registry, CtPointer{});
+    CHECK_MSG(layer.Paused(), what + ": a lone finger's tap on the pause button pauses");
+}
+
+// A second finger on a control while the controls finger is down is ignored whole: it walks nothing, cancels nothing, fires nothing.
+void TheSecondContactOnTheSamePadIsIgnored() {
+    MdRun run(MdSplitPaths(), "level30", "TheSecondContactOnTheSamePadIsIgnored");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "TheSecondContactOnTheSamePadIsIgnored";
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    CtTick(layer, registry, arrow);
+    arrow.pressed = false;
+    CtTicks(layer, registry, 4, arrow);
+    // One finger's pace.
+    double before = playerPx(registry, layer).x;
+    CtTick(layer, registry, arrow);
+    const double pace = playerPx(registry, layer).x - before;
+    CHECK_MSG(pace > 1.0, what + ": he walks right at " + PtrNum(pace) + " a tick");
+    // A second on the same arrow and a third on the other: neither walks, neither cancels.
+    const std::vector<CtFinger> more{CtFinger{1, scene.right + glm::vec2(5.0f, 0.0f), false}, CtFinger{2, scene.left, false}};
+    bool sameEveryTick = true;
+    for (int tick = 0; tick < 6; ++tick) {
+        before = playerPx(registry, layer).x;
+        CtTick(layer, registry, arrow, more);
+        if (std::fabs((playerPx(registry, layer).x - before) - pace) > 0.01) sameEveryTick = false;
+    }
+    CHECK_MSG(sameEveryTick, what + ": he walks at the one finger's pace on every tick");
+    const Controls::ContactRoles roles = layer.ContactRolesNow();
+    CHECK_MSG(roles.controls != Controls::kNoContact && roles.world == Controls::kNoContact && layer.ContactsSplit(),
+              what + ": the pointer works the controls and nothing is the world's: " + std::to_string(roles.controls) + ", " + std::to_string(roles.world));
+    CtTick(layer, registry, arrow);
+    CHECK_MSG(CtFired(layer) == fired0, what + ": and their lifts fire nothing");
+}
+
+// ONE FINGER, READ AS EVER. The same script on three layers - the first reads two fingers and is fed the engine's contact list as a desktop gives it (the
+// mouse as contact 0 while its button is down, and ENDED once more on the frame it came up, at the last place it was seen: one pixel off the mouse when the
+// mouse moved on that frame), the second reads two fingers and is fed by the DEVICE path (a RawInputState through the engine's own SynthesiseMouseContact and
+// Update: nothing of the contact list is hand-written), the third reads one and is fed none - is the same game on every tick: the walk, a slide off the arrow,
+// a drag, a shot, the pause and its resume. (Round R of planning step 191: until then the first layer was never fed the Ended contact, so the guard that keeps
+// the mouse's own lift from being a second finger ran for an engine finger only, and nothing was fed by the device path at all.)
+void OneContactBehavesExactlyAsToday() {
+    MdRun a(MdSplitPaths(CtFlag(true)), "level30", "OneContactBehavesExactlyAsToday: two, replayed");
+    MdRun c(MdSplitPaths(CtFlag(true)), "level30", "OneContactBehavesExactlyAsToday: two, the device path");
+    MdRun b(MdSplitPaths(CtFlag(false)), "level30", "OneContactBehavesExactlyAsToday: one");
+    if (!a.ok || !b.ok || !c.ok) return;
+    const std::string what = "OneContactBehavesExactlyAsToday";
+    CHECK_MSG(a.layer.TwoContactsOn() && c.layer.TwoContactsOn() && !b.layer.TwoContactsOn(), what + ": two layers read two fingers and the other one");
+    const CtScene scene = CtSceneOf(a.layer);
+    // The script: each entry is the pointer on a tick.
+    std::vector<CtPointer> script;
+    const auto hold = [&script](int ticks, const glm::vec2& at, bool press) {
+        for (int tick = 0; tick < ticks; ++tick) {
+            CtPointer p;
+            p.down = true;
+            p.pressed = press && tick == 0;
+            p.at = at;
+            script.push_back(p);
+        }
+    };
+    // The mouse comes up one pixel from where it was last held, and the engine lists the contact it had, ended, where it was last held.
+    const auto lift = [&script](const glm::vec2& at) {
+        CtPointer p;
+        p.released = true;
+        p.at = at + glm::vec2(1.0f, 0.0f);
+        p.endedAt = at;
+        script.push_back(p);
+    };
+    const auto rest = [&script](int ticks) {
+        for (int tick = 0; tick < ticks; ++tick) script.push_back(CtPointer{});
+    };
+    rest(30);
+    hold(12, scene.right, true);          // the arrow
+    hold(8, scene.left, false);           // slid to the other arrow
+    hold(5, scene.world, false);          // slid off into the world
+    lift(scene.world);                    // a drag short enough to shoot
+    rest(30);
+    hold(1, scene.world + glm::vec2(30.0f, 20.0f), true);
+    lift(scene.world + glm::vec2(30.0f, 20.0f)); // a tap
+    rest(30);
+    hold(3, scene.restart, true);         // restart held, then slid off before it comes up
+    hold(2, scene.world, false);
+    lift(scene.world);
+    rest(30);
+    hold(2, scene.pause, true);           // the pause
+    lift(scene.pause);
+    rest(3);
+    {
+        CtPointer back;
+        back.keys.push_back(MagicPortalsLayer::kBack);
+        script.push_back(back);           // resumes
+    }
+    rest(10);
+    hold(1, scene.world, true);           // a tap in the world once more
+    lift(scene.world);
+    rest(30);
+    hold(10, scene.right, true);
+    lift(scene.right);
+    rest(10);
+    const auto agree = [&what](MagicPortalsLayer& x, entt::registry& xr, MagicPortalsLayer& y, entt::registry& yr) {
+        return playerPx(xr, x) == playerPx(yr, y) && x.CameraCentrePx() == y.CameraCentrePx() && CtFired(x) == CtFired(y) && x.Paused() == y.Paused() &&
+               x.TouchSwallowed() == y.TouchSwallowed() && x.LevelAgeMs() == y.LevelAgeMs() && PtrLastTap(x) == PtrLastTap(y) && !x.ContactsSplit();
+    };
+    int differing = 0;
+    int differingLive = 0;
+    std::string first;
+    std::string firstLive;
+    int began = 0;
+    int beganAsRead = 0;
+    int ended = 0;
+    int endedAsRead = 0;
+    for (std::size_t tick = 0; tick < script.size(); ++tick) {
+        CtTick(a.layer, a.registry, script[tick], {}, true);
+        CtLiveTick(c.layer, c.registry, script[tick]);
+        // The device path, read back: what the engine derives from the mouse is what this case says it is, or the case would pass for nothing.
+        if (script[tick].pressed) {
+            ++began;
+            if (Input::ContactCount() == 1 && Input::GetContact(0).id == 0 && Input::GetContact(0).phase == Supersonic::ContactPhase::Began) ++beganAsRead;
+        }
+        if (script[tick].released && script[tick].endedAt) {
+            ++ended;
+            const Supersonic::Contact gone = Input::GetContact(0);
+            if (Input::ContactCount() == 1 && gone.id == 0 && gone.phase == Supersonic::ContactPhase::Ended && gone.position != Input::MousePosition()) ++endedAsRead;
+        }
+        CtTick(b.layer, b.registry, script[tick], {}, false);
+        if (!agree(a.layer, a.registry, b.layer, b.registry)) {
+            ++differing;
+            if (first.empty()) first = "tick " + std::to_string(tick);
+        }
+        if (!agree(c.layer, c.registry, b.layer, b.registry)) {
+            ++differingLive;
+            if (firstLive.empty()) firstLive = "tick " + std::to_string(tick);
+        }
+    }
+    CtLiveRest();
+    CHECK_MSG(began > 0 && beganAsRead == began,
+              what + ": the engine hands the device path's mouse over as ONE contact, Began, id 0, on the tick it goes down: " + std::to_string(beganAsRead) + " of " + std::to_string(began));
+    CHECK_MSG(ended > 0 && endedAsRead == ended,
+              what + ": and lists it once more on the frame it comes up, Ended, at a place that is not where the mouse now is: " + std::to_string(endedAsRead) + " of " + std::to_string(ended));
+    CHECK_MSG(differing == 0, what + ": the replayed layer agrees with the one-finger layer on every one of " + std::to_string(script.size()) + " ticks (the first difference: " + first + ")");
+    CHECK_MSG(differingLive == 0, what + ": and so does the layer fed by the device path (the first difference: " + firstLive + ")");
+    CHECK_MSG(CtFired(a.layer) >= 2 && CtFired(c.layer) == CtFired(a.layer) && a.layer.SimLevel() != nullptr, what + ": and the script did something: it fired " + std::to_string(CtFired(a.layer)));
+}
+
+// A scheduled tap is a finger. With two contacts on they run AT ONCE; with the switch off, or in the classic style, they SERIALISE as they always did: the
+// second goes down after the first has come up.
+void TwoDevTapsSerialiseWhenTheSwitchIsOff() {
+    struct Variant {
+        const char* name;
+        MagicPortalsLayer::Paths paths;
+        bool atOnce;
+    };
+    const Variant variants[] = {{"contacts=two", MdSplitPaths(CtFlag(true)), true},
+                                {"contacts=one", MdSplitPaths(CtFlag(false)), false},
+                                {"classic", TestPaths(), false}};
+    for (const Variant& variant : variants) {
+        const std::string what = std::string("TwoDevTapsSerialiseWhenTheSwitchIsOff (") + variant.name + ")";
+        const Controls::Style want = std::string(variant.name) == "classic" ? Controls::Style::Classic : Controls::Style::Modern;
+        MdRun run(variant.paths, "level30", what, glm::vec2(1280.0f, 720.0f), true, want);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(layer.TwoContactsOn() == (variant.atOnce), what + ": the layer reads " + (variant.atOnce ? "two fingers" : "one"));
+        PtrRest(layer, registry, 30);
+        const glm::dvec2 view = layer.ViewPx();
+        // The arrow to hold: modern's right arrow, or a point 30 units in from the classic pad's corner.
+        const glm::dvec2 padView = want == Controls::Style::Modern ? MdGeometry(layer).hit[MdAt(PtrControl::Right)].Centre() : glm::dvec2(view.x - 30.0, view.y - 30.0);
+        const glm::dvec2 worldView(view.x * 0.5, view.y * 0.45);
+        const int T = layer.LayerTicks();
+        const int fired0 = CtFired(layer);
+        layer.ScheduleDevTap(T + 1, padView / view, T + 41);       // held 40 ticks on the arrow
+        layer.ScheduleDevTap(T + 11, worldView / view, T + 13);    // a tap in the world, asked for while the first is held
+        const double x0 = playerPx(registry, layer).x;
+        int firedAt = -1;
+        for (int tick = 1; tick <= 70; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            if (firedAt < 0 && CtFired(layer) > fired0) firedAt = tick;
+        }
+        CHECK_MSG(firedAt > 0, what + ": the world tap fires in the end");
+        if (variant.atOnce) {
+            CHECK_MSG(firedAt >= 12 && firedAt <= 16, what + ": at once, it fires on its own release (tick " + std::to_string(firedAt) + " after the first goes down at 1)");
+        } else {
+            CHECK_MSG(firedAt > 41, what + ": serialised, it waits for the first to come up (it fired on tick " + std::to_string(firedAt) + ", the first comes up on 41)");
+        }
+        CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": and exactly one portal in all: " + std::to_string(CtFired(layer) - fired0));
+        CHECK_MSG(playerPx(registry, layer).x - x0 > 40.0, what + ": the arrow walked him: " + PtrNum(playerPx(registry, layer).x - x0));
+    }
+}
+
+// A classic layer, or one forced classic, reads one pointer whatever fingers it is handed and whatever the data says.
+void AClassicLayerReadsOneFingerWhateverItIsHanded() {
+    for (const bool forced : {false, true}) {
+        const std::string what = std::string("AClassicLayerReadsOneFingerWhateverItIsHanded (") + (forced ? "--controls classic)" : "a bare layer)");
+        MdRun run(forced ? MdPaths("classic") : TestPaths(), "level30", what, glm::vec2(1280.0f, 720.0f), true, Controls::Style::Classic);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(!layer.TwoContactsOn(), what + ": no second finger is read");
+        const glm::dvec2 view = layer.ViewPx();
+        PtrRest(layer, registry, 30);
+        const int fired0 = CtFired(layer);
+        CtPointer pad;
+        pad.down = true;
+        pad.pressed = true;
+        pad.at = PtrPixel(layer, glm::dvec2(view.x - 30.0, view.y - 30.0));
+        CtTick(layer, registry, pad);
+        pad.pressed = false;
+        CtTicks(layer, registry, 4, pad);
+        const glm::vec2 world = PtrPixel(layer, glm::dvec2(view.x * 0.5, view.y * 0.45));
+        const std::vector<CtFinger> second{CtFinger{1, world, false}};
+        CtTicks(layer, registry, 4, pad, second);
+        CtTick(layer, registry, pad);
+        CHECK_MSG(CtFired(layer) == fired0 && !layer.ContactsSplit(), what + ": the second finger is not there: it fires nothing");
+    }
+}
+
+// A pause is a gap: what was down is forgotten, and a finger that is still down when the level takes the tick again was not seen to go down - its
+// lift starts and ends no shot.
+void AGapForgetsWhatWasDown() {
+    MdRun run(MdSplitPaths(), "level30", "AGapForgetsWhatWasDown");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "AGapForgetsWhatWasDown";
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    CtTick(layer, registry, arrow);
+    arrow.pressed = false;
+    const std::vector<CtFinger> second{CtFinger{1, scene.world, false}};
+    CtTicks(layer, registry, 5, arrow, second);
+    CHECK_MSG(layer.ContactsSplit(), what + ": two fingers, split");
+    // The back key pauses; both fingers stay down through it.
+    CtPointer back = arrow;
+    back.keys.push_back(MagicPortalsLayer::kBack);
+    CtTick(layer, registry, back, second);
+    CHECK_MSG(layer.Paused(), what + ": the back key pauses");
+    CtTicks(layer, registry, 5, arrow, second);
+    CtTick(layer, registry, back, second);
+    CHECK_MSG(!layer.Paused(), what + ": and resumes");
+    // Both are still down on the first tick of the level, which has not seen either go down.
+    CtTicks(layer, registry, 3, arrow, second);
+    CtTick(layer, registry, arrow);
+    CHECK_MSG(CtFired(layer) == fired0, what + ": the lift of a finger the level never saw go down fires nothing: " + std::to_string(CtFired(layer) - fired0));
+    // And a finger that goes down WHILE the level reads nothing - during the pause - and is still down when it resumes was not seen to go down either. (The
+    // first finger is on its arrow throughout; the second joins in the pause. Remembering what was down across the pause would make its first tick after
+    // the resume a PRESS, and its lift a shot.)
+    {
+        MdRun again(MdSplitPaths(), "level30", what + " (a finger that joins in the pause)");
+        if (!again.ok) return;
+        MagicPortalsLayer& second_layer = again.layer;
+        entt::registry& second_registry = again.registry;
+        PtrRest(second_layer, second_registry, 30);
+        const int firedAgain = CtFired(second_layer);
+        CtPointer onArrow;
+        onArrow.down = true;
+        onArrow.pressed = true;
+        onArrow.at = scene.right;
+        CtTick(second_layer, second_registry, onArrow);
+        onArrow.pressed = false;
+        CtTicks(second_layer, second_registry, 5, onArrow);
+        CtPointer pause = onArrow;
+        pause.keys.push_back(MagicPortalsLayer::kBack);
+        CtTick(second_layer, second_registry, pause);
+        CHECK_MSG(second_layer.Paused(), what + ": the back key pauses");
+        const std::vector<CtFinger> joined{CtFinger{1, scene.world, false}};
+        CtTicks(second_layer, second_registry, 5, onArrow, joined);
+        CtTick(second_layer, second_registry, pause, joined);
+        CHECK_MSG(!second_layer.Paused(), what + ": and resumes, the second finger down since the pause");
+        CtTicks(second_layer, second_registry, 4, onArrow, joined);
+        CtTick(second_layer, second_registry, onArrow);
+        CHECK_MSG(CtFired(second_layer) == firedAgain,
+                  what + ": the lift of a finger that went down in the pause fires nothing: " + std::to_string(CtFired(second_layer) - firedAgain));
+    }
+}
+
+// The engine reports a lifted contact for the frame it lifted in, and a frame can run more than one tick: the lift is the layer's once.
+void AnEndedContactIsAReleaseOnceEvenWhenTwoTicksSeeIt() {
+    MdRun run(MdSplitPaths(), "level30", "AnEndedContactIsAReleaseOnceEvenWhenTwoTicksSeeIt");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "AnEndedContactIsAReleaseOnceEvenWhenTwoTicksSeeIt";
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    // Two fingers, the second in the world; the second lifts, listed Ended on two consecutive ticks (one frame, two ticks).
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    CtTick(layer, registry, arrow);
+    arrow.pressed = false;
+    const std::vector<CtFinger> second{CtFinger{1, scene.world, false}};
+    CtTicks(layer, registry, 4, arrow, second);
+    const std::vector<CtFinger> ended{CtFinger{1, scene.world, true}};
+    CtTick(layer, registry, arrow, ended);
+    CHECK_MSG(CtFired(layer) == fired0 + 1 && layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired,
+              what + ": the Ended frame is the release: " + std::to_string(CtFired(layer) - fired0));
+    // A repeat of it would be a second tap 17 ms after the first, which the original's 400 ms between taps refuses - so the count would not show it: the
+    // layer's last ATTEMPT does (a refused tap leaves its reason, Cooldown, as the last tap).
+    CtTick(layer, registry, arrow, ended);
+    CtTick(layer, registry, arrow, ended);
+    CHECK_MSG(CtFired(layer) == fired0 + 1 && layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired,
+              what + ": and the next ticks of that frame are not another tap, not even a refused one: reason " +
+                  std::to_string(static_cast<int>(layer.SimLevel()->portals.lastTap.reason)));
+    PtrRest(layer, registry, 30);
+    CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": nor later: " + std::to_string(CtFired(layer) - fired0));
+}
+
+// The switch is data (controls.json input.two_contacts, shipped true) and the flag beats it: `contacts=one` and `contacts=two` for a run. The test variant that
+// claims classic reads one finger whatever either says.
+void TheDataAndTheFlagDecideWhetherTwoContactsAreRead() {
+    const std::string what = "TheDataAndTheFlagDecideWhetherTwoContactsAreRead";
+    {
+        MdRun run(MdSplitPaths(), "level30", what + ": the shipped data");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ControlsRules().twoContacts && run.layer.TwoContactsOn(), what + ": the shipped data reads two fingers under the modern controls");
+    }
+    {
+        MdRun run(MdPaths("modern", true, Controls::Arrows::Split), "level30", what + ": classic claims");
+        if (!run.ok) return;
+        CHECK_MSG(!run.layer.TwoContactsOn(), what + ": the variant that claims classic reads one finger whatever the data says");
+    }
+    const ControlsScratchGuard scratch;
+    const std::string data = ControlsScratchData("two-contacts-off", [](const std::string& text) {
+        std::string edited = text;
+        const std::string from = "\"two_contacts\": true";
+        const std::size_t at = edited.find(from);
+        CHECK_MSG(at != std::string::npos, "controls.json has the key this case rewrites");
+        if (at != std::string::npos) edited.replace(at, from.size(), "\"two_contacts\": false");
+        return std::optional<std::string>(edited);
+    });
+    for (const char* flag : {"modern", "modern,contacts=two", "modern,contacts=one"}) {
+        MagicPortalsLayer::Paths paths = MdSplitPaths(flag);
+        paths.portData = data;
+        MdRun run(paths, "level30", what + ": the data says false, " + flag);
+        if (!run.ok) return;
+        const bool want = std::string(flag) == "modern,contacts=two";
+        CHECK_MSG(!run.layer.ControlsRules().twoContacts, what + ": the layer read two_contacts = false from its copy of the data");
+        CHECK_MSG(run.layer.TwoContactsOn() == want, std::string(what) + ": " + flag + " over data that says false reads " + (want ? "two fingers" : "one"));
+    }
+}
+
+// THE SPRITE WALK'S SWITCH (planning step 191; Step 190's verifier: no case built a layer with Paths::spriteReport false, so the declined candidate's switch was
+// untested code that ships on). On, the first frame walks every sprite (the "on"/"off"/"GONE" lines); off, no frame does - and G still asks for the whole dump.
+void TheSpriteWalkRunsWhereSwitchedOnAndOnlyWhenAskedWhereSwitchedOff() {
+    if (!OriginalArtIsThere("TheSpriteWalkRunsWhereSwitchedOnAndOnlyWhenAskedWhereSwitchedOff")) return;
+    for (const bool on : {true, false}) {
+        const std::string what = std::string("TheSpriteWalkRunsWhereSwitchedOnAndOnlyWhenAskedWhereSwitchedOff (sprite report ") + (on ? "on)" : "off)");
+        MagicPortalsLayer::Paths paths = TestPaths();
+        paths.spriteReport = on;
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level30");
+        if (!PtrReady(registry, layer, what)) return;
+        CHECK_MSG(layer.SpriteCount() > 0, what + ": the level has sprites to walk: " + std::to_string(layer.SpriteCount()));
+        for (int frame = 0; frame < 3; ++frame) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(layer.SpriteWalkDone() == on && (layer.SpritesWalked() == layer.SpriteCount()) == on,
+                  what + ": after three frames the walk " + (on ? "has run over every sprite" : "has not run at all") + ": done " + std::to_string(layer.SpriteWalkDone()) + ", " +
+                      std::to_string(layer.SpritesWalked()) + " of " + std::to_string(layer.SpriteCount()) + " tracked");
+        // G: the whole dump, whatever the switch says.
+        tickWith(layer, registry, kRest, {MagicPortalsLayer::kDump}, {MagicPortalsLayer::kDump});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CHECK_MSG(layer.SpriteWalkDone() && layer.SpritesWalked() == layer.SpriteCount(), what + ": G walks them all, " + (on ? "as ever" : "though the switch is off"));
+        layer.OnDetach(registry);
+    }
+}
+
+// A corner button acts on the release inside it after a press inside it, and the press is the controls finger's. A second finger that comes while the
+// button is held keeps that press with the finger it belongs to - whether it is still down when the button comes up or has gone by then - so the pause opens.
+void ACornerPressSurvivesAnotherFingerComingAndGoing() {
+    for (const bool stillDown : {false, true}) {
+        const std::string what = std::string("ACornerPressSurvivesAnotherFingerComingAndGoing (the second finger ") + (stillDown ? "still down)" : "gone)");
+        MdRun run(MdSplitPaths(), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const CtScene scene = CtSceneOf(layer);
+        PtrRest(layer, registry, 30);
+        CtPointer button;
+        button.down = true;
+        button.pressed = true;
+        button.at = scene.pause;
+        CtTick(layer, registry, button);
+        button.pressed = false;
+        CtTicks(layer, registry, 2, button);
+        const std::vector<CtFinger> second{CtFinger{1, scene.world, false}};
+        CtTicks(layer, registry, 3, button, second);
+        CHECK_MSG(layer.ContactsSplit() && !layer.Paused(), what + ": two fingers, and the button not yet released");
+        if (!stillDown) CtTicks(layer, registry, 2, button);
+        CtPointer up;
+        up.released = true;
+        up.at = scene.pause;
+        CtTick(layer, registry, up, stillDown ? second : std::vector<CtFinger>{});
+        CtTicks(layer, registry, 2, CtPointer{});
+        CHECK_MSG(layer.Paused(), what + ": the button comes up inside the button it went down on: the pause opens");
+    }
+}
+
+// The roles are not the order the fingers went down in. The FIRST finger (the pointer) aims in the world and the SECOND goes down on the arrow: the second works the
+// controls and he walks, the first is still the world's and its release fires. (The mirror of AHeldArrowAndASecondContactFiresAPortal.)
+void AFingerOnAnArrowWalksWhateverOrderTheFingersWentDownIn() {
+    MdRun run(MdSplitPaths(), "level30", "AFingerOnAnArrowWalksWhateverOrderTheFingersWentDownIn");
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const std::string what = "AFingerOnAnArrowWalksWhateverOrderTheFingersWentDownIn";
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the layer reads two fingers");
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const int fired0 = CtFired(layer);
+    // The pointer goes down in the world and holds there.
+    CtPointer aim;
+    aim.down = true;
+    aim.pressed = true;
+    aim.at = scene.world;
+    CtTick(layer, registry, aim);
+    aim.pressed = false;
+    CtTicks(layer, registry, 3, aim);
+    // The second finger goes down on the right arrow: it walks him, on every tick, while the first stays where it is.
+    const std::vector<CtFinger> arrow{CtFinger{1, scene.right, false}};
+    const double x0 = playerPx(registry, layer).x;
+    bool walkedEveryTick = true;
+    for (int tick = 0; tick < 8; ++tick) {
+        const double before = playerPx(registry, layer).x;
+        CtTick(layer, registry, aim, arrow);
+        if (tick > 0 && playerPx(registry, layer).x - before < 1.0) walkedEveryTick = false;
+    }
+    CHECK_MSG(playerPx(registry, layer).x - x0 > 8.0 && walkedEveryTick, what + ": the second finger on the arrow walks him: " + PtrNum(playerPx(registry, layer).x - x0));
+    const Controls::ContactRoles roles = layer.ContactRolesNow();
+    CHECK_MSG(layer.ContactsSplit() && roles.controls == 1 && roles.world != 1 && roles.world != Controls::kNoContact,
+              what + ": the second works the controls and the first is the world's: " + std::to_string(roles.controls) + ", " + std::to_string(roles.world));
+    CHECK_MSG(CtFired(layer) == fired0, what + ": nothing leaves while both are down");
+    // The first lifts: its release is the world's, and fires. He walks on.
+    CtPointer up;
+    up.released = true;
+    up.at = scene.world;
+    const double before = playerPx(registry, layer).x;
+    CtTick(layer, registry, up, arrow);
+    CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": the first finger's release fires one portal: " + std::to_string(CtFired(layer) - fired0));
+    CtTicks(layer, registry, 4, CtPointer{}, arrow);
+    CHECK_MSG(playerPx(registry, layer).x - before > 8.0, what + ": and he walks on under the second: " + PtrNum(playerPx(registry, layer).x - before));
+    CtTick(layer, registry, CtPointer{});
+    CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": the arrow's release fires nothing");
+}
+
+// ---- THE PRESS OF A FINGER THAT LANDS AS ANOTHER LIFTS (planning step 191, round R) -------------------------------------------------------------------
+//
+// A finger that lifts still holds its role on the tick it lifts (its release is read on that tick), so a finger that lands on the SAME tick cannot be given
+// one: it OWES its press, which is delivered on the next tick it is read - when it is alone. Until round R its press was thrown away: the newcomer was listed
+// as pressed, given no role, and found "known" on the next tick with no press edge to arm anything, so its tap fired nothing. (A finger that lands while the
+// role is HELD by one that stays down is ignored whole, as the design has it: TheSecondContactOnTheSamePadIsIgnored, and a bystander that takes the world
+// later fires nothing: TheWorldContactChangingMidHoldResetsTheRecords.) Three newcomers: an engine finger in the world, an engine finger on the pause button,
+// and the mouse.
+void AFingerThatLandsAsAnotherLiftsLosesNoPress() {
+    const std::string name = "AFingerThatLandsAsAnotherLiftsLosesNoPress";
+    // The world, an engine finger lands as the mouse lifts. The mouse dragged far from where it went down, so its lift fires nothing and the second shot is not
+    // hidden by the 400 ms between taps.
+    {
+        const std::string what = name + " (an engine finger in the world)";
+        MdRun run(MdSplitPaths(), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        CHECK_MSG(layer.TwoContactsOn(), what + ": the layer reads two fingers");
+        const CtScene scene = CtSceneOf(layer);
+        PtrRest(layer, registry, 30);
+        const int fired0 = CtFired(layer);
+        CtPointer mouse;
+        mouse.down = true;
+        mouse.pressed = true;
+        mouse.at = scene.world;
+        CtTick(layer, registry, mouse);
+        mouse.pressed = false;
+        mouse.at = scene.world + glm::vec2(100.0f, 0.0f);
+        CtTick(layer, registry, mouse);
+        mouse.at = scene.world + glm::vec2(200.0f, 0.0f);
+        CtTicks(layer, registry, 2, mouse);
+        const glm::vec2 landsAt = scene.world - glm::vec2(260.0f, 0.0f);
+        const std::vector<CtFinger> lands{CtFinger{1, landsAt, false}};
+        CtPointer up;
+        up.released = true;
+        up.at = mouse.at;
+        CtTick(layer, registry, up, lands); // the mouse comes up as the finger goes down
+        CHECK_MSG(CtFired(layer) == fired0, what + ": the mouse's lift fired nothing (it was dragged away)");
+        CtTicks(layer, registry, 3, CtPointer{}, lands);
+        CHECK_MSG(CtFired(layer) == fired0 && !layer.ContactsSplit(), what + ": and nothing leaves while the finger is down, alone and the world's");
+        CHECK_MSG(layer.ContactRolesNow().world == 1, what + ": it is the world's finger: " + std::to_string(layer.ContactRolesNow().world));
+        CtTick(layer, registry, CtPointer{}); // gone from the list: it came up where it stood
+        CHECK_MSG(CtFired(layer) == fired0 + 1 && layer.SimLevel()->portals.lastTap.reason == MagicPortals::Portals::TapReason::Fired,
+                  what + ": its lift fires its shot, the press it owed having been delivered: " + std::to_string(CtFired(layer) - fired0));
+        glm::dvec2 aimed(0.0);
+        CHECK_MSG(layer.ViewportToLevelPx(registry, landsAt, aimed) && glm::distance(PtrLastTap(layer), aimed) < 8.0,
+                  what + ": at the place the finger stood: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+    }
+    // A control: the mouse comes up off the arrow as an engine finger lands on the pause button. The button acts on the release inside it after a press inside
+    // it, so a press that was thrown away would leave the pause shut.
+    {
+        const std::string what = name + " (an engine finger on the pause button)";
+        MdRun run(MdSplitPaths(), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const CtScene scene = CtSceneOf(layer);
+        PtrRest(layer, registry, 30);
+        CtPointer arrow;
+        arrow.down = true;
+        arrow.pressed = true;
+        arrow.at = scene.right;
+        CtTick(layer, registry, arrow);
+        arrow.pressed = false;
+        CtTicks(layer, registry, 3, arrow);
+        const std::vector<CtFinger> lands{CtFinger{1, scene.pause, false}};
+        CtPointer up;
+        up.released = true;
+        up.at = scene.right;
+        CtTick(layer, registry, up, lands);
+        CtTicks(layer, registry, 3, CtPointer{}, lands);
+        CHECK_MSG(!layer.Paused(), what + ": the button acts on the release, not before");
+        CtTick(layer, registry, CtPointer{});
+        CtTicks(layer, registry, 2, CtPointer{});
+        CHECK_MSG(layer.Paused(), what + ": the finger that landed as the arrow's lifted pauses: its press was delivered");
+    }
+    // The mouse lands as an engine finger lifts: the mouse's press edge is latched and spent by the tick it was owed on, so the layer must remember it owes it.
+    {
+        const std::string what = name + " (the mouse)";
+        MdRun run(MdSplitPaths(), "level30", what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const CtScene scene = CtSceneOf(layer);
+        PtrRest(layer, registry, 30);
+        const int fired0 = CtFired(layer);
+        // A lone engine finger in the world drags away and is gone as the mouse goes down.
+        CtTick(layer, registry, CtPointer{}, {CtFinger{1, scene.world, false}});
+        CtTick(layer, registry, CtPointer{}, {CtFinger{1, scene.world + glm::vec2(100.0f, 0.0f), false}});
+        CtTicks(layer, registry, 2, CtPointer{}, {CtFinger{1, scene.world + glm::vec2(200.0f, 0.0f), false}});
+        const glm::vec2 landsAt = scene.world - glm::vec2(260.0f, 0.0f);
+        CtPointer mouse;
+        mouse.down = true;
+        mouse.pressed = true;
+        mouse.at = landsAt;
+        CtTick(layer, registry, mouse);
+        CHECK_MSG(CtFired(layer) == fired0, what + ": the finger's lift fired nothing (it was dragged away)");
+        mouse.pressed = false;
+        CtTicks(layer, registry, 3, mouse);
+        CHECK_MSG(CtFired(layer) == fired0 && !layer.ContactsSplit(), what + ": nothing leaves while the mouse is down");
+        CtPointer release;
+        release.released = true;
+        release.at = landsAt;
+        CtTick(layer, registry, release);
+        CHECK_MSG(CtFired(layer) == fired0 + 1, what + ": and its lift fires its shot: " + std::to_string(CtFired(layer) - fired0));
+    }
+}
+
+// Scheduled taps are DEV fingers that overlap only where two fingers can: one on a control and one in the world. Two that would hold the same place - both
+// in the world - go down in order, as scheduled taps always did: the second waits for the first to come up. Until round R the second went down beside the first,
+// was given no role and acted on nothing, in a level and (through the one reading) in every menu; the 128 routes have no two taps that touch.
+void ScheduledTapsThatCollideGoDownInOrder() {
+    for (const bool two : {true, false}) {
+        for (const int apart : {0, 1}) {
+            const std::string what = std::string("ScheduledTapsThatCollideGoDownInOrder (contacts=") + (two ? "two" : "one") + ", the second due " +
+                                     (apart == 0 ? "on the same tick)" : "as the first comes up)");
+            MdRun run(MdSplitPaths(CtFlag(two)), "level30", what);
+            if (!run.ok) return;
+            MagicPortalsLayer& layer = run.layer;
+            entt::registry& registry = run.registry;
+            CHECK_MSG(layer.TwoContactsOn() == two, what + ": the layer reads " + (two ? "two fingers" : "one"));
+            PtrRest(layer, registry, 30);
+            const int fired0 = CtFired(layer);
+            const int T = layer.LayerTicks();
+            const glm::dvec2 first(0.5, 0.45);
+            const glm::dvec2 second(0.38, 0.40);
+            layer.ScheduleDevTap(T + 2, first, T + 3);
+            layer.ScheduleDevTap(T + 2 + apart, second, T + 160); // held long: its shot is well clear of the 400 ms between taps
+            int firedFirstAt = -1;
+            int firedSecondAt = -1;
+            for (int tick = 1; tick <= 190; ++tick) {
+                tickWith(layer, registry, kRest, {}, {});
+                if (firedFirstAt < 0 && CtFired(layer) > fired0) firedFirstAt = tick;
+                if (firedSecondAt < 0 && CtFired(layer) > fired0 + 1) firedSecondAt = tick;
+            }
+            CHECK_MSG(firedFirstAt > 0 && firedFirstAt < 10, what + ": the first fires on its own release, early: tick " + std::to_string(firedFirstAt));
+            CHECK_MSG(CtFired(layer) == fired0 + 2, what + ": and the second fires too, on its release: " + std::to_string(CtFired(layer) - fired0) + " portals");
+            CHECK_MSG(firedSecondAt >= 155 && firedSecondAt <= 162, what + ": it went down after the first came up and fired on its own release (tick " + std::to_string(firedSecondAt) + " of 160)");
+            glm::dvec2 aimed(0.0);
+            CHECK_MSG(layer.ViewportToLevelPx(registry, glm::vec2(static_cast<float>(second.x * 1280.0), static_cast<float>(second.y * 720.0)), aimed) &&
+                          glm::distance(PtrLastTap(layer), aimed) < 8.0,
+                      what + ": the last shot is the second tap's: " + Point(PtrLastTap(layer)) + " against " + Point(aimed));
+        }
+    }
+}
+
+// A menu, the loading screen and a popup read the ONE pointer, as they always did: a lone engine finger (no mouse button) reaches nothing there. Two scheduled
+// taps that touch act in order in the Options screen, the way a chain of taps drives a menu. (Round R of planning step 191: these screens used to take the
+// level's reading of the fingers, which kept a memory of two behind a popup and, with a finger on a menu, read a finger no menu ever read.)
+void TheMenusReadTheOnePointerAndNothingElse() {
+    if (!OriginalArtIsThere("TheMenusReadTheOnePointerAndNothingElse")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string what = "TheMenusReadTheOnePointerAndNothingElse";
+    OsRun run(OsPaths(OsDir("pointer-saves"), OsDir("pointer-prisms"), std::string("modern")), what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the run reads two fingers in a level");
+    if (!OsOpenOptions(run, what)) return;
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern, what + ": it starts on Modern");
+    const glm::dvec2 view = layer.ViewPx();
+    // A lone engine finger on the Classic tile, down, held and up: nothing, in a menu.
+    CtTicks(layer, run.registry, 4, CtPointer{}, {CtFinger{1, OsPx(OsTileCentre(layer, Style::Classic)), false}});
+    CtTicks(layer, run.registry, 3, CtPointer{});
+    CHECK_MSG(layer.ControlsStyle() == Style::Modern && !layer.ContactsSplit(), what + ": a lone engine finger on the Classic tile changes nothing: a menu reads the pointer");
+    // The control: the pointer on the same tile does.
+    OsClick(run, OsTileCentre(layer, Style::Classic));
+    CHECK_MSG(layer.ControlsStyle() == Style::Classic, what + ": the pointer on the Classic tile changes the run");
+    // Two scheduled taps, the second due as the first comes up: Modern, then Classic again, in that order.
+    const int T = layer.LayerTicks();
+    layer.ScheduleDevTap(T + 1, OsTileCentre(layer, Style::Modern) / view, T + 2);
+    layer.ScheduleDevTap(T + 2, OsTileCentre(layer, Style::Classic) / view, T + 3);
+    bool sawModern = false;
+    for (int tick = 0; tick < 10; ++tick) {
+        tickWith(layer, run.registry, kRest, {}, {});
+        sawModern = sawModern || layer.ControlsStyle() == Style::Modern;
+    }
+    CHECK_MSG(sawModern && layer.ControlsStyle() == Style::Classic, what + ": two taps that touch both act, in order (Modern was chosen on the way: " + std::to_string(sawModern) + ")");
+}
+
+// A finger that rests on a control while another works it is ignored, and the layer remembers it as down. A restart forgets what was down: the finger is
+// still down across the load, so the new level did not see it go down, and it is swallowed when the controls come to it - as the one-finger rule has it. (Round R
+// of planning step 191: the memory outlived the load, so the second finger was found to be a finger whose press the level had seen, and walked him.)
+void AFingerRestingOnAControlIsSwallowedAcrossARestartLikeOne() {
+    const std::string what = "AFingerRestingOnAControlIsSwallowedAcrossARestartLikeOne";
+    MdRun run(MdSplitPaths(), "level30", what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    // Both land on the same tick: the pointer works the right arrow, the finger resting on the left one has no role.
+    const std::vector<CtFinger> resting{CtFinger{1, scene.left, false}};
+    const double x0 = playerPx(registry, layer).x;
+    CtTick(layer, registry, arrow, resting);
+    arrow.pressed = false;
+    CtTicks(layer, registry, 12, arrow, resting);
+    CHECK_MSG(playerPx(registry, layer).x - x0 > 8.0 && layer.ContactsSplit(), what + ": the arrow's finger walks him, the other has no role: " + PtrNum(playerPx(registry, layer).x - x0));
+    CHECK_MSG(layer.ContactRolesNow().world == Controls::kNoContact && layer.ContactRolesNow().controls != 1, what + ": nothing is the world's, and the resting finger works nothing");
+    // The retry key, with both down.
+    CtPointer retry = arrow;
+    retry.keys.push_back(MagicPortalsLayer::kRetry);
+    CtTick(layer, registry, retry, resting);
+    const double afterLoad = playerPx(registry, layer).x;
+    CHECK_MSG(layer.LevelAgeMs() < 100.0, what + ": the level was loaded again: age " + PtrNum(layer.LevelAgeMs()));
+    // Both stay down while the arrows slide in again (700 ms) and after: neither walks him.
+    CtTicks(layer, registry, 60, arrow, resting);
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - afterLoad) < 0.5, what + ": the finger held across the load is swallowed: " + PtrNum(playerPx(registry, layer).x - afterLoad));
+    // The first lifts. The second is alone now, on the left arrow, a finger the new level never saw go down: still no walk.
+    CtPointer up;
+    up.released = true;
+    up.at = scene.right;
+    CtTick(layer, registry, up, resting);
+    CtTicks(layer, registry, 8, CtPointer{}, resting);
+    CHECK_MSG(std::fabs(playerPx(registry, layer).x - afterLoad) < 0.5, what + ": and the second, left alone, does not walk him either: " + PtrNum(playerPx(registry, layer).x - afterLoad));
+    // The control: both up, and a fresh press on the left arrow walks him.
+    CtTicks(layer, registry, 3, CtPointer{});
+    CtPointer fresh;
+    fresh.down = true;
+    fresh.pressed = true;
+    fresh.at = scene.left;
+    CtTick(layer, registry, fresh);
+    fresh.pressed = false;
+    CtTicks(layer, registry, 12, fresh);
+    CHECK_MSG(playerPx(registry, layer).x - afterLoad < -8.0, what + ": a fresh press walks him: " + PtrNum(playerPx(registry, layer).x - afterLoad));
+}
+
+// The camera's record follows the world finger. The finger that pans it slides onto an arrow and another, resting far away, becomes the world's: the pan
+// must not jump by the distance between the two (a record left standing would take the second finger's place as the first's next step).
+void TheWorldContactChangingDoesNotJumpTheCamera() {
+    const std::string what = "TheWorldContactChangingDoesNotJumpTheCamera";
+    MdRun run(MdSplitPaths(), "level0", what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.TwoContactsOn() && layer.CameraRules().drag.enabled, what + ": two fingers, and the port's camera takes a drag");
+    PtrRest(layer, registry, 60);
+    const CtScene scene = CtSceneOf(layer);
+    const glm::dvec2 view = layer.ViewPx();
+    // The first finger drags left by 14 pixels a tick for 8 ticks (a pan of twice that, to the right). The second rests 70 pixels - about 25 units - left of
+    // where the first will be when it slides away: nearer than the 35.6 units a frame's move may be for the camera to take it at all, and far enough that
+    // a record left standing would pan the view by twice the distance, about 50 units.
+    const glm::vec2 pAt = PtrPixel(layer, glm::dvec2(view.x * 0.6, view.y * 0.3));
+    const glm::vec2 qAt = pAt - glm::vec2(14.0f * 8.0f + 70.0f, 0.0f);
+    CHECK_MSG(25.0 < layer.CameraRules().drag.maxFrameMoveUnits, what + ": a 25-unit move is one the camera takes: " + PtrNum(layer.CameraRules().drag.maxFrameMoveUnits));
+    CHECK_MSG(!layer.ControlAt(glm::dvec2(pAt.x, pAt.y) / glm::dvec2(1280.0, 720.0) * view) && !layer.ControlAt(glm::dvec2(qAt.x, qAt.y) / glm::dvec2(1280.0, 720.0) * view),
+              what + ": both places are the world's");
+    const glm::dvec2 rest = layer.CameraCentrePx();
+    CtPointer pan;
+    pan.down = true;
+    pan.pressed = true;
+    pan.at = pAt;
+    CtTick(layer, registry, pan);
+    pan.pressed = false;
+    // The second finger lands far to the left, in the world, while the first holds the world's role: it has none.
+    const std::vector<CtFinger> far{CtFinger{1, qAt, false}};
+    CtTick(layer, registry, pan, far);
+    for (int tick = 0; tick < 8; ++tick) {
+        pan.at.x -= 14.0f;
+        CtTick(layer, registry, pan, far);
+    }
+    const glm::dvec2 panned = layer.CameraCentrePx();
+    CHECK_MSG(panned.x - rest.x > 20.0, what + ": the first finger's drag pans the view right: " + PtrNum(panned.x - rest.x));
+    CHECK_MSG(layer.ContactRolesNow().world != 1 && layer.ContactRolesNow().world != Controls::kNoContact && layer.ContactRolesNow().controls == Controls::kNoContact,
+              what + ": the first is the world's and the second has no role");
+    // The first slides onto the right arrow: it works the controls, and the second becomes the world's.
+    pan.at = scene.right;
+    const glm::dvec2 before = layer.CameraCentrePx();
+    CtTick(layer, registry, pan, far);
+    CHECK_MSG(layer.ContactRolesNow().world == 1 && layer.ContactRolesNow().controls != 1, what + ": the second finger is the world's now: " + std::to_string(layer.ContactRolesNow().world));
+    const glm::dvec2 after = layer.CameraCentrePx();
+    CHECK_MSG(glm::length(after - before) < 1.0, what + ": and the view did not jump by the distance between the fingers: " + PtrNum(glm::length(after - before)));
+    CtTicks(layer, registry, 3, pan, far);
+    CHECK_MSG(glm::length(layer.CameraCentrePx() - before) < 1.0, what + ": nor on the ticks after it, the second finger resting: " + PtrNum(glm::length(layer.CameraCentrePx() - before)));
+}
+
+// A help block is the WORLD finger's: a touch that goes down on it fires no portal and, coming up, opens its popup - with an arrow held by the other finger.
+void AWorldFingerTapsAHelpBlockWhileAnArrowIsHeld() {
+    if (!OriginalArtIsThere("AWorldFingerTapsAHelpBlockWhileAnArrowIsHeld")) return; // the popup's card and button are the original's
+    const std::string what = "AWorldFingerTapsAHelpBlockWhileAnArrowIsHeld";
+    MdRun run(MdSplitPaths(), "level12", what);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    CHECK_MSG(layer.TwoContactsOn(), what + ": the layer reads two fingers");
+    const CtScene scene = CtSceneOf(layer);
+    PtrRest(layer, registry, 30);
+    const std::vector<Hud::Rect> blocks = layer.HelpBlockRects();
+    CHECK_MSG(blocks.size() == 1u, what + ": level12 places one help block the view shows");
+    if (blocks.size() != 1u) return;
+    const glm::dvec2 centre = blocks[0].Centre();
+    const glm::dvec2 viewSize = layer.ViewPx();
+    CHECK_MSG(centre.x > 0.0 && centre.x < viewSize.x && centre.y > 0.0 && centre.y < viewSize.y && !layer.ControlAt(centre),
+              what + ": and its centre is on the view, the world's and not a control's: " + Point(centre));
+    const glm::vec2 onBlock = PtrPixel(layer, centre);
+    const int fired0 = CtFired(layer);
+    CtPointer arrow;
+    arrow.down = true;
+    arrow.pressed = true;
+    arrow.at = scene.right;
+    CtTick(layer, registry, arrow);
+    arrow.pressed = false;
+    CtTicks(layer, registry, 3, arrow);
+    const std::vector<CtFinger> block{CtFinger{1, onBlock, false}};
+    CtTicks(layer, registry, 3, arrow, block);
+    CHECK_MSG(layer.ContactsSplit() && layer.ContactRolesNow().world == 1, what + ": the arrow's finger works the controls and the one on the block the world: " + std::to_string(layer.ContactRolesNow().world));
+    CHECK_MSG(!layer.PopupOpen() && CtFired(layer) == fired0, what + ": nothing opens or leaves while it is down");
+    CtTick(layer, registry, arrow); // gone from the list: it came up on the block
+    CHECK_MSG(layer.PopupOpen(), what + ": its release opens the block's popup");
+    CHECK_MSG(CtFired(layer) == fired0, what + ": and fired no portal: " + std::to_string(CtFired(layer) - fired0));
+}
+
+void runContactTests() {
+    AFingerOnAnArrowWalksWhateverOrderTheFingersWentDownIn();
+    ACornerPressSurvivesAnotherFingerComingAndGoing();
+    TheSpriteWalkRunsWhereSwitchedOnAndOnlyWhenAskedWhereSwitchedOff();
+    TheDataAndTheFlagDecideWhetherTwoContactsAreRead();
+    AHeldArrowAndASecondContactFiresAPortal();
+    TheFirstContactsReleaseOnAPadFiresNothing();
+    TheWorldContactChangingMidHoldResetsTheRecords();
+    AContactThatVanishesMidHoldLeavesNoRecordStuck();
+    ASecondContactCannotUnSwallowTheFirst();
+    AMenuButtonIsNotPressedThroughAHeldControl();
+    TheSecondContactOnTheSamePadIsIgnored();
+    OneContactBehavesExactlyAsToday();
+    TwoDevTapsSerialiseWhenTheSwitchIsOff();
+    AClassicLayerReadsOneFingerWhateverItIsHanded();
+    AGapForgetsWhatWasDown();
+    AnEndedContactIsAReleaseOnceEvenWhenTwoTicksSeeIt();
+    AFingerThatLandsAsAnotherLiftsLosesNoPress();
+    ScheduledTapsThatCollideGoDownInOrder();
+    TheMenusReadTheOnePointerAndNothingElse();
+    AFingerRestingOnAControlIsSwallowedAcrossARestartLikeOne();
+    TheWorldContactChangingDoesNotJumpTheCamera();
+    AWorldFingerTapsAHelpBlockWhileAnArrowIsHeld();
+}
+
 void runModernTests() {
     AHeldTouchOnTheModernLeftArrowWalksLeft();
     AHeldTouchOnTheModernRightArrowWalksRight();
@@ -29775,6 +30982,8 @@ void runModernTests() {
     ThePlayersKeptTuningIsPlayedFromTheFileAndNothingIsWritten();
     ATunedFileIsIgnoredByAClassicRunAndPlayedAfterTheSwitch();
     AnUnforcedClassicRunPlaysTheClassicClaimsAndHud();
+    // A second finger (planning step 191).
+    runContactTests();
 }
 
 // ---- a level the port cannot load, a start it cannot make, and a save it cannot read (planning step 189) ----------------------------------

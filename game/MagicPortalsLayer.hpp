@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -194,9 +195,11 @@ public:
         bool fixedStep = false;
 
         // Whether the layer walks its sprites every frame to log the ones that cross the view's edge ("on", "off", "GONE" lines: reportSprites).
-        // A developer's instrument, and the walk costs a pass over every sprite on every frame of a player's run for lines nobody reads
-        // (planning step 190, PA-12): main turns it off for a person's run (game/data/engine.json, sprite_report). On by default, so every
-        // suite and every capture keeps what it has always had. The dropped-draw alarm and G's full dump are kept whatever this says.
+        // A developer's instrument, and the walk costs a pass over every sprite on every frame for lines nobody reads in a player's run
+        // (planning step 190, PA-12). main passes what game/data/engine.json (sprite_report) or --sprite-report says: ON as shipped, for a
+        // person's run as for every other, because the measurement found nothing to gain by turning it off (the table says so; --sprite-report
+        // off or the table turns it off for a run). On by default here too, so every suite and every capture keeps what it has always had. The
+        // dropped-draw alarm and G's full dump are kept whatever this says.
         bool spriteReport = true;
 
         // WHICH CONTROLS THE RUN PLAYS (planning step 181, CTL-5; the design's 2.1): what main's
@@ -1297,6 +1300,18 @@ public:
     // Whether the touch now held is being swallowed (see m_swallowUntilUp): a test's precondition for "it did not walk because it was
     // swallowed", not because nothing claimed it.
     bool TouchSwallowed() const { return m_swallowUntilUp; }
+    // Whether the sprite walk (reportSprites' per-sprite pass, the "on"/"off"/"GONE" lines) has run since the level loaded, and how many sprites it keeps
+    // track of: what a case reads to say that a layer with Paths::spriteReport off walks nothing until G asks, and one with it on walks at once.
+    bool SpriteWalkDone() const { return m_reportedOnce; }
+    std::size_t SpritesWalked() const { return m_onScreenLast.size(); }
+    std::size_t SpriteCount() const { return m_sprites.size(); }
+    // TWO CONTACTS (planning step 191, CTL-14). Whether this run reads a second finger: the modern controls with the data's input.two_contacts
+    // (or the flag's `contacts=`), and not the test variant that claims with the classic rules. The classic style never does.
+    bool TwoContactsOn() const { return twoContactsOn(); }
+    // The roles the last tick gave the fingers (sim/Controls AssignContacts), and whether the controls and the world were two fingers on it.
+    // A test's window on the machinery, not a way in.
+    Controls::ContactRoles ContactRolesNow() const { return m_fingers.roles; }
+    bool ContactsSplit() const { return m_split; }
     // The picture a modern control is drawn with, resolved once per run through the four tiers (planning step 184): Magic Rampage's file,
     // the original's own corner sprite, the glyph the game draws (written into Paths::prisms), or empty where there is none - and the
     // control is a flat quad. Empty for a classic run.
@@ -1551,6 +1566,12 @@ public:
     // It never moves, so it always fires if nothing takes it; a drag (below) that
     // strays more than scale(18) does not. The pause and the end screens still
     // read the mouse alone; the pause's buttons have ScheduleDevPress.
+    // TAPS SERIALISE: one at a time, the next going down after the last has come up, wherever
+    // they are asked for - in a menu, a popup and the loading screen always. In a LEVEL under the
+    // modern controls with two contacts on (planning step 191, TwoContactsOn) they overlap where
+    // two fingers can instead, each a finger of its own: a tap held on an arrow and another that
+    // shoots. Two that would hold the same place (both in the world, both on a control) still go
+    // down in order: the later one waits for the earlier to come up.
     void ScheduleDevTap(int tick, std::optional<glm::dvec2> viewFraction, int releaseTick = 0);
     // DEV ONLY: a drag - a touch down at `from` on tick `tick`, moved at an even pace
     // to reach `to` on `releaseTick`, and released there. Both are fractions of the
@@ -3563,7 +3584,14 @@ private:
         glm::dvec2 atView{0.0};   // design units on the view
         glm::dvec2 atPx{0.0};     // the viewport's pixels: the move a touch makes, and where the shot goes
     };
+    // The ONE pointer's touch, read once a tick: a scheduled tap one at a time, else the mouse. Every screen that reads one finger takes it -
+    // the menus, the loading screen, a popup, the achievements popup - and it forgets the fingers (a screen that reads one finger leaves no
+    // memory of two, so a level that takes the tick again finds a gap). A scheduled tap is stepped as it is read.
     Touch touchThisTick(const entt::registry& registry);
+    // The touch a LEVEL reads its input by (planning step 191): touchThisTick, or, with two contacts on, the WORLD's finger - the one that is
+    // not on a control - with `m_controlsTouch` the finger the controls are worked by; with one finger down they are the same touch and this
+    // is what it always was.
+    Touch levelTouchThisTick(const entt::registry& registry);
     // A popup of `cls` over the level, game time stopped.
     void openPopup(entt::registry& registry, const Popup::Class& cls, bool stepOnResume);
     // One tick under a popup. True when it resumed the level on this tick and the
@@ -3622,12 +3650,73 @@ private:
         // A drag: where it goes, reached on the release tick, from the tick it went down.
         std::optional<glm::dvec2> toFraction;
         int pressedTick{0};
+        int serial{0}; // its finger when taps run at once (planning step 191): the order they were asked for in
     };
     std::vector<DevTap> m_devTaps;
+    int m_devSerial{0};
     std::vector<int> m_devBurns;
     std::vector<std::pair<int, std::string>> m_devBreaks;
     std::vector<std::pair<int, glm::dvec2>> m_devPlaces;
     int m_ticks{0};
+
+    // ---- TWO CONTACTS (planning step 191, CTL-14) ----------------------------------------------------------------------------
+    //
+    // The layer reads ONE pointer a tick (the mouse, or a scheduled tap) and always has. Under the modern controls with the data's
+    // input.two_contacts on (twoContactsOn) it reads every finger the engine hands a tick - Input's contacts, which a desktop's mouse
+    // fills as contact 0 and the Android backend fills for real - and the scheduled taps that overlap, and gives each its work through
+    // ONE path: sim/Controls AssignContacts names the CONTROLS finger (on an arrow or a corner button, or began on one and is still down)
+    // and the WORLD finger (the first other that is not on a control), and every record of "the touch" below follows the finger it
+    // belongs to. A finger that has neither role is ignored. With one finger down nothing differs: both roles are that finger, the
+    // tick is read by the code it always was (m_split is false), and no record is ever reset.
+    //
+    // A finger as the layer lists it this tick.
+    struct Finger {
+        int id{Controls::kNoContact};
+        Touch touch;
+        // Its press is still OWED (planning step 191, round R): it went down on the tick the finger that held the role it would take lifted, so
+        // this tick's reading could not give it one, and it was not seen to go down. It is remembered, and its press is delivered on the next
+        // tick it is read. A finger that lands while a role is HELD by one that stays is ignored whole and owes nothing (the design).
+        bool owed{false};
+    };
+    // The numbers the layer gives its fingers: the pointer (the mouse, or the engine's first finger) and the scheduled taps have their own;
+    // the engine's other fingers keep theirs.
+    static constexpr int kPointerFinger = -2;
+    static constexpr int kDevFingerBase = 1 << 24;
+    // What the last tick left, to read this one against.
+    struct FingerMemory {
+        int tick{-1000};                         // the tick of the last step: a tick that did not step (a pause, a load) is a gap, and forgets
+        std::vector<Finger> down;                // the fingers still down after the last step, with where they were
+        std::vector<int> sawPress;               // of those, the ones whose press this layer saw go down
+        Controls::ContactRoles roles;            // as the last step left them
+        int feed{Controls::kNoContact};          // the finger the swallow's machine was fed by
+        bool multi{false};                       // two or more fingers were down at the last step
+    };
+    FingerMemory m_fingers;
+    // The controls finger's own record of its release (the corner buttons act on it), kept only while it is not the world's finger: while it
+    // is, m_handTouch is the controls' as well, as it always was.
+    Portals::TouchTrack m_controlsTrack;
+    // The touch the controls are worked by, as the last touchThisTick left it, and whether it is a different finger from the world's.
+    Touch m_controlsTouch;
+    bool m_split{false};
+    bool twoContactsOn() const;
+    // Today's pointer: scheduled taps one at a time, else the mouse.
+    Touch pointerThisTick(const entt::registry& registry);
+    // The mouse alone (the real pointer): where it is, and its edges.
+    Touch realPointerThisTick(const entt::registry& registry);
+    // What a scheduled tap does on this tick, for either reading of the taps. `Waits`: it is due and would go down now, but `admit` (the
+    // two-finger reading) says no finger could take the role it would hold - another is on it - so it goes down on a later tick, as taps
+    // always have: nothing is changed by the call.
+    enum class DevTapStep { NotDue, Dropped, Pressed, Held, Released, Waits };
+    using AdmitTap = std::function<bool(const Touch& where)>;
+    DevTapStep stepDevTap(DevTap& tap, const glm::dvec2& view, const glm::dvec2& viewportPx, Touch& out, const AdmitTap& admit = {});
+    // The fingers, their roles, and the two touches they give (see above).
+    Touch fingersThisTick(const entt::registry& registry);
+    // The engine's fingers other than the pointer, with their edges worked out against the last tick's.
+    void engineFingers(const entt::registry& registry, bool gap, std::vector<Finger>& out);
+    // Every record of a touch the world's finger keeps, forgotten: the finger that fed them is not the one feeding them now.
+    void resetWorldRecords();
+    // What was down is forgotten: a load, a pause. A finger still down when the level reads the fingers again was not seen to go down by it.
+    void forgetFingers();
 
     void buildControls();
     void unloadControls();
