@@ -1893,6 +1893,9 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   the build, eight decoded groups confirmed fixed on the stills (CMP-1, -2, -3, -6, -7, -10, -15, -16) and CMP-9 fixed in kind with low residuals left. The bullet STAYS
   OPEN: 1-30 (CMP-4) and 3-05 (CMP-5) still differ, CMP-8, -11, -12, -13, -14, -17, -18 and the two new groups CMP-19 and CMP-20 are open (the rig clips, the owner's
   calls, one decoded drawing group and the untraced), and the section-5 box is not ticked.*
+  *Wave 4d-2, 2026-10-19 (first step): the one `decoded` drawing group is built - CMP-20 (step 194, committed locally as `74a4a0a`, not pushed at this note): a crate the
+  fire burns is drawn in `fire32` flames and fades over its second, in the draw path only; the f420 sweep changes 4 levels (2-05, 2-08, 2-22, 2-23), exactly those whose
+  log has a burn by tick 420. CMP-4, -5, -8, -11 to -14, -17 to -19, CMP-low and CMP-R1 stay open, and the section-5 box is still not ticked.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2737,6 +2740,16 @@ repository's going public, which still needs the owner's explicit word**. (6) **
 list above (a full `port_build.bat` with zero warnings, R4c2-5 and WALL-7, among them). For the next wave's gates: future route gates compare against
 `R4c2/census_after_round1.md` (128 won; 117 exact, 11 on another tick), a step's scope is derived by a census of `out/levels` and the original's files, never typed, and
 the sweep a step is measured against is `WALL/after/sweep` or this re-take's `port_f420`.
+
+*Wave 4d-2, 2026-10-19: item (1) is DONE - CMP-20 is built as planning step 194 (committed locally as `74a4a0a`, not pushed at this note), verified by an independent
+verifier in its second round; its rows CMP20-1 to CMP20-3 are above. **What is left of this list, in the order to take it:** (1) the measurement wave, read-only first:
+CMP-19's one-pair reconciliation against step 85's rows, CMP-14's lightmap experiment on a scratch variant (2-17 with the lightmap off and at full resolution), CMP-low
+(d)'s bob-centre fit, and CMP-18 / WT-10 LAST because its fix would move 2-29's route (re-fly it once, from tap 320); (2) the rig checks, unchanged; (3) the owner's calls,
+unchanged, with one more: CMP20-1, whether the simulation should keep removing a burned `crate_low_emissive` (3-03, 3-05, 3-13, 4-09) as the original does not; (4) CTL-13
+(the modern controls as a player's default) WAITS for the owner, who chose on 2026-10-19 to take the fix wave first, so `game/data/controls.json` `default_mode` is still
+`"classic"`; (5) the ship preparation, unchanged. **The sweep a step is measured against is now `CMP20/after/sweep`** (128 PNG, `MagicPortals.exe` `f23eacd9`, listed in
+`out/parity/BASELINE.txt`); it differs from `WALL/after/sweep` on exactly 2-05, 2-08, 2-22 and 2-23, and `WALL/after/sweep` stays listed as the pre-CMP-20 reference. The
+step's own leftovers (the lightmap crate of 2-11 at alpha below 1, the static crates' bucket clock, the 52 one-level pixels) are in its LEFT FOR LATER.*
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -4605,7 +4618,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       and halo size in `lighting.json` `fireball` and `effects.json` against the 8 matched stills on 2 sides (and the dragon's two mouth fireballs on 2-32). Gate: the
       profile at 12-26 u within 15 percent on 2-02, 2-04, 2-07 and 2-28, the core unchanged (6-10 u), step 85's gates (8.94 u core, R 226 +-20) still met. Joins CMP-8's
       owner decision only if the scale is the knob. GAMEPLAY: none.
-- [ ] **CMP-20. A crate the fireball burns draws no flame and no fade: the original puts `fire32` on it and fades it over 1000 ms** (medium; particles; `decoded`; moves
+- [x] **CMP-20. A crate the fireball burns draws no flame and no fade: the original puts `fire32` on it and fades it over 1000 ms** (medium; particles; `decoded`; moves
       no route). NEW TO THE LIST by the re-take, not new in the build: the old readers filed it as low phase ('the crate is intact in the port, the shot still in
       flight'); it is the recorded, decoded and unbuilt part of 'Found by step 120' and step 146's `fire32` ('a burnable crate's not drawn'). Levels: 2-05 (h2.8 an orange
       flame over the right crate, t8.0 a flame column), 2-08 (h6.3 the last crate burning and translucent), 2-22 (h6.3 the left crate in a flame cloud with ember blobs,
@@ -4623,6 +4636,34 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       leaves at 1000 ms and no damage rule is added. Gate: the f420-f504 frames of 2-22 and 2-08 show the flame and the fade at the ticks the carranca's decoded schedule
       burns the crate; the sweep changes only levels where a crate burns by f420; a pin in `test_mp_effects`; 3-30's 63-tick stand on a burning crate must not change.
       GAMEPLAY: none.
+      *FIXED by step 194 (CMP20, wave 4d-2), 2026-10-19; COMMITTED LOCALLY as `74a4a0a` (the commit titled "Magic Portals: a crate the fire burns is drawn in flames and
+      fades over its second, as the original draws it"), NOT PUSHED at this note: the audit and the push are the owner's assistant's. GAMEPLAY: none (`game/sim/Fire.*`,
+      `Game.cpp` and `fire.json` are untouched; the crate leaves on the same tick, by the same code); classic PICTURES change on purpose, the first step since CTL-1 that does.
+      **Three premises of this row were wrong, and the listing (md5 `48fe65ce`, read again by the implementer, the reviewer and both verifiers) wins.** (1) The port drew
+      NEITHER the flame NOR the fade: the row's "the delete at 1000 ms, which the port already does" is the delete only (`MagicPortalsLayer.cpp:7976`, before the step: "its
+      fade is not drawn, so the node's white stands"), while the same row's cause paragraph said "no flame and no fade". (2) The bias is SET, not multiplied into the node's
+      colour: `manageBurnable` #70-94 `bias = max(min(1 - burnTime / 1000, 1), 0)`, #95-104 `SetColor(vector3(bias, bias, bias))`, #105-108 `SetAlpha(bias)`; 0.984 on the
+      first burned update, 0.008 on the 62nd, 0 on the 63rd (the original deletes on the 64th, the port on the 63rd: nothing visible). (3) The scope is `crateCallback`'s five
+      callers (crate, crate_no_emissive, wood_piece_small, crate_small, crate_small_no_emissive: `art.json` `non_teleportable.callbacks`), NOT `fire.json` `fade_names`:
+      that also lists `crate_low_emissive`, which has a contact callback (a wood sound) and no frame callback, so the original never flames, fades or deletes it (CMP20-1).
+      Built in the draw path only: `fire32` on the crate at its drawn width over 64, once per crate on its first counted burned update, riding the crate's body while it
+      stands and staying where it was when the simulation takes it away (`ETHCallback_fire32`, 420459..420664: `SeekEntity` finds nothing and moves nothing), on a random
+      stream of its own; and the fade (`art.json` `non_teleportable.burn_fade`, its length `fire.json` `burn.time_ms`); the log line `crate burning on tick N: <node> at
+      (x, y) z Z x S`. **Measured by the independent verifier (round 2; round 1 had failed the step on one gap in the tests, fixed before round 2), on `MagicPortals.exe`
+      `f23eacd9` and `test_mp.exe` `67ac06c4`:** burns on 2-05 at ticks 83, 213 and 330, 2-08 at 169, 293 and 437, 2-22 at 250 and 452, 2-23 at 175 and 322, and 3-30 on its
+      own route at 253 (a plain 64-wide `crate`); the crate's alpha over the background (flames off) falls 0.386, 0.358, 0.051, 0.018, 0.000 at 30, 45, 60, 61 and 62 ticks
+      after the burn on 2-22 (2-08 0.563, 0.406, 0.047, 0.019, 0.000), and its picture is gone on the tick the simulation deletes it; a flame over the crate from the burn
+      tick's frame, still over its place 13 ticks after the crate went, gone from the picture within 120 ticks; against the original's stills (structural, the clock offset
+      of CMP-low (a) applies) 2-08's flame column is the crate's width over a translucent crate in both and 2-22's ember cloud differs in phase and thickness, not in place.
+      The f420 sweep of the 128 levels: **124 md5-equal** to `WALL/after/sweep`, and the 4 that differ (2-05, 2-08, 2-22, 2-23) are exactly the levels whose log has a burn by
+      tick 420; 19 of 19 CTL baselines equal; `test_mp_routes` 2,365 and 128 of 128 won with the five modern variants identical (7,357, 4,949, 7,571, 7,357, 7,357);
+      3-30's 63-tick stand unchanged; 64 suites, 84,468 checks (84,312 before). The census of `out/levels`: 29 levels carry a burnable `fade_names` crate (54 placements; 25
+      levels and 48 placements for `crateCallback`'s names), 12 of the 29 a carranca, 11 a fire agent, as the row said; only 4 burn one by tick 420 because the sweep plays no
+      input. **Three gates are NOT MET as worded and are written so in the step**: G1's "the crate's box mean luminance falls" (these crates are darker than the sky behind
+      them, so the box rises as they fade; the alpha over the background and the distance to it fall), G2's "nowhere else" (52 pixels in the four levels, each one RGB565
+      level in one channel, 42 in the exit door's swirl and 10 in other additive glows, also present with the flames sized to nothing: the class filed at "Order 11.3
+      deviation" above, inferred and not traced) and S9's "one launching build" (three, with one Smart App Control refusal of a fresh `test_mp.exe`, relinked once). What it
+      leaves: CMP20-1 to CMP20-3 below, and in the step's LEFT FOR LATER the lightmap crate of 2-11 at alpha below 1 (not examined) and the static crates' bucket clock.*
 - [ ] **CMP-low. Residuals no play would notice** (low; 120 levels, 227 residuals; `unknown`, no step proposed). (a) PHASE (about 100 levels): animation, particle,
       flame, blink, mover and knight phases. Not defects of the port: the stills were timed by wall seconds on an emulator at 15-29 fps and the original runs two clocks
       the port runs as one (the HUD 0.49-0.94 s ahead of its world: `ui.json` `level_start._start_after`); a level-by-level fit puts `h6.3` at f440-f492, and chapter
@@ -4713,6 +4754,30 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       low where the same kinds of cause are medium on chapter 2 (CMP-19, CMP-14); so CMP-8, CMP-14 and CMP-19 are present on every level that carries the entity and a fix
       is not scoped to the medium levels. Next, if the count is to be quoted outside this file: re-read one more chunk of lit levels of chapter 1 or 3 (read-only; the
       verifier's advice), or say the sentence above. Open until then.
+
+**CMP-20's rows** (planning step 194; defects of the existing game that the step found, each open; the step's other leftovers are in its LEFT FOR LATER).
+- [ ] **CMP20-1. The simulation removes a burned `crate_low_emissive` that the original never removes** (step 194's recorded deviation 1 and its LEFT FOR THE OWNER 1;
+      `decoded`; GAMEPLAY: YES, the owner's call). `fire.json` `fade_names` lists `crate_low_emissive` (both spellings), so `Fire::State::Tick` counts its second and takes the
+      body away. In the listing (md5 `48fe65ce`) the kind has `ETHBeginContactCallback_crate_low_emissive` (422872..423108, a wood sound only) and no
+      `ETHCallback_crate_low_emissive` (the `ETHCallback_` crate functions are the five of `crateCallback`'s callers), so `manageBurnable` never runs for it: in the original
+      a burned one stays where it is, unflamed, unfaded and undeleted, and `isBurned` has no other reader that deletes a crate. By census of `out/levels`: 6 placements in
+      3-03, 3-05, 3-13 and 4-09. Step 194 draws it as the original does (no flame, no fade) and leaves the simulation as it was, so a burned one still vanishes whole at
+      1000 ms on those four levels; `TheBurningCrateFadesAsManageBurnableSays` holds the disagreement so a later change of either side is a change someone made. Next, if the
+      owner wants the original's behaviour: take `crate_low_emissive` out of `fire.json` `fade_names` (data), re-fly the routes of those four levels and re-take the
+      census; a route that burns one may change. Gate: the four levels' routes still win; a pin that a burned one stays. Fixability `decoded`; owner decision before a step.
+- [ ] **CMP20-2. The burn has two one-tick differences from the original, neither seen on a screen** (low; step 194's recorded deviations 5, 6 and 7). (a) The blink stops
+      on the bare `burned` flag: a fireball-lit crate has the flag one tick before the simulation counts it (`Game::AfterStep` sets it past `Fire::Tick`), while the
+      original's callback sees the flag a frame after the fireball's contact, so for that one tick the port draws the node's white where the original draws the crate's last
+      blink colour once more (drawing; moves the pixels of one tick before each burn; the fix reads `burningMs > 0` as the callback's `isBurned`). (b) The original deletes on
+      the update AFTER the bias reaches 0 (burnTime 1008 on the 63rd update, deleted on the 64th); the port deletes on the 63rd, so the collider outlives the picture by one
+      update in the original (the simulation's; nothing visible). A fire agent's or the lava's crate is flagged and counted on one tick, a fireball's or a blast's one tick
+      apart: the same static-after-dynamic order, read and not shifted by the draw (pinned: `the flag and the first counted frame are one tick`). Next: none until a step
+      touches the burn's clock.
+- [ ] **CMP20-3. Notes and comments that say the old thing** (low; step 194's LEFT FOR LATER 5; GAMEPLAY: none). `fire.json`'s note that `fade_names` "is the whole of it ...
+      crateCallback" is wrong about `crate_low_emissive` (CMP20-1) and omits `wood_piece_small`, a `crateCallback` caller that no level places burnable; its note on the
+      shock agents ("levels 2-12, 2-14, 2-19") is stale numbering: by census the burnable shock agents are on 3-31, 4-04 to 4-08, 4-12, 4-14 and 4-19 and 2-12 has none;
+      the comment at `Fire.hpp:76-86` says both again ("fire.json lists the names whose callback is crateCallback", "level 2-12's shock agent"). The two notes in `fire.json`
+      are data text (a new md5, no number changes); the header comment rides the next step that relinks. Next: fix with the next edit to either file; no gate of its own.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
