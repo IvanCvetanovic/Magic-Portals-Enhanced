@@ -713,6 +713,12 @@ public:
             // frame - SeekEntity finds a hidden entity, and Hide is a flag, so a
             // dead character's flames ride its body down (planning step 146).
             Character,
+            // A burning crate's flames (manageBurnable #34-40's addFlames, planning step 194),
+            // by the crate's place in m_sprites (`index`): ETHCallback_fire32 moves them onto
+            // it every frame while SeekEntity finds it and leaves them where it was deleted,
+            // so this follows the picture's point and, once the picture is taken away, holds
+            // the last one - and never ends the effect, which lives out its own pools.
+            BurningCrate,
         };
         Kind kind = Kind::None;
         int index = -1;           // which one, for the kinds that key by place or id
@@ -1803,6 +1809,12 @@ private:
         int burnable{-1};
         bool blinked{false};
         double blinkMs{0.0};
+        // A crate crateCallback runs for (art.json non_teleportable `callbacks`), whatever it blinks:
+        // manageBurnable, its one caller, flames and fades it once burned (planning step 194), so
+        // `burnable` is its place in fire.burnables for every such crate, not only the blinking ones.
+        // `flamed` is its addFlames, which the original makes once.
+        bool crateCallback{false};
+        bool flamed{false};
         // THE SCRIPT'S OTHER EMISSIVE BLINKS (planning step 169): a barrel's every frame
         // (art.json barrel_bomb: its floor, the minEmissive datum read as GetVector3 does),
         // a breakable wall's with the uint `blink` (breakable_wall: colour and emissive on
@@ -1930,6 +1942,12 @@ private:
     // draw, so that adding an effect mid-level cannot move a single particle of
     // the level's own emitters.
     double effectRandom(double from, double to);
+    // And a burning crate's flames' own (planning step 194): they are added mid-level by the crate's
+    // callback, and drawing from the effects' stream above would move every later draw of every other
+    // effect of the level - a fireball's trail a second after the crate caught - which is the
+    // reasoning K8 gave the effects a stream apart from the placed emitters. The pool they are made
+    // with and every release it makes both come from here.
+    double crateFlameRandom(double from, double to);
 
     // The effects runtime (system_7 7a-2). Spawned on the frame, updated on the
     // frame, and gone with the level - nothing here reaches Game::Level, the
@@ -1947,6 +1965,9 @@ private:
     // clock counts (Effects::AdvanceFlyIn); `registry` is read for the player's
     // point, where a shock ring's kill adds shock_death.
     void latchSimEffects(const entt::registry& registry, const ScriptClock::Step& step);
+    // addFlames for each crate manageBurnable first finds burned (planning step 194): queued once,
+    // on the tick the sim first counts the crate's burn.
+    void latchBurningCrates(const entt::registry& registry);
     // Chapter 4's torches, their signal and their wall (the visuals plan's 11.2),
     // from latchSimEffects: what lighting a torch, putting it out and the wall
     // going add, each on the tick its state turns over.
@@ -2767,6 +2788,8 @@ private:
     // they are all there is while it is up, and no level's emitters are alive to
     // be moved.
     std::mt19937 m_effectRandom{20260919u};
+    // A burning crate's flames' own: see crateFlameRandom.
+    std::mt19937 m_crateFlameRandom{20261019u};
 
     // The effects the script has added, in the order they were added, and what
     // the TICK has queued for the next frame to add.

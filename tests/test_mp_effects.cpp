@@ -1230,6 +1230,18 @@ void TheSmallerPicturesRowsAreTheDecodedCalls() {
                   mage.scale == 0.625 && mage.angleDeg == 0.0f,
               "the mage's flames at 40 / 64: x " + Num(mage.scale));
     CHECK_MSG(Effects::Flames(rules, glm::dvec2(0.0), 0.0, 64.0).scale == 1.0, "a 64-unit target at 1");
+    // A burning crate's (planning step 194; manageBurnable #34-40 calls addFlames on the crate): the same call, at the crate's own
+    // point and depth, its width - GetSize().x, the frame times the entity's scale - over 64: a 64-wide crate at 1, a 32-wide
+    // smaller_crate at 0.5, and 2-01's crate at its datum scale 0.75 (48 wide, below). Not the character's width and not 64,
+    // whatever the target.
+    const Effects::Spawn smallCrate = Effects::Flames(rules, glm::dvec2(336.0, 80.0), -2.0 / 2.8125, 48.0);
+    CHECK_MSG(smallCrate.entity == "fire32.ent" && smallCrate.atPx == glm::dvec2(336.0, 80.0) &&
+                  Near(smallCrate.z, -2.0 / 2.8125, 1e-12) && smallCrate.zScaled && smallCrate.scale == 0.75 &&
+                  smallCrate.angleDeg == 0.0f,
+              "a 48-unit crate's (2-01's, scaled 0.75) flames at its point and depth, at 48 / 64: x " + Num(smallCrate.scale));
+    CHECK_MSG(Effects::Flames(rules, glm::dvec2(0.0), 0.0, 32.0).scale == 0.5 &&
+                  Effects::Flames(rules, glm::dvec2(0.0), 0.0, 96.0).scale == 1.5,
+              "and the width alone sizes them: 32 at a half, 96 at one and a half");
     // carranca_destroy, turned by its carranca as wall_destroy is by its wall.
     CHECK_MSG(rules.carrancaDestroy.entity == "carranca_destroy.ent" &&
                   rules.carrancaDestroy.turn == Effects::Turn::EntityAngle,

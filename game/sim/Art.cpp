@@ -321,6 +321,17 @@ NonTeleportable::Blinks NonTeleportable::For(const std::string& bareEntity, bool
     return Blinks::Nothing;
 }
 
+bool NonTeleportable::Calls(const std::string& bareEntity) const {
+    return std::any_of(callbacks.begin(), callbacks.end(),
+                       [&bareEntity](const auto& known) { return known.first == bareEntity; });
+}
+
+double NonTeleportable::BurnFade::At(double burningMs, double lengthMs) const {
+    // #78-84: uTOf burnTime over 1000f, then #85-93's 1 - that, min against 1, max against 0.
+    const double share = lengthMs > 0.0 ? burningMs / lengthMs : 1.0;
+    return std::max(std::min(from + (to - from) * share, ceiling), floor);
+}
+
 int Timer::FrameAt(double elapsedMs, double timeMs) const {
     if (!(timeMs > 0.0)) return frames - 1;
     // uTOf, DIVf, MULIf 8f and fTOi (ETHCallback_timer ins 233-239), then
@@ -980,6 +991,23 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     crates.teleportableEmissive.strideMs = teleportable["stride_ms"].AsNumber();
     crates.blinkDatum = teleportable["blink_datum"].AsString("");
+    // And the fade a burning crate takes (manageBurnable #70-108): a bias that moves between two ends
+    // held inside the floor and ceiling the script's min and max give it. One that does not move, or
+    // starts or ends outside them, would draw a burning crate no different from an unburnt one.
+    const Json::Value& fade = crateEntry["burn_fade"];
+    if (!fade.IsObject() || !Finite(fade["from"]) || !Finite(fade["to"]) || !Finite(fade["floor"]) ||
+        !Finite(fade["ceiling"]) || !(fade["floor"].AsNumber() <= fade["ceiling"].AsNumber()) ||
+        fade["from"].AsNumber() == fade["to"].AsNumber() ||
+        fade["from"].AsNumber() < fade["floor"].AsNumber() || fade["from"].AsNumber() > fade["ceiling"].AsNumber() ||
+        fade["to"].AsNumber() < fade["floor"].AsNumber() || fade["to"].AsNumber() > fade["ceiling"].AsNumber()) {
+        error = path + ": non_teleportable needs burn_fade, a from and a to that differ, each between its floor and "
+                       "its ceiling, which are numbers in order";
+        return false;
+    }
+    crates.burnFade.from = fade["from"].AsNumber();
+    crates.burnFade.to = fade["to"].AsNumber();
+    crates.burnFade.floor = fade["floor"].AsNumber();
+    crates.burnFade.ceiling = fade["ceiling"].AsNumber();
 
     // A barrel's blink and a wall's, every frame of a callback (ETHCallback_barrel_bomb #1-30,
     // ETHCallback_breakable_wall #87-151). Named as their callbacks are, without the .ent.

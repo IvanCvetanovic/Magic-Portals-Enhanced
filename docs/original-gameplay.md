@@ -393,6 +393,29 @@ off the first barrel it meets, and cannot hurt the player. A minion is burnable 
 character: a flame sets it alight and it destroys itself on the next frame, dropping what it
 carried.
 
+**DECODED** (`manageBurnable`, listing bytes 420664..421145, `addFlames` 420120..420459,
+`ETHCallback_fire32` 420459..420664, planning step 194). **A burning crate is drawn in flames
+and fades.** `manageBurnable` has one caller, `crateCallback`, which the five crate callbacks
+call (`crate`, `crate_small`, `wood_piece_small`, `crate_no_emissive`, `crate_small_no_emissive`:
+bytes 423812..424324): only those entities do what follows, and a shock agent, which carries
+`burned` and nothing more, does none of it. On the first update that finds the crate burned
+(its uint `burnTime` not yet there) it makes `burnTime` 0 and calls `addFlames`, **once**:
+`fire32.ent` at the crate's own point and depth, unturned, at its `GetSize().x` over 64 (a 64-wide
+crate at 1, a 32-wide `smaller_crate.png` at 0.5, 2-01's crate at its datum scale 0.75: 48 over 64),
+with the crate's id in its `targetID`. `fire32`'s callback re-seeks that
+target every frame and, while it finds it, sets the flames onto its point; deleted, the crate
+leaves them where they were, and they live out their own particle pools (the .ent is temporary,
+32 particles a life of 450 ± 300 ms, repeating twice) - it does no damage, spreads nothing and
+casts no light. Every update then adds the frame's time to `burnTime` and **sets** the crate's
+colour (all three channels) **and its alpha** to `bias = max(min(1 - burnTime / 1000, 1), 0)`: the
+crate darkens and turns transparent together, from 0.984 on the first update (16 ms) to 0.008 on
+the 62nd and 0 on the 63rd; the update after it (`burnTime` >= 1000) deletes the crate. Once burned
+`crateCallback` stops writing the blink, whose last emissive stays. The port deletes the crate on
+the 63rd update, one before the original's `DeleteEntity` (the 63rd draws alpha 0), which is the
+simulation's and unchanged. `crate_low_emissive` has a begin-contact callback and no frame callback,
+so the original never fades, flames or removes one (the port's simulation still removes it at the
+burn's end: planning step 194, left for the owner).
+
 ### 6.3 Switches, keys and locks
 
 **DATA.** `button.idx` ↔ `door_lift.switchIdx` — identical multisets in all 37 levels that

@@ -304,12 +304,34 @@ struct NonTeleportable {
     Blink teleportableEmissive;
     std::string blinkDatum;
 
+    // manageBurnable's fade (art.json burn_fade; bytes 420664..421145, #70-108): the bias
+    // SetColor and SetAlpha are both given, from `from` at burnTime 0 to `to` at the burn's
+    // length, held to [floor, ceiling] as #87-93's min and max hold it. Its length is
+    // fire.json's burn.time_ms, which the caller hands in: one clock, not two.
+    struct BurnFade {
+        double from = 1.0;
+        double to = 0.0;
+        double floor = 0.0;
+        double ceiling = 1.0;
+
+        // The bias at `burningMs` of a burn `lengthMs` long: max(min(from + (to - from) x
+        // burningMs / lengthMs, ceiling), floor).
+        double At(double burningMs, double lengthMs) const;
+    };
+    BurnFade burnFade;
+
     // What a placement of `bareEntity` blinks, `teleportable` being whether its
     // datum is there and not 0 (GetUInt reads an absent one as 0) and `blinkFlag`
     // whether its uint 'blink' is there and not 0. A crate that carries the flag
     // takes the 200 ms branch of crateCallback, which is not built: it blinks
     // nothing here, as the teleportable crates did before this one.
     Blinks For(const std::string& bareEntity, bool teleportable, bool blinkFlag) const;
+
+    // Whether `bareEntity` is one of crateCallback's five callers (`callbacks`): the only
+    // entities manageBurnable runs for, whatever their teleportable datum, so the only ones
+    // that burn in flames and fade. crate_low_emissive has a begin-contact callback and no
+    // frame callback, so it is none of them.
+    bool Calls(const std::string& bareEntity) const;
 };
 
 // A barrel's blink, every frame (art.json barrel_bomb; ETHCallback_barrel_bomb #1-30):

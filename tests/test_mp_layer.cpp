@@ -2018,14 +2018,19 @@ void ACrateNoPortalCarriesBlinksRed() {
             if (!registry.valid(small) || QuadOfNode(layer, "crate_small_no_emissive_ent_1129") != small) break;
             ++drawnTicks;
             const auto& material = registry.get<MaterialComponent>(small);
-            if (!near(material.sprite2D.ambient, lastBlink) || material.albedoColor != glm::vec4(1.0f)) ++held;
+            // Its colour is manageBurnable's, not the blink's (planning step 194): (b, b, b, b), b = 1 - burnTime / 1000.
+            const float bias = static_cast<float>(1.0 - layer.SimLevel()->fire.burnables[index].burningMs /
+                                                            layer.SimLevel()->fire.rules.burnMs);
+            if (!near(material.sprite2D.ambient, lastBlink) || glm::length(material.albedoColor - glm::vec4(bias)) > 1e-5f) {
+                ++held;
+            }
             tickWith(layer, registry, kRest, {}, {});
             const glm::vec3 bigNow = registry.get<MaterialComponent>(big).sprite2D.ambient;
             if (bigNow == bigBefore) ++bigStill;
             bigBefore = bigNow;
         }
         CHECK_MSG(drawnTicks >= 20, "the burning crate is drawn on: " + std::to_string(drawnTicks) + " ticks");
-        CHECK_MSG(held == 0, "a burnt crate's emissive keeps its last blink, its colour white: " +
+        CHECK_MSG(held == 0, "a burnt crate's emissive keeps its last blink, its colour the fade's: " +
                                  std::to_string(held) + " ticks off");
         CHECK_MSG(bigStill <= 1, "while the unburnt one blinks on: " + std::to_string(bigStill) + " still ticks");
         layer.OnDetach(registry);
@@ -21106,6 +21111,864 @@ void ABurnedMinionLeavesItsFlamesBeforeItsBlood() {
     layer.OnDetach(registry);
 }
 
+// ---- A CRATE THE FIRE BURNS (planning step 194) ---------------------------------------------------------------------------
+//
+// manageBurnable (listing bytes 420664..421145), crateCallback's second call: on the first update that finds the crate burned it
+// makes its burnTime 0 and calls addFlames (fire32.ent on the crate, #21-40, once); every update then adds the frame's time and sets
+// the colour's three channels and its alpha to 1 - burnTime / 1000 (#54-108); at 1000 it deletes the crate. The sim counts and
+// deletes (Fire::State::Tick, untouched); the layer draws the flames and the fade, which is what these read.
+
+// An edit of a converted node: `from` is replaced, once, inside that node's own block; with `from` empty, `to` is added as a line of
+// its own right after the node's header.
+struct SceneEdit {
+    std::string node;
+    std::string from;
+    std::string to;
+};
+
+// The scratch directory a level variant is written into, removed when the case that made it ends by any road (an early return
+// included): what it holds is a modified COPY of a converted level, which is Asantee-derived data and has no business staying in
+// %TEMP% after the run that needed it.
+struct ScratchDirectory {
+    std::filesystem::path path;
+    explicit ScratchDirectory(const char* name) : path(std::filesystem::temp_directory_path() / name) {}
+    ScratchDirectory(const ScratchDirectory&) = delete;
+    ScratchDirectory& operator=(const ScratchDirectory&) = delete;
+    ~ScratchDirectory() {
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+    }
+};
+
+// The converted level `level` with `edits` made, written as `<level>.tscn` into a scratch directory the layer reads it from - the
+// converted levels are the port's input and never rewritten - and the Paths that point at it (the art stays the levels' own).
+bool WriteLevelVariant(const char* level, const char* directory, const std::vector<SceneEdit>& edits,
+                       MagicPortalsLayer::Paths& paths) {
+    std::ifstream in(kLevels + "/" + level + ".tscn", std::ios::binary);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    std::string text = buffer.str();
+    CHECK_MSG(!text.empty(), std::string(level) + " reads");
+    for (const SceneEdit& edit : edits) {
+        const std::string header = "[node name=\"" + edit.node + "\" type=\"Node2D\" parent=\".\"]";
+        const std::size_t at = text.find(header);
+        CHECK_MSG(at != std::string::npos && text.find(header, at + 1) == std::string::npos,
+                  std::string(level) + " holds " + edit.node + " once");
+        if (at == std::string::npos) return false;
+        const std::size_t headerEnd = text.find('\n', at);
+        const std::size_t next = text.find("\n[node ", at + 1);
+        if (headerEnd == std::string::npos) return false;
+        if (edit.from.empty()) {
+            // The converted levels are written with CRLF; the line goes in the same way.
+            const std::string eol = headerEnd > 0 && text[headerEnd - 1] == '\r' ? "\r\n" : "\n";
+            text.insert(headerEnd + 1, edit.to + eol);
+            continue;
+        }
+        const std::size_t hit = text.find(edit.from, at);
+        CHECK_MSG(hit != std::string::npos && (next == std::string::npos || hit < next),
+                  edit.node + " holds '" + edit.from + "'");
+        if (hit == std::string::npos || (next != std::string::npos && hit >= next)) return false;
+        text.replace(hit, edit.from.size(), edit.to);
+    }
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / directory;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream out(dir / (std::string(level) + ".tscn"), std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    paths = TestPaths();
+    paths.levels = dir.string();
+    return true;
+}
+
+// What one crate's burning gave: the sim's counts, the crate's drawn colour, where the crate and its flames stood, tick by tick from
+// the burn's first to five after the crate was taken away.
+struct CrateBurn {
+    bool ran = false;           // the crate burned and went
+    int flagTick = 0;           // the tick `burned` was first true
+    int burnTick = 0;           // the tick the sim first counted a frame of the burn (burningMs above 0)
+    int goneTick = 0;           // the tick the crate's body was taken away
+    double firstMs = 0.0;       // what it counted on its first tick
+    double lookZ = 0.0;         // the crate's eth_z
+    double widthUnits = 0.0;    // and the width it is drawn at: GetSize().x
+    glm::vec4 before{0.0f};     // its drawn colour at rest
+    int flamesAtRest = 0;       // the fire32 added over the twelve resting ticks, before anything burns
+    int otherOff = 0;           // the ticks the other crate named was not drawn white
+    std::vector<AddedEffect> added;
+    std::vector<char> drawn;    // from here on, one entry a tick from the burn's first
+    std::vector<glm::vec4> colour;
+    std::vector<double> counted;
+    std::vector<char> crateThere;
+    std::vector<glm::dvec2> cratePx;
+    std::vector<char> flameThere;
+    std::vector<glm::dvec2> flamePx;
+    int listedAtRest = 0;       // the crate's body was in portals.travellers before it burned
+    std::vector<char> listed;   // and on each tick from the burn's first (Game::AfterStep's Forget takes it out with the body)
+    bool moved = false;         // the crate was put somewhere else while it burned
+    glm::dvec2 movedTo{0.0};      // where the body then stood (the world's floats, read back)
+    glm::dvec2 flameAtMove{0.0};  // where the frame after the move left its flames
+    glm::dvec2 flameBeforeMove{0.0}; // and where they were on the tick before
+};
+
+// Twelve resting ticks, then `node` put in the level's fire agent's reach, and the burn followed to its end and five ticks past it.
+// With `moveWhileBurning` the crate is also put 30 right and 20 up eight ticks into the burn, and one frame run before the next tick.
+CrateBurn BurnACrate(MagicPortalsLayer& layer, entt::registry& registry, const std::string& node, const std::string& other,
+                     bool moveWhileBurning) {
+    namespace Units = MagicPortals::Units;
+    CrateBurn run;
+    const MagicPortals::Game::Level* level = layer.SimLevel();
+    if (level == nullptr || level->fire.agents.empty()) {
+        CHECK_MSG(false, "the level reads and has a fire agent");
+        return run;
+    }
+    int seen = layer.EffectsSpawned();
+    int tick = 0;
+    for (int n = 0; n < 12; ++n) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, tick, run.added);
+    }
+    run.flamesAtRest = static_cast<int>(AddedNamed(run.added, "fire32.ent").size());
+    const std::vector<MagicPortals::Fire::Burnable>& burnables = level->fire.burnables;
+    const auto burnable =
+        std::find_if(burnables.begin(), burnables.end(), [&node](const auto& one) { return one.name == node; });
+    const auto built = level->built.entities.find(node);
+    const entt::entity firstQuad = QuadOfNode(layer, node);
+    CHECK_MSG(burnable != burnables.end() && built != level->built.entities.end() && firstQuad != entt::null,
+              node + " is burnable, has a body and is drawn");
+    if (burnable == burnables.end() || built == level->built.entities.end() || firstQuad == entt::null) return run;
+    const std::size_t index = static_cast<std::size_t>(burnable - burnables.begin());
+    const entt::entity body = built->second;
+    // Its size as it is drawn, which is what addFlames reads: GetSize().x, the frame times the entity's scale.
+    const MagicPortalsLayer::DrawnPictureReport picture = layer.DrawnPicture(node);
+    run.lookZ = picture.lookZ;
+    run.widthUnits = picture.sizePx.x;
+    run.before = registry.get<MaterialComponent>(firstQuad).albedoColor;
+    // Whether a portal would carry it: Portals::Find lists a teleportable dynamic body, and only Forget takes it out again.
+    const auto listedNow = [&level, body]() {
+        const std::vector<entt::entity>& travellers = level->portals.travellers;
+        return std::find(travellers.begin(), travellers.end(), body) != travellers.end() ? 1 : 0;
+    };
+    run.listedAtRest = listedNow();
+    PutBodyAt(registry, body, level->fire.agents.front().atPx + glm::dvec2(0.0, 8.0));
+
+    int flameId = 0;
+    for (int n = 0; n < 200; ++n) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, tick, run.added);
+        const MagicPortals::Fire::Burnable& now = burnables[index];
+        if (run.flagTick == 0 && now.burned) run.flagTick = tick;
+        if (run.burnTick == 0 && now.burningMs > 0.0) {
+            run.burnTick = tick;
+            run.firstMs = now.burningMs;
+        }
+        if (run.burnTick == 0) continue;
+        if (flameId == 0) {
+            const std::vector<AddedEffect> flames = AddedNamed(run.added, "fire32.ent");
+            if (!flames.empty()) flameId = flames.front().report.id;
+        }
+        const bool crateThere = registry.valid(body);
+        if (!crateThere && run.goneTick == 0) run.goneTick = tick;
+        const entt::entity quad = QuadOfNode(layer, node);
+        run.drawn.push_back(quad != entt::null ? 1 : 0);
+        run.colour.push_back(quad != entt::null ? registry.get<MaterialComponent>(quad).albedoColor : glm::vec4(-1.0f));
+        run.counted.push_back(now.burningMs);
+        run.crateThere.push_back(crateThere ? 1 : 0);
+        run.listed.push_back(static_cast<char>(listedNow()));
+        run.cratePx.push_back(crateThere ? Units::ToPixels(registry.get<TransformComponent>(body).position)
+                                         : glm::dvec2(0.0));
+        const MagicPortalsLayer::EffectReport flame =
+            flameId != 0 ? ByIdIn(layer.EffectReports(), flameId) : MagicPortalsLayer::EffectReport{};
+        run.flameThere.push_back(flame.id != 0 ? 1 : 0);
+        run.flamePx.push_back(flame.atPx);
+        if (!other.empty()) {
+            const entt::entity otherQuad = QuadOfNode(layer, other);
+            if (otherQuad == entt::null || registry.get<MaterialComponent>(otherQuad).albedoColor != glm::vec4(1.0f)) {
+                ++run.otherOff;
+            }
+        }
+        if (moveWhileBurning && !run.moved && tick == run.burnTick + 8 && crateThere && flameId != 0) {
+            run.moved = true;
+            run.flameBeforeMove = run.flamePx.back();
+            PutBodyAt(registry, body, run.cratePx.back() + glm::dvec2(30.0, -20.0));
+            run.movedTo = Units::ToPixels(registry.get<TransformComponent>(body).position);
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            run.flameAtMove = ByIdIn(layer.EffectReports(), flameId).atPx;
+        }
+        if (run.goneTick != 0 && tick >= run.goneTick + 5) break;
+    }
+    run.ran = run.burnTick != 0 && run.goneTick != 0;
+    return run;
+}
+
+// The ticks a burn of `firstMs` a tick lasts: the sim takes the crate away on the tick its count reaches the burn's 1000.
+int TicksOfABurn(double firstMs, double lengthMs) {
+    return static_cast<int>(std::ceil(lengthMs / firstMs - 1e-9));
+}
+
+// A burning crate the layer draws as manageBurnable does. `what` names the case in every message; `traveller` is whether a portal
+// would carry the crate (a teleportable dynamic body, listed in portals.travellers).
+void CheckADrawnBurn(const CrateBurn& run, const std::string& what, double burnMs, bool moves, bool traveller) {
+    CHECK_MSG(run.ran, what + ": it burned and went");
+    if (!run.ran) return;
+    // The relation the draw inherits: a fire agent's flag is set and counted on one tick, so the crate's first burned update is that
+    // tick (a fireball's is the tick after: Game::AfterStep sets it past Fire::Tick).
+    CHECK_MSG(run.flamesAtRest == 0, what + ": no flames until it burns: " + std::to_string(run.flamesAtRest) + " at rest");
+    CHECK_MSG(run.flagTick == run.burnTick, what + ": the flag and the first counted frame are one tick: " +
+                                                std::to_string(run.flagTick) + ", " + std::to_string(run.burnTick));
+
+    // THE TRAVELLER (Game::AfterStep: Fire::Tick's removals go through Forget). A crate a portal carries is in portals.travellers
+    // before it burns and on every tick it stands, and is out of it on every tick after the sim takes it away - with its flames
+    // still up, which ride on and then stay without it. A crate that no portal carries (teleportable 0) was never listed. The
+    // layer does not touch the list; this holds the case the pin is asked for to the list, so that a body that stopped being a
+    // traveller (kinematic, another datum) cannot turn the case into the plain one unseen.
+    CHECK_MSG(run.listedAtRest == (traveller ? 1 : 0),
+              what + (traveller ? ": a traveller before it burns: " : ": no traveller before it burns: ") +
+                  std::to_string(run.listedAtRest));
+    int listedWrong = 0;
+    int afterGone = 0;
+    int afterGoneUnlisted = 0;
+    for (std::size_t i = 0; i < run.drawn.size(); ++i) {
+        const int want = traveller && run.crateThere[i] ? 1 : 0;
+        if (run.listed[i] != want) ++listedWrong;
+        if (!run.crateThere[i]) {
+            ++afterGone;
+            if (!run.listed[i] && run.flameThere[i]) ++afterGoneUnlisted;
+        }
+    }
+    CHECK_MSG(listedWrong == 0, what + (traveller ? ": listed on each tick it stands and on none after: "
+                                                  : ": listed on no tick: ") +
+                                    std::to_string(listedWrong) + " ticks wrong");
+    CHECK_MSG(afterGone >= 5 && afterGoneUnlisted == afterGone,
+              what + ": out of the travellers, and its flames still there, on each of the " + std::to_string(afterGone) +
+                  " ticks after it goes: " + std::to_string(afterGoneUnlisted));
+
+    // THE FLAMES, ONCE, on that first update (#9-40), over the crate's width and at its point and depth.
+    const std::vector<AddedEffect> flames = AddedNamed(run.added, "fire32.ent");
+    CHECK_MSG(flames.size() == 1, what + ": one fire32 in all, not none and not one a tick: " + std::to_string(flames.size()));
+    if (flames.size() != 1) return;
+    const MagicPortalsLayer::EffectReport& fire = flames[0].report;
+    CHECK_MSG(flames[0].tick == run.burnTick, what + ": added on the first burned update, tick " + std::to_string(flames[0].tick) +
+                                                  " against " + std::to_string(run.burnTick));
+    CHECK_MSG(!run.cratePx.empty() && glm::distance(fire.atPx, run.cratePx.front()) < 1e-6 &&
+                  NearD(fire.zUnits, run.lookZ, 1e-12) && fire.angleDeg == 0.0 &&
+                  NearD(fire.scriptScale, run.widthUnits / 64.0, 1e-12) && run.widthUnits > 0.0 &&
+                  fire.followKind == MagicPortalsLayer::EffectOwner::Kind::BurningCrate && fire.temporary && !fire.drawn &&
+                  fire.systems == 1,
+              what + ": on the crate's point and depth, its " + std::to_string(run.widthUnits) + " units over 64, unturned, riding it: " +
+                  Point(fire.atPx) + " x " + std::to_string(fire.scriptScale));
+
+    // THE FADE (#54-108): the colour's three channels and its alpha all 1 - burnTime / 1000, falling on every tick it is drawn,
+    // from 0.984 to under 0.02, and the picture gone on the tick the sim takes the crate away.
+    int drawnTicks = 0;
+    int off = 0;
+    int notFalling = 0;
+    float previous = 2.0f;
+    float last = -1.0f;
+    for (std::size_t i = 0; i < run.drawn.size(); ++i) {
+        if (!run.drawn[i]) continue;
+        ++drawnTicks;
+        const float want = static_cast<float>(1.0 - run.counted[i] / burnMs);
+        if (glm::length(run.colour[i] - glm::vec4(want)) > 1e-5f) ++off;
+        if (!(run.colour[i].r < previous)) ++notFalling;
+        previous = run.colour[i].r;
+        last = run.colour[i].r;
+    }
+    CHECK_MSG(off == 0 && drawnTicks > 55, what + ": drawn at (b, b, b, b), b = 1 - burnTime / 1000, on each of " +
+                                              std::to_string(drawnTicks) + " ticks: " + std::to_string(off) + " off");
+    CHECK_MSG(notFalling == 0 && last > 0.0f && last < 0.02f,
+              what + ": the bias falls on every tick, to " + std::to_string(last) + ": " + std::to_string(notFalling) + " did not");
+    CHECK_MSG(!run.colour.empty() && std::fabs(run.colour.front().r - 0.984f) < 1e-3f,
+              what + ": the first burned update draws 1 - 16 / 1000: " + std::to_string(run.colour.empty() ? 0.0f : run.colour.front().r));
+    // THE SIM'S OWN TICK, which this does not move: gone when the count reaches the burn's length (3-30's stand is 63 of 16).
+    const int want = TicksOfABurn(run.firstMs, burnMs);
+    CHECK_MSG(run.goneTick - run.burnTick + 1 == want && drawnTicks == run.goneTick - run.burnTick,
+              what + ": taken away after " + std::to_string(run.goneTick - run.burnTick + 1) + " counted ticks, " +
+                  std::to_string(want) + " expected, drawn on " + std::to_string(drawnTicks));
+
+    // ETHCallback_fire32: SetPositionXY onto the crate every frame while SeekEntity finds it.
+    int following = 0;
+    int astray = 0;
+    for (std::size_t i = 0; i < run.drawn.size(); ++i) {
+        if (!run.crateThere[i]) continue;
+        ++following;
+        if (!run.flameThere[i] || glm::distance(run.flamePx[i], run.cratePx[i]) > 1e-6) ++astray;
+    }
+    CHECK_MSG(following > 55 && astray == 0, what + ": the flames stand on the crate on each of " + std::to_string(following) +
+                                                 " ticks it stands: " + std::to_string(astray) + " astray");
+    CHECK_MSG(run.moved == moves && (!moves || (glm::distance(run.flameAtMove, run.movedTo) < 1e-6 &&
+                                                glm::distance(run.flameAtMove, run.flameBeforeMove) > 30.0)),
+              what + ": and they follow it when it is put elsewhere, 30 right and 20 up: " + Point(run.flameBeforeMove) + " to " +
+                  Point(run.flameAtMove) + " for the crate at " + Point(run.movedTo));
+    // And once it is deleted SeekEntity finds nothing: they stay where it last put them and live out their own pools - not freed with
+    // the crate, not moved, not added again.
+    // `gone - 1` is read below, so a run that took the crate away on its first counted tick fails here and not by indexing before 0.
+    const int goneAfter = run.goneTick - run.burnTick;
+    CHECK_MSG(goneAfter > 0 && static_cast<std::size_t>(goneAfter) < run.drawn.size(),
+              what + ": the crate stood after its first counted tick: gone after " + std::to_string(goneAfter) + " of " +
+                  std::to_string(run.drawn.size()));
+    if (!(goneAfter > 0 && static_cast<std::size_t>(goneAfter) < run.drawn.size())) return;
+    const std::size_t gone = static_cast<std::size_t>(goneAfter);
+    int stay = 0;
+    for (std::size_t i = gone; i < run.drawn.size(); ++i) {
+        if (run.flameThere[i] && glm::distance(run.flamePx[i], run.flamePx[gone - 1]) < 1e-9 && !run.drawn[i]) ++stay;
+    }
+    CHECK_MSG(stay == static_cast<int>(run.drawn.size() - gone) && stay >= 5,
+              what + ": the crate's picture gone, the flames still there and where they were, on each of the " +
+                  std::to_string(stay) + " ticks after");
+    CHECK_MSG(run.otherOff == 0, what + ": the other crate, unburnt, is drawn as before: " + std::to_string(run.otherOff) + " ticks off");
+}
+
+// 2-20 (level19a): the fire agent at (162, 192) and two burnable crates. The small one is put in its reach and burns, drawn in
+// flames and fading; the other, left where it is, is neither. A COPY of the level makes the same of a crate that blinks nothing - the
+// teleportable one with the `blink` uint, which manageNonTeleportable and the blink leave alone - because crateCallback runs
+// manageBurnable for it all the same: its flame and its fade must not depend on the blink.
+void ABurningCrateIsDrawnInFlamesAndFades() {
+    if (!OriginalArtIsThere("ABurningCrateIsDrawnInFlamesAndFades")) return;
+    namespace Art = MagicPortals::Art;
+    Art::Rules art;
+    std::string artError;
+    CHECK_MSG(Art::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/art.json", art, artError), artError);
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const double burnMs = layer.SimLevel()->fire.rules.burnMs;
+        const CrateBurn run = BurnACrate(layer, registry, "crate_small_no_emissive_ent_1129", "crate_no_emissive_1128", true);
+        CHECK_MSG(run.before == glm::vec4(1.0f), "the crate is drawn white at rest");
+        CheckADrawnBurn(run, "2-20's crate_small_no_emissive_ent_1129", burnMs, true, false);
+        std::printf("  2-20: crate_small_no_emissive_ent_1129 burned on tick %d for %d ticks, %.0f units wide: fire32 x %.4f\n",
+                    run.burnTick, run.goneTick - run.burnTick + 1, run.widthUnits, run.widthUnits / 64.0);
+        layer.OnDetach(registry);
+    }
+    {
+        // The crate that blinks nothing: teleportable 1 and blink 1 (Art::NonTeleportable::For is Nothing for a _no_emissive crate with
+        // the flag), on a copy of 2-20.
+        MagicPortalsLayer::Paths paths;
+        constexpr const char* kScratch = "supersonic-test-mp-layer-burning-crate-no-blink";
+        const ScratchDirectory scratch(kScratch);
+        if (!WriteLevelVariant("level19a", kScratch,
+                               {{"crate_no_emissive_1128", "metadata/teleportable = \"0\"", "metadata/teleportable = \"1\""},
+                                {"crate_no_emissive_1128", "", "metadata/blink = \"1\""}},
+                               paths)) {
+            return;
+        }
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CHECK_MSG(art.nonTeleportable.For("crate_no_emissive", true, true) == Art::NonTeleportable::Blinks::Nothing &&
+                      art.nonTeleportable.Calls("crate_no_emissive"),
+                  "such a crate blinks nothing and is still one of crateCallback's");
+        CloseTheLevelStartPopup(layer, registry);
+        const CrateBurn run = BurnACrate(layer, registry, "crate_no_emissive_1128", "crate_small_no_emissive_ent_1129", false);
+        CheckADrawnBurn(run, "the crate that blinks nothing", layer.SimLevel()->fire.rules.burnMs, false, true);
+        layer.OnDetach(registry);
+    }
+}
+
+// What the fire burns and the original's crateCallback does not run for: a crate_low_emissive - an entity with a begin-contact
+// callback and no frame callback, which the SIM'S fade_names lists all the same and so takes away at the burn's end - and a shock
+// agent, which carries `burned` and nothing more. Neither is drawn in flames or faded: manageBurnable has the one caller.
+void WhatManageBurnableDoesNotRunForIsNotDrawnBurning() {
+    if (!OriginalArtIsThere("WhatManageBurnableDoesNotRunForIsNotDrawnBurning")) return;
+    {
+        MagicPortalsLayer::Paths paths;
+        constexpr const char* kScratch = "supersonic-test-mp-layer-burning-low-emissive";
+        const ScratchDirectory scratch(kScratch);
+        if (!WriteLevelVariant("level19a", kScratch,
+                               {{"crate_small_no_emissive_ent_1129", "metadata/entity_name = \"crate_small_no_emissive.ent\"",
+                                 "metadata/entity_name = \"crate_low_emissive.ent\""}},
+                               paths)) {
+            return;
+        }
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(paths, "level19a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const double burnMs = layer.SimLevel()->fire.rules.burnMs;
+        const CrateBurn run = BurnACrate(layer, registry, "crate_small_no_emissive_ent_1129", "", false);
+        // The sim still counts it and takes it away, as it has: the fade_names it reads lists the name.
+        CHECK_MSG(run.ran && run.goneTick - run.burnTick + 1 == TicksOfABurn(run.firstMs, burnMs),
+                  "a crate_low_emissive burns and is taken away by the sim, as before: " + std::to_string(run.goneTick - run.burnTick + 1));
+        CHECK_MSG(AddedNamed(run.added, "fire32.ent").empty(), "and has no flames: " + std::to_string(AddedNamed(run.added, "fire32.ent").size()));
+        int faded = 0;
+        for (std::size_t i = 0; i < run.drawn.size(); ++i) {
+            if (run.drawn[i] && run.colour[i] != run.before) ++faded;
+        }
+        CHECK_MSG(faded == 0 && run.before == glm::vec4(1.0f), "nor a fade: " + std::to_string(faded) + " ticks drawn off its white");
+        layer.OnDetach(registry);
+    }
+    {
+        // 4-12 (level11c): the shock agent at (160, 16), a fire agent at (206, 94). Put in the agent's reach it carries `burned`, which
+        // is all a shock agent does with it: the sim never counts it (it is not one of the fade names), nothing is added and its picture
+        // keeps the colour it had.
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level11c");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        const MagicPortals::Game::Level& level = *layer.SimLevel();
+        const std::vector<MagicPortals::Fire::Burnable>& burnables = level.fire.burnables;
+        const auto agent = std::find_if(burnables.begin(), burnables.end(),
+                                        [](const auto& one) { return one.name == "shock_agent_2234"; });
+        const entt::entity quad = QuadOfNode(layer, "shock_agent_2234");
+        CHECK_MSG(agent != burnables.end() && agent->body != entt::null && !level.fire.agents.empty() && quad != entt::null,
+                  "4-12's shock agent is burnable, has a body and is drawn, and the level has a fire agent");
+        if (agent == burnables.end() || agent->body == entt::null || level.fire.agents.empty() || quad == entt::null) {
+            layer.OnDetach(registry);
+            return;
+        }
+        const std::size_t index = static_cast<std::size_t>(agent - burnables.begin());
+        const glm::vec4 before = registry.get<MaterialComponent>(quad).albedoColor;
+        std::vector<AddedEffect> added;
+        int seen = layer.EffectsSpawned();
+        int tick = 0;
+        PutBodyAt(registry, agent->body, level.fire.agents.front().atPx);
+        int litAt = 0;
+        int altered = 0;
+        for (int n = 0; n < 60; ++n) {
+            tickWith(layer, registry, kRest, {}, {});
+            ++tick;
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            CollectAdded(layer, seen, tick, added);
+            if (litAt == 0 && burnables[index].burned) litAt = tick;
+            const entt::entity now = QuadOfNode(layer, "shock_agent_2234");
+            if (now != entt::null && registry.get<MaterialComponent>(now).albedoColor != before) ++altered;
+        }
+        CHECK_MSG(litAt > 0 && !burnables[index].fades && burnables[index].burningMs == 0.0 && !burnables[index].gone,
+                  "the shock agent carries `burned` and is never counted or taken away: lit on tick " + std::to_string(litAt));
+        CHECK_MSG(AddedNamed(added, "fire32.ent").empty(), "no flames: " + std::to_string(AddedNamed(added, "fire32.ent").size()));
+        CHECK_MSG(altered == 0, "and its picture is never drawn off the colour it had: " + std::to_string(altered) + " ticks");
+        layer.OnDetach(registry);
+    }
+}
+
+// How many fire32 the layer holds now: the live list, not what was added. A crate's flames and an effect a case adds are both one.
+int LiveFire32(const MagicPortalsLayer& layer) {
+    int live = 0;
+    for (const MagicPortalsLayer::EffectReport& one : layer.EffectReports()) {
+        if (one.entity == "fire32.ent") ++live;
+    }
+    return live;
+}
+
+// One crate followed through a level in which two burn (TwoCratesBurningTogetherAreEachInFlamesOfTheirOwn).
+struct WatchedCrate {
+    const char* node = "";
+    entt::entity body{entt::null};
+    std::size_t burnable = 0;     // its place in fire.burnables
+    double widthUnits = 0.0;      // its drawn width: GetSize().x
+    glm::dvec2 home{0.0};         // where it rests at the level's start
+    int burnTick = 0;
+    int goneTick = 0;
+    int flames = 0;               // the fire32 that came to its point
+    int flameId = 0;
+    int flameTick = 0;
+    int followIndex = -2;
+    bool riding = false;          // that flame follows a burning crate
+    double flameScale = 0.0;
+    int standing = 0;             // ticks it stood from its burn on
+    int astray = 0;               // of them, those its flames were not on its point, or not there
+    glm::dvec2 lastFlamePx{0.0};  // where its flames stood on the last tick it stood
+    int after = 0;                // ticks since it went
+    int stayed = 0;               // of them, those its flames were still there, where it left them
+};
+
+// TWO CRATES ON FIRE AT ONCE (planning step 194). 2-20's small crate is put in its fire agent's reach and burns; three ticks later it is
+// sent back to its resting place, far out of reach, and it burns on there; three ticks after that the other, larger crate is put in the
+// agent's reach and burns. (They cannot both be in the reach of one agent where they stand: it is 32 px, centre to centre, and the
+// crates are 32 and 64 wide, so two bodies in it would be shoved apart by the physics before the flame is lit.) Each must have its own
+// flames, once, added on its own first burned update, riding it and no other, at its own width over 64; and when the first crate goes
+// its flames stay where it left them while the second's go on riding the second.
+void TwoCratesBurningTogetherAreEachInFlamesOfTheirOwn() {
+    if (!OriginalArtIsThere("TwoCratesBurningTogetherAreEachInFlamesOfTheirOwn")) return;
+    namespace Units = MagicPortals::Units;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level19a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Game::Level& level = *layer.SimLevel();
+    CHECK_MSG(!level.fire.agents.empty(), "2-20 has a fire agent");
+    if (level.fire.agents.empty()) {
+        layer.OnDetach(registry);
+        return;
+    }
+    const glm::dvec2 reachPx = level.fire.agents.front().atPx + glm::dvec2(0.0, 8.0);
+    std::array<WatchedCrate, 2> crates;
+    crates[0].node = "crate_small_no_emissive_ent_1129";
+    crates[1].node = "crate_no_emissive_1128";
+    bool found = true;
+    for (WatchedCrate& crate : crates) {
+        const auto burnable = std::find_if(level.fire.burnables.begin(), level.fire.burnables.end(),
+                                           [&crate](const auto& one) { return one.name == crate.node; });
+        const auto built = level.built.entities.find(crate.node);
+        if (burnable == level.fire.burnables.end() || built == level.built.entities.end()) {
+            found = false;
+            continue;
+        }
+        crate.burnable = static_cast<std::size_t>(burnable - level.fire.burnables.begin());
+        crate.body = built->second;
+        crate.widthUnits = layer.DrawnPicture(crate.node).sizePx.x;
+    }
+    CHECK_MSG(found && crates[0].widthUnits > 0.0 && crates[1].widthUnits > crates[0].widthUnits,
+              "2-20's two crates are burnable and have bodies, the small one the narrower");
+    if (!found || !(crates[0].widthUnits > 0.0 && crates[1].widthUnits > crates[0].widthUnits)) {
+        layer.OnDetach(registry);
+        return;
+    }
+
+    std::vector<AddedEffect> added;
+    int seen = layer.EffectsSpawned();
+    int tick = 0;
+    for (int n = 0; n < 12; ++n) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        CollectAdded(layer, seen, tick, added);
+    }
+    CHECK_MSG(AddedNamed(added, "fire32.ent").empty(), "no flames before anything burns");
+    for (WatchedCrate& crate : crates) {
+        crate.home = Units::ToPixels(registry.get<TransformComponent>(crate.body).position);
+    }
+    PutBodyAt(registry, crates[0].body, reachPx);
+
+    int totalFlames = 0;
+    int strayFlames = 0;
+    int together = 0;      // ticks both stood, both alight
+    int windowTicks = 0;   // ticks the first was gone and the second stood alight
+    int windowStayed = 0;  // of them, those the first's flames were where it left them
+    bool sentHome = false;
+    bool sentSecond = false;
+    for (int n = 0; n < 260; ++n) {
+        tickWith(layer, registry, kRest, {}, {});
+        ++tick;
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        const std::size_t before = added.size();
+        CollectAdded(layer, seen, tick, added);
+        const std::vector<MagicPortalsLayer::EffectReport> live = layer.EffectReports();
+
+        std::array<bool, 2> standing{};
+        std::array<glm::dvec2, 2> px{};
+        for (std::size_t i = 0; i < crates.size(); ++i) {
+            standing[i] = registry.valid(crates[i].body);
+            px[i] = standing[i] ? Units::ToPixels(registry.get<TransformComponent>(crates[i].body).position)
+                                : glm::dvec2(0.0);
+        }
+        // Each flame added on this tick belongs to the crate whose point it is on.
+        for (std::size_t k = before; k < added.size(); ++k) {
+            if (added[k].report.entity != "fire32.ent") continue;
+            ++totalFlames;
+            bool placed = false;
+            for (std::size_t i = 0; i < crates.size(); ++i) {
+                if (!standing[i] || glm::distance(added[k].report.atPx, px[i]) >= 1e-6) continue;
+                WatchedCrate& crate = crates[i];
+                ++crate.flames;
+                crate.flameId = added[k].report.id;
+                crate.flameTick = tick;
+                crate.followIndex = added[k].report.followIndex;
+                crate.riding = added[k].report.followKind == MagicPortalsLayer::EffectOwner::Kind::BurningCrate;
+                crate.flameScale = added[k].report.scriptScale;
+                placed = true;
+            }
+            if (!placed) ++strayFlames;
+        }
+        std::array<MagicPortalsLayer::EffectReport, 2> flame{};
+        for (std::size_t i = 0; i < crates.size(); ++i) {
+            WatchedCrate& crate = crates[i];
+            if (crate.burnTick == 0 && level.fire.burnables[crate.burnable].burningMs > 0.0) crate.burnTick = tick;
+            if (crate.burnTick == 0) continue;
+            if (!standing[i] && crate.goneTick == 0) crate.goneTick = tick;
+            if (crate.flameId != 0) flame[i] = ByIdIn(live, crate.flameId);
+            if (standing[i]) {
+                ++crate.standing;
+                if (flame[i].id == 0 || glm::distance(flame[i].atPx, px[i]) > 1e-6) {
+                    ++crate.astray;
+                } else {
+                    crate.lastFlamePx = flame[i].atPx;
+                }
+            } else {
+                ++crate.after;
+                if (flame[i].id != 0 && glm::distance(flame[i].atPx, crate.lastFlamePx) < 1e-9) ++crate.stayed;
+            }
+        }
+        if (crates[0].burnTick != 0 && standing[0] && crates[1].burnTick != 0 && standing[1]) ++together;
+        if (crates[0].goneTick != 0 && !standing[0] && crates[1].burnTick != 0 && standing[1]) {
+            ++windowTicks;
+            if (flame[0].id != 0 && glm::distance(flame[0].atPx, crates[0].lastFlamePx) < 1e-9) ++windowStayed;
+        }
+        if (crates[0].burnTick != 0 && !sentHome && tick == crates[0].burnTick + 3) {
+            PutBodyAt(registry, crates[0].body, crates[0].home);
+            sentHome = true;
+        }
+        if (crates[0].burnTick != 0 && !sentSecond && tick == crates[0].burnTick + 6) {
+            PutBodyAt(registry, crates[1].body, reachPx);
+            sentSecond = true;
+        }
+        if (crates[0].goneTick != 0 && crates[1].goneTick != 0 &&
+            tick >= std::max(crates[0].goneTick, crates[1].goneTick) + 5) {
+            break;
+        }
+    }
+    const WatchedCrate& first = crates[0];
+    const WatchedCrate& second = crates[1];
+    const bool both = first.burnTick > 0 && first.goneTick > 0 && second.burnTick > 0 && second.goneTick > 0;
+    CHECK_MSG(both, "both crates burned and went: " + std::to_string(first.burnTick) + " to " + std::to_string(first.goneTick) + ", " +
+                        std::to_string(second.burnTick) + " to " + std::to_string(second.goneTick));
+    if (!both) {
+        layer.OnDetach(registry);
+        return;
+    }
+    CHECK_MSG(second.burnTick - first.burnTick >= 5 && together >= 40,
+              "and burned together: the second alight " + std::to_string(second.burnTick - first.burnTick) +
+                  " ticks after the first, both standing alight on " + std::to_string(together));
+    CHECK_MSG(totalFlames == 2 && strayFlames == 0 && first.flames == 1 && second.flames == 1,
+              "two fire32 in all, one on each crate and none anywhere else: " + std::to_string(totalFlames) + " in all, " +
+                  std::to_string(first.flames) + " and " + std::to_string(second.flames) + " on the crates, " +
+                  std::to_string(strayFlames) + " elsewhere");
+    CHECK_MSG(first.flameTick == first.burnTick && second.flameTick == second.burnTick,
+              "each added on its own crate's first burned update: " + std::to_string(first.flameTick) + " against " +
+                  std::to_string(first.burnTick) + ", " + std::to_string(second.flameTick) + " against " +
+                  std::to_string(second.burnTick));
+    CHECK_MSG(first.riding && second.riding && first.followIndex >= 0 && second.followIndex >= 0 &&
+                  first.followIndex != second.followIndex,
+              "each rides a crate of its own: sprites " + std::to_string(first.followIndex) + " and " +
+                  std::to_string(second.followIndex));
+    CHECK_MSG(NearD(first.flameScale, first.widthUnits / 64.0, 1e-12) &&
+                  NearD(second.flameScale, second.widthUnits / 64.0, 1e-12) && first.flameScale < second.flameScale,
+              "and each at its own crate's width over 64: " + std::to_string(first.flameScale) + " for " +
+                  std::to_string(first.widthUnits) + " units, " + std::to_string(second.flameScale) + " for " +
+                  std::to_string(second.widthUnits));
+    CHECK_MSG(first.standing > 55 && first.astray == 0 && second.standing > 55 && second.astray == 0,
+              "each crate's flames on it on every tick it stands, the first crate sent across the level included: " +
+                  std::to_string(first.standing) + " ticks and " + std::to_string(first.astray) + " astray, " +
+                  std::to_string(second.standing) + " and " + std::to_string(second.astray));
+    CHECK_MSG(windowTicks >= 5 && windowStayed == windowTicks,
+              "the first crate gone, its flames stay where it left them while the second's ride on: " +
+                  std::to_string(windowStayed) + " of " + std::to_string(windowTicks) + " ticks");
+    CHECK_MSG(second.after >= 5 && second.stayed == second.after,
+              "and the second's stay where it went: " + std::to_string(second.stayed) + " of " + std::to_string(second.after) +
+                  " ticks");
+    std::printf("  2-20: two crates alight together for %d ticks: fire32 x %.4f on the small one, x %.4f on the large\n", together,
+                first.flameScale, second.flameScale);
+    layer.OnDetach(registry);
+}
+
+// A RETRY AND A BURNING CRATE (planning step 194). The flame and its latch go with the level: a retry, with the crate's flames still
+// up, leaves no fire32 at all, and the crate that burns again in the rebuilt level is flamed once - not never (a latch that outlived the
+// level) and not twice.
+void ABurningCratesFlamesDoNotOutliveARetryAndComeAgainOnTheNextBurn() {
+    if (!OriginalArtIsThere("ABurningCratesFlamesDoNotOutliveARetryAndComeAgainOnTheNextBurn")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level19a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const CrateBurn first = BurnACrate(layer, registry, "crate_small_no_emissive_ent_1129", "", false);
+    const std::vector<AddedEffect> flames = AddedNamed(first.added, "fire32.ent");
+    CHECK_MSG(first.ran && flames.size() == 1, "the crate burned in flames, once: " + std::to_string(flames.size()));
+    if (!first.ran || flames.size() != 1) {
+        layer.OnDetach(registry);
+        return;
+    }
+    const int oldId = flames.front().report.id;
+    CHECK_MSG(ByIdIn(layer.EffectReports(), oldId).id == oldId && LiveFire32(layer) == 1,
+              "its flames are still up after the crate has gone, when the level is retried: " + std::to_string(LiveFire32(layer)));
+
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CloseTheLevelStartPopup(layer, registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) {
+        layer.OnDetach(registry);
+        return;
+    }
+    CHECK_MSG(ByIdIn(layer.EffectReports(), oldId).id == 0 && LiveFire32(layer) == 0,
+              "a retry leaves none of them: " + std::to_string(LiveFire32(layer)) + " fire32 in the rebuilt level");
+    int lit = 0;
+    for (const MagicPortals::Fire::Burnable& one : layer.SimLevel()->fire.burnables) {
+        if (one.burned || one.burningMs > 0.0 || one.gone) ++lit;
+    }
+    CHECK_MSG(lit == 0, "and nothing in it is alight: " + std::to_string(lit));
+
+    const CrateBurn again = BurnACrate(layer, registry, "crate_small_no_emissive_ent_1129", "crate_no_emissive_1128", false);
+    CheckADrawnBurn(again, "the same crate, burned again after the retry", layer.SimLevel()->fire.rules.burnMs, false, false);
+    layer.OnDetach(registry);
+}
+
+// THE FLAMES' OWN RANDOM STREAM (planning step 194): a burning crate's fire32 draws from m_crateFlameRandom - its pool when it is made and
+// every particle it releases - and nothing else does, so that adding the flames mid-level moves no other effect's draw and no other
+// effect's draw moves theirs (K8's reasoning, one step further). Four layers on 2-20 are ticked in step:
+//   X: an effect (a fire32 at the agent's point, tick 8) and a crate burning (tick 13);
+//   Y: the effect alone;      Z: the burn alone;
+//   W: the effect and a second effect on tick 12, no burn - the CONTROL: a second effect on the shared stream DOES move the first's
+//      particles, which shows the observable (where each newborn particle is born, how many are alive) depends on the draws at all.
+// X's effect must be Y's on every tick (the flames took nothing off the effects' stream) and X's flames Z's (the effect took nothing
+// off theirs), and W's must part from Y's. The mutation this holds is the flames drawn from m_effectRandom again, at either draw site.
+void TheCratesFlamesDrawOnAStreamOfTheirOwn() {
+    if (!OriginalArtIsThere("TheCratesFlamesDrawOnAStreamOfTheirOwn")) return;
+    struct Lane {
+        entt::registry registry;
+        std::unique_ptr<MagicPortalsLayer> layer;
+        bool effect = false;  // a fire32 added at tick 8
+        bool second = false;  // and another at tick 12
+        bool burn = false;    // the small crate put in the agent's reach at tick 12
+        int effectId = 0;
+        entt::entity body{entt::null};
+        glm::dvec2 reachPx{0.0};
+    };
+    std::array<Lane, 4> lanes;
+    lanes[0].effect = true;
+    lanes[0].burn = true;
+    lanes[1].effect = true;
+    lanes[2].burn = true;
+    lanes[3].effect = true;
+    lanes[3].second = true;
+    bool ready = true;
+    for (Lane& lane : lanes) {
+        publishViewport(lane.registry);
+        lane.layer = std::make_unique<MagicPortalsLayer>(TestPaths(), "level19a");
+        lane.layer->OnAttach(lane.registry);
+        const bool loaded = lane.layer->SimLevel() != nullptr && lane.layer->ArtError().empty();
+        CHECK_MSG(loaded, lane.layer->LoadError() + lane.layer->ArtError());
+        if (!loaded) {
+            ready = false;
+            continue;
+        }
+        CloseTheLevelStartPopup(*lane.layer, lane.registry);
+        const MagicPortals::Game::Level& level = *lane.layer->SimLevel();
+        const auto built = level.built.entities.find("crate_small_no_emissive_ent_1129");
+        const bool there = !level.fire.agents.empty() && built != level.built.entities.end();
+        CHECK_MSG(there, "2-20 has its fire agent and its small crate");
+        if (!there) {
+            ready = false;
+            continue;
+        }
+        lane.body = built->second;
+        lane.reachPx = level.fire.agents.front().atPx + glm::dvec2(0.0, 8.0);
+    }
+    const auto detachAll = [&lanes]() {
+        for (Lane& lane : lanes) {
+            if (lane.layer) lane.layer->OnDetach(lane.registry);
+        }
+    };
+    if (!ready) {
+        detachAll();
+        return;
+    }
+
+    constexpr int kEffectTick = 8;
+    constexpr int kBurnTick = 12;
+    constexpr int kLastTick = 90;
+    const auto spawnFire32 = [](Lane& lane, const glm::dvec2& atPx) {
+        MagicPortalsLayer::EffectSpawn spawn;
+        spawn.entity = "fire32.ent";
+        spawn.atPx = atPx;
+        spawn.zUnits = 0.0;
+        const int id = lane.layer->SpawnEffect(lane.registry, spawn);
+        CHECK_MSG(id > 0, "fire32.ent is added");
+        return id;
+    };
+    const auto flameOf = [](const std::vector<MagicPortalsLayer::EffectReport>& all) -> MagicPortalsLayer::EffectReport {
+        for (const MagicPortalsLayer::EffectReport& one : all) {
+            if (one.entity == "fire32.ent" && one.followKind == MagicPortalsLayer::EffectOwner::Kind::BurningCrate) return one;
+        }
+        return MagicPortalsLayer::EffectReport{};
+    };
+    // What the draws decide: where each particle that began its life on this tick was born, how many have been released and are alive,
+    // and their ages (a life is a draw). Compared exactly: the layers run the same arithmetic on the same ticks.
+    const auto same = [](const MagicPortalsLayer::EffectReport& a, const MagicPortalsLayer::EffectReport& b) {
+        return a.id != 0 && b.id != 0 && a.newbornPx == b.newbornPx && a.released == b.released && a.active == b.active &&
+               a.ageSumMs == b.ageSumMs;
+    };
+    int effectReadings = 0;
+    int effectApart = 0;
+    int effectBirths = 0;
+    int flameReadings = 0;
+    int flameApart = 0;
+    int flameBirths = 0;
+    int controlReadings = 0;
+    int controlApart = 0;
+    for (int tick = 1; tick <= kLastTick; ++tick) {
+        for (Lane& lane : lanes) {
+            tickWith(*lane.layer, lane.registry, kRest, {}, {});
+            lane.layer->OnUpdate(lane.registry, MagicPortalsLayer::kTick);
+        }
+        if (tick == kEffectTick) {
+            for (Lane& lane : lanes) {
+                if (lane.effect) lane.effectId = spawnFire32(lane, lane.reachPx);
+            }
+        }
+        if (tick == kBurnTick) {
+            for (Lane& lane : lanes) {
+                if (lane.burn) PutBodyAt(lane.registry, lane.body, lane.reachPx);
+                if (lane.second) spawnFire32(lane, lane.reachPx + glm::dvec2(20.0, 0.0));
+            }
+        }
+        if (tick <= kBurnTick) continue;
+        const std::vector<MagicPortalsLayer::EffectReport> x = lanes[0].layer->EffectReports();
+        const std::vector<MagicPortalsLayer::EffectReport> y = lanes[1].layer->EffectReports();
+        const std::vector<MagicPortalsLayer::EffectReport> z = lanes[2].layer->EffectReports();
+        const std::vector<MagicPortalsLayer::EffectReport> w = lanes[3].layer->EffectReports();
+        const MagicPortalsLayer::EffectReport effectX = ByIdIn(x, lanes[0].effectId);
+        const MagicPortalsLayer::EffectReport effectY = ByIdIn(y, lanes[1].effectId);
+        const MagicPortalsLayer::EffectReport effectW = ByIdIn(w, lanes[3].effectId);
+        const MagicPortalsLayer::EffectReport flameX = flameOf(x);
+        const MagicPortalsLayer::EffectReport flameZ = flameOf(z);
+        if (effectX.id != 0 || effectY.id != 0) {
+            ++effectReadings;
+            if (!same(effectX, effectY)) ++effectApart;
+            if (!effectX.newbornPx.empty()) ++effectBirths;
+        }
+        if (flameX.id != 0 || flameZ.id != 0) {
+            ++flameReadings;
+            if (!same(flameX, flameZ)) ++flameApart;
+            if (!flameX.newbornPx.empty()) ++flameBirths;
+        }
+        if (effectW.id != 0 || effectY.id != 0) {
+            ++controlReadings;
+            if (!same(effectW, effectY)) ++controlApart;
+        }
+    }
+    CHECK_MSG(effectReadings >= 30 && effectBirths >= 10,
+              "the effect beside the burn was compared on " + std::to_string(effectReadings) + " ticks, born on " +
+                  std::to_string(effectBirths) + " of them");
+    CHECK_MSG(effectApart == 0,
+              "the crate's flames take no draw off the effects' stream: the effect's particles are the burn-free layer's on every "
+              "tick, " + std::to_string(effectApart) + " of " + std::to_string(effectReadings) + " apart");
+    CHECK_MSG(flameReadings >= 50 && flameBirths >= 10,
+              "the flames were compared on " + std::to_string(flameReadings) + " ticks, born on " + std::to_string(flameBirths) +
+                  " of them");
+    CHECK_MSG(flameApart == 0, "and an effect's draws take none off theirs: the flames are the effect-free layer's on every tick, " +
+                                   std::to_string(flameApart) + " of " + std::to_string(flameReadings) + " apart");
+    CHECK_MSG(controlReadings >= 30 && controlApart >= 10,
+              "the control: a second effect on the shared stream moves the first's particles, on " + std::to_string(controlApart) +
+                  " of " + std::to_string(controlReadings) + " ticks");
+    std::printf("  2-20: the crate's flames, %d ticks compared, apart on %d; the effect beside them, %d compared, apart on %d; "
+                "control apart on %d of %d\n",
+                flameReadings, flameApart, effectReadings, effectApart, controlApart, controlReadings);
+    detachAll();
+}
+
 // 2-13: a carranca taken (here by a DEV break, as a stone's touch takes one: no
 // level's play takes one in the port) leaves carrancaCallback's carranca_destroy.ent
 // at its own point and depth, turned by its own angle, at the script's size.
@@ -33102,6 +33965,11 @@ void runTests() {
     TheBeholdersDeathScattersAndExplodes();
     ADeathByFireLeavesFlamesOnTheCharacter();
     ABurnedMinionLeavesItsFlamesBeforeItsBlood();
+    ABurningCrateIsDrawnInFlamesAndFades();
+    WhatManageBurnableDoesNotRunForIsNotDrawnBurning();
+    TwoCratesBurningTogetherAreEachInFlamesOfTheirOwn();
+    ABurningCratesFlamesDoNotOutliveARetryAndComeAgainOnTheNextBurn();
+    TheCratesFlamesDrawOnAStreamOfTheirOwn();
     ACarrancaBrokenLeavesItsDust();
     ATappedHandGoesWithItsSmoke();
     AShockAgentPulsesOnItsBounce();

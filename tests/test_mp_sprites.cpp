@@ -16,6 +16,7 @@
 #include "core/AudioClip.hpp"
 
 #include "sim/Art.hpp"
+#include "sim/Fire.hpp"
 #include "sim/GravityWell.hpp"
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
@@ -1147,6 +1148,72 @@ void TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused() {
             "crates two numbers", crate);
     refused("\"to\": [1.0, 1.0, 1.0] },\n    \"emissive\"", "\"to\": [1.0, -1.0, 1.0] },\n    \"emissive\"",
             "crates below zero", crate);
+    // And manageBurnable's fade of a burning crate (planning step 194): without it, or with one that cannot fade, the
+    // port would draw a burning crate as it draws an unburnt one.
+    refused("\"burn_fade\": {", "\"burn_fade_gone\": {", "crates no burn fade", crate);
+    refused("\"to\": 0.0,\n      \"floor\": 0.0,", "\"to\": 1.0,\n      \"floor\": 0.0,", "a burn fade that does not fade", crate);
+    refused("\"from\": 1.0,\n      \"to\": 0.0,", "\"from\": 2.0,\n      \"to\": 0.0,", "a burn fade that starts above its ceiling", crate);
+    refused("\"to\": 0.0,\n      \"floor\": 0.0,", "\"to\": -0.5,\n      \"floor\": 0.0,", "a burn fade that ends below its floor", crate);
+    refused("\"floor\": 0.0,\n      \"ceiling\": 1.0", "\"floor\": 2.0,\n      \"ceiling\": 1.0", "a burn fade floor above its ceiling", crate);
+    refused("\"ceiling\": 1.0\n    },", "\"ceiling\": \"1\"\n    },", "a burn fade ceiling that is text", crate);
+}
+
+// manageBurnable's fade of a burning crate (planning step 194; art.json non_teleportable burn_fade; listing bytes 420664..421145
+// #70-108): bias = max(min(1 - burnTime / 1000, 1), 0), SET as the colour's three channels and as its alpha, once a frame; and the
+// five names crateCallback runs it for. The decode's own formula is written out here and not read back through the rule, so the
+// rule and its numbers are held to the listing. The layer's use of it is test_mp_layer's.
+void TheBurningCrateFadesAsManageBurnableSays() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    Fire::Rules fire;
+    CHECK_MSG(Fire::LoadRules(kPortData + "/fire.json", fire, error), error);
+    const Art::NonTeleportable& crates = rules.nonTeleportable;
+    const Art::NonTeleportable::BurnFade& fade = crates.burnFade;
+    CHECK_MSG(fade.from == 1.0 && fade.to == 0.0 && fade.floor == 0.0 && fade.ceiling == 1.0,
+              "from 1 to 0, held to [0, 1]: #85-93's 1 - burnTime / 1000, the min against 1f and the max against 0f");
+    // The fade's length is the burn's: fire.json burn.time_ms, one clock for the fade and for the crate going.
+    CHECK_MSG(fire.burnMs == 1000.0, "BURN_TIME 1000, which the fade runs over");
+
+    // Every update a crate burns on, at the 16 ms the script clock gives a frame: the first reads 1 - 16 / 1000.
+    int off = 0;
+    double previous = 2.0;
+    int fallingWrong = 0;
+    for (int update = 0; update <= 70; ++update) {
+        const double burnTime = 16.0 * update;
+        const double want = std::max(std::min(1.0 - burnTime / 1000.0, 1.0), 0.0);
+        const double got = fade.At(burnTime, fire.burnMs);
+        if (std::fabs(got - want) > 1e-12) ++off;
+        if (!(got < previous) && got > 0.0) ++fallingWrong;
+        previous = got;
+    }
+    CHECK_MSG(off == 0, std::to_string(off) + " of 71 updates off #70-94's max(min(1 - burnTime / 1000, 1), 0)");
+    CHECK_MSG(fallingWrong == 0, "and the bias falls on every update until it reaches 0: " + std::to_string(fallingWrong));
+    CHECK_MSG(std::fabs(fade.At(16.0, fire.burnMs) - 0.984) < 1e-12 && std::fabs(fade.At(992.0, fire.burnMs) - 0.008) < 1e-12 &&
+                  fade.At(1008.0, fire.burnMs) == 0.0 && fade.At(0.0, fire.burnMs) == 1.0,
+              "the first update's 0.984, the 62nd's 0.008, the 63rd's 0 (burnTime 1008, past the 1000 that deletes it next)");
+    // A longer burn fades more slowly: the length is an argument, not a number of the fade's own.
+    CHECK_MSG(std::fabs(fade.At(500.0, 2000.0) - 0.75) < 1e-12 && fade.At(2000.0, 2000.0) == 0.0,
+              "over a burn of 2000 the fade is a quarter done at 500");
+
+    // crateCallback's five callers (ETHCallback_crate, _crate_no_emissive, _wood_piece_small, _crate_small,
+    // _crate_small_no_emissive: bytes 423812..424324) and nothing else run manageBurnable.
+    for (const char* name : {"crate", "crate_small", "wood_piece_small", "crate_no_emissive", "crate_small_no_emissive"}) {
+        CHECK_MSG(crates.Calls(name), std::string(name) + " runs crateCallback");
+    }
+    for (const char* name : {"crate_low_emissive", "shock_agent", "barrel_bomb", "fire_agent", "crate.ent", ""}) {
+        CHECK_MSG(!crates.Calls(name), std::string("'") + name + "' does not");
+    }
+    // crate_low_emissive has a begin-contact callback (ETHBeginContactCallback_crate_low_emissive, 422872..423108) and no frame
+    // callback, so the original never fades, flames or takes one away. fire.json's fade_names still lists it, which is the SIM's
+    // (it takes one away at the burn's end: LEFT FOR THE OWNER, planning step 194): this pin is that disagreement, held so that a
+    // later change of either side is a change someone made on purpose.
+    bool lowListed = false;
+    for (const std::string& name : fire.fadeNames) {
+        if (name == "crate_low_emissive" || name == "crate_low_emissive.ent") lowListed = true;
+    }
+    CHECK_MSG(lowListed && !crates.Calls("crate_low_emissive"),
+              "fire.json's fade_names lists crate_low_emissive, which crateCallback's callers do not");
 }
 
 // The dial behind a timed crystal (art.json timer): timer.ent's facts, pinned. The
@@ -4340,6 +4407,7 @@ MP_SUITE_MAIN("test_mp_sprites") {
     TheHelpBlockIsDrawnAtItsAlphaAndBreathesAsItsCallbackSays();
     TheHelpBlockWithoutItsAlphaOrBounceIsRefused();
     TheFireAgentTheKeysOrTheCratesWithoutTheirScriptsAreRefused();
+    TheBurningCrateFadesAsManageBurnableSays();
     TheTimerIsTimerEnt();
     ATimerWithoutItsClockIsRefused();
     TheLightWallGhostIsDashedDoorEnt();

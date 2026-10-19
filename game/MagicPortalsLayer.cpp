@@ -2443,13 +2443,26 @@ std::vector<MagicPortalsLayer::EmitterReport> MagicPortalsLayer::EmitterReports(
 // portal_death 400 ms later - belongs to the step that spawns portals as effects
 // (the plan's 7.4). This step builds the two free rules the engine itself has.
 
-double MagicPortalsLayer::effectRandom(double from, double to) {
-    // Randomizer::Float(min, max) takes the two either way round, as particleRandom does.
+namespace {
+
+// Randomizer::Float(min, max) takes the two either way round, as particleRandom does: one draw
+// from `engine`, none when the two are the same number.
+double UniformDraw(std::mt19937& engine, double from, double to) {
     const double lo = std::min(from, to);
     const double hi = std::max(from, to);
     if (!(hi > lo)) return lo;
     std::uniform_real_distribution<double> spread(lo, hi);
-    return spread(m_effectRandom);
+    return spread(engine);
+}
+
+} // namespace
+
+double MagicPortalsLayer::effectRandom(double from, double to) {
+    return UniformDraw(m_effectRandom, from, to);
+}
+
+double MagicPortalsLayer::crateFlameRandom(double from, double to) {
+    return UniformDraw(m_crateFlameRandom, from, to);
 }
 
 bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const EffectOwner& owner, glm::dvec2& atPx,
@@ -2605,6 +2618,24 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         if (m_level.player == entt::null || !registry.valid(m_level.player)) return false;
         atPx = Units::ToPixels(registry.get<TransformComponent>(m_level.player).position) + owner.offsetPx;
         return true;
+    case EffectOwner::Kind::BurningCrate: {
+        // ETHCallback_fire32 (bytes 420459..420664): SeekEntity(targetID) every frame and, while it
+        // finds the crate, SetPositionXY onto it; when the crate has been deleted (manageBurnable
+        // #110-118) it finds nothing and the flames STAY where it last put them, and go on to
+        // live out their own pools. So this is true whatever has become of the crate - a false
+        // would free the flames with it, which only the original's DeleteEntity of the flames
+        // themselves does. The BODY's point, as Kind::Character reads the player's: the point the
+        // crate's picture is hung from (syncSprites), where a push, a fall or a portal's carry
+        // has put it this frame; once the body is gone `atPx` is left as the last frame had it,
+        // which is the point the last update before the deletion moved the flames to.
+        if (owner.index >= 0 && owner.index < static_cast<int>(m_sprites.size())) {
+            const entt::entity body = m_sprites[static_cast<std::size_t>(owner.index)].body;
+            if (body != entt::null && registry.valid(body) && registry.all_of<TransformComponent>(body)) {
+                atPx = Units::ToPixels(registry.get<TransformComponent>(body).position) + owner.offsetPx;
+            }
+        }
+        return true;
+    }
     }
     return false;
 }
@@ -2776,8 +2807,14 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
         emitter.sprite = -1; // no level sprite carries it: this effect does
         emitter.slot = slot;
         emitter.tag = "Magic Portals Effect Particle";
+        // A burning crate's flames draw on a stream of their own (crateFlameRandom): this pool and every
+        // release it makes, so that no other effect of the level draws a different number for them.
+        const bool crateFlames = spawn.follow.kind == EffectOwner::Kind::BurningCrate;
         emitter.particles = Particles::MakePool(system, std::min(system.count, kMaxParticles), owner,
-                                                [this](double from, double to) { return effectRandom(from, to); });
+                                                [this, crateFlames](double from, double to) {
+                                                    return crateFlames ? crateFlameRandom(from, to)
+                                                                       : effectRandom(from, to);
+                                                });
         emitter.quads.assign(emitter.particles.size(), entt::null);
         effect.emitters.push_back(std::move(emitter));
     }
@@ -2855,6 +2892,8 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
     const double elapsedMs = static_cast<double>(deltaTime) * 1000.0;
     const double scriptMs = ScriptClock::OfFrameMs(m_clockRules, elapsedMs, ScriptClock::WallMs(m_step));
     const Particles::Random random = [this](double from, double to) { return effectRandom(from, to); };
+    // And a burning crate's flames' own, which no other effect's draw is moved by (crateFlameRandom).
+    const Particles::Random crateFlameDraw = [this](double from, double to) { return crateFlameRandom(from, to); };
     for (std::size_t i = 0; i < m_effects.size();) {
         Effect& effect = m_effects[i];
         glm::dvec2 atPx = effect.atPx;
@@ -2974,7 +3013,8 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
         for (Emitter& emitter : effect.emitters) {
             if (steps) {
                 emitter.owner = Particles::Owner{effect.atPx, effect.angleDeg};
-                stepEmitter(registry, emitter, elapsedMs, random, true);
+                stepEmitter(registry, emitter, elapsedMs,
+                            effect.follow.kind == EffectOwner::Kind::BurningCrate ? crateFlameDraw : random, true);
             }
             if (hidden) {
                 for (entt::entity& quad : emitter.quads) {
@@ -5970,7 +6010,11 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             const Tscn::Value* blinkMeta = node->Meta(m_artRules.nonTeleportable.blinkDatum);
             const bool blinkFlag = blinkMeta != nullptr && blinkMeta->AsNumber(flagValue) && flagValue != 0.0;
             drawn.blinks = m_artRules.nonTeleportable.For(BareEntityName(*node), teleportable, blinkFlag);
-            if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing) {
+            // crateCallback's five callers, which run manageBurnable whatever they blink: a
+            // teleportable `crate` blinks nothing here and still burns in flames and fades
+            // (planning step 194), so its place in fire.burnables is not the blink's to give.
+            drawn.crateCallback = m_artRules.nonTeleportable.Calls(BareEntityName(*node));
+            if (drawn.blinks != Art::NonTeleportable::Blinks::Nothing || drawn.crateCallback) {
                 const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
                 for (std::size_t b = 0; b < burnables.size(); ++b) {
                     if (burnables[b].name == sprite.node) drawn.burnable = static_cast<int>(b);
@@ -7973,8 +8017,8 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
         // A CRATE NO PORTAL CARRIES (art.json non_teleportable), on the same clock:
         // blinkColor writes the rgb as the ring's does, blinkEmissive the emissive
         // min(1, ambient + emissive) takes. Once its crate is burned the script stops
-        // writing either: manageBurnable takes the colour from 1 (its fade is not
-        // drawn, so the node's white stands), and the emissive keeps its last blink.
+        // writing either: manageBurnable sets the colour (its fade, drawn below the
+        // blink since planning step 194), and the emissive keeps its last blink.
         glm::dvec3 emissive = drawn.emissive;
         // A BARREL'S BLINK (art.json barrel_bomb): ETHCallback_barrel_bomb's blinkEmissive every frame
         // writes the emissive over the node's own - its floor, minEmissive, to 0.2 and back on
@@ -8007,6 +8051,23 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
             } else if (drawn.blinks == Art::NonTeleportable::Blinks::TeleportableEmissive && drawn.blinked) {
                 // crateCallback's own, for a teleportable crate (#70-93): 0.2 to 0 on 600 ms legs.
                 emissive = crates.teleportableEmissive.At(drawn.blinkMs);
+            }
+        }
+        // A CRATE BURNING FADES (planning step 194): manageBurnable, crateCallback's second call, from
+        // the update that first sees `burned` - the one that adds a burn's first frame to burnTime
+        // (#54-69), so Fire's burningMs above 0 - sets the colour's three channels and its alpha to
+        // the bias, 1 falling to 0 over the burn (#70-108), SET and not multiplied into the node's.
+        // Written after the blink, which stopped at `burned`: the blink never wrote on a burnt
+        // crate, and this does. Only crateCallback's five names (Art::NonTeleportable::Calls) get it;
+        // a shock agent or a crate_low_emissive carries `burned` and nothing more.
+        if (drawn.crateCallback && drawn.burnable >= 0) {
+            const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
+            if (static_cast<std::size_t>(drawn.burnable) < burnables.size()) {
+                const Fire::Burnable& burning = burnables[static_cast<std::size_t>(drawn.burnable)];
+                if (burning.burned && burning.burningMs > 0.0) {
+                    colour = glm::vec4(static_cast<float>(
+                        m_artRules.nonTeleportable.burnFade.At(burning.burningMs, m_level.fire.rules.burnMs)));
+                }
             }
         }
         tint(registry, drawn.quad, colour, emissive, runtimeBake ? noLightmap : drawn.lightmap, receiver);
@@ -10288,6 +10349,48 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
     return add;
 }
 
+// A CRATE THE FIRE HAS BURNED (planning step 194). manageBurnable (bytes 420664..421145), run by
+// crateCallback for the five names art.json non_teleportable lists and by nothing else, finds the
+// crate `burned` and, when its uint 'burnTime' is not there yet (#9-20: CheckCustomData is not a
+// uint), makes it 0 and calls addFlames (#21-40) - ONCE, on that first update, and then adds the
+// update's time (#54-69). The port's Fire::State::Tick is that callback's clock: it adds a burn's
+// first tick on the tick it first counts the crate, so `burningMs` above 0 is the first update, and
+// the flame is queued then and never again (`flamed`). A fire agent's or the lava's flag is set and
+// counted on one tick; a fireball's or a blast's is set after Fire::Tick and counted on the next
+// (Game::AfterStep), as the original's static agents and contacts set a flag the crate's own
+// dynamic callback reads a frame later - the sim's relation, which this reads and does not shift.
+//
+// fire32.ent at the crate's point and depth, unturned, at its width over 64 (Effects::Flames),
+// riding it as ETHCallback_fire32 does (EffectOwner::Kind::BurningCrate). The width is GetSize().x,
+// the frame times the entity's scale: a 64-wide crate at 1, a 32-wide smaller crate at 0.5.
+void MagicPortalsLayer::latchBurningCrates(const entt::registry& registry) {
+    const std::vector<Fire::Burnable>& burnables = m_level.fire.burnables;
+    for (std::size_t i = 0; i < m_sprites.size(); ++i) {
+        DrawnSprite& drawn = m_sprites[i];
+        if (!drawn.crateCallback || drawn.flamed || drawn.burnable < 0 ||
+            static_cast<std::size_t>(drawn.burnable) >= burnables.size()) {
+            continue;
+        }
+        const Fire::Burnable& burning = burnables[static_cast<std::size_t>(drawn.burnable)];
+        if (!burning.burned || !(burning.burningMs > 0.0)) continue;
+        // A crate whose body was taken before its first burned update was seen has nothing to ride.
+        if (drawn.body == entt::null || !registry.valid(drawn.body) ||
+            !registry.all_of<Supersonic::TransformComponent>(drawn.body)) {
+            continue;
+        }
+        drawn.flamed = true;
+        const glm::dvec2 atPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(drawn.body).position);
+        EffectSpawn flames =
+            effectAdd(Effects::Flames(m_effectRules, atPx, drawn.lookZ, drawn.sprite.sizePx.x * drawn.scale));
+        flames.follow.kind = EffectOwner::Kind::BurningCrate;
+        flames.follow.index = static_cast<int>(i);
+        m_effectQueue.push_back(flames);
+        SUPERSONIC_LOG_INFO("Magic Portals") << "crate burning on tick " << m_ticks << ": " << drawn.sprite.node
+                                             << " at (" << atPx.x << ", " << atPx.y << ") z " << flames.zUnits << " x "
+                                             << flames.scale << std::endl;
+    }
+}
+
 // WHERE THE EFFECTS ARE TRIGGERED (system_7 7a-2), beside the sounds and for the
 // same reason: the tick says what happened, and the frame draws it.
 //
@@ -10301,6 +10404,7 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
 // back door.
 void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const ScriptClock::Step& step) {
     if (!m_loaded) return;
+    latchBurningCrates(registry);
 
     // A MINION'S OWN SYSTEMS (the visuals plan's 11.4, planning step 97). The
     // entity a marker adds is ghost_minion.ent on 3-32 (R16), and that .ent
