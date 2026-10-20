@@ -1648,8 +1648,9 @@ void WhatTheAdjustBlockRefuses() {
 //
 // The drag is Adjust::Drag, a pure class fed one pointer and the screen. Pinned here with no layer: a pad that drives it the way the layer does, tick by
 // tick, the tuning in force changing only when a tick says `commit`. THE LITERALS of the scenarios come from out/parity/program/CTL/CTL12/work/model_drag.py,
-// an independent Python model of the specification (the shared clamp, the clearance, the walk in steps, the bisection) that reads controls.json for its
-// constants and nothing of this code: the scenarios are the ones of 16:9 at the default size, where the default boxes are
+// a second implementation, by the same author, of the same design (the shared clamp, the clearance, the walk in steps, the bisection) - not an independent
+// check of it - that reads controls.json for its constants and nothing of this code; what makes the literals checkable is that they are plain geometry,
+// e.g. 208.4978 - 117.362 = 91.136, which a move kept to a tenth stops at 91.1. The scenarios are the ones of 16:9 at the default size, where the default boxes are
 //   walk_left (15.6444, 208.4978)-(47.5022, 240.3556)   restart (346.1689, 15.6444)-(387.1289, 56.6044)   clear_portals (15.6444, 15.6444)-(56.6044, 56.6044)
 // and the widgets are kWidgetRows169's. A move is kept to a tenth of a unit, so a control stops within a tenth of what it may not meet.
 

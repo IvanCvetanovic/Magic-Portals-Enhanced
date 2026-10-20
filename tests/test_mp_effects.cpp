@@ -15,6 +15,7 @@
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
 
+#include "core/Json.hpp"
 #include "sim/Earthquake.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Loading.hpp"
@@ -30,6 +31,8 @@
 #include <vector>
 
 using namespace MagicPortals;
+
+namespace Json = Supersonic::Json;
 
 namespace {
 
@@ -1348,6 +1351,143 @@ void TheKnightsMarksAreAddedAboveAndBehindThem() {
     CHECK_MSG(Effects::ExclamationMark(rules, knight, 0.0).z == -32.0, "an escort at depth 0: -32");
 }
 
+// ---- CMP-19 (planning step 195): THE FIREBALL'S HALO SCALE ---------------------------------------------
+//
+// effects.json's "fireball" row names a halo_brightness_scale of 1, Ethanon's own arithmetic
+// (ETHRenderEntity.cpp:354-388, no factor), which the layer draws that entity's halo at in place of
+// lighting.json's 0.6. The scale rides with the call-site row (Rule -> Spawn -> EffectSpawn -> Effect), so
+// what is pinned here is the row's half: the row holds it, no other row does, the loader refuses what is
+// not a number from 0 to 1, and a row that does not name one leaves the global scale in charge. The layer's
+// half (the halo that is drawn) is test_mp_layer's AFireballsHaloIsDrawnAtEthanonsOwnBrightness.
+void TheFireballsHaloHasAScaleOfItsOwnAndNoOtherRowDoes() {
+    const Effects::Rules rules = TheRules();
+    const glm::dvec2 at(10.0, 20.0);
+
+    // MUTATIONS THIS FAILS UNDER: the field ignored (the loader never reads it, or SpawnOf never copies it);
+    // the field read into the wrong row (Rules::fireball taking another row's, or the value changed).
+    CHECK_MSG(rules.fireball.haloBrightnessScale.has_value() && *rules.fireball.haloBrightnessScale == 1.0,
+              "the fireball's row names a halo_brightness_scale of 1, Ethanon's own arithmetic");
+    const Effects::Spawn ball = Effects::Fireball(rules, at);
+    CHECK_MSG(ball.haloBrightnessScale.has_value() && *ball.haloBrightnessScale == 1.0,
+              "and the spawn the call makes carries it to the layer");
+
+    // MUTATIONS THIS FAILS UNDER: the field applied to every halo (a default in the loader or in SpawnOf);
+    // another effect's halo taking the fireball's value (a spawn built from the fireball's row).
+    const std::vector<Effects::Spawn> others = {
+        Effects::Suck(rules, at, glm::dvec2(30.0, 40.0)), Effects::Sparkles(rules, at, glm::dvec2(30.0, 40.0)),
+        Effects::Appear(rules, at),                       Effects::SmallExplosion(rules, at),
+        Effects::LargeExplosion(rules, at),               Effects::Summon(rules, at),
+        Effects::Portal(rules, at),                       Effects::Death(rules, at)};
+    int named = 0;
+    for (const Effects::Spawn& spawn : others) {
+        if (spawn.haloBrightnessScale.has_value()) ++named;
+    }
+    CHECK_MSG(named == 0, std::to_string(named) + " of the eight other point rows' spawns carry a halo scale of their own");
+    // And in the FILE: of every row of effects.json, the fireball's is the only one that names one. A
+    // second one would be the owner's CMP-8 call, and this is the line he would change.
+    const std::string text = Read(kEffects);
+    Json::Parser parser(text);
+    Json::Value root;
+    CHECK_MSG(parser.Parse(root), "effects.json parses: " + parser.Error());
+    std::vector<std::string> naming;
+    for (const auto& [name, row] : root.AsObject()) {
+        if (row.IsObject() && row.Has("halo_brightness_scale")) naming.push_back(name);
+    }
+    CHECK_MSG(naming.size() == 1 && naming.front() == "fireball",
+              "only the fireball row names a halo_brightness_scale: " + std::to_string(naming.size()) + " row(s)");
+    const Json::Value& block = root["fireball"]["halo_brightness_scale"];
+    CHECK_MSG(block.IsObject() && block["_source"].IsArray() && !block["_source"].AsArray().empty() &&
+                  block["value"].IsNumber(),
+              "with the provenance beside the value, as lighting.json keeps its own scale's");
+
+    // The loader: an own scale is a number from 0 to 1 in an object, as lighting.json's is, or it is refused
+    // by name. FAILS UNDER: the range check removed, or the type check removed.
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-effects";
+    std::filesystem::create_directories(dir, ec);
+    const std::string valueText = "\"restores the 0.6.\"\n      ],\n      \"value\": 1.0";
+    const auto load = [&](const char* name, const std::string& from, const std::string& to, Effects::Rules& out,
+                          std::string& why) {
+        std::string edited = text;
+        const std::size_t found = edited.find(from);
+        CHECK_MSG(found != std::string::npos && edited.find(from, found + 1) == std::string::npos,
+                  std::string(name) + ": the fixture finds its text exactly once");
+        if (found == std::string::npos) return false;
+        edited.replace(found, from.size(), to);
+        const std::string path = (dir / name).string();
+        {
+            std::ofstream file(path, std::ios::binary);
+            file << edited;
+        }
+        return Effects::LoadRules(path, out, why);
+    };
+    const auto withValue = [&](const std::string& value) {
+        return "\"restores the 0.6.\"\n      ],\n      \"value\": " + value;
+    };
+    const auto refusedValue = [&](const char* name, const std::string& value) {
+        Effects::Rules read;
+        std::string why;
+        const bool loaded = load(name, valueText, withValue(value), read, why);
+        CHECK_MSG(!loaded && why.find("fireball.halo_brightness_scale") != std::string::npos,
+                  std::string(name) + " is refused by name: " + why);
+    };
+    refusedValue("scale_over.json", "1.5");
+    refusedValue("scale_under.json", "-0.1");
+    refusedValue("scale_text.json", "\"1.0\"");
+    refusedValue("scale_flag.json", "true");
+    refusedValue("scale_list.json", "[1.0]");
+    {
+        Effects::Rules read;
+        std::string why;
+        const bool loaded = load("scale_bare.json", "\"halo_brightness_scale\": {",
+                                 "\"halo_brightness_scale\": 1.0, \"stray\": {", read, why);
+        CHECK_MSG(!loaded && why.find("fireball.halo_brightness_scale") != std::string::npos,
+                  "a scale that is a bare number, not an object holding one, is refused by name: " + why);
+    }
+    {
+        Effects::Rules read;
+        std::string why;
+        const bool loaded = load("scale_missing.json", valueText,
+                                 "\"restores the 0.6.\"\n      ],\n      \"valeur\": 1.0", read, why);
+        CHECK_MSG(!loaded && why.find("fireball.halo_brightness_scale") != std::string::npos,
+                  "an object with no value is refused by name: " + why);
+    }
+    // The ends are numbers from 0 to 1 and are read as an own scale: 0 is a scale (no halo), not 'none'.
+    for (const double edge : {0.0, 1.0, 0.25}) {
+        Effects::Rules read;
+        std::string why;
+        const bool loaded = load("scale_edge.json", valueText, withValue(Num(edge)), read, why);
+        CHECK_MSG(loaded && read.fireball.haloBrightnessScale.has_value() && *read.fireball.haloBrightnessScale == edge,
+                  "a scale of " + Num(edge) + " is read as the row's own: " + why);
+    }
+
+    // DELETING THE FIELD RESTORES TODAY'S PIXELS: the file without the block loads, and the row names no scale, so
+    // the layer draws its halo at lighting.json's. FAILS UNDER: a default of 1 in the loader or in SpawnOf.
+    {
+        std::string without = text;
+        const std::string head = ",\n    \"halo_brightness_scale\": {";
+        const std::size_t start = without.find(head);
+        const std::string tail = "\"value\": 1.0\n    }";
+        const std::size_t stop = start == std::string::npos ? std::string::npos : without.find(tail, start);
+        CHECK_MSG(start != std::string::npos && stop != std::string::npos, "the fixture finds the block to delete");
+        if (start != std::string::npos && stop != std::string::npos) {
+            without.erase(start, stop + tail.size() - start);
+            const std::string path = (dir / "scale_deleted.json").string();
+            {
+                std::ofstream file(path, std::ios::binary);
+                file << without;
+            }
+            Effects::Rules read;
+            std::string why;
+            CHECK_MSG(Effects::LoadRules(path, read, why), "the file without the field loads: " + why);
+            CHECK_MSG(!read.fireball.haloBrightnessScale.has_value() &&
+                          !Effects::Fireball(read, at).haloBrightnessScale.has_value() &&
+                          read.fireball.entity == rules.fireball.entity && read.fireball.scale == rules.fireball.scale,
+                      "and the fireball's row then names no scale, the rest of it as it was");
+        }
+    }
+}
+
 void ARowMissingAFactIsRefused() {
     const std::string good = Read(kEffects);
     CHECK_MSG(!good.empty(), "effects.json is where the build says: " + kEffects);
@@ -1654,6 +1794,7 @@ MP_SUITE_MAIN("test_mp_effects") {
     TheBossesScatterIsTheAddersClockAndTheirRandomPoint();
     ATappedHandsSmokeTurnsWithIt();
     TheKnightsMarksAreAddedAboveAndBehindThem();
+    TheFireballsHaloHasAScaleOfItsOwnAndNoOtherRowDoes();
     ARowMissingAFactIsRefused();
     return ::test::summary("test_mp_effects", 60);
 }

@@ -135,9 +135,10 @@ struct Rules {
     // decodes a texel as -(2 (c - 0.5)) against a light vector in Ethanon's y-down
     // world (Enhanced's engine_math.md 4.5).
     bool normalMapGreenDown = true;
-    // What every halo's formula colour is multiplied by. 1 is the formula itself;
-    // the value in the file is a _guess the design leaves to the halo gate
-    // (design_port.md 5.5, 8), with its measurements beside it.
+    // What every halo's formula colour is multiplied by, but for one whose effects.json
+    // row carries a scale of its own (HaloScale: the carranca fireball's, CMP-19). 1 is
+    // the formula itself; the value in the file is a _guess the design leaves to the
+    // halo gate (design_port.md 5.5, 8), with its measurements beside it.
     double haloBrightnessScale = 1.0;
     // The original draws into a 16-bit 5/6/5 surface without dithering.
     bool framebufferRgb565 = true;
@@ -231,6 +232,12 @@ glm::dvec3 LightColour(const Light& light, double intensity, bool ownerStatic, d
 // for a static owner too, and NOT the scene's intensity (ETHRenderEntity::DrawHalo,
 // ETHRenderEntity.cpp:354-388); then Rules::haloBrightnessScale.
 glm::dvec3 HaloColour(const Light& light, double ratio, double scale);
+
+// The scale a halo is drawn at (the `scale` of HaloColour): its owner's own, where the
+// owner's effects.json row carries a halo_brightness_scale (CMP-19: the fireball's, 1,
+// which is Ethanon's own arithmetic), else lighting.json's. The one place the choice is
+// made, so a halo that names no scale of its own cannot take another's.
+double HaloScale(const Rules& rules, const std::optional<double>& own);
 
 // A light as its owner's scale draws it: the owner's m_properties.scale, which
 // <Scale> and every Scale() the script calls multiply. The light's position and

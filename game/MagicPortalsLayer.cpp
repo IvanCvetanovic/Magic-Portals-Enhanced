@@ -2677,6 +2677,7 @@ int MagicPortalsLayer::SpawnEffect(entt::registry& registry, const EffectSpawn& 
     effect.angleDeg = spawn.angleDeg;
     effect.scriptScale = spawn.scale;
     effect.scale = art.ScaleAt(spawn.scale);
+    effect.haloBrightnessScale = spawn.haloBrightnessScale;
     effect.zUnits = spawn.zUnits;
     effect.follow = spawn.follow;
     effect.colour = spawn.colour;
@@ -2997,7 +2998,7 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
             placeLight(registry, effect.light, entt::null, *effect.art.light, effect.atPx, effect.zUnits,
                        effect.art.isStatic, ratio, effect.haloZ, !hidden, effect.scale);
             placeLight(registry, entt::null, effect.halo, *effect.art.light, effect.atPx, effect.zUnits,
-                       effect.art.isStatic, ratio, effect.haloZ, !hidden, drawnScale);
+                       effect.art.isStatic, ratio, effect.haloZ, !hidden, drawnScale, effect.haloBrightnessScale);
         }
 
         // A HIDDEN entity is not drawn (ETHScene.cpp:568, ETHRenderEntity.cpp:396),
@@ -3311,6 +3312,12 @@ std::vector<MagicPortalsLayer::EffectReport> MagicPortalsLayer::EffectReports() 
             report.haloPx = Lighting::OwnerScaled(*effect.art.light, effect.scale * effect.bounceScale).haloSize;
         }
         report.systems = static_cast<int>(effect.emitters.size());
+        // The numbers updateEffects hands Lighting::ParticleRatio for the halo.
+        if (!effect.emitters.empty()) {
+            report.firstSystemActive = effect.emitters.front().active;
+            report.firstSystemCount = effect.emitters.front().system.count;
+        }
+        report.haloScale = Lighting::HaloScale(m_data.lighting, effect.haloBrightnessScale);
         report.systemZ.reserve(effect.emitters.size());
         report.systemSizePx.reserve(effect.emitters.size());
         for (const Emitter& emitter : effect.emitters) {
@@ -8232,8 +8239,10 @@ void MagicPortalsLayer::tint(entt::registry& registry, entt::entity quad, const 
 // THE HALOS (design section 5.5, plan_port System 8). An added quad of the halo's
 // size in world units at the owner plus the light's UNSCALED offset, coloured
 // <Color> x haloBrightness x the owner's live particle share for any owner
-// (ETHRenderEntity.cpp:354-388), x lighting.json's scale, with no ambient and no
-// intensity, so it is not on the 2D sprite path at all. Drawn a quarter slot in
+// (ETHRenderEntity.cpp:354-388), x lighting.json's scale - or, for an effect whose
+// effects.json row names a halo_brightness_scale of its own, x that (the carranca
+// fireball's 1, Ethanon's own arithmetic: CMP-19, planning step 195) - with no ambient
+// and no intensity, so it is not on the 2D sprite path at all. Drawn a quarter slot in
 // front of its owner's picture: over what is behind the owner (the arches and sky
 // of 1-1, which Enhanced's fit finds it adds over), under what is in front of
 // it (1-1's wall04, where it finds none), and behind the owner's particles, which
@@ -8363,10 +8372,11 @@ double MagicPortalsLayer::particleRatioOf(int emitter) const {
 void MagicPortalsLayer::placeLight(entt::registry& registry, entt::entity light, entt::entity halo,
                                    const Lighting::Light& unscaled, const glm::dvec2& ownerPx, double ownerZ,
                                    bool ownerStatic, double ratio, float haloZ, bool present,
-                                   const glm::dvec2& ownerScale) const {
+                                   const glm::dvec2& ownerScale, const std::optional<double>& ownHaloScale) const {
     using namespace Supersonic;
     const double intensity = m_look.intensity;
-    const double haloScale = m_data.lighting.haloBrightnessScale;
+    // lighting.json's scale for every halo but one whose row names its own (CMP-19).
+    const double haloScale = Lighting::HaloScale(m_data.lighting, ownHaloScale);
     const Lighting::Light from = Lighting::OwnerScaled(unscaled, ownerScale);
     if (light != entt::null && registry.valid(light)) {
         const glm::vec3 at = Units::ToWorld(ownerPx.x + from.offset.x, ownerPx.y + from.offset.y);
@@ -10346,6 +10356,7 @@ MagicPortalsLayer::EffectSpawn MagicPortalsLayer::effectAdd(const Effects::Spawn
                  (spawn.zScaled || !(m_artRules.scaleFactor > 0.0) ? spawn.z : m_artRules.LevelDepth(spawn.z));
     add.angleDeg = spawn.angleDeg;
     add.scale = spawn.scale;
+    add.haloBrightnessScale = spawn.haloBrightnessScale;
     return add;
 }
 

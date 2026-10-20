@@ -13505,6 +13505,271 @@ void AFireballIsDrawnAtItsEntitysOwnScale() {
     layer.OnDetach(registry);
 }
 
+// CMP-19 (planning step 195), K2: THE LIVE RATIO OF A FIREBALL'S FIRST SYSTEM, READ AT RUN TIME.
+//
+// The halo's colour is <Color> x haloBrightness x the live share of the entity's FIRST particle system
+// (ETHRenderEntity.cpp:367-376: GetNumActiveParticles / GetNumParticles, counted as ETHParticleManager.cpp:208-213
+// counts them), and the measurement of 2026-10-19 put the port's fireball halo at 0.55 of the original's at
+// lighting.json's 0.6 and 0.89 to 0.92 at 1. That reads as "the scale is the knob" only if the share is 1 in
+// steady state: 0.55 = 0.6 x 0.917 is the same number whether the share is 0.92 and the scale right, or the
+// share 1 and the scale wrong. The code symmetry (Particles.cpp:399 against the original's rule) and the steady
+// frames said 5 of 5, and nobody had READ it. This reads it, through the numbers placeLight is handed
+// (EffectReport::firstSystemActive and firstSystemCount), on a fireball built by hand (it follows nothing, so it
+// lives as long as the test) and on the real one a carranca spits on 2-01 - the start of a flight ramps up as
+// the particles are released one after the other, the original's too, and is not steady.
+//
+// placeLight runs BEFORE the emitters are stepped, so the halo a frame draws is made of the count the LAST
+// step left: the report taken before a frame is what that frame's halo reads.
+//
+// FAILS UNDER: a first system whose count falls below its pool in steady state (a particle that dies at size 0,
+// a release that never completes) - which would make the field's 1 right for the wrong reason.
+void AFireballsLiveRatioIsOneAtSteadyState() {
+    if (!OriginalArtIsThere("AFireballsLiveRatioIsOneAtSteadyState")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    constexpr int kRampFrames = 40; // the system releases over (100 + 50) x 4 / 5 ms: 8 frames; 40 is generous
+
+    // ---- A. one built by hand on 1-01: 400 frames, nothing to reset the level ----
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        MagicPortalsLayer::EffectSpawn spawn;
+        spawn.entity = "fireball.ent";
+        spawn.atPx = glm::dvec2(200.0, 128.0);
+        const int id = layer.SpawnEffect(registry, spawn);
+        CHECK(id > 0);
+        if (id <= 0) return;
+        int steady = 0, belowOne = 0, minActive = 1 << 30, maxActive = -1, count = 0, firstActive = -1;
+        double mismatch = 0.0;
+        for (int frame = 0; frame < 400; ++frame) {
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            const MagicPortalsLayer::EffectReport report = ByIdIn(layer.EffectReports(), id);
+            CHECK_MSG(report.id == id && report.systems == 1, "the fireball is there, with its one system");
+            if (report.id != id) return;
+            count = report.firstSystemCount;
+            if (frame == 0) firstActive = report.firstSystemActive;
+            if (frame < kRampFrames) continue;
+            ++steady;
+            minActive = std::min(minActive, report.firstSystemActive);
+            maxActive = std::max(maxActive, report.firstSystemActive);
+            if (Lighting::ParticleRatio(report.firstSystemActive, report.firstSystemCount) != 1.0) ++belowOne;
+            // and what it is drawn with: this frame's halo is made of the count the frame before left, which
+            // is this frame's too once steady - so the colour is the formula at ratio 1 and lighting.json's
+            // scale (a hand-built spawn names no scale of its own: only the row's call does).
+            const glm::vec4 colour = registry.get<MaterialComponent>(report.halo).albedoColor;
+            mismatch = std::max({mismatch, std::fabs(colour.r - 0.6), std::fabs(colour.g - 0.3), std::fabs(colour.b - 0.12)});
+        }
+        CHECK_MSG(count == 5, "fireball.ent's one system holds 5 particles: " + std::to_string(count));
+        CHECK_MSG(firstActive < count, "and the flight starts with the particles released one after the other (" +
+                                           std::to_string(firstActive) + " of " + std::to_string(count) + " on its first frame)");
+        CHECK_MSG(steady == 400 - kRampFrames && belowOne == 0 && minActive == count && maxActive == count,
+                  "K2: once released, the first system's live share is exactly 1 on every frame: " +
+                      std::to_string(belowOne) + " of " + std::to_string(steady) + " frames below 1, active " +
+                      std::to_string(minActive) + ".." + std::to_string(maxActive) + " of " + std::to_string(count));
+        CHECK_MSG(mismatch < 1e-5, "and the halo is then (1, 0.5, 0.2) x lighting.json's scale: " + std::to_string(mismatch));
+        std::printf("  K2, a fireball built by hand, %d steady frames: first system active %d..%d of %d (frame 0: %d)\n", steady,
+                    minActive, maxActive, count, firstActive);
+    }
+
+    // ---- B. the real one, spat by 2-01's carranca and followed by its effect ----
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0a");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CloseTheLevelStartPopup(layer, registry);
+        int born = -1, steady = 0, belowOne = 0, minActive = 1 << 30, maxActive = -1, count = 0, seen = 0;
+        for (int tick = 0; tick < 150; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            MagicPortalsLayer::EffectReport report{};
+            for (const MagicPortalsLayer::EffectReport& r : layer.EffectReports()) {
+                if (r.entity == "fireball.ent") report = r;
+            }
+            if (report.id == 0) continue;
+            if (born < 0) born = tick;
+            ++seen;
+            count = report.firstSystemCount;
+            if (tick - born < kRampFrames) continue;
+            ++steady;
+            minActive = std::min(minActive, report.firstSystemActive);
+            maxActive = std::max(maxActive, report.firstSystemActive);
+            if (Lighting::ParticleRatio(report.firstSystemActive, report.firstSystemCount) != 1.0) ++belowOne;
+        }
+        CHECK_MSG(born >= 0 && steady >= 10,
+                  "2-01's first fireball flew long enough to be read in steady state: born at tick " + std::to_string(born) +
+                      ", " + std::to_string(steady) + " steady frames of " + std::to_string(seen));
+        CHECK_MSG(belowOne == 0 && minActive == count && maxActive == count,
+                  "K2, the real fireball: the first system's live share is 1 on every steady frame (" +
+                      std::to_string(belowOne) + " below 1, active " + std::to_string(minActive) + ".." +
+                      std::to_string(maxActive) + " of " + std::to_string(count) + ")");
+        std::printf("  K2, 2-01's real fireball, %d steady frames from tick %d: first system active %d..%d of %d\n", steady, born,
+                    minActive, maxActive, count);
+    }
+}
+
+// CMP-19 (planning step 195), THE PIN: the carranca fireball's halo is drawn at (1, 0.5, 0.2) x its own
+// brightness 1 x the live ratio x ITS OWN scale, 1 - effects.json's halo_brightness_scale on its row - and
+// every other halo stays at lighting.json's 0.6.
+//
+// The real fireball (the latch's, so the field travels Rule -> Spawn -> EffectSpawn -> Effect as in play) is
+// read frame by frame against the count the frame before left; the two halos that are NOT the fireball's -
+// a fireball.ent built by hand with no row behind it, and the lit torch's light_from_projectile.ent - are
+// read the same way and must read lighting.json's value, so that the scale is the row's property and not the
+// entity file's or the layer's.
+//
+// MUTATIONS THIS FAILS UNDER (the verifier reads each pin against the code or the mutation):
+//   the field ignored                          -> A: the real halo reads 0.6 of (1, 0.5, 0.2), haloScale 0.6
+//   the field applied to every halo            -> B and C: the others read 1 x their colour, not 0.6 x
+//   the global 0.6 changed                     -> B and C: they read the new value, not 0.6; test_mp_lighting too
+//   the field read for the wrong entity        -> A reads 0.6 (the row is not the fireball's) or B reads 1
+//   another effect's halo taking the value     -> C: light_from_projectile.ent reads 1 x 0.7 x its colour
+//   the light taking the halo's scale          -> D: the fireball's light is its colour x the level's intensity
+//                                                  x the ratio, unscaled (and the shot's, AShotCarriesItsOwnLight)
+void AFireballsHaloIsDrawnAtEthanonsOwnBrightness() {
+    if (!OriginalArtIsThere("AFireballsHaloIsDrawnAtEthanonsOwnBrightness")) return;
+    namespace Lighting = MagicPortals::Lighting;
+    const Lighting::Rules rules = LightingRules();
+    CHECK_MSG(rules.haloBrightnessScale == 0.6, "lighting.json's scale, the others', is 0.6");
+
+    // The level's own intensity, which scales a light and not a halo.
+    const auto intensityOf = [](const std::string& level) {
+        std::ifstream file(kLevels + "/" + level + ".tscn", std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        const std::string key = "metadata/eth_light_intensity = \"";
+        const std::size_t at = text.find(key);
+        return at == std::string::npos ? -1.0 : std::atof(text.c_str() + at + key.size());
+    };
+
+    // ---- A and D. the real one on 2-01 ----
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0a");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CloseTheLevelStartPopup(layer, registry);
+        const double intensity = intensityOf("level0a");
+        CHECK_MSG(intensity > 0.0, "2-01's light intensity is read from its scene: " + std::to_string(intensity));
+        int born = -1, framesChecked = 0, rampChecked = 0, wrongHalo = 0, wrongLight = 0, wrongScale = 0;
+        double worst = 0.0;
+        for (int tick = 0; tick < 150; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            // What THIS frame's halo is made of: the count the last step left, read before the frame runs.
+            MagicPortalsLayer::EffectReport before{};
+            for (const MagicPortalsLayer::EffectReport& r : layer.EffectReports()) {
+                if (r.entity == "fireball.ent") before = r;
+            }
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            MagicPortalsLayer::EffectReport after{};
+            for (const MagicPortalsLayer::EffectReport& r : layer.EffectReports()) {
+                if (r.entity == "fireball.ent") after = r;
+            }
+            if (after.id == 0) continue;
+            if (born < 0) born = tick;
+            if (before.id != after.id) continue; // its first frame: nothing was left for it to read
+            const double ratio = Lighting::ParticleRatio(before.firstSystemActive, before.firstSystemCount);
+            const glm::vec4 colour = registry.get<MaterialComponent>(after.halo).albedoColor;
+            const glm::vec3 want = glm::vec3(1.0f, 0.5f, 0.2f) * static_cast<float>(1.0 * ratio * 1.0);
+            const double off = std::max({std::fabs(colour.r - want.r), std::fabs(colour.g - want.g), std::fabs(colour.b - want.b)});
+            worst = std::max(worst, off);
+            if (off > 1e-5 || colour.a != 1.0f) ++wrongHalo;
+            if (after.haloScale != 1.0) ++wrongScale;
+            // D. its light: colour x the level's intensity x the live ratio, a moving owner's, and no scale in it.
+            const glm::vec3 light = registry.get<Light2DComponent>(after.light).color;
+            const glm::vec3 wantLight = glm::vec3(1.0f, 0.5f, 0.2f) * static_cast<float>(intensity * ratio);
+            if (std::max({std::fabs(light.r - wantLight.r), std::fabs(light.g - wantLight.g), std::fabs(light.b - wantLight.b)}) > 1e-4) {
+                ++wrongLight;
+            }
+            ++framesChecked;
+            if (ratio == 1.0) ++rampChecked;
+        }
+        CHECK_MSG(framesChecked >= 40 && rampChecked >= 10,
+                  "2-01's fireball flew long enough to be read: " + std::to_string(framesChecked) + " frames, " +
+                      std::to_string(rampChecked) + " at ratio 1");
+        CHECK_MSG(wrongHalo == 0 && wrongScale == 0,
+                  "A: the carranca fireball's halo is (1, 0.5, 0.2) x 1 x the live ratio x 1 on every frame, ramp included (" +
+                      std::to_string(wrongHalo) + " frames off by up to " + std::to_string(worst) + ", " +
+                      std::to_string(wrongScale) + " reporting a scale other than 1)");
+        CHECK_MSG(wrongLight == 0,
+                  "D: and its light is its colour x the level's intensity x the ratio, not scaled by either halo scale (" +
+                      std::to_string(wrongLight) + " frames off)");
+        std::printf("  2-01's real fireball: %d frames checked from tick %d (%d at ratio 1), halo within %.2g of (1, 0.5, 0.2) x ratio\n",
+                    framesChecked, born, rampChecked, worst);
+    }
+
+    // ---- B and C. the others, built by hand on 1-01 ----
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+        if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+        CloseTheLevelStartPopup(layer, registry);
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        struct Case {
+            const char* name;
+            const char* entity;
+            glm::vec3 colour;
+            double brightness;
+            int id;
+        };
+        // light_from_projectile.ent: <Color> (1, 0.5, 0.2), haloBrightness 0.7. fireball.ent built with no row behind it.
+        Case cases[] = {{"B: a fireball.ent with no row behind it", "fireball.ent", glm::vec3(1.0f, 0.5f, 0.2f), 1.0, 0},
+                        {"C: the lit torch's light_from_projectile.ent", "light_from_projectile.ent", glm::vec3(1.0f, 0.5f, 0.2f), 0.7, 0}};
+        glm::dvec2 at(200.0, 128.0);
+        for (Case& c : cases) {
+            MagicPortalsLayer::EffectSpawn spawn;
+            spawn.entity = c.entity;
+            spawn.atPx = at;
+            c.id = layer.SpawnEffect(registry, spawn);
+            CHECK_MSG(c.id > 0, std::string(c.name) + " is added");
+            at.x += 120.0;
+        }
+        int wrong[2] = {0, 0}, checked[2] = {0, 0};
+        double worst[2] = {0.0, 0.0};
+        for (int frame = 0; frame < 200; ++frame) {
+            std::vector<MagicPortalsLayer::EffectReport> before = layer.EffectReports();
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            const std::vector<MagicPortalsLayer::EffectReport> after = layer.EffectReports();
+            for (int k = 0; k < 2; ++k) {
+                if (cases[k].id <= 0) continue;
+                const MagicPortalsLayer::EffectReport b = ByIdIn(before, cases[k].id);
+                const MagicPortalsLayer::EffectReport a = ByIdIn(after, cases[k].id);
+                if (a.id == 0 || b.id == 0 || a.halo == entt::null) continue;
+                const double ratio = a.systems == 0 ? 1.0 : Lighting::ParticleRatio(b.firstSystemActive, b.firstSystemCount);
+                const glm::vec4 colour = registry.get<MaterialComponent>(a.halo).albedoColor;
+                const glm::vec3 want = cases[k].colour * static_cast<float>(cases[k].brightness * ratio * 0.6);
+                const double off = std::max({std::fabs(colour.r - want.r), std::fabs(colour.g - want.g), std::fabs(colour.b - want.b)});
+                worst[k] = std::max(worst[k], off);
+                if (off > 1e-5 || a.haloScale != 0.6) ++wrong[k];
+                ++checked[k];
+            }
+        }
+        for (int k = 0; k < 2; ++k) {
+            CHECK_MSG(checked[k] >= 100 && wrong[k] == 0,
+                      std::string(cases[k].name) + ": its halo stays colour x its brightness x the ratio x lighting.json's 0.6 (" +
+                          std::to_string(wrong[k]) + " of " + std::to_string(checked[k]) + " frames off by up to " +
+                          std::to_string(worst[k]) + ")");
+        }
+        std::printf("  the others' halos at 0.6: a hand-built fireball.ent %d frames (worst %.2g), the lit torch's effect %d frames (worst %.2g)\n",
+                    checked[0], worst[0], checked[1], worst[1]);
+    }
+}
+
 // What an explosion is, and that the runtime frees it without being told to.
 //
 // small_explosion.ent and explosion_large.ent are both TEMPORARY - no sprite, and
@@ -33774,6 +34039,8 @@ void runTests() {
     ThePlayerWearsItsRedEyes();
     FiveBlastsFitUnderTheLightCap();
     AFireballIsDrawnAtItsEntitysOwnScale();
+    AFireballsLiveRatioIsOneAtSteadyState();
+    AFireballsHaloIsDrawnAtEthanonsOwnBrightness();
     AnExplosionIsTemporaryAndCarriesNoHalo();
     ADestroyedFireballLeavesASmallExplosion();
     ABombsBlastLeavesALargeExplosion();

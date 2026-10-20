@@ -49,6 +49,7 @@
 // boss puts something back or drops its key, the flames addFlames puts on a
 // burning character or minion, a carranca's dust, and a tapped-away hand's smoke.
 
+#include <optional>
 #include <string>
 
 #include <glm/glm.hpp>
@@ -100,6 +101,11 @@ struct Rule {
     Turn turn = Turn::Fixed;
     double angleDeg = 0.0;    // when Fixed
     double scale = 1.0;       // in g_scale.getScale()s: 1 is the entity at its own size
+    // The scale the HALO of what this row adds is drawn at, in place of lighting.json's
+    // halo_brightness_scale (Lighting::HaloScale): a measured number for one entity, where
+    // the global one is a fit to another's. Absent on every row but the carranca
+    // fireball's (CMP-19, planning step 195); deleting it gives the global one back.
+    std::optional<double> haloBrightnessScale;
 };
 
 // The player's red eyes: MainCharacter's own effect, and the one effect every
@@ -381,6 +387,8 @@ struct Spawn {
     double zBaseUnits = 0.0;
     float angleDeg = 0.0f;
     double scale = 1.0;
+    // The row's own halo scale, where it has one (Rule::haloBrightnessScale).
+    std::optional<double> haloBrightnessScale;
 };
 
 // vanishEffect's direction: normalize(traveller - portal), in floats as the

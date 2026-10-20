@@ -416,6 +416,22 @@ simulation's and unchanged. `crate_low_emissive` has a begin-contact callback an
 so the original never fades, flames or removes one (the port's simulation still removes it at the
 burn's end: planning step 194, left for the owner).
 
+**DECODED and MEASURED** (`ETHRenderEntity::DrawHalo`, `ETHRenderEntity.cpp:354-388`; `ETHParticleManager.cpp:208-213`;
+planning step 195, CMP-19). **A fireball's glow is its halo, drawn at Ethanon's own brightness.** `fireball.ent` has a
+`<Light>` of range 50 with `haloBrightness` 1, `haloSize` 60 (72 u at its `<Scale>` 1.2), colour (1, 0.5, 0.2) and
+`halo.bmp`; `DrawHalo` adds that bitmap at `<Color> x haloBrightness x` the live ratio of the entity's FIRST particle
+system (`GetNumActiveParticles / GetNumParticles`), and has **no other factor**: so a fireball in flight, once its five
+particles are released, adds (1, 0.5, 0.2) at the bitmap's own falloff, and the ratio is exactly 1 (the port reads it:
+`test_mp_layer` `AFireballsLiveRatioIsOneAtSteadyState`). On the original's stills the glow 12 to 26 u from the core is
+35.2 levels of luminance (R 56.2); the port drew it at 0.55 of that with `lighting.json`'s `halo_brightness_scale` 0.6,
+a fit to the torches' arches on 1-01 (planning step 49) that Ethanon does not have, and draws it at 0.89 now. The
+**port's other halos are still drawn at 0.6 of the formula** (the torches', the lit torch's, the shot's, the diamonds' and the fire agents'):
+that factor is the owner's open call (CMP-8), and the fireball's own `halo_brightness_scale` of 1 in `effects.json` is
+the one exception, measured and reversible (delete the key and it is 0.6 again). Not measured: the dragons' mouth
+fireballs and 4-32's scale-2 ones (the same entity, so they take the same value), and why the original's remaining
+11 percent or so (the port reads 0.882 to 0.894 of it, depending on the method) is whitish (the particles' explosion
+glow, inferred by an absolute check against `halo.bmp`, not measured).
+
 ### 6.3 Switches, keys and locks
 
 **DATA.** `button.idx` ↔ `door_lift.switchIdx` — identical multisets in all 37 levels that

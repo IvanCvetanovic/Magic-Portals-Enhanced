@@ -297,7 +297,9 @@ struct Step {
 // component first, then the y - and a step is REFUSED when the laid-out box it makes meets another control's (grown by the clearance) or a
 // widget's. A refused step is bisected to the farthest place a tenth of a unit allows and ends the walk of that component, and the other goes on,
 // so the control SLIDES along an obstacle instead of sticking to it, stops flush against it, and because it is walked in steps it cannot jump a
-// neighbour: a pointer moving 1 unit a tick and one moving 40 end on the same place.
+// neighbour. For a drag blocked along one axis, or sliding along one face, a pointer moving 1 unit a tick and one moving 40 end on the same place; a
+// DIAGONAL drag that ends inside an obstacle is not promised that, and can end beside the obstacle or above it depending on how coarsely the pointer
+// is sampled, though nothing is ever jumped (planning step 193, recorded deviation 2).
 //
 // A step into an obstacle is refused unless it makes the overlap with every obstacle the control ALREADY meets smaller: a control that starts
 // meeting a widget (restart at 5:4 and a bigger size) can be dragged out of it and never deeper into it.

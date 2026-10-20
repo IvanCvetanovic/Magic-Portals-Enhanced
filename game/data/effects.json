@@ -145,7 +145,30 @@
       "ETHEntity::IsTemporary is false and the engine never deletes it: it goes when its script",
       "deletes it (ETHCallback_fireball below), which the port models as the effect going when",
       "the fireball it follows goes."
-    ]
+    ],
+    "halo_brightness_scale": {
+      "_source": [
+        "CMP-19 (planning step 195), MEASURED and not decoded: this entity's halo at Ethanon's own brightness.",
+        "ETHRenderEntity::DrawHalo (ETHRenderEntity.cpp:354-388) draws a halo at <Color> x the entity's own",
+        "haloBrightness x the live ratio of its first system (GetNumActiveParticles / GetNumParticles,",
+        "ETHParticleManager.cpp:208-213) and has NO other factor, so 1 is its formula; fireball.ent's own",
+        "haloBrightness is 1 and the port multiplies it already (Lighting::HaloColour).",
+        "lighting.json's halo_brightness_scale (0.6) is a fit to the TORCH's arch blocks on 1-01 (planning step",
+        "49) and draws this halo at 0.55 of the original's over 12-26 u: port / original luminance 0.550 on 18",
+        "position-matched pairs (7 levels, 18 of 18 below 1; original 35.23, port 19.75; R 56.17 against 32.17),",
+        "0.552 on the verifier's own 10 pairs, exactly linear in the scale (x1.65 per pixel against 1 / 0.6),",
+        "and 0.89 to 0.92 at 1 (out/parity/program/MEAS/CMP-19/result.txt, the measurement wave of 2026-10-19).",
+        "An absolute check against halo.bmp puts the original's halo-colour channel within 5 percent of the",
+        "formula at 1, and nothing in the data supports more than 1. The live ratio of the first system is 1",
+        "in steady state, READ at run time (test_mp_layer AFireballsLiveRatioIsOneAtSteadyState), so the 1 is not",
+        "right for the wrong reason (K2).",
+        "Read where an effect's halo is placed (MagicPortalsLayer::placeLight) in place of lighting.json's value,",
+        "which stays for every other halo: the torch's evidence is the opposite (step 49). Whether that 0.6",
+        "moves, or the other halos get scales of their own, is the owner's call (CMP-8). Deleting this key",
+        "restores the 0.6."
+      ],
+      "value": 1.0
+    }
   },
 
   "small_explosion": {

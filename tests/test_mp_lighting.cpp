@@ -464,6 +464,71 @@ void EachLightReachesTheSpritesItShould() {
     CHECK_MSG(Near(Lighting::HaloColour(torch, 1.0, 0.5), 0.35, 0.175, 0.035), "x lighting.json's scale");
 }
 
+// CMP-19 (planning step 195): THE SCALE A HALO IS DRAWN AT. lighting.json's 0.6 is every halo's, except one
+// whose effects.json row names a scale of its own - today the carranca fireball's, 1, Ethanon's own arithmetic
+// (ETHRenderEntity.cpp:354-388). Lighting::HaloScale is the one place the choice is made, and these are its
+// pins on the real file: the halos that name none (the torch's, the portal's, the shot's, the flame's, every
+// other effect's) stay at 0.6, the fireball's is (1, 0.5, 0.2) x its own 1 x the live ratio, and the light a
+// halo's owner casts is never multiplied by either.
+void AHalosOwnScaleReplacesTheGlobalOneAndOnlyThat() {
+    Lighting::Rules rules;
+    std::string error;
+    CHECK_MSG(Lighting::LoadRules(kPortData + "/lighting.json", rules, error), error);
+    const auto Near = [](const glm::dvec3& v, double x, double y, double z) {
+        return std::fabs(v.x - x) < 1e-12 && std::fabs(v.y - y) < 1e-12 && std::fabs(v.z - z) < 1e-12;
+    };
+
+    // FAILS UNDER: the global 0.6 changed (lighting.json's value edited, or the loader scaling it).
+    CHECK_MSG(rules.haloBrightnessScale == 0.6, "lighting.json's halo scale is still 0.6 for every halo that names none: " +
+                                                    std::to_string(rules.haloBrightnessScale));
+    // FAILS UNDER: the field ignored (HaloScale returning the global scale); the field applied to every halo
+    // (HaloScale returning an own scale of 1 for a halo that names none).
+    CHECK_MSG(Lighting::HaloScale(rules, std::nullopt) == 0.6, "a halo that names no scale is drawn at lighting.json's");
+    CHECK_MSG(Lighting::HaloScale(rules, 1.0) == 1.0, "one that names 1 is drawn at 1");
+    CHECK_MSG(Lighting::HaloScale(rules, 0.25) == 0.25, "and at what it names");
+    CHECK_MSG(Lighting::HaloScale(rules, 0.0) == 0.0, "0 is a scale of its own (no halo), not 'none'");
+
+    // The fireball's halo as the layer builds it: fireball.ent's <Color> (1, 0.5, 0.2), haloBrightness 1.
+    Lighting::Light fireball;
+    fireball.colour = glm::dvec3(1.0, 0.5, 0.2);
+    fireball.haloBrightness = 1.0;
+    const double scale = Lighting::HaloScale(rules, 1.0);
+    CHECK_MSG(Near(Lighting::HaloColour(fireball, 1.0, scale), 1.0, 0.5, 0.2),
+              "the fireball's whole halo is its colour x its own brightness 1 x ratio 1 x scale 1: (1, 0.5, 0.2)");
+    CHECK_MSG(Near(Lighting::HaloColour(fireball, 0.6, scale), 0.6, 0.3, 0.12), "and x the live ratio");
+    // FAILS UNDER: the field ignored.
+    CHECK_MSG(Near(Lighting::HaloColour(fireball, 1.0, Lighting::HaloScale(rules, std::nullopt)), 0.6, 0.3, 0.12),
+              "without the field it is today's 0.6 of that");
+
+    // The others, with their own brightness, at lighting.json's 0.6 - FAILS UNDER: another halo taking the
+    // fireball's value, the field applied to every halo, the global 0.6 changed.
+    struct Other {
+        const char* name;
+        glm::dvec3 colour;
+        double brightness;
+    };
+    const Other others[] = {{"the torch (light.ent)", glm::dvec3(1.0, 0.5, 0.1), 0.7},
+                            {"the lit torch (light_from_projectile.ent)", glm::dvec3(1.0, 0.5, 0.2), 0.7},
+                            {"the shot (projectile.ent)", glm::dvec3(0.6, 0.6, 1.0), 0.65},
+                            {"the fire agent (fire_agent.ent)", glm::dvec3(1.0, 0.5, 0.2), 0.55},
+                            {"a ghost's shot (enemy_shoot.ent)", glm::dvec3(2.0, 0.0, 0.0), 0.25},
+                            {"a diamond (diamond_light_blue.ent)", glm::dvec3(0.3, 0.8, 1.0), 0.5}};
+    for (const Other& other : others) {
+        Lighting::Light light;
+        light.colour = other.colour;
+        light.haloBrightness = other.brightness;
+        const glm::dvec3 drawn = Lighting::HaloColour(light, 1.0, Lighting::HaloScale(rules, std::nullopt));
+        CHECK_MSG(Near(drawn, other.colour.x * other.brightness * 0.6, other.colour.y * other.brightness * 0.6,
+                       other.colour.z * other.brightness * 0.6),
+                  std::string(other.name) + " is colour x its own brightness x 0.6");
+    }
+
+    // The light a halo's owner casts has no halo scale in it: LightColour takes the level's intensity and the live
+    // ratio, and nothing of either scale. FAILS UNDER: the light taking the halo's scale.
+    CHECK_MSG(Near(Lighting::LightColour(fireball, 3.0, false, 0.5), 1.5, 0.75, 0.3),
+              "a fireball's light: colour x intensity x the live ratio, whatever its halo is scaled by");
+}
+
 // THE OWNER-SCALE RULE (00_order K7; planning step 81). An owner's scale draws its
 // light at position and range x scale.y (ETHEntityRenderingManager::BuildChildLight)
 // and its halo at size x the scale, standing where the unscaled light is
@@ -1049,6 +1114,7 @@ MP_SUITE_MAIN("test_mp_lighting") {
     ALightmapIsHalfItsSpritesUnits();
     ALightmapIsHalfItsSpritesUnitsBeforeItsScale();
     AnOwnersScaleDrawsItsLightAndHalo();
+    AHalosOwnScaleReplacesTheGlobalOneAndOnlyThat();
 
     std::error_code ec;
     if (!std::filesystem::is_directory(kLevels, ec)) {

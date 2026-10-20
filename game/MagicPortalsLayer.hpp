@@ -731,6 +731,11 @@ public:
         double zUnits = 0.0;   // the vector3's z, in the level's units
         double angleDeg = 0.0; // Ethanon's angle, counter-clockwise on the screen
         double scale = 1.0;    // the script's Scale(), which the .ent's <Scale> multiplies
+        // The scale its HALO is drawn at where its effects.json row names one
+        // (Effects::Rule::haloBrightnessScale: the carranca fireball's, CMP-19), in place
+        // of lighting.json's. Its light, and every halo whose row names none, keep the
+        // global one.
+        std::optional<double> haloBrightnessScale;
         // ETHEntity::ScaleParticleSystem(0, n): a further scale on the FIRST
         // particle system alone, over the entity's own, touching neither the
         // picture nor the light nor the halo. addFireball is the one caller in
@@ -863,6 +868,13 @@ public:
         int systems = 0;        // its emitters
         int pool = 0;           // the particles they were made with, summed
         int active = 0;         // GetNumActiveParticles, summed over them
+        // The two numbers the halo's live ratio is made of, as placeLight is handed them:
+        // the FIRST system's active count and its particle count (DrawHalo reads the first
+        // slot alone, ETHRenderEntity.cpp:367-373). Both 0 where it has no system.
+        int firstSystemActive = 0;
+        int firstSystemCount = 0;
+        // The scale its halo is drawn at: its own where its row names one, else lighting.json's.
+        double haloScale = 0.0;
         int quads = 0;          // the pooled particle quads it holds, drawn or not
         int released = 0;       // the particles that have been released at all, summed
         // Every particle's elapsed life, summed over every emitter: ONE number
@@ -2041,9 +2053,12 @@ private:
     // A light and its halo placed the one way (Lighting::OwnerScaled): a level's
     // placement passes an owner scale of 1, and what a script adds passes its
     // <Scale> times the script's (00_order K7).
+    // `ownHaloScale` is the halo's own scale where its effects.json row names one
+    // (CMP-19); none draws it at lighting.json's, as every level light does.
     void placeLight(entt::registry& registry, entt::entity light, entt::entity halo, const Lighting::Light& unscaled,
                     const glm::dvec2& ownerPx, double ownerZ, bool ownerStatic, double ratio, float haloZ,
-                    bool present, const glm::dvec2& ownerScale) const;
+                    bool present, const glm::dvec2& ownerScale,
+                    const std::optional<double>& ownHaloScale = std::nullopt) const;
 
     // ---- the between-slot table (00_order K13), read by every user ----------
     //
@@ -2730,6 +2745,8 @@ private:
         double bounceMs = 0.0;
         glm::dvec2 bounceScale{1.0};
         glm::dvec2 scale{1.0};    // times its <Scale>: what its picture, halo and light take
+        // The halo's own scale (EffectSpawn::haloBrightnessScale); none draws it at lighting.json's.
+        std::optional<double> haloBrightnessScale;
         double zUnits = 0.0;
         bool temporary = false; // the engine frees it once its pools are over
         // Whether the engine updates it while it is HIDDEN. A hidden entity is not

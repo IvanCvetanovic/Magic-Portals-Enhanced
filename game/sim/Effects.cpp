@@ -19,6 +19,7 @@ constexpr const char* kTowardTravellerMinus90 = "toward_traveller_minus_90";
 constexpr const char* kAlongFlightMinus90 = "along_flight_minus_90";
 constexpr const char* kRadiansAsDegrees = "get_angle_radians_as_degrees";
 constexpr const char* kEntityAngle = "entity_angle";
+constexpr const char* kHaloBrightnessScale = "halo_brightness_scale";
 
 bool Finite(const Json::Value& value) {
     return value.IsNumber() && std::isfinite(value.AsNumber());
@@ -80,6 +81,18 @@ bool ReadRule(const Json::Value& root, const char* name, Rule& out, std::string&
         return false;
     }
     read.scale = row["scale"].AsNumber();
+    // Optional, and only as an object holding a number from 0 to 1 (lighting.json's own
+    // range for the scale it replaces): a typing mistake is refused by name, and a row
+    // that does not carry one draws its halo at lighting.json's.
+    if (row.Has(kHaloBrightnessScale)) {
+        const Json::Value& own = row[kHaloBrightnessScale];
+        if (!own.IsObject() || !Finite(own["value"]) || own["value"].AsNumber() < 0.0 ||
+            own["value"].AsNumber() > 1.0) {
+            error = where + "." + kHaloBrightnessScale + ".value is not a number from 0 to 1";
+            return false;
+        }
+        read.haloBrightnessScale = own["value"].AsNumber();
+    }
     out = std::move(read);
     return true;
 }
@@ -233,6 +246,7 @@ Spawn SpawnOf(const Rule& rule, const glm::dvec2& fromPx, const glm::dvec2& dire
     spawn.zScaled = rule.zScaled;
     spawn.angleDeg = AngleDegrees(rule, direction);
     spawn.scale = rule.scale;
+    spawn.haloBrightnessScale = rule.haloBrightnessScale;
     return spawn;
 }
 

@@ -493,6 +493,10 @@ glm::dvec3 HaloColour(const Light& light, double ratio, double scale) {
     return light.colour * light.haloBrightness * ratio * scale;
 }
 
+double HaloScale(const Rules& rules, const std::optional<double>& own) {
+    return own ? *own : rules.haloBrightnessScale;
+}
+
 Light OwnerScaled(const Light& light, const glm::dvec2& ownerScale) {
     Light scaled = light;
     // BuildChildLight: the light's position and range take scale.y alone.

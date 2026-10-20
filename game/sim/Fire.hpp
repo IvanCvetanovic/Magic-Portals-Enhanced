@@ -79,9 +79,13 @@
 // (bytes 420664..421145), which has exactly ONE caller: crateCallback. So only
 // crates fade over BURN_TIME and are taken away; a shock_agent carries the
 // burnable flag too and merely holds `burned` when lit. Building "everything
-// burnable dies" would delete level 2-12's shock agent and change its puzzle, so
-// fire.json lists the names whose callback is crateCallback and nothing else
-// fades.
+// burnable dies" would delete the shock agents of 3-31, 4-04 to 4-08, 4-12, 4-14
+// and 4-19 and change their puzzles (2-12 has none), so fire.json lists the crate
+// names the port fades and nothing else fades. That list is not exactly
+// crateCallback's callers: it carries crate_low_emissive, which has no frame
+// callback in the original (a burned one is never faded or removed there:
+// CMP20-1, the owner's call), and it omits wood_piece_small, a crateCallback
+// caller that no level places burnable.
 //
 // THE FLAG AND THE POLL ARE DELIBERATELY A TICK APART
 //

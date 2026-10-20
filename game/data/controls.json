@@ -543,8 +543,10 @@
       "_source": [
         "step_units 0.5 (planning step 193, CTL-12): PORT. A drag moves the control toward the pointer in steps of at most this many units, the x component first and then",
         "the y, and refuses a step that would meet another control (grown by clearance_px) or a widget, so the control cannot jump over a neighbour at any speed of the",
-        "pointer; the step that is refused is bisected, so it stops within a tenth of a unit of the clearance (a move is kept to a tenth, Controls::Tuning::kMoveSnap) and a",
-        "move of 1 unit a tick and one of 40 end on the same place. A step must be more than the tenth, or the walk would stand still in the rounding; an obstacle is wider",
+        "pointer; the step that is refused is bisected, so it stops within a tenth of a unit of the clearance (a move is kept to a tenth, Controls::Tuning::kMoveSnap) and, for a",
+        "drag blocked along one axis or sliding along one face, a move of 1 unit a tick and one of 40 end on the same place (a diagonal drag that ends inside an obstacle can",
+        "end beside it or above it depending on how coarsely the pointer is sampled, though nothing is jumped: planning step 193, recorded deviation 2). A step must be more",
+        "than the tenth, or the walk would stand still in the rounding; an obstacle is wider",
         "than a step, or a neighbour could be stepped over (the loader refuses a step under 0.2 or over 8: the smallest box is 18.2 units across)."
       ],
       "_guess": true,
