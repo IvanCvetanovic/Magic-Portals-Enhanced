@@ -1900,6 +1900,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   the original's over 12-26 u; the scale is the knob; a fireball-only 1.0 is the proposed step), CMP-14's cause is found (at a screen of 480 px or more the original bakes
   its lightmaps at one texel per unit at level load; the port draws the 2-unit shipped files), CMP-low (d) is phase (no offset, no step) and CMP-18 is real and is the
   stone's roll, not the plank's release. The numbers are in each row's note.*
+  *Wave 4d-2, 2026-10-20 (second step): CMP-19 is built (step 195, committed locally as `932af62`, not pushed at this note): the carranca fireball's halo is drawn at Ethanon's
+  own brightness by a fireball-only `halo_brightness_scale` of 1 on its `effects.json` row; the f420 sweep changes 11 levels (2-01, 2-03, 2-06, 2-08, 2-14, 2-22, 2-25, 2-28,
+  2-29, 4-13, 4-14) and the other 117 are md5-equal. CMP20-3 is closed (text only) and CMP19-1 opens for the four texts left. CMP-4, -5, -8, -11 to -14, -17, -18, CMP-low and
+  CMP-R1 stay open, and the section-5 box is still not ticked.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2773,6 +2777,21 @@ needs the held friction), and 2-29 is re-flown from its START, not from tap 320.
 pixel-difference verdicts; never read a gem's y at one tick against one still). The rig checks, the owner's calls (CMP-8's halo scale first of them), CTL-13 (it WAITS for
 the owner) and the ship preparation are unchanged. The sweep a step is measured against is still `CMP20/after/sweep`. 44 frames of the measurement are listed in
 `out/parity/BASELINE.txt`; the wave's other images were purged and its tables, scripts and results stay under `out/parity/program/MEAS/`.*
+
+*Wave 4d-2, 2026-10-20, item (1) of the measurement wave's list is DONE - CMP-19 is built as planning step 195 (committed locally as `932af62`, not pushed at this note) and
+verified by an independent verifier in its first round; its row is ticked above, with the two gates it did not meet as worded (G1 (a) on 2-28 to the letter, S9) and the
+numbers. **It also closed two carried debts as text only:** Step 193's three overclaim comments (`Adjust.hpp:300` and `controls.json`'s `drag._source` now scope the "1 unit a
+tick and 40 end on the same place" sentence as Step 193's deviation 2 does - a drag blocked along one axis or sliding along one face, key `step_units` kept - and
+`test_mp_adjust.cpp:1650` says its Python model is a second implementation of the same design by the same author, not an independent check) and CMP20-3; four known texts remain
+as CMP19-1. **What is left of the list, in the order to take it - a recommendation, not a decision. The owner allowed ONE step (2026-10-20), so nothing below starts on the
+strength of this note:** (1) **CMP-14's fix step**, now that the fireball floors are re-baselined: sub-step 0 decides from `engine/ARCHITECTURE.md` whether the engine can render
+a sprite's light pass into an offscreen target (an engine gap fixed in the engine's own repository first, then a pin bump) or the game bakes on the CPU; the expected-changed
+set is the 67 lightmapped levels, derived by count. (2) **CMP-18 LAST and measurement first** (CMP18-1), unchanged: the 12 s rig clip of 2-29 idle and the held-friction
+experiment need no relink; the fix moves 2-29's route, which is re-flown from its START. (3) CMP-low (d): nothing to build. (4) The rig checks, the owner's calls (**CMP-8 first:
+this step moved one entity, the call is still his**; CMP20-1), CTL-13 (it WAITS for the owner: `default_mode` is still `"classic"`) and the ship preparation, unchanged.
+**The sweep a step is measured against is now `CMP19/after/sweep`** (128 PNG, `MagicPortals.exe` `8f59fba7`, listed in `out/parity/BASELINE.txt`); it differs from
+`CMP20/after/sweep` on exactly 2-01, 2-03, 2-06, 2-08, 2-14, 2-22, 2-25, 2-28, 2-29, 4-13 and 4-14, and `CMP20/after/sweep` stays listed as the pre-CMP-19 reference
+(`WALL/after/sweep` as the pre-CMP-20 one). The 19 CTL baselines were taken before both steps and are still md5-equal on the new build (none of their levels places a fireball source).*
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -4403,6 +4422,19 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       6.0; not reopened since the hd art), so two entities disagree about one formula and nobody has found why; if the cause is common (the hd halo, the 565 surface, the
       quad's blend) a per-entity field treats a symptom and leaves a pair of opposite errors. Still the owner's call (global, per-entity or leave): the CMP-19 step moves
       only the fireball, records the call as open and keeps the field reversible (deleting it restores today's pixels).*
+      *Step 195 (CMP-19), 2026-10-20: option (b) is DONE for ONE entity - the carranca fireball's halo is drawn at Ethanon's own 1 by a `halo_brightness_scale` on its
+      `effects.json` row; every other halo (the torches', the lit torch's, the shot's, the diamonds', the fire agents') is still at 0.6, and deleting the key restores the old
+      pixels. THE CALL STAYS THE OWNER'S: a global 1, per-entity scales (this field, repeated for each entity once it is measured) or leave the rest. What the fireball showed that
+      bears on it: (1) **the entities' own halo brightness is not the answer.** The original's `.ent` files that carry a halo hold `fireball.ent` 1, `light.ent`,
+      `light_from_projectile.ent` and `orange_light.ent` 0.7, `projectile.ent` 0.65, `fire_agent.ent` 0.55, the two `diamond_light_*.ent` 0.5 and `enemy_shoot.ent` 0.25; they
+      differ, but the port already multiplies each halo by its own entity's value (`Art.cpp:1331`, `Lighting.cpp:276`, `Lighting::HaloColour`), so both the fireball's and the
+      torch's comparison carry it and the 0.6 is a SECOND factor on top; the torch's opposite evidence (1 reads 8.94 against 6.0 on 1-01, step 49) is not explained by 1 against
+      0.7, and a field derived from the entity's value would have been wrong. (2) **For the fireball Ethanon's own arithmetic holds:** at 1 the halo reads 0.894 of the original's,
+      with a whitish 11 percent or so left that looks like the particles' glow and not the halo; nothing supports a scale above 1. The fireball is the cleanest entity (open sky,
+      no lightmap, no wall). (3) **A common cause is still possible and untested** (the hd halo, the 565 surface, the quad's blend): if it is found, the fireball's field treats a
+      symptom and the two errors are one pair of opposite ones. (4) **No portal in the original or in the converted levels carries a halo**: nine entities do, and the portal is
+      not among them. (5) A fire agent's or a fire diamond's shot is the same `fireball.ent` in play and now draws the stronger halo by design (15 routes, listed under CMP-19).
+      CMP-12 follows the call.*
 - [x] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
       levels in scope: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-04, 2-05, 2-08, 2-12 to 2-19, 2-21 to 2-25, 2-28, 2-29, 2-32, 3-14, 3-15, 3-19, 4-10, 4-16, 4-25, 4-32 (the
       readers filed it on 17; wave 4c-1's fix1 adds the fire agent's 10 outside them, which the cause text below names (the pulse): 2-10, 2-11, 2-20, 2-26, 2-27, 2-30, 2-31, 3-23, 4-12 and 4-28, 42 levels in all). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
@@ -4748,7 +4780,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       roll (2.0x), the barrel and 2-22 / 1-09 untouched. The pre-fix port set for the gates is regenerable only on the frozen exe (`MEAS/CMP-18/scripts/launch.sh S1 400
       2`): take it BEFORE the relink. Evidence: `out/parity/program/MEAS/CMP-18/` (`result.txt`, `result.json`, traces, scripts; 5 images listed in
       `out/parity/BASELINE.txt`).*
-- [ ] **CMP-19. The carranca fireball's glow reads weaker than the original's beyond its core** (medium; light; `unknown`; moves no route). NEW TO THE LIST by the
+- [x] **CMP-19. The carranca fireball's glow reads weaker than the original's beyond its core** (medium; light; `unknown`; moves no route). NEW TO THE LIST by the
       2026-10-15 re-take (wave 4d-1), not new in the build: the fireball boxes hold 0 changed pixels against the old frame (2-28's 3,319 are the platform at the box's
       foot), and the old readers filed the fireballs only as phase (where the ball is), never its light. Levels: 2-01 to 2-08, 2-28 and 2-32's dragon (10 read; 21 levels
       carry a carranca). 2-01 to 2-08 are one reader's entries with shared wording and pooled numbers (original core 1,450-2,180 px and R-B glow 15-21, port 800-1,450 px
@@ -4809,12 +4841,46 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       inside a quad; a level in E that does not change is a finding. Played fireballs (a fire agent's flame, 20 levels; a fire diamond, 5) get the stronger halo too:
       re-run the route suite and list those levels from the routes' traces. **Not measured:** 14 of the 21 carranca levels (2-05 and 2-08 for the flames round their
       fireballs, 2-09, 2-12 to 2-15, 2-18, 2-22, 2-23, 2-25, 2-29, 4-13, 4-14), 2-32's two mouth fireballs (a moving camera), 4-32's scale-2 fireballs; any original frame
-      at a known or 60 fps (the stills are 15-29 fps, unknown per still, so the 8 percent left at 1.0, whitish, is inferred to be the rig or the particle glow); the
+      at a known or 60 fps (the stills are 15-29 fps, unknown per still, so the 8 percent left at 1.0 [step 195 re-took it: about 11 percent, 0.882 to 0.894 by the method; the 8 was the 0.92 end of 0.89-0.92], whitish, is inferred to be the rig or the particle glow); the
       original's halo / light split; why the port draws 11 percent above its own formula; whether the shot's, the portal's or a torch's halo wants the same (CMP-8's
       question; the torch's 0.6 has the opposite evidence and is not touched). **Proposed (one step, a parity fix):** a `halo_brightness_scale` of 1.0 on `effects.json`
       `fireball`, read where `placeLight` builds an effect's halo (`MagicPortalsLayer.cpp:2988-2995`) in place of `lighting.json`'s 0.6, which stays for every other halo;
       deleting the field restores today's pixels; the CMP-8 call stays the owner's and the step records it as open; do not tune beyond 1.0. Evidence:
       `out/parity/program/MEAS/CMP-19/` (`result.txt`, `result.json`, tables, scripts; 19 frames and crops listed in `out/parity/BASELINE.txt`).*
+      *FIXED by step 195 (CMP19, wave 4d-2's second step), 2026-10-20; COMMITTED LOCALLY as `932af62` (titled "Magic Portals: the carranca fireball's halo is drawn at Ethanon's own
+      brightness (a fireball-only halo_brightness_scale of 1 on its effects.json row, lighting.json's 0.6 kept for every other halo), ..."), NOT PUSHED at this note: the audit and
+      the push are the owner's assistant's. GAMEPLAY: none (no number a tick reads; `test_mp_routes` 2,365, 128 of 128 won, every route on the same tick). Classic PICTURES change on
+      purpose, in one place only: inside the 72 u quad of a fireball halo; the second step since CTL-1 that does. **Built:** `game/data/effects.json` row `fireball` gains
+      `halo_brightness_scale {_source, value 1.0}` (md5 `67c6dcf0`); `Effects` reads it (an object holding a number from 0 to 1, else refused by name), `Lighting::HaloScale(rules,
+      own)` = the own value or `lighting.json`'s, and the layer's halo `placeLight` call of `updateEffects` passes the effect's. The fireball's LIGHT on sprites and every other halo
+      (the torches', the lit torch's, the shot's, the diamonds', the fire agents') stay on `lighting.json`'s 0.6, which is byte-equal to HEAD; deleting the key restores the old
+      pixels (a data mutation was RUN: exactly the one pin fails). **K2 first, and it did not fail:** the first system's live share is 5 of 5 on every steady frame (360 on a
+      fireball built by hand, 16 on 2-01's real one; frame 0 reads 0 of 5, the ramp), so 1.0 is right for the right reason (the original's side is read from
+      `ETHParticleManager.cpp:208-213`, not measured). **The brief's item (7), the entity's own halo brightness:** `fireball.ent` 1 against 0.7 for the torch, but the port already
+      multiplies each halo by its own entity's value, so the 0.6 is a second factor and the difference does not explain the torch's opposite evidence; the measured field stands (see
+      CMP-8's note). **Verified by an independent verifier, round 1, top-level pass, on `MagicPortals.exe` `8f59fba7` and `test_mp.exe` `6c8266ae`:** G1 (the port is
+      byte-deterministic): (b) the median of D_new / D_old over the 12-26 u band is 1.671 / 1.646 / 1.653 / 1.657 on 2-02 f105, 2-04 f255, 2-07 f363 and 2-28 f252 (required
+      1.667 +-0.04), (c) the no-fireball twins are byte-equal old against new on all four and on 21 of 21 (before and after the build); the changed pixels (20,064 / 19,397 /
+      19,445 / 20,048) fill one box of at most 191 x 190 px under the quad's 202.5, no channel decreases. G2 on the FIXED 18 pairs: the pooled median band luminance port /
+      original **0.894** (was 0.550; required [0.85, 1.15]; the independent same-mask method 0.886), the pooled port R band mean **51.59** (was 32.17; floor 51.0; original
+      56.17) - **thin: 50.81 to 51.71 across the verifier's variants, and 0.19 under the floor on its own code on the 14 pairs where its cores agree with the wave's**, so the pair
+      set had to be fixed. G3 pooled rings: 12.8-21.3 u 0.91-0.94 (was 0.53-0.60), 8.5-12.8 u 0.95-0.97 (was 0.60-0.75), 0-6.4 u 0.99-1.00, the 6-10 u band 0.99; step 85's
+      populations on 269 fireballs: equivalent core radius mean 6.94 u (max 9.41), core RGB (238, 205, 164), R-excess half radius 15.1 u, R <= 10 at 27.6 u; the tail at 28-36 u
+      reads 1.2-1.3 of the original's (under the reference's noise; not a gate). **G5, the f420 sweep of 128 levels against `CMP20/after/sweep`: 117 md5-equal, 11 changed - 2-01,
+      2-03, 2-06, 2-08, 2-14, 2-22, 2-25, 2-28, 2-29, 4-13 and 4-14, 18,533 to 20,147 px each, one cluster inside a 192 px box** (the logs predicted 12: those and 2-15, whose
+      fireball is in flight but below the 256-high view; 2-02's had ended on tick 419). The expected-changed set E, by the twin rule, is all 21 carranca levels (a twin also removes
+      the burst, the flames and the earthquake), so the gate is one-sided and each of the 10 unchanged members is explained from its log; 1-01, 1-13, 1-20 and 4-01 are md5-equal
+      (a global 1.0 would have moved 1-01 by 177,590 px). G6: 19 of 19 CTL baselines; G7: the five modern census variants identical (7,357, 4,949, 7,571, 7,357, 7,357), 64 suites,
+      84,933 checks. The routes whose PLAYED fireball (a fire agent's flame or a fire diamond's shot) now draws the stronger halo, from the routes' own log: 2-10, 2-11, 2-16,
+      2-17, 2-19, 2-27, 3-19, 4-10, 4-12, 4-28 (fire agent), 4-16, 3-29, 3-30, 3-31, 3-32 (fire diamond). The dragons' mouth fireballs (2-32: 16 of 101 frames change, ticks
+      255-300) and 4-32's scale-2 ones are the same entity and take the field; they were looked at, not measured. **Two gates are NOT MET as worded and are written so in the
+      step:** G1 (a) to the letter on 2-28 (about the decider's white-core centroid the farthest changed pixel is 116.2 px and 55 px lie beyond 112; 108.6 / 108.2 / 109.8 on the
+      others; the centroid is 29.6 px off the quad's centre there, and the wave's own global-edit row has the same 20,048 px and 116.2, so **the wave's attribution of those 25
+      pixels to "another halo" was wrong**; about the step-85 core the farthest is 101.7) and S9 (3 links, 1 Smart App Control refusal of the first `test_mp.exe`, relinked once).
+      **What it leaves:** the 9,711 px by which the wave's global edit moved 2-28's no-fireball twin are the player's figure drawn mirrored in that kept frame, cause not
+      determined and no determinism problem for this step (the new twin equals the old one byte for byte); the whitish remainder, about 11 percent (0.882 to 0.894), which is
+      inferred to be the particles' explosion glow and is not chased (nothing in the data supports a scale above 1.0); 2-02 and 2-15 at another tick; the dragons' and 4-32's
+      fireballs against the original; CMP-8 (the other halos), still the owner's; and CMP19-1 below.*
 - [x] **CMP-20. A crate the fireball burns draws no flame and no fade: the original puts `fire32` on it and fades it over 1000 ms** (medium; particles; `decoded`; moves
       no route). NEW TO THE LIST by the re-take, not new in the build: the old readers filed it as low phase ('the crate is intact in the port, the shot still in
       flight'); it is the recorded, decoded and unbuilt part of 'Found by step 120' and step 146's `fire32` ('a burnable crate's not drawn'). Levels: 2-05 (h2.8 an orange
@@ -5015,11 +5081,28 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       update in the original (the simulation's; nothing visible). A fire agent's or the lava's crate is flagged and counted on one tick, a fireball's or a blast's one tick
       apart: the same static-after-dynamic order, read and not shifted by the draw (pinned: `the flag and the first counted frame are one tick`). Next: none until a step
       touches the burn's clock.
-- [ ] **CMP20-3. Notes and comments that say the old thing** (low; step 194's LEFT FOR LATER 5; GAMEPLAY: none). `fire.json`'s note that `fade_names` "is the whole of it ...
+- [x] **CMP20-3. Notes and comments that say the old thing** (low; step 194's LEFT FOR LATER 5; GAMEPLAY: none). `fire.json`'s note that `fade_names` "is the whole of it ...
       crateCallback" is wrong about `crate_low_emissive` (CMP20-1) and omits `wood_piece_small`, a `crateCallback` caller that no level places burnable; its note on the
       shock agents ("levels 2-12, 2-14, 2-19") is stale numbering: by census the burnable shock agents are on 3-31, 4-04 to 4-08, 4-12, 4-14 and 4-19 and 2-12 has none;
       the comment at `Fire.hpp:76-86` says both again ("fire.json lists the names whose callback is crateCallback", "level 2-12's shock agent"). The two notes in `fire.json`
       are data text (a new md5, no number changes); the header comment rides the next step that relinks. Next: fix with the next edit to either file; no gate of its own.
+      *FIXED by step 195 (wave 4d-2), 2026-10-20, as TEXT ONLY (G9, proved by a script and by the verifier's own: the parsed JSON of `fire.json` and `controls.json` equals HEAD's
+      except `/burn/_note` and `/adjust/drag/_source`; `Fire.hpp`, `Adjust.hpp` and `tests/test_mp_adjust.cpp` equal HEAD's with their comments stripped; `test_mp_fire` 129,
+      `test_mp_adjust` 24,754 and `test_mp_controls` 13,771 unchanged): `fire.json`'s note and the `Fire.hpp` header now say that `fade_names` carries `crate_low_emissive`
+      (no frame callback in the original, CMP20-1) and omits `wood_piece_small` (a `crateCallback` caller no level places burnable), and that the burnable shock agents are on 3-31,
+      4-04 to 4-08, 4-12, 4-14 and 4-19 (2-12 has none). One wording stays in the header (it still says the list is what "the port fades"; the port removes a burned
+      `crate_low_emissive` unfaded), with three other known texts: CMP19-1.*
+
+**CMP-19's rows** (planning step 195; defects of the existing game that the step found, each open; the step's other leftovers are in its LEFT FOR LATER).
+- [ ] **CMP19-1. Four texts in compiled or checked files still say the old thing** (low; step 195's LEFT FOR LATER; GAMEPLAY: none). Known and left on purpose, because an edit
+      to a compiled file after the verified build leaves the exes older than the sources, changes the Step's md5 rows and needs a relink (a Smart App Control launch):
+      (a) `game/MagicPortalsLayer.hpp:736` ("Its light, and every halo whose row names none, keep the global one": the light never takes a halo scale; `LightColour` has none);
+      (b) `tests/test_mp_lighting.cpp:527` (the last check of `AHalosOwnScaleReplacesTheGlobalOneAndOnlyThat` says "FAILS UNDER: the light taking the halo's scale", but
+      `LightColour` has no halo-scale parameter, so it cannot fail under it; only `test_mp_layer`'s pin D can, and only against `lighting.json`'s 0.6); (c) `game/sim/Fire.hpp:83-88`
+      (it says the list is what "the port fades", but the port removes a burned `crate_low_emissive` unfaded, CMP20-1; `fire.json`'s own note was corrected); (d) `game/data/lighting.json`
+      `halo_brightness_scale._source` ("what every halo's formula colour ... is multiplied by") is untrue for the fireball's halo now (data text: a new md5 for a file this step
+      kept byte-equal to HEAD as a gate, and no number changes). Next: fix with the next edit to any of the files - (a) to (c) ride a step that relinks, (d) needs none; no gate of its
+      own.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
