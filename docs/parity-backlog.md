@@ -1896,6 +1896,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   *Wave 4d-2, 2026-10-19 (first step): the one `decoded` drawing group is built - CMP-20 (step 194, committed locally as `74a4a0a`, not pushed at this note): a crate the
   fire burns is drawn in `fire32` flames and fades over its second, in the draw path only; the f420 sweep changes 4 levels (2-05, 2-08, 2-22, 2-23), exactly those whose
   log has a burn by tick 420. CMP-4, -5, -8, -11 to -14, -17 to -19, CMP-low and CMP-R1 stay open, and the section-5 box is still not ticked.*
+  *Wave 4d-2 measurement wave, 2026-10-19/20 (four read-only items, nothing built; the section-5 box is still not ticked): CMP-19 holds (the fireball's glow is 0.55 of
+  the original's over 12-26 u; the scale is the knob; a fireball-only 1.0 is the proposed step), CMP-14's cause is found (at a screen of 480 px or more the original bakes
+  its lightmaps at one texel per unit at level load; the port draws the 2-unit shipped files), CMP-low (d) is phase (no offset, no step) and CMP-18 is real and is the
+  stone's roll, not the plank's release. The numbers are in each row's note.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2750,6 +2754,25 @@ unchanged, with one more: CMP20-1, whether the simulation should keep removing a
 `"classic"`; (5) the ship preparation, unchanged. **The sweep a step is measured against is now `CMP20/after/sweep`** (128 PNG, `MagicPortals.exe` `f23eacd9`, listed in
 `out/parity/BASELINE.txt`); it differs from `WALL/after/sweep` on exactly 2-05, 2-08, 2-22 and 2-23, and `WALL/after/sweep` stays listed as the pre-CMP-20 reference. The
 step's own leftovers (the lightmap crate of 2-11 at alpha below 1, the static crates' bucket clock, the 52 one-level pixels) are in its LEFT FOR LATER.*
+
+*Wave 4d-2, 2026-10-19/20, the measurement wave (read-only: four items measured by a measurer, a verifier and a decider each, about 430 launches of the frozen
+`MagicPortals.exe` `f23eacd9`, no relink, no tracked file touched but these notes and the devlog): the measurement half of item (1) above is DONE and NOTHING IS BUILT.
+**Decisions** (each row has its numbers, because the wave's images were purged): CMP-19 `holds` (the fireball's halo is 0.55 of the original's over 12-26 u at the shipped
+scale 0.6; linear in the scale; 1.0, Ethanon's own formula, reads 0.89-0.92); CMP-14 `cause_found` (at a screen of 480 px or more the original bakes its lightmaps at one
+texel per unit at level load and never reads the shipped files; the port draws them at two units per texel); CMP-low (d) `phase_only` (the original's bob centre is the
+port's within 0.3 px; the 3-8 px is two half-circle windows; no step); CMP-18 `real_late_release` (not a clock artefact; the stone's roll is 3.8x slow per original frame,
+the plank's release is on time). **What is left of this list, in the order to take it - a recommendation, not a decision:** (1) **CMP-19's fix step**: drawing only,
+GAMEPLAY none, small, with a deterministic gate (G1) and G8 first (read the live particle ratio before pinning 1.0). It relinks, so it carries Step 193's three overclaim
+comments (`Adjust.hpp:300`, `controls.json:547`'s `_source`, `test_mp_adjust.cpp:1650`) and CMP20-3's `Fire.hpp:76-86` comment. **It pre-empts part of CMP-8's call** (a
+per-entity scale for the fireball while the torch's 0.6 has opposite evidence), which is the owner's to weigh: the step records it as open and keeps the field reversible.
+(2) **CMP-14's fix step**, after (1) is re-baselined (they share the fireball floors of 2-17 and 2-18): sub-step 0 decides from `engine/ARCHITECTURE.md` whether the
+engine can render a light pass into an offscreen target (engine first, then a pin bump) or the game bakes on the CPU; the expected-changed set is the 67 lightmapped
+levels, derived by count. (3) **CMP-18 LAST and measurement first** (CMP18-1): the 12 s rig clip of 2-29 idle and the held-friction experiment need no relink and can be
+taken at any time; the fix (remove the carried frame, or the cheap local start velocity) moves 2-29's route and may move others, is entangled with CMP-11 (the barrel
+needs the held friction), and 2-29 is re-flown from its START, not from tap 320. (4) CMP-low (d): nothing to build; the row keeps a comparison rule (mask crystals out of
+pixel-difference verdicts; never read a gem's y at one tick against one still). The rig checks, the owner's calls (CMP-8's halo scale first of them), CTL-13 (it WAITS for
+the owner) and the ship preparation are unchanged. The sweep a step is measured against is still `CMP20/after/sweep`. 44 frames of the measurement are listed in
+`out/parity/BASELINE.txt`; the wave's other images were purged and its tables, scripts and results stay under `out/parity/program/MEAS/`.*
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -4373,6 +4396,13 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       wash R 0.77-0.89, blue lamp 0.62-0.87, fire-agent halos 9-20 percent weaker at 32-64 px and equal beyond 80 px), which favours option (b), per-entity scales; the
       original's concentric light bands around the flame are absent in the port's torch halos on 1-01, 1-02, 1-04, 1-06, 1-07 and 1-18. Still the owner's call; CMP-12
       follows it, and CMP-19 joins it only if the scale is the knob.*
+      *Measurement wave 2026-10-19: CMP-19's measurement answers "joins it only if the scale is the knob": on the fireball it IS - the port's halo is exactly linear in
+      `halo_brightness_scale` (D(1.0) / D(0.6) per pixel 1.646-1.672 against 1/0.6 = 1.667), and the fireball's band reads 0.55 of the original's at 0.6 and 0.89-0.92 at
+      1.0 (Ethanon's own formula has no factor) - but the scale is global (1.0 moves 177,590 px on 1-01 alone), so the fix proposed is a fireball-only field, which is
+      this row's option (b) for ONE entity. The torch has the opposite evidence (step 49 fitted 0.6 on 1-01's arch blocks with 1x art, where 1.0 read 8.94 of 255 against
+      6.0; not reopened since the hd art), so two entities disagree about one formula and nobody has found why; if the cause is common (the hd halo, the 565 surface, the
+      quad's blend) a per-entity field treats a symptom and leaves a pair of opposite errors. Still the owner's call (global, per-entity or leave): the CMP-19 step moves
+      only the fireball, records the call as open and keeps the field reversible (deleting it restores today's pixels).*
 - [x] **CMP-9. Script emissive blinks not built: barrels, the breakable wall's `blink` flag and teleportable crates** (medium; light; `decoded`; moves no route). 32
       levels in scope: 1-09, 1-13, 1-19, 1-22, 1-24, 1-25, 2-04, 2-05, 2-08, 2-12 to 2-19, 2-21 to 2-25, 2-28, 2-29, 2-32, 3-14, 3-15, 3-19, 4-10, 4-16, 4-25, 4-32 (the
       readers filed it on 17; wave 4c-1's fix1 adds the fire agent's 10 outside them, which the cause text below names (the pulse): 2-10, 2-11, 2-20, 2-26, 2-27, 2-30, 2-31, 3-23, 4-12 and 4-28, 42 levels in all). Evidence: 2-12 barrel box 778,520,866,630 (R 15.9-23.8 over the stills against a constant 10.5); 2-14 wall box 800,358,890,508 (72-88
@@ -4500,6 +4530,66 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       chapter 3 has no unlit control and chapter 4 one. The cause is NOT isolated, no step touched the lightmap path, and the experiment stands as written (2-17 with the
       lightmap off and at full resolution); the other 57 lightmapped levels need their own boxes read before any gate is set on them. Present on every lightmapped level,
       medium or low by magnitude.*
+      *Measured 2026-10-19 (measurement wave, read-only; nothing built): CAUSE FOUND - the lightmap's SOURCE AND RESOLUTION, not the relief, the filtering or a dimmer
+      light. Measurer, verifier and decider agree (they share one set of original stills and one deterministic set of port frames; the decode, the model-free lattice test
+      and the dose-response do not lean on the offline model). **The row's premise is overturned:** at a screen 480 px or taller the original does NOT read the shipped
+      `add<id>.png` at all. Its `shouldUsePrerenderedLights` is `GetScreenSize().y < 480` (the listing, md5 `48fe65ce`: `CMPIf` 480 then `TS`; `as_context.cpp:2241` and
+      `:1876`); `preLoop` calls `EnablePreLoadedLightmapsFromFile(true)` only then; the flag defaults to false (`ETHScriptWrapper.cpp:39`), so `LoadLightmaps` calls
+      `GenerateLightmaps()` (`ETHScriptWrapper.Scene.cpp:198-204`, at the end of `LoadScene`, `:607-609`). On this rig (1280x720) the original bakes each static lit
+      sprite's lightmap at level load into a target of the sprite's bitmap size in UNITS (`ETHLightmapGen.cpp:57-58`; 256x32 for the 512x64 hd stone): one texel per unit
+      = 2.8125 px, one light pass per static light, RGB565, read back linear and clamped. The port draws the shipped files, which are half the sprite per axis: 2 units
+      per texel = 5.625 px. 730 of 730 `eth_lightmap` lines in the 67 levels are byte-identical to the original's shipped files, so the DATA are the same and the
+      RESOLUTION is not (the row's first candidate - a lightmap a quarter of the hd art per axis, stretched where the original keeps detail - is the right one, the
+      original's own bake being twice as fine per axis; the second, a weaker relief, is not needed: the gap exists only where a lightmap does and the unlit controls read
+      0.98-0.99). The row's experiment was run as scene variants through `--levels` / `--art` on the frozen exe (no scratch build, no link): `nolm` (the scene without
+      `eth_lightmap`) and `live` (the same static light evaluated per screen pixel) on 2-11, 2-17, 2-18, 2-19 and 2-30 with controls 2-21 and 2-24, and a 124-frame census
+      of the 64 usable lightmapped levels. **Numbers** (Y = 0.299R + 0.587G + 0.114B, px of 1280x720, original `h6.3` against the port's f420 of `CMP20/after/sweep`; the
+      stills are static stone, so the pairing clock does not matter: `h0.3`, `h2.8` and `h6.3` differ by mean |dY| 0.000-0.004 inside 2-19's wall, 2-17's pillar and
+      2-11's and 2-18's floors). Laplacian s.d. port / original: 0.733 (2-19 wall 910,95,985,260), 0.693 (2-17 pillar 165,370,240,625), 0.721 (2-17 floor
+      180,630,1080,715), 0.696 (2-18 floor, same box), 0.721 (2-11 floor 215,640,930,712), 0.801 (2-30 floor 300,640,1000,712), 0.85 (2-19 floor); the lit boxes' mean
+      luminance is 1.0-1.6 grey levels (2-4 percent) under the original's, so it is grain, not a dimmer light (that residual is CMP-8's and CMP-19's); the controls (no
+      lightmap, live light in both) read 0.979 (2-21 floor), 0.994 (2-21 pillar and 2-24 pillar), 0.992 (2-24 floor_left). Model-free lattice test on the lightmap
+      component alone (D = Y(frame) - Y(the same level without `eth_lightmap`), the spectrum of the second difference along x, no frequency picked beforehand): the
+      original carries the 1-unit lattice (1/2.8125 cycles per px, x4.7 to x20.1 over the median on six floor boxes) and NO 2-unit lattice (1/5.625, x0.0-0.5); the port
+      as shipped carries the 2-unit one (x7-12 where its light is strong); the unlit control reads x0.4 / x2.2 (noise); the per-pixel `live` render reads x0.7-1.5 at
+      1/2.8125, so the normal map does not make the lattice. Dose-response inside the same levels (32x32 blocks; 9,542 lit blocks over 64 levels where the shipped
+      lightmap adds >= 8 grey levels): Laplacian ratio 0.985 where it adds < 2 (28,998 blocks), 0.881 / 0.825 where it adds 20-40 / >= 40 (3,542 blocks), high-pass 0.793
+      / 0.737; the census median over the 64 levels 0.894 (p10 0.776, min 0.670, 33 of 64 under 0.90, high-pass median 0.826) against 0.984-0.995 on unlit levels. **The
+      closure is an offline model, not an engine render:** a 1-unit bake (point-sampled at the texel centres, minified diffuse, 5/6/5) brackets the original at Laplacian
+      0.80-1.05 (0.80-0.96 un-quantised, 0.94-1.05 double-quantised; the final 5/6/5 re-quantisation lifts a lattice-free Gaussian smoothing by +0.03-0.15 and the lattice
+      model by +0.03-0.19, so the Laplacian alone does not settle the amplitude - UNRESOLVED without an engine render), high-pass 0.88-0.97, and a pixel correlation of
+      the high-pass with the original of 0.97 mean at 2.8125 px per texel (0.92-0.99) against 0.71 as shipped and 0.77 at 5.625, with a sharp peak at 2.8125; a
+      lattice-free smoothing of the same light reaches only 0.92-0.95, the lattice adds 0.04-0.055 of correlation and +0.12-0.14 of Laplacian over the best smoothing in
+      four of five boxes; the amplitude on floors reads 10-18 percent low in the verifier's model, the 3-12 percent high-pass deficit stays open; the phase is (0, 0) on
+      2-18 and 2-19 and 0.23 px on the scrolled 2-17 and 2-11 (consistent with the camera at the origin, not proof: do not tune it). **What a step gates on** (every bound
+      is the model's value less an allowance; the kept `nolm` frames are the baseline of the D-field gates): G1 Laplacian ratio of every judged box in [0.85, 1.10], box
+      mean luminance within +-1.5 percent of today's; G2 high-pass s.d. ratio >= 0.85 on every judged box (today 0.62-0.67, 0.53 on 2-11, 0.57 on 2-30, 0.82 on 2-19's
+      dark floor); G3 high-pass Pearson correlation with the original >= 0.96 on the walls, >= 0.95 on the lit floors, >= 0.90 on the dark ones (today 0.61-0.80, mean
+      0.71 over 11 boxes; under about 0.95 on a wall or lit floor means detail without the lattice); G4 the lattice: ratio at 1/2.8125 >= half the original's where the
+      original's is >= x10 (2-11 floor x20.1, 2-17 floor_L x14.4 and floor_R x10.6, 2-18 floor_R x10.1, 2-19 floor x11.3) and at 1/5.625 <= x1.5 on 2-11, 2-17 and 2-18
+      (port today x9.4, x9.0, x11.7, x7.3); G5 the 64-level census: median >= 0.95, p10 >= 0.90, no level under 0.85, high-pass median >= 0.88 (the block selector with
+      positions is `MEAS/CMP-14/decide/selector_blocks.npz`); G6 dose-response: Laplacian >= 0.93 and high-pass >= 0.85 in the >= 20 bins, blocks the lightmap adds < 2 to
+      stay at 0.985 +-0.01; G7 the 67 levels' logs carry no `Loaded .../add<id>.png` line (730 today). **Controls that stay byte-equal:** all 61 unlightmapped levels'
+      f420 frames against the step's own pre-change sweep; the four live-light levels (level19a, level20a, level21a, level23a = 2-20, 2-21, 2-22, 2-24: the same light
+      shader, no lightmap); on the 67, every pixel outside the lightmapped sprites' screen rectangles dilated by 3 px (1 u); a `--tap` capture on a torch level (4-22)
+      before and after, because the run-time torch path is not changed. **Expected-changed set (derive, do not type):** the levels of `out/levels/*.tscn` with at least
+      one `metadata/eth_lightmap =` line - 67 today (730 lines: 24 in chapter 1, 10 in 2, 32 in 3, 1 in 4) - asserted equal to the levels with a static light owner (a
+      node with both `eth_light_range` and `eth_static`: 68 nodes in the same 67 files); none of the other 61. A lightmapped level whose f420 frame does NOT change is a
+      finding (drawn unlit, or a popup covers the footprint: 1-02 and 1-03 are popup-up at f420, footprints 242,945 and 72,736 px; the smallest other is 55,571 px, 2-31).
+      The CMP-19 step and this one overlap on the fireball floors (2-17, 2-18 and others): run them one after the other, each against the sweep of the build before it.
+      **Proposed step (its own, GAMEPLAY none):** replace the shipped `add<id>.png` as the input of a static lit sprite's lightmap by an in-memory bake at level load (one
+      texel per bitmap unit, one light pass per static light at the texel centres with the sprite's diffuse, normal map and shadows, 5/6/5, read back linear and clamped
+      as the overlay is today). Sub-step 0, before any game code: decide from `engine/ARCHITECTURE.md` whether the engine can render a sprite's light pass into an
+      offscreen target (an engine gap is fixed in the engine's repository first, then the pin moves) or whether the game bakes on the CPU with a twin of the shader's
+      arithmetic (13.9 M texels for the whole game, at most 21 lightmapped sprites in a level, the largest 256x256 units). The bake is made in memory from art read in
+      place and never written to a tracked path (hard rule). The run-time torch bake (the listing's `ETHCallback_light_off` and `ETHCallback_fire_signal` call
+      `GenerateLightmaps`) is out of scope: not measured, and no original frame of a lit torch level exists. **Not measured:** an engine-rendered unit-resolution bake
+      (the frozen exe's `Lighting::Read` refuses a lightmap that is not half its sprite); the original's `GetScreenSize().y` in the running game (no log of the original
+      exists; the decode, the 2.8125 px pitch and the lattice test agree); the lattice test on chapters 1, 3 and 4 (the decode and the census carry them); the bake's
+      CONTENT - `ETHLightmapGen.cpp:121` passes `maxHeight` = the screen height and `minHeight` 0 where the live pass passes the scene's, so the bake's amplitude and the
+      vertical sprites' shading may differ from the live per-pixel term beyond the lattice (the first suspect if an engine render misses G1 / G2); the ETC1 / PVRTC
+      siblings of the shipped PNGs. Evidence: `out/parity/program/MEAS/CMP-14/` (`result.txt`, `result.json`, `decide/`, scripts; 15 frames and crops listed in
+      `out/parity/BASELINE.txt`).*
 - [x] **CMP-15. A rider drifts off a bobbing slab: the astronaut on 4-02's bounce slab floats away at the slab's peak speed** (medium; structural; `decoded` but NOT
       RUN; MOVES A ROUTE). Evidence: 4-02 box 350,330,450,520 (`pairs/4-02_h63_pair.png` and `_overlay.png`: the astronaut doubled, the port's about 17 px higher): the
       original's eye stays at y 380 +-0.5 in all six stills while the slab bobs 475-481 under him; the port's drifts up 3.2 px/s (383.1 at f75, 364.3 at f420) = the
@@ -4598,6 +4688,66 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       37-123, because the original's stone has already pushed it), 136 px at f450 and 124 px at h2.8 (the old 125-135 is the f450 / h2.8 gap). CMP-2 is ruled out as the
       cause (step 174's hinge moves the stone 1.04 u, about 3 px, and the plank's first turn past 0.05 rad is tick 254 before and after); the late release from the plank
       is unexplained and WT-10's trace of the stone against the plank and the hinge is the next step on this row.*
+      *Measured 2026-10-19/20 (measurement wave, read-only; nothing built): REAL, NOT A CLOCK ARTEFACT - and what is late is the stone's ROLL, not the plank's release.
+      Measurer, verifier and decider agree (they share the six stills, one frozen exe whose frames are byte-identical across their launches and the R4d caption estimator;
+      three circle-fit codes, a Box2D replica against a minimal rigid-circle simulation and a model-free bound are independent). **The row's premise is corrected:** "the
+      release from the hinged plank is late" is false. Aligned on the stone's x the port's stone and plank follow the original's path (stone y within 0.8 u, plank within
+      3 degrees, about one tick); the lag is 81 percent the approach along the block (the port rolls 0.281 u per tick for 318 ticks, the original 1.054 u per frame for
+      84), 1 percent the fall and 18 percent the floor roll after the landing (port 1.035 u per tick, replica 2.078). The row should read "the stone rolls too slowly".
+      **Not the clock** - a label-free anchor first: at `h0.3` the caption's alpha (0.4994) gives 1.502 s of script time since the level started, and the port needs 126
+      ticks (125.6-126.2 by three fits) to reach the stone state the original shows then (83.9 port ticks per caption second); the original's physics steps once per
+      rendered frame, 1/30 s (decoded; the rig's F10 recoil bench confirms), so in 1.502 s it had run at most 22 / 44 / 90 frames at 15 / 29 / 60 fps and the port is
+      behind by 5.6x / 2.9x / 1.4x in the time to the same state: not closed even at 60 fps, which the rig cannot reach (28-29 fps ceiling). The label spacings agree: 217
+      ticks carry `h0.3` to `h2.8` against 2.5 s (87 a second, 62-145 with 1 s of label error; 29 a second would need a 7.5 s spacing). Per original frame the port creeps
+      0.2803-0.2815 u per tick against 1.054 (the Box2D replica of the decoded level, no free parameter) or 1.107 (a minimal rigid-circle simulation, other code): 3.8-3.9
+      times slow; the floor roll 1.035 against 2.078. The replica puts `h0.3` / `h2.8` / `h6.3` at frames 40 / 106 / 207 (26.6 / 26.4 / 28.9 fps, inside the rig's
+      measured 26-29), matches five state readings (stone y and plank angle at `h2.8` and `t8.0`, the barrel's shift at `h6.3` 23.83 against 23.82 u) and is a model: its
+      frame numbers are conventions (+-1; +-3 at `h6.3`) and the verdict does not use them. The label pairing UNDERSTATES the lag: at the same caption second the port has
+      run 2.3 times as many frames and is still behind (x 401.6 against 392.7 at `h0.3`, 357.8 against 316.3 at `h2.8`, 158.0 against 129.7 at `h6.3`). **Mechanism - a
+      lead, NOT isolated:** the engine's own natural-step world (`test_mp_hinge`: the same `Game::Tick`, data and engine at a bare 1/60 s step, where a tick is half an
+      original frame) creeps 0.855 u per original frame (81 percent of the replica), rolls on the floor at 1.765 (85 percent), turns the plank at frame 127 (replica 107)
+      and reaches the barrel about frame 213 (183); the game's carried frame (gravity x4, velocities x2 per 1/60 s step) gives 0.2806 (27 percent), 1.035 (50 percent),
+      344 and 474. So removing the carry is worth about 3.0x on the creep and the contact response about 1.23x: the carry is the lead (about 84 percent of the log
+      deficit), the contact response real but second (16 percent). It points at the engine's absolute contact tolerances (rest velocity, speculative margin, slop,
+      positional-correction share), which do not scale with a step that carries 4x the acceleration, more than at integration; `PhysicsSystem::Update` takes one dt per
+      call and does not sub-step (`PhysicsSystem.cpp:437`; `Game::Tick` calls it once, `Game.cpp:1137`). Untested: held friction 1 / restitution 0 in the engine on 2-29,
+      sub-stepping, tolerance scaling, the speculative margin, the sphere's inertia, the correction order. `resting.json` holds only 3-12, so a "resting bodies sleep"
+      confound does not touch 2-29. **The barrel:** at `h6.3` the original has pushed it 23.82 u (NCC 0.986) with the stone against it; the port's stone stops at the
+      barrel (3 px by tick 540). The verifier's equal-masses hypothesis is REFUTED (`materials.json`: stone 1.131, barrel 0.432); an energy budget (the decider's
+      estimate, not a run) says the held friction 1.0 stalls the barrel at about 3.8 u at the port's arrival speed and at about 13 u after a roll fix, while the decoded
+      0.53 and 2.08 u per frame allow 29 u (replica 25.2): the barrel gate needs the friction step (CMP-11, G10-14, WT-1) or is expected to fail. **What a step gates on**
+      (M measured on the original, R replica, S minimal simulation, P port, T test world): G1 [M] the release shape, clock-free: the stone at x 316.3 (+-0.4) has y 105.2
+      (+-1.0) and the plank -1.4 (+-3) degrees; at x 307.4, y 112.9 (+-1.0) and plank -10.35 (+-3) degrees (true today; must not regress); G2 [M] at `h6.3` the stone at x
+      129.7 u against the barrel moved 23.82 u, the plank vertical; G3 [R, S] the creep 1.054 (1.107) u per frame from frame 13-14: stage-1 gate (the carry removed alone)
+      >= 0.80 u per tick (prediction 0.855), target 0.95-1.16; G4 [R] the floor roll 2.078: stage-1 >= 1.70 (prediction 1.765), target 1.87-2.29; G5 [R] first plank turn
+      at frame 107 (today 344), the stone lands (y > 190) 124 (363), reaches x 153.3 at 183 (474): stage-1 turn <= 135 and barrel <= 225, state gates outrank tick gates;
+      G6 the barrel 23.8 u, expected NOT met by a roll fix with held friction (about 13 u), gated separately; G7 [P, T] an engine unit table in BOTH time bases (a 30 u
+      sphere above a 14 degree static prism with a flat beyond; overlaps 0.41 / 0.90 / 1.62 / 2.35 / 3.32 u: replica 0.44 / 0.70 / 0.97 / 1.23 / 1.49 u per frame, the
+      engine in the carried frame 0.00 / 0.00 / 0.09 / 0.63 / 0.99; the natural base not yet run); G8 the script clock must not move (caption alpha = 1 - 16 t / 3000
+      +-0.003, `fireball_spat` on ticks 127 and 378); G9 2-29's route re-flown from its START (tap 320, R4a-6, is SUPERSEDED: the stone now meets the barrel at about
+      frame 183-213, where the barrel trick - tap 140, portal entry 178 - is) and then all 128 routes. **Controls:** a no-ramp scene and a tangent scene creep 0.000
+      +-0.02 u per tick; a byte copy of level28a equals the idle trace of the same build tick for tick; the plank reads flat (|angle| <= 0.3 degrees) until the stone
+      passes x about 332 u; the barrel's left edge stays at 103 px until contact; the camera-fixed items agree to 0 px on the stills. **Expected-changed set (derive, do
+      not type):** it depends on what the fix is declared to touch. Census of `out/levels` (three codes agree): 24 levels with a stone, 10 with a plank class (9
+      `spinning_platform` / `seesaw` + 1 `motor_seesaw`), 28 with either, 70 with any `RigidBody2D` (crate 41, barrel 16, stone 24, plank 9, motor_seesaw 1, wood piece
+      2), 37 with a minion / knight / dragon spawn (a circle walker), 91 with a body or a spawn, 37 with neither (the candidate byte-equal controls). (i) A fix confined
+      to a sphere's contact response against a static polygon: at most 54 levels (24 stone + 37 spawn - 7 in both); the four plank-only levels (2-28, 3-19, 4-11, 4-31)
+      stay equal. (ii) Removing the carried frame (sub-stepping or tolerance scaling): every body moves and the player's rest pose with it, so nothing is guaranteed; the
+      37 are the first candidates (step 152's precedent: 33 of 33 loose-body-free frames identical, 82 of 128 changed); an unexplained change in the 37 fails unless the
+      player's rest pose is the stated cause and is checked on 2-24 (idle player 0.000 u in 420 ticks). 2-22 (a stone falling 4.5 u onto a -20 degree bridge) and 1-09 are
+      the likeliest next; the re-take read "agrees" on 1-09, 1-13, 2-30, 2-31, 3-07, 3-15, 3-20 and 3-22, but most of those stones are probably at rest in both frames,
+      which is weak evidence that their rolling is right. **Not measured:** the original's frame rate on 2-29 (derived 26.4-28.9 from the replica, 8.8-16 in an earlier
+      pass; no clip of 2-29 exists; a 12 s pts-timed rig clip of 2-29 idle is the direct test and turns 1.054 into a reading); the engine's mechanism (above); the
+      original's floor roll and barrel push beyond the one still; real-clock (non `--fixed-step`) port behaviour; the other 27 census levels' stills against frames.
+      **Proposed (CMP18-1, one step, measurement first; GAMEPLAY: yes):** Part 0, no code: the rig clip. Part 1, no relink: the `game/data` experiment `friction_applied`
+      / `restitution_applied` true on 2-29 only (md5 before, copy kept, restore in a trap, md5 after) and, in the engine's repository, the G7 table in both time bases
+      with each candidate switched. Part 2, the fix chosen from Part 1 and put to the owner: (A) remove the carry for dynamic bodies - `PhysicsSystem::Update` in two
+      natural 1/60 s steps per tick at the call site, the carried-frame code (`SimRatio`, about 25 sites in `game/` and the callbacks) reduced to 1, predicted at 81-85
+      percent of the original's creep and floor roll, then a contact-response change in the engine (engine first, then the pin bump) for the last 19 percent; or (B) the
+      cheap local path: 2-29's stone given a start velocity of about -1.054 u per frame as a marked `_guess`, byte-equal on the other 127 levels but leaving the floor
+      roll (2.0x), the barrel and 2-22 / 1-09 untouched. The pre-fix port set for the gates is regenerable only on the frozen exe (`MEAS/CMP-18/scripts/launch.sh S1 400
+      2`): take it BEFORE the relink. Evidence: `out/parity/program/MEAS/CMP-18/` (`result.txt`, `result.json`, traces, scripts; 5 images listed in
+      `out/parity/BASELINE.txt`).*
 - [ ] **CMP-19. The carranca fireball's glow reads weaker than the original's beyond its core** (medium; light; `unknown`; moves no route). NEW TO THE LIST by the
       2026-10-15 re-take (wave 4d-1), not new in the build: the fireball boxes hold 0 changed pixels against the old frame (2-28's 3,319 are the platform at the box's
       foot), and the old readers filed the fireballs only as phase (where the ball is), never its light. Levels: 2-01 to 2-08, 2-28 and 2-32's dragon (10 read; 21 levels
@@ -4618,6 +4768,53 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       and halo size in `lighting.json` `fireball` and `effects.json` against the 8 matched stills on 2 sides (and the dragon's two mouth fireballs on 2-32). Gate: the
       profile at 12-26 u within 15 percent on 2-02, 2-04, 2-07 and 2-28, the core unchanged (6-10 u), step 85's gates (8.94 u core, R 226 +-20) still met. Joins CMP-8's
       owner decision only if the scale is the knob. GAMEPLAY: none.
+      *Measured 2026-10-19 (measurement wave, read-only; the build is step 194's, `MagicPortals.exe` `f23eacd9`; nothing built): HOLDS, and the knob is the halo scale.
+      Measurer, verifier and decider agree; a fix step is warranted (drawing only, GAMEPLAY none). **Method:** per fireball instance, D = (frame with the fireball) minus
+      (the same scene with the carranca's fireball not fired, or for the original the median of the level's other stills aligned on their static pixels), mean luminance
+      of D over the annulus 12-26 u (33.75-73.125 px at 2.8125 px per u, 1280x720) round the core's centroid; the port's twin is the `levels_nofire` recipe (every
+      carranca node's `startStride` 0 and `stride` 900000000, run through `--levels` / `--art`); pairs are matched by position, never by tick. **Numbers:** port /
+      original luminance in 12-26 u at the shipped `halo_brightness_scale` 0.6 = 0.550 on 18 pairs (7 levels, 18 of 18 below 1; original 35.23, port 19.75; R 56.17
+      against 32.17); the verifier's own twins 0.552 on 10 pairs (10 of 10); the decider's third code 0.45-0.61 on 4 pairs with identical masks. The backgrounds agree
+      (mean luminance under the band 71.0 original, 73.2 port), so it is the glow, not the scene. Pooled rings: 0-6.4 u 1.00-1.02 (the core is right), 8.5-10.7 u 0.75,
+      10.7-12.8 0.60, 12.8-23.5 0.53-0.61, rising to 0.89-0.95 at 27.7-32 u: a flat factor on the halo from 11 to 26 u, not a falloff. The sign does not flip with the
+      method (the re-take's annuli, step 85's gates, the twin difference), the pair or the phase. **The conflict the row left is NOT reproduced and NOT explained:** step
+      85's "port longer" (R <= 10 at 40.0 u against 27.6 u) came from binary `b1aaf6eb`, one licensed sample and a statistic blind to amplitude; on this build both agents
+      read 25.8 u against 27.6 u, a second warm blob stood 34.3 px from that sample, and step 114 postdates it; the old build is gone, so it stays unexplained and does
+      not block a step. **Knob:** the port's halo is exactly linear in the scale (D(1.0) / D(0.6) per pixel 1.63-1.68 measurer, 1.65 verifier, 1.646-1.672 decider,
+      against 1/0.6 = 1.667; nothing clips); at 1.0, Ethanon's own arithmetic (`ETHRenderEntity.cpp:354-388`, no factor), the band reads 0.89-0.92 (measurer 0.918 mean /
+      0.893 median on 10 pairs; verifier 0.894 on 10, 2 of 10 below 0.85), the rings 0.84-1.02 at 8.5-34 u and the core ring 6-10 u 0.91 to 0.96-1.00. An absolute check
+      against `halo.bmp` and the additive formula (no pairing, no tick) puts the original's halo-colour channel (R) within 5 percent of the formula at 1.0 (1.048, after
+      dividing by the port's own 1.113 pipeline factor, an unexplained 11 percent that is calibration, not a finding) and the remainder whitish (G +8.5, B +17.5 percent,
+      about 2 levels): nothing in the data supports more than 1.0. The scale is global (1.0 moves 177,590 px on 1-01 alone), so a fix has to be fireball-only: CMP-8's
+      option (b) for one entity, and this answers the row's "joins CMP-8's call only if the scale is the knob" (see CMP-8's note). **Do not gate on:** the "ahead of the
+      ball / behind it" halves (the asymmetry changes sign with the instance set: 0.622 / 0.482 at 0.6 on 18 pairs, 0.838 / 1.017 at 1.0 on 10); a per-level mean (2-07
+      reads 0.822-0.918 at 1.0 on 2-3 pairs against an original instance sd of 10 percent), so the row's "within 15 percent on 2-02, 2-04, 2-07 and 2-28" is replaced by a
+      pooled median on a FIXED pair set; the far tail beyond 30 u (the reference's own noise is +-2 levels there; a fireball-only change touches nothing beyond the quad).
+      **What a step gates on:** G1, the primary and deterministic (the port is byte-deterministic: the two agents' frames at the same tick are identical, 9 of 9 by md5):
+      relaunch 2-02 f105, 2-04 f255, 2-07 f363 and 2-28 f252 and their twins and require (a) every changed pixel inside the fireball's quad (Chebyshev <= 101.25 px of the
+      halo's centre; <= 112 px about the core centroid), (b) the median of D_new / D_old over band pixels with D_old >= 8 at 1.667 +-0.04, (c) the twin frames (no
+      fireball) byte-equal old against new on all four (the global edit moves 2-28's twin by 9,711 px, which is the proof that the factor is fireball-only); G2, loose, on
+      the fixed 18 pairs (`MEAS/CMP-19/pairs_table.txt`): pooled median band ratio in [0.85, 1.15], pooled port R band mean in [51.0, 61.3] (original 56.17 +-1 sd 5.17;
+      today 32.17); G3, pooled rings: 12.8-21.3 u each in [0.80, 1.10], 8.5-12.8 u >= 0.90, core ring 0-6.4 u in [0.95, 1.05], and step 85's populations not worse (core
+      equivalent radius mean >= 6.00 u and max <= 10 u; core mean RGB within +-20 of (226, 196, 165); R-excess half radius within 16.9 +-4 u; R <= 10 within 27.6 +-6 u;
+      all met at 1.0 in 269 instances); G8 FIRST, before the number is pinned: read the live ratio of a fireball's first system (`GetNumActiveParticles` /
+      `GetNumParticles`) at steady state in a test - below 1 would make 1.0 right for the wrong reason (K2: 0.55 = 0.6 x 0.917 is the same number whether the ratio is
+      0.92 or the scale 0.55; the code symmetry, `Particles.cpp:399` against `ETHParticleManager.cpp:208-213`, and the steady frames say 5/5, but the runtime value was
+      not read). **Controls that stay byte-equal:** the other 105 levels at f420 against `CMP20/after/sweep` (the census: 23 levels place a fireball source - 21 carranca
+      levels by `entity_name` in {carranca, carranca.ent, carranca_right, carranca_right.ent}, level31a the dragon, level31c the dark dragon); 1-01, 1-13, 1-20 and 4-01
+      (1-01 is what a global edit would move); inside a changed level every pixel outside a quad (the light on sprites, the player's eye blob, the carranca's mouth flame
+      and the explosions carry no halo). **Expected-changed set (derive, do not type):** at most the 23, and at f420 about 12 by the sweep's own logs (`fireball_spat`
+      minus `fireball_end` at tick 420: 2-01, 2-03, 2-06, 2-08, 2-14, 2-15, 2-22, 2-25, 2-28, 2-29, 4-13, 4-14; 2-02 borderline; 2-15, 4-13 and 4-14 may be out of frame):
+      E = the carranca levels whose f420 frame differs from their no-fireball twin's on the build before; assert changed(before to after) == E and every changed pixel
+      inside a quad; a level in E that does not change is a finding. Played fireballs (a fire agent's flame, 20 levels; a fire diamond, 5) get the stronger halo too:
+      re-run the route suite and list those levels from the routes' traces. **Not measured:** 14 of the 21 carranca levels (2-05 and 2-08 for the flames round their
+      fireballs, 2-09, 2-12 to 2-15, 2-18, 2-22, 2-23, 2-25, 2-29, 4-13, 4-14), 2-32's two mouth fireballs (a moving camera), 4-32's scale-2 fireballs; any original frame
+      at a known or 60 fps (the stills are 15-29 fps, unknown per still, so the 8 percent left at 1.0, whitish, is inferred to be the rig or the particle glow); the
+      original's halo / light split; why the port draws 11 percent above its own formula; whether the shot's, the portal's or a torch's halo wants the same (CMP-8's
+      question; the torch's 0.6 has the opposite evidence and is not touched). **Proposed (one step, a parity fix):** a `halo_brightness_scale` of 1.0 on `effects.json`
+      `fireball`, read where `placeLight` builds an effect's halo (`MagicPortalsLayer.cpp:2988-2995`) in place of `lighting.json`'s 0.6, which stays for every other halo;
+      deleting the field restores today's pixels; the CMP-8 call stays the owner's and the step records it as open; do not tune beyond 1.0. Evidence:
+      `out/parity/program/MEAS/CMP-19/` (`result.txt`, `result.json`, tables, scripts; 19 frames and crops listed in `out/parity/BASELINE.txt`).*
 - [x] **CMP-20. A crate the fireball burns draws no flame and no fade: the original puts `fire32` on it and fades it over 1000 ms** (medium; particles; `decoded`; moves
       no route). NEW TO THE LIST by the re-take, not new in the build: the old readers filed it as low phase ('the crate is intact in the port, the shot still in
       flight'); it is the recorded, decoded and unbuilt part of 'Found by step 120' and step 146's `fire32` ('a burnable crate's not drawn'). Levels: 2-05 (h2.8 an orange
@@ -4690,6 +4887,44 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       rest skin: the player 1.6-2.0 px low on 7 of chapter 4's last 8 levels and on chapters 1-3, crates and barrels 2 px, a stack adding up (2-10 crates 3-6 px, 2-16
       barrels 4-6, 2-24 the player on his barrel 5). 4-22's sparkle depth (Order 8.4) is not reproduced on this build. Dropped as not defects: 4-20's achievement card,
       3-07's 2 px shake of the original's still, 1-02 and 1-03's pad pulse and popup moment. Next: still no step.*
+      *Measured 2026-10-19 (measurement wave, read-only; nothing built): item (d) is PHASE, not a defect - there is no offset to fix. Measurer, verifier and decider agree
+      (not independent in data: the same 1,427 stills and the same deterministic port frames; independent in the decode, two registration estimators, a footage leg and a
+      label-free support). **The premise is overturned:** "the original's diamonds sit about 3.6 px lower than the port's centre" and "about 60-70 levels at 3-8 px" are d
+      = r + c, the difference of two half-circle phase windows, not a centre offset. **Decode** (read again by the decider in the listing, md5 `48fe65ce`):
+      `ETHCallback_crystal` ins 83-96 calls `linearMotion(thisEntity, vertical = 1, angle = 0, startAngle = randF(PI))`; `linearMotion` stores `originalPos :=
+      GetPosition()` once, advances `angle` by `unitsPerSecond(speed)` and sets `originalPos + (0, cos(angle) x stride, 0) x scale`: a cosine of amplitude 1.5 u (4.219 px
+      at 2.8125 px per u) about the PLACED position, no A(1 - cos), no base offset, a random start angle per run. The port's `Motion.cpp` (`Advance`,
+      `OffsetPxWithCosine`), `motions.json` "crystal" (speed 2, stride 1.5, vertical, start 0..PI) and the draw code (`MagicPortalsLayer.cpp:6892-6895`) are the same
+      expression with no per-crystal offset. Keys are decode-equal (`ETHCallback_key` ins 653-679 calls the same `linearMotion`; never measured). **Measured centre,
+      original minus port** (+ = lower; px of 1280x720): the label-free support on the stills (a sine of amplitude A fills [delta - A, delta + A] whatever its phase):
+      1,379 samples / 105 levels / 286 gems, midrange of the 1st / 99th percentiles +0.031 [-0.007, +0.054] (level bootstrap), half-range 4.326, no level's range excludes
+      0 (0 of 105) while +3.6 is excluded on 100 of 105 and -3.6 on 89; a structured phase-free fit +0.006 [-0.010, +0.023]; continuous footage, no wall-second labels: 26
+      gems, 11 clips, 10 levels, luma centre +0.058 (sd 0.096; clip-level +0.033, se 0.032), amplitude 4.194, rate 1.972 against the port's 4.191 and 1.920 (the decode's
+      16 ms script-clock floor); a second estimator (Lucas-Kanade on an 81 px Gaussian window against NCC + ECC on a 26 px disc) on 14 levels / 157 samples +0.003 (level
+      bootstrap -0.026..+0.033), mine-minus-theirs -0.035 sd 0.163 on 154 shared samples. The method floor is about 0.1 px (port-vs-port closure -0.001 sd 0.102; an
+      injected +1.0 and +3.6 come back +1.00 and +3.50; the static emerald control +0.001 sd 0.100 on 54 samples); honest bound |offset| <= 0.3 px. A first footage pass
+      read +0.397: it was the H.264 4:2:0 chroma of the blue feature (+0.344 on identical frames). **Where the 3-8 px comes from:** the port's f420 gems sit 1.88 px HIGH
+      (c over 291 bobbing gems in 107 levels, sd 2.22, 74 percent above their centre; the decode's window at f420 gives 2.06) and chapter 4's stills at `h6.3` sit about
+      1.8 px low; opposite extremes read up to 8.4 px apart. 4-13 is the picture: the original's three gems at the bottom of their swing (r +4.0 +3.1 +4.0), the port's at
+      the top (c +3.8 +4.2 +3.1), d 7.2-7.8 on one centre. Reproduced as phase: 4-10 to 4-14, 4-16, 4-04, 3-18, 3-20, 1-18, 1-20, 3-01 (sign). NOT reproduced: 3-17 ("3.6
+      lower": its swing is -4.18..+3.99), 3-02 ("the other way": -3.95..+4.08, the knight over the gem), one gem of 4-15; 1-25's and 1-26's 1.7-1.9 px is the camera of
+      (b). **What is left of the row:** nothing to build. A constant +3.6 px added to the crystal would be a REGRESSION (the support would run -0.6..+7.8 against the
+      measured -4.4..+4.5), and seeding the start angles to the stills would tune to one clock reading. A comparison rule instead: never read a gem's y at one port tick
+      against one still (d = r + c, 0-8 px); remove the camera / scenery shift (1.7-1.9 px on 1-25 and 1-26) before reading a bob; use the support, the structured fit or
+      a continuous trace; mask crystals out of pixel-difference verdicts. Wave 4d-2's "cheapest low item, one bob-centre fit" closes without a fit and without a step; (d)
+      is a comparison artefact now, and the row stays open for its other items. **If a step ever touches the bob:** the gates are the centre within +-0.1 px on >= 800
+      support samples, half-range 4.3 +-0.1, footage centre within +-0.15 px, amplitude 4.19 +-0.1 and rate 1.92-1.98. The byte-equal set is DERIVED from `out/levels` and
+      is NOT the crystals alone: a change to the crystal row also moves the crystals' sparkles and the 35 timed crystals' dials in 20 levels (`syncTimers` puts the dial
+      at the crystal's drawn centre WITH its bob); a change in `Motion::Advance` / `OffsetPx` moves every `motions.json` row (key: 39 placements in 32 levels; door;
+      ghost; the four placed pictures: hand_drawn_arrow, dashed_circle, dashed_square, hand_tap), so at most level31, level31c and level6c could stay byte-equal, and only
+      if they are not no_gravity levels (the "7 levels with no crystal / key / shock / fire" census is an upper bound and wrong as it stands: level0, level1, level2 and
+      level31a carry placed pictures). Census: 470 crystal placements in 120 levels (435 `crystal.ent` + 35 `crystal`; 35 timed); no crystal in level0, level1, level2,
+      level31, level31a, level31b, level31c and level6c (1-01, 1-02, 1-03, 1-32, 2-32, 3-32, 4-32, 4-07). **Not measured:** keys; 13 crystal levels with no gem in the
+      port's f420 view (1-04, 1-17, 1-19, 1-21, 1-22, 1-24, 1-31, 2-24, 2-27, 3-16, 3-27, 4-06, 4-25) and 2 with no gate-passing sample (2-19, 4-23); 19 of the 105 levels
+      are bounded only by pooling and the label model (+3.6 is not excluded by the range alone on 1-25, 2-23, 3-13, 3-20 and 4-09; -3.6 on 14 others; judged immaterial
+      because the callback and the placement path are one for every crystal); 3-08's three gems share one phase (unexplained); the original at 60 Hz; the original's start
+      angle (random per run); absolute pixel truth (every number is relative to the port's drawn gem). Evidence: `out/parity/program/MEAS/CMP-low-d/` (`result.txt`,
+      `result.json`, the samples, scripts; 5 images listed in `out/parity/BASELINE.txt`).*
 - [ ] **CMP-R1. The comparison's own limits** (the verification's six low findings, `R4b/verify1.json`, and the triage's). (1) **The pairing is the record's convention,
       measured in part**: `h6.3` against f420 is not a measurement (f420 is 0.3-1.2 s early on the script clock; f450 is the extra set, +-0.4 s level to level); the
       script clock was fitted on four chapter 1-3 platform levels and 2-32's dragon; `h0.3` and `h2.8` use f75, f135, the level's own HUD tick (`CMP/hud_ticks.json`,
@@ -4717,6 +4952,13 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       found a medium the first missed on 5 of 8 levels; the audit's sample holds no lightmapped level of chapter 2. (6) Edge rows, any pan or tremble and a window other
       than 1280 x 720 are still not compared. (7) Build currency: `MagicPortals.exe` `f27dde1a` was checked by md5 at the start and the end of the sweep and nothing was
       rebuilt. (8) No python launch was refused (0 CodeIntegrity events from 11:00). The row stays open.*
+      *Measurement wave 2026-10-19 (two additions to limit (1), the pairing): (a) for a PHYSICS-DRIVEN body the f420 / f450 pairing is wrong by more than a clock error:
+      the original's physics steps once per rendered frame (1/30 s a step, 15-29 fps over the stills, about 27 and about 14 fps in two passes over 2-29) while the port
+      runs 60 ticks a second, so at the same caption second the port has run 2.3 times as many frames, and the f420 pairing mis-pairs a rolling stone by about 2.2x in
+      frames (CMP-18); a label-free anchor - the caption's alpha - or a state both frames show is the way, and no other physics row has been audited for it. (b) A bobbing
+      diamond starts at a random angle per run, so reading its y at one tick against one still gives d = r + c, up to 8.4 px, a comparison artefact (CMP-low (d)): mask
+      crystals out of pixel-difference verdicts. The rig's frame rate is not recorded per still and differs by run: any rate quoted from the stills is derived, never
+      read.*
 - [ ] **R4d1-1. 1-15: `match` -> `minor` is a re-grade of a cause no step touched, not a regression of the build** (the one level whose verdict got worse; CMP-13; low).
       The lower static portal over the pale sky: the original's iris is a neutral grey-white disc (mean RGB 143-159 / 130-160 / 165-181, luma 138-162 over six stills),
       the port's a pink-magenta disc (182-206 / 151-182 / 214-239, luma 167-194 over six frames), no overlap; the old reading filed it on this level as low phase. The
