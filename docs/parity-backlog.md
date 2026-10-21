@@ -1904,6 +1904,10 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   own brightness by a fireball-only `halo_brightness_scale` of 1 on its `effects.json` row; the f420 sweep changes 11 levels (2-01, 2-03, 2-06, 2-08, 2-14, 2-22, 2-25, 2-28,
   2-29, 4-13, 4-14) and the other 117 are md5-equal. CMP20-3 is closed (text only) and CMP19-1 opens for the four texts left. CMP-4, -5, -8, -11 to -14, -17, -18, CMP-low and
   CMP-R1 stay open, and the section-5 box is still not ticked.*
+  *Wave 4d-2, 2026-10-22 (third step): CMP-14 is built (step 196, committed locally as `ac80dfa`, not pushed at this note): a static lit sprite's lightmap is baked in
+  memory at level load at one texel per bitmap unit, as the original does at a screen of 480 px or more, in place of the shipped half-resolution `add<id>.png`; the f420
+  sweep changes the 67 levels that carry `eth_lightmap` and the other 61 are md5-equal. CMP14-1 (the arches' tier, the owner's call) to CMP14-5 open. CMP-4, -5, -8, -11
+  to -13, -17, -18, CMP-low and CMP-R1 stay open, and the section-5 box is still not ticked.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2792,6 +2796,21 @@ this step moved one entity, the call is still his**; CMP20-1), CTL-13 (it WAITS 
 **The sweep a step is measured against is now `CMP19/after/sweep`** (128 PNG, `MagicPortals.exe` `8f59fba7`, listed in `out/parity/BASELINE.txt`); it differs from
 `CMP20/after/sweep` on exactly 2-01, 2-03, 2-06, 2-08, 2-14, 2-22, 2-25, 2-28, 2-29, 4-13 and 4-14, and `CMP20/after/sweep` stays listed as the pre-CMP-19 reference
 (`WALL/after/sweep` as the pre-CMP-20 one). The 19 CTL baselines were taken before both steps and are still md5-equal on the new build (none of their levels places a fireball source).*
+
+*Wave 4d-2, 2026-10-22, item (2) of the list is DONE - CMP-14 is built as planning step 196 (committed locally as `ac80dfa`, not pushed at this note) and verified by an
+independent verifier in its first round; its row is ticked above with the numbers and the three things it did not meet as worded (G1's mean-Y clause on the 2-18 floor,
+S9, and a literal wording of S-HR). **What is left of the list, in the order to take it - a recommendation, not a decision; the owner has so far allowed one step per
+restart, so nothing below starts on the strength of this note:** (1) **CMP-18 LAST and measurement first** (CMP18-1), unchanged: the 12 s rig clip of 2-29 idle and the
+held-friction experiment need no relink; the fix moves 2-29's route, which is re-flown from its START. (2) CMP-low (d): nothing to build. (3) The rig checks, the owner's
+calls (**CMP-8 first**; CMP20-1; **the arches' lightmap tier, CMP14-1**, which the step stopped on), CTL-13 (it WAITS for the owner: `default_mode` is still `"classic"`)
+and the ship preparation, unchanged. (4) The rows the step opened, none urgent: CMP14-2 (static sprites with no lightmap file), CMP14-3 (the run-time torch bake, a rig
+clip first), CMP14-4 (the residuals) and CMP14-5 (known imprecisions, which ride the next step that touches the files).
+**The sweep a step is measured against is now `CMP14/after/sweep`** (128 PNG, `MagicPortals.exe` `5e0c8108`, listed in `out/parity/BASELINE.txt`); it differs from
+`CMP19/after/sweep` on exactly the 67 levels that carry `eth_lightmap`, every changed pixel inside the lightmapped sprites' rectangles, and `CMP19/after/sweep` stays
+listed as the pre-CMP-14 reference (`CMP20/after/sweep` as the pre-CMP-19 one, `WALL/after/sweep` as the pre-CMP-20 one). **The 19 CTL baselines are no longer all
+md5-equal on the new build:** 10 captures (A1, A1a, A7, A8, K7 = M1, M2, M3, M4, M5) are, and 9 differ on purpose (K1, A1b, A2, A4, A6, A9a and A9b = 1-01 at other ticks
+and windows, A3 = 1-31, A5 = 2-10), each on a lightmapped level; the nine new captures are listed in `BASELINE.txt` under `program/CMP14/verify1/baselines/`, and a later
+step compares those nine against them and the other ten against `CTL/baseline`.*
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -4545,7 +4564,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       0.25-0.47 in the port (never under 0.24, channels to 253, about 1.5x brighter); 1-02's lower-left portal bluer in the port (127/105/179 against 131/108/160); 3-03 a
       thicker cyan ring and a dark spoked iris against a thinner, brighter ring (low). Cause as recorded: the ring particles are brighter over their life (1.62x on 1-01's
       582); tint, 0.8 scale, inline systems and the AM_ADD blend are ruled out.*
-- [ ] **CMP-14. Lit stone reads softer than the original on lightmapped levels** (medium; light; `unknown`; moves no route). Levels judged: 2-17 (box 100,630,1180,715),
+- [x] **CMP-14. Lit stone reads softer than the original on lightmapped levels** (medium; light; `unknown`; moves no route). Levels judged: 2-17 (box 100,630,1180,715),
       2-18 (box 180,630,1080,715), 2-19 (box 910,95,985,260); 67 levels carry `eth_lightmap`, 2-16 has one and was not tested. Evidence: the original shows crisp
       relief, cracks and bright grit on floors and cracked pillars, the port smoothed stones; the Laplacian s.d. of the cracked `breakable_wall` is 17.2-17.8 against
       12.4-12.6 on 2-17 to 2-19, but 11.9 against 11.8 on 2-21 and 2-24, which have no lightmap. Cause: unexplained; untested candidates are a lightmap (a quarter of
@@ -4622,6 +4641,40 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       vertical sprites' shading may differ from the live per-pixel term beyond the lattice (the first suspect if an engine render misses G1 / G2); the ETC1 / PVRTC
       siblings of the shipped PNGs. Evidence: `out/parity/program/MEAS/CMP-14/` (`result.txt`, `result.json`, `decide/`, scripts; 15 frames and crops listed in
       `out/parity/BASELINE.txt`).*
+      *FIXED by step 196 (CMP-14, wave 4d-2's third step), 2026-10-22; COMMITTED LOCALLY as `ac80dfa` (titled "Magic Portals: a static lit sprite's lightmap is baked in
+      memory at level load at one texel per bitmap unit, as the original does at a screen of 480 px or more, in place of the shipped half-resolution add<id>.png"), NOT
+      PUSHED at this note: the audit and the push are the owner's assistant's. GAMEPLAY: none (no number a tick reads; `test_mp_routes` 2,365, 128 of 128 won, every route
+      on the same tick, the five census variants identical). Classic PICTURES change on purpose, in one place only: the screen rectangles of the 730 lightmapped sprites
+      of the 67 levels; the third step since CTL-1 that does.
+      **Built:** sub-step 0 decided that the engine has no game-callable render-to-texture with readback, so the bake runs on the CPU in the port
+      (`game/sim/LightmapBake.{hpp,cpp}`, the arithmetic of the engine's tested twin of the light shader, `Light2D.hpp`): no engine change, no pin bump (`engine` stays at
+      `5781518`). `game/data/lighting.json` gains a `lightmap_bake` block (`units_per_texel` 1, the 5/6/5 target with a `nearest` rounding marked `_guess`, the fixed 2:1
+      reduction taps, each with its `_source`); `Lighting::Read` keeps `eth_lightmap` as a marker and no longer reads the file, checks the "twice the lightmap is its
+      sprite" size or requires the file to exist; the layer bakes each marked sprite where it used to copy the file's path, registers it in the texture registry under a
+      key that names no file (`mp-bake:` + the path), hands it back with the level and reuses it on a retry. **The calibration, before any of it:** two independent
+      calibrators and a judge found that the shipped files are NOT a render at 2 units per texel but the original's unit bake reduced 2:1 by a Catmull-Rom filter (Keys a
+      = -0.5) and stored as 8-bit, so the step's G0 self-check (`units_per_texel` 2 and the target at 8/8/8, relaunch with no relink, the file restored byte for byte)
+      reproduces the shipped files' frame within the judge's bounds.
+      **Verified by an independent verifier, round 1, top-level pass, on `MagicPortals.exe` `5e0c8108` and `test_mp.exe` `267b8fcb`:** G0 MET (outside the lightmapped
+      rectangles dilated by 3 px 0 px differ on all five judged levels; pooled mean-of-3 0.718 against 0.85, the tightest level 2-19 at 0.532 against 0.55; the same
+      scorer reads 2.312 on the real pitch-1 frames, so it can fail); G1 Laplacian new / original 0.976-0.998 on the seven boxes (today 0.693-0.846), controls unchanged
+      to the digit; **G1's mean-Y clause NOT MET on the 2-18 floor, +1.59 percent of today's against 1.5 (the calibration predicted +2.0 on a correct bake; nothing was
+      tuned)**; G2 high-pass 0.976-0.987 (today 0.533-0.823); G3 pixel correlation 11 of 11, mean 0.988 (today 0.712; the same G3 on the G0 pitch-2 frames of the same exe
+      reads 0.628-0.800, so the gate bites); G4 the lattice 9 of 9 ratio tests and 4 of 4 signature tests (at 1/2.8125 cycles per px x10.2-x22.7 where the original is
+      x10.1-x20.1, at 1/5.625 x0.0-0.2 against today's x7.3-x11.7); G5 the 64-level census median 0.977 (today 0.894), p10 0.922 (0.776), minimum 0.884 on 3-20 (0.670), 0
+      levels under 0.85 (15), 3 under 0.90 (33), high-pass median 0.979 (0.826); G6 dose-response 0.969 / 0.976 and 0.942 / 0.972 in the two top bins, 0.987 / 0.989 where
+      the lightmap adds under 2; G7 the 67 levels' logs carry no `Loaded .../add<id>.png` and no `drawn unlit`, and 67 `baked N lightmap(s)` lines whose N sum to 730 (all
+      730 bake). **The f420 sweep of 128 levels against `CMP19/after/sweep`: 67 changed, exactly E1** (the levels with an `eth_lightmap` line, 24 + 10 + 32 + 1 by
+      chapter, asserted equal to E2, the levels with a static light owner), **61 md5-equal**, 0 changed pixels outside the lightmapped sprites' rectangles dilated by 3 px
+      (a test that can fail on 22 of the 67), 2-20, 2-21, 2-22 and 2-24 byte-equal, 1-02 and 1-03 change even popup-up; the verifier's 128 frames are md5-identical to the
+      implementer's (two independent launch series). The 4-22 `--tap` control is byte-equal before and after BY CONSTRUCTION (none of the ten torch levels carries a
+      lightmap). The bake and upload cost 9.6-59.3 ms per level load (median 35.3; 13,908,992 texels over 730 sprites, at most 21 in a level); a device walk of
+      `--visit-levels lightmapped` made 134 visits and 1,460 lightmap sets with 0 failures. Tests: new `test_mp_lightmap_bake` 194 (synthetic), `test_mp_lighting` 652
+      (604), `test_mp_layer` 12,491 (12,449); a full run 65 suites, 85,217 checks (84,933 + 194 + 48 + 42), none skipped.
+      **Not met as worded, and written so in the step:** G1's mean-Y clause (above); S9 (2 launching builds, 1 Smart App Control refusal of the first `MagicPortals.exe`,
+      relinked once); and the literal "a test never reads `out/` art" for the three `test_mp_layer` lifecycle cases (they load converted levels in place; the bake suite
+      reads nothing). **The implementer stopped on one question for the owner, the arches' tier (CMP14-1 below), and the verifier passed the step with it open.** **What
+      it leaves:** CMP14-1 to CMP14-5 below. **The sweep a step is measured against is now `CMP14/after/sweep`** (see the wave-4d-2 note of 2026-10-22).*
 - [x] **CMP-15. A rider drifts off a bobbing slab: the astronaut on 4-02's bounce slab floats away at the slab's peak speed** (medium; structural; `decoded` but NOT
       RUN; MOVES A ROUTE). Evidence: 4-02 box 350,330,450,520 (`pairs/4-02_h63_pair.png` and `_overlay.png`: the astronaut doubled, the port's about 17 px higher): the
       original's eye stays at y 380 +-0.5 in all six stills while the slab bobs 475-481 under him; the port's drifts up 3.2 px/s (383.1 at f75, 364.3 at f420) = the
@@ -5103,6 +5156,79 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       `halo_brightness_scale._source` ("what every halo's formula colour ... is multiplied by") is untrue for the fireball's halo now (data text: a new md5 for a file this step
       kept byte-equal to HEAD as a gate, and no number changes). Next: fix with the next edit to any of the files - (a) to (c) ride a step that relinks, (d) needs none; no gate of its
       own.
+
+**CMP-14's rows** (planning step 196; what the step found or left, each open; the step's other leftovers are in its LEFT FOR LATER).
+- [ ] **CMP14-1. The arches' lightmap is baked from the fullhd art and reads about 5 percent darker than the shipped files; the original's stills do not settle whether it
+      should** (low-medium; light; `owner-call`; GAMEPLAY: none). The step stopped on this and the verifier passed it with the question open. The arch's lightmap is baked
+      from the arch's fullhd file, the rig's tier (the source's reading; the judge's R14), which is 5.4 percent darker than the 1x art the shipped `add<id>.png` were
+      baked from (both calibrators found the shipped arch files fit the 1x art); the new frame is a median 0.951 of today's over 37 arches' lightmap footprints (min
+      0.910, max 0.987), the offline model's term ratio a median 0.952. The judge's own check (calibration 6.2: "if the arch box moves AWAY from the original by more than
+      6 percent of its lightmap term, stop and report; do not bake the 1x art to match the files") sits AT its line, and the two readings disagree. **The implementer's
+      mask (the pixels the lightmap changed, which selects on the outcome):** the movement away from the original, |new - original| - |today - original|, is a mean +1.12
+      grey levels against 6 percent of the arches' own term, mean 1.09, over it on 20 of 37 arches; the stills are mixed (3 arches where today overshot: new nearer 3 of
+      3; 21 within 1.5 of the original: new 1.56 low; 13 already far below because of the halos' residual, CMP-8 and CMP-19: new further). **The verifier's mask (the lit
+      texels of the shipped files, an input):** per-pixel error -0.90 grey (toward the original; 0 of 37 arches over their own 6 percent; mean absolute error 6.181 ->
+      5.278, nearer on 32 of 37), but the mean brightness offset is +1.62 against 1.29 (over the line by 25 percent: the new frame is darker than the original by more
+      than today's was), and the regression slope of (original - today) on (new - today) is 0.652 on the arches against 0.980 on 41 stone and bar sprites (the change
+      overshoots the original's gap by about 1.5 times). The whole-rectangle reading (+0.63 grey) is diluted by the unlit share (the lightmap changed 3,186,790 of
+      12,213,592 px) and is not evidence about the line. **Decide:** keep the fullhd bake (the source's reading; the recommendation taken), or bake the arches from the 1x
+      art (a deliberate departure from the source: one more key in `lightmap_bake`). To look: the same filename in `out/parity/program/CMP19/after/sweep` (before) and
+      `out/parity/program/CMP14/after/sweep` (after), with the original's `out/parity/original/levels/<L>_h6.3.png` - 1-01 (`1-01_level0_f420.png`), 1-06
+      (`1-06_level5_f420.png`), 1-08 (`1-08_level7_f420.png`), 1-16 (`1-16_level15_f420.png`), the arches that moved most (-3.4 to -4.8 grey at the footprint). Evidence:
+      `out/parity/program/CMP14/impl/arch_check.txt`, `arch_join.txt`, `arch_model.py`, `verify1/arch2_v1.txt` (text; the frames are in the sweeps).
+- [ ] **CMP14-2. 148 static `applyLight` sprites in the 67 lightmapped levels carry no `eth_lightmap`; the original bakes every one of them, the port draws them at the
+      ambient alone** (low; light; `unknown`; GAMEPLAY: none). The step's LEFT FOR LATER calls it CMP-14b. Census (`out/parity/program/CMP14/pre/census.md` section 5,
+      `census.json` -> `finding_d`): the original bakes EVERY static `applyLight` sprite at a 720 px screen (`ETHScene.cpp:336-415`, no filter on a file or an id); the
+      port has files only for the 730 and `Lighting::ReceiverMask` gives a static sprite the live lights only, so a static light reaches none of the 148. 87 lie out of
+      every light's range (their bake would be black: no change). **61 sprites in 39 levels lie inside some static light's 3D range** (25 / 7 / 28 / 1 by chapter, in 17 /
+      5 / 16 / 1 levels; nearest-point attenuation >= 0.05 on 49 and >= 0.25 on 14; the flat-normal drive estimate median 0.004, max 0.115 of full scale): 1-01 (1), 1-04
+      (1), 1-06 (2), 1-08 (3), 1-09 (2), 1-10 (2), 1-11 (1), 1-12 (2), 1-16 (1), 1-17 (2), 1-18 (2), 1-19 (1), 1-28 (1), 1-29 (1), 1-30 (1), 1-31 (1), 1-32 (1); 2-11 (1),
+      2-18 (2), 2-27 (1), 2-30 (2), 2-31 (1); 3-01 (2), 3-03 (2), 3-05 (4), 3-06 (1), 3-09 (2), 3-10 (2), 3-14 (1), 3-15 (3), 3-16 (1), 3-19 (2), 3-21 (1), 3-22 (1), 3-27
+      (1), 3-28 (1), 3-29 (2), 3-30 (2); 4-28 (1). **No brightening is detected on them in the original's stills:** the mean luminance inside the sprite's rectangle,
+      original minus the port's CMP19 f420 frame, reads a median +0.78 (mean +0.84; 34 measurable) on the reached sprites against +0.92 (mean +0.50; 32) on out-of-range
+      controls and +0.86 (388) on lightmapped sprites, and the same method reads a bake-sized term at +11.0 on the five levels that keep a no-lightmap frame; a term of a
+      few grey levels would show, smaller ones are not resolved. Next: if ever wanted, this step's bake over the sprites the shipped files never covered, behind one scope
+      key (step 196 is scoped to the nodes that carry `eth_lightmap`), no new engine need; gate: the reached sprites' rectangles against the originals and byte-equal
+      outside them. Not worth a step until a still shows it.
+- [ ] **CMP14-3. The run-time torch bake: the original regenerates the lightmaps when a torch is lit or put out, the port draws that light per pixel** (low; light;
+      `unknown`; GAMEPLAY: none). The listing's `ETHCallback_light_off` and `ETHCallback_fire_signal` call `GenerateLightmaps`, so on a torch level the original re-bakes
+      the static lit sprites' lightmaps at run time, at the same unit lattice; the port keeps `Lighting::RuntimeBake` (`torch.json`), which evaluates the light per pixel
+      and carries no lattice. Step 196 left it alone on purpose and it is byte-equal (the 4-22 `--tap 692,113@60` captures at f100 and f240, md5 `4c8cd903` and
+      `85f6dac1`, equal the old exe's); **that holds by construction**, because none of the ten levels with a torch, a light wall or a fire signal (4-22 to 4-27 and 4-29
+      to 4-32, `level21c` to `level26c` and `level28c` to `level31c`) carries an `eth_lightmap`, so the control shows only that the shared draw code did not move. Not
+      measured: no original frame of a lit torch level exists, so nothing says whether the difference of grain is visible there. Next: a rig clip of a lit torch level
+      first (4-22 after the torch is lit); only then a step, calling this step's bake module over the level's static lights behind the same lifecycle. The two `--tap`
+      PNGs of the OLD exe (`8f59fba7`) are kept in `out/parity/BASELINE.txt` (`program/CMP14/impl/pre/`), because that exe is gone.
+- [ ] **CMP14-4. What the bake still is not: the residuals the judge named, and one gate clause** (low; light; `measured`; GAMEPLAY: none). Not defects of the step; the
+      numbers a later look needs. (a) The model is the files to the calibration's bounds, not exactly, and four classes do not match: `torch_small` (24 sprites, 19 with
+      the pivot) mean absolute error 5.118 levels, 73.8 percent within one 5/6/5 level, the bake reads 8 percent above the files (sum ratio 1.078), unexplained for any
+      alpha power or shift; `metal_door` and `breakable_wall_sand` (31) 1.703 / 93.7; the single `crate` 2.20; the stones (331) 1.136 / 97.6 with a +3 percent excess (sum
+      ratio 1.032, the border rows not fitted); plus the form differences on `pilar`, the torch, `gutter_mouth` and `carranca` (the product's GLSL against the files' Cg,
+      3 to 12 percent) and the named exception 2-18 `add1075` (about 12 percent below the files, bias -0.23). (b) **G1's mean-Y clause is NOT MET on the 2-18 floor**
+      (+1.59 percent of today's against +-1.5): the stones' excess, predicted by the calibration (+2.0), not tuned; the new boxes still sit 1.6 to 2.3 percent BELOW the
+      original's means, so the move is toward it. (c) The overlay's 8-bit expansion flips a final 5/6/5 step on about 3 percent of R and B values and 6 percent of G
+      values against the original's float; an engine float upload would remove it (an engine-repository change, not made). (d) The rounding rule of the target's store
+      stays `nearest`, a `_guess` (nothing in the source says how the float-to-fixed store rounds); the measured Laplacian (0.976-0.998) lies inside the offline model's
+      bracket (0.80-1.05), which could not say where. (e) What G0 does NOT reach: the pivot (no torch among the five judged levels), two lights (1-02 is popup-covered at
+      f420), the arch tier, `pilar`, `torch_small`, the 5/6/5 rounding and the unit lattice; those rest on the closed-form tests, G5 and G6. (f) The 0.23 px sub-pixel
+      phase of the lattice on scrolled levels (2-17, 2-11) is a camera difference and was not tuned. (g) The lattice test (G4) is chapter 2's floors; chapters 1, 3 and 4
+      are carried by the census (0.884 to 1.0), not by a lattice test. Source: `out/parity/program/CMP14/pre/calibration.md` sections 5, 6, 7 and 9.
+- [ ] **CMP14-5. Step 196's known imprecisions, recorded and not fixed** (low; step 196's KNOWN IMPRECISIONS; GAMEPLAY: none). Left on purpose, because an edit to a
+      compiled file after the verified build leaves the exes older than the sources, changes the Step's md5 rows and needs a relink (a Smart App Control launch), the
+      reason step 195 left CMP19-1: (a) the calibration's R15 and R16 "loud" handling is not implemented (a static caster found at load is not recorded, a vertical
+      receiver is not refused by name): the converted levels carry neither and the converter drops `castShadows` (`tools/converter/src/ethanon2godot/entity.py:135`), so
+      no runtime guard is possible without a converter key, and the census says 0 of 190 `.ent` and 0 of 4,072 instances carry `castShadow="1"`; (b) `LightmapBake::Rules`
+      carries the data as code defaults (`LightmapBake.hpp:52-62`), so `TheShippedPitchIsTheUnitBakeReducedByTheFixedTaps` (`test_mp_lightmap_bake.cpp:883`) tests the
+      code's copy of the taps, not the file's; (c) a wrong comment at `game/sim/LightmapBake.cpp:35-36` (for two texels a unit s = 2k + 1/2, floor(s) = 2k, f = 1/2, taps
+      (2k, 2k + 1); the code is right); (d) pins weaker than they read: `Lighting::BakeReceiver` maps `scale` and `colour` but the composed test sets 1 and white
+      (`test_mp_lightmap_bake.cpp:507-513`), `ABakeIsTheSameBytesEveryTime` (`:917`) calls a pure function twice and cannot fail, the hidden-strip assertion
+      (`test_mp_layer.cpp:11900-11908`) cannot be shown to bite from the text, and the shipped `TextureRegistrySink` has no unit test (the device walk is its whole
+      proof); (e) the failed-bake WARN `lightmap not baked: <node>: <why>` (`MagicPortalsLayer.cpp:5804`) is pinned by no test, and the sprite then draws at the ambient
+      alone; (f) `TextureRegistry::Invalidate` prints "the next request will re-read it from disk" for each baked key (engine-side; no re-read happens); (g) a stale
+      comment at `game/MagicPortalsLayer.cpp:8148-8155` still calls a static sprite's lightmap "the baked add<id>.png"; (h) the three `test_mp_layer` lifecycle cases read
+      converted levels in place (a synthetic scratch level would need a spawn, bounds and an exit); (i) the converter still copies the 730 `add<id>.png` that nothing
+      reads (`tools/converter`), and `TextureRegistry::KeyFor` (the layer composes `"data:"` or `"srgb:"` + the key by `UploadRGBA`'s documented convention in one
+      function, `RegistryKeyOf`) is an engine-repository change for a later step. Next: fix with the next edit to any of the files; no gate of its own.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -6301,3 +6427,8 @@ crate** (CMP-16), **4-02's astronaut standing on his slab** (CMP-15), **2-31's s
 and 4-31 a few units off** (CMP-2), and **stones that must be fast to break a wall and die with the first one**: 1-19, 1-20, 1-22, 2-29, 3-10, 3-12 (drop the stone on the slab from above), 3-14
 (the crate on both buttons), 4-21 (the stone lifted into the wall from under it) and the thrown stones of 1-24 and 1-25; the grant in `docs/permission.md`, still its placeholder; and the
 repository's going public, which needs his explicit word.
+*Added by step 196 (CMP-14)*: the arches' lightmap tier (CMP14-1). The arches are baked from the fullhd art, as the source reads, and read about 5 percent darker than the
+shipped files; the original's stills do not settle whether that is right (the per-pixel error moves toward the original, the brightness offset away from it). Keep it, or
+bake the arches from the 1x art (a deliberate departure from the source, one more key). To look: the same filename in `out/parity/program/CMP19/after/sweep` and
+`out/parity/program/CMP14/after/sweep` for 1-01, 1-06, 1-08 and 1-16 (e.g. `1-01_level0_f420.png`), beside `out/parity/original/levels/1-01_h6.3.png`; the grant in
+`docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
