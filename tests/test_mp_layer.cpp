@@ -11766,6 +11766,230 @@ std::vector<std::string> SortedOverlayPaths(const std::vector<Overlaid>& overlay
     return out;
 }
 
+// ---- the baked lightmaps' LIFECYCLE (CMP-14, planning step 196) ---------------------------
+//
+// A lightmap is no longer a file the renderer loads: the layer bakes it when its level loads (sim/LightmapBake) and hands
+// the pixels to a sink, which holds them under the key the sprite names as its overlay (MagicPortalsLayer::LightmapSink;
+// the shipped sink is the engine's texture registry, which no suite can construct). These cases publish a recording sink
+// in the registry's context and watch the lifecycle the file overlay had and the bug it once had: registered ONCE per
+// level and node, kept by a retry, given back when the level goes, never leaked into the next level or the grid, and a key
+// never named by a sprite or a hidden strip once it has been given back (the level walk's 259 failures on step 165's first
+// build were exactly that: a hidden edge strip still named a dropped lightmap and the next level drew the last one's).
+//
+// They run on the converted levels, read in place as every case of this suite does and never committed (the bake's own
+// MATH is pinned on synthetic art in test_mp_lightmap_bake); the device proof is `MagicPortals.exe --visit-levels
+// lightmapped`, which holds the real registry to the same lifecycle.
+
+class RecordingSink final : public MagicPortalsLayer::LightmapSink {
+public:
+    std::map<std::string, MagicPortals::LightmapBake::Baked> live;
+    std::vector<std::string> taken;
+    std::vector<std::string> given;
+    // The first `refuseFirst` takes are refused, as a full pool or a failed upload would be.
+    int refuseFirst = 0;
+    int doubleTakes = 0;
+    int unknownGives = 0;
+
+    bool Take(entt::registry&, const std::string& key, const MagicPortals::LightmapBake::Baked& baked) override {
+        taken.push_back(key);
+        if (refuseFirst > 0) {
+            --refuseFirst;
+            return false;
+        }
+        if (!live.emplace(key, baked).second) ++doubleTakes;
+        return true;
+    }
+
+    void Give(entt::registry&, const std::string& key) override {
+        given.push_back(key);
+        if (live.erase(key) != 1) ++unknownGives;
+    }
+
+    std::vector<std::string> LiveKeys() const {
+        std::vector<std::string> keys;
+        for (const auto& [key, baked] : live) keys.push_back(key);
+        return keys;   // a std::map: sorted
+    }
+};
+
+// Every overlay path any material in the registry names, strips and all.
+std::set<std::string> EveryOverlayNamed(entt::registry& registry) {
+    std::set<std::string> out;
+    for (auto [entity, material] : registry.view<MaterialComponent>().each()) {
+        (void)entity;
+        if (!material.overlayTexturePath.empty()) out.insert(material.overlayTexturePath);
+    }
+    return out;
+}
+
+void TheBakedLightmapsAreHeldOnceKeptByARetryAndGivenBackWithTheirLevel() {
+    // The key is the one function the registry composes its cache key with.
+    CHECK_MSG(MagicPortalsLayer::RegistryKeyOf("mp-bake:x", false) == "data:mp-bake:x" &&
+                  MagicPortalsLayer::RegistryKeyOf("mp-bake:x", true) == "srgb:mp-bake:x",
+              "the texture registry's own composition: srgb: or data: ahead of the key");
+
+    entt::registry registry;
+    publishViewport(registry);
+    RecordingSink sink;
+    registry.ctx().emplace<MagicPortalsLayer::LightmapSink*>(&sink);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty() && layer.LightingError().empty(),
+              layer.LoadError() + layer.ArtError() + layer.LightingError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || !layer.LightingError().empty()) return;
+
+    // L1: registered ONCE, nine of them, each its sprite's own and as big as its sprite in units.
+    CHECK_MSG(sink.taken.size() == 9 && sink.live.size() == 9 && sink.doubleTakes == 0 && sink.given.empty(),
+              "level0's nine taken once each: " + std::to_string(sink.taken.size()));
+    std::vector<std::string> takenSorted = sink.taken;
+    std::sort(takenSorted.begin(), takenSorted.end());
+    CHECK_MSG(takenSorted == layer.HeldLightmaps() && sink.LiveKeys() == layer.HeldLightmaps(),
+              "the keys taken are the keys held, the keys the sprites name");
+    CHECK_MSG(std::all_of(takenSorted.begin(), takenSorted.end(),
+                          [](const std::string& k) {
+                              return k.starts_with(MagicPortals::LightmapBake::kKeyPrefix) &&
+                                     k.find("/assets/lightmaps/level0/add") != std::string::npos;
+                          }),
+              "each a virtual path in level0's own directory: it names no file the renderer could fall back to");
+    std::map<std::pair<int, int>, int> sizes;
+    int blank = 0;
+    int unopaque = 0;
+    for (const auto& [key, baked] : sink.live) {
+        ++sizes[{baked.width, baked.height}];
+        bool lit = false;
+        for (std::size_t i = 0; i + 3 < baked.rgba.size(); i += 4) {
+            lit = lit || baked.rgba[i] != 0 || baked.rgba[i + 1] != 0 || baked.rgba[i + 2] != 0;
+            if (baked.rgba[i + 3] != 255) ++unopaque;
+        }
+        if (!lit) ++blank;
+        CHECK_MSG(baked.rgba.size() == static_cast<std::size_t>(baked.width) * static_cast<std::size_t>(baked.height) * 4u,
+                  key + ": width x height x 4 bytes");
+    }
+    CHECK_MSG(blank == 0 && unopaque == 0, "all nine lit by level0's torch, and opaque: " + std::to_string(blank));
+    // At one texel per UNIT: arch, arch and wall_w3 256 x 256; two platforms 256 x 32; the wall04 64 x 256; the double block
+    // 128 x 32; the moving platform 64 x 32; the torch 32 x 64 - twice the shipped files' 128 x 128 and so on.
+    const std::map<std::pair<int, int>, int> want{{{256, 256}, 3}, {{256, 32}, 2}, {{64, 256}, 1}, {{128, 32}, 1}, {{64, 32}, 1}, {{32, 64}, 1}};
+    CHECK_MSG(sizes == want, "one texel per bitmap unit, not two units a texel");
+    CHECK_MSG(SortedOverlayPaths(OverlaysOf(registry)) == layer.HeldLightmaps(),
+              "and each is the overlay of its sprite, under the key it was taken by");
+    const std::vector<std::string> held = layer.HeldLightmaps();
+    const std::map<std::string, MagicPortals::LightmapBake::Baked> firstBakes = sink.live;
+
+    // A retry draws the same level again, so it keeps them: nothing taken again, nothing given back.
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(sink.taken.size() == 9 && sink.given.empty() && sink.live.size() == 9,
+              "a retry makes no bake and gives none back: " + std::to_string(sink.taken.size()));
+    CHECK_MSG(layer.HeldLightmaps() == held && layer.LightmapsHandedBack() == 0 &&
+                  SortedOverlayPaths(OverlaysOf(registry)) == held,
+              "and draws the same nine");
+
+    // The next level gives them back and holds its own: no leak across levels.
+    press(layer, registry, MagicPortalsLayer::kSkip);
+    CHECK(IsAt(layer, "level1"));
+    CHECK_MSG(sink.given.size() == 9 && layer.LightmapsHandedBack() == 9 && sink.unknownGives == 0,
+              "level0's nine given back, once each, on the way: " + std::to_string(sink.given.size()));
+    std::vector<std::string> givenSorted = sink.given;
+    std::sort(givenSorted.begin(), givenSorted.end());
+    CHECK_MSG(givenSorted == held, "exactly the nine it held");
+    CHECK_MSG(sink.taken.size() == 18 && sink.live.size() == 9 && sink.doubleTakes == 0, "level1's nine taken: " + std::to_string(sink.taken.size()));
+    CHECK_MSG(sink.LiveKeys() == layer.HeldLightmaps() &&
+                  std::all_of(sink.live.begin(), sink.live.end(),
+                              [](const auto& kv) { return kv.first.find("/assets/lightmaps/level1/add") != std::string::npos; }),
+              "the live set is level1's and none of level0's");
+    CHECK_MSG(SortedOverlayPaths(OverlaysOf(registry)) == layer.HeldLightmaps(), "and level1 draws its own");
+    // THE HIDDEN-STRIP BUG: no material in the registry, an edge strip's among them, names a lightmap that is not live.
+    {
+        const std::set<std::string> named = EveryOverlayNamed(registry);
+        const std::vector<std::string> keys = sink.LiveKeys();
+        const bool onlyLive = std::all_of(named.begin(), named.end(), [&](const std::string& n) {
+            return std::binary_search(keys.begin(), keys.end(), n);
+        });
+        CHECK_MSG(onlyLive, "no material names a lightmap that was given back");
+    }
+
+    // Out to the grid: nothing held, nothing live, nothing named.
+    CHECK(OutToTheGrid(layer, registry));
+    CHECK_MSG(layer.HeldLightmaps().empty() && sink.live.empty() && sink.given.size() == 18 &&
+                  layer.LightmapsHandedBack() == 18 && sink.unknownGives == 0,
+              "the grid holds none: " + std::to_string(sink.live.size()));
+    CHECK_MSG(EveryOverlayNamed(registry).empty(), "and no material names one");
+    layer.OnDetach(registry);
+    CHECK(sink.live.empty());
+
+    // L4: a second layer on its own registry, detached at once, gives back everything it took; and it bakes the same bytes
+    // (the same input, the same texels: nothing in a bake reads a clock, a thread or the order of an earlier level).
+    {
+        entt::registry other;
+        publishViewport(other);
+        RecordingSink again;
+        other.ctx().emplace<MagicPortalsLayer::LightmapSink*>(&again);
+        MagicPortalsLayer second(TestPaths(), "level0");
+        second.OnAttach(other);
+        CHECK(again.live.size() == 9);
+        bool same = again.live.size() == firstBakes.size();
+        for (const auto& [key, baked] : again.live) {
+            const auto before = firstBakes.find(key);
+            same = same && before != firstBakes.end() && before->second.rgba == baked.rgba;
+        }
+        CHECK_MSG(same, "two layers bake level0 to the same bytes");
+        second.OnDetach(other);
+        CHECK_MSG(again.live.empty() && again.given.size() == 9, "and detaching gives them all back");
+    }
+}
+
+// A sink that refuses a take (a full pool, a failed upload) leaves the sprite drawing no lightmap, says so and carries on; the
+// next try - a retry - makes the bake again, for it was never taken. FAILS UNDER: a layer that holds the key of a bake that
+// failed, or one that remembers it as taken.
+void ARefusedBakeIsNeitherHeldNorForgottenAndARetryTriesAgain() {
+    entt::registry registry;
+    publishViewport(registry);
+    RecordingSink sink;
+    sink.refuseFirst = 1;
+    registry.ctx().emplace<MagicPortalsLayer::LightmapSink*>(&sink);
+    MagicPortalsLayer layer(TestPaths(), "level0");
+    layer.OnAttach(registry);
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty() || !layer.LightingError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError() + layer.LightingError());
+        return;
+    }
+    CHECK_MSG(sink.taken.size() == 9 && sink.live.size() == 8 && layer.HeldLightmaps().size() == 8,
+              "nine offered, eight taken, eight held: " + std::to_string(sink.live.size()));
+    CHECK_MSG(SortedOverlayPaths(OverlaysOf(registry)) == layer.HeldLightmaps() && sink.LiveKeys() == layer.HeldLightmaps(),
+              "the refused sprite names no lightmap, and the rest are fine");
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(sink.taken.size() == 10 && sink.live.size() == 9 && layer.HeldLightmaps().size() == 9,
+              "a retry offers only the one that was refused, and it is taken now: " + std::to_string(sink.taken.size()));
+    CHECK_MSG(sink.given.empty() && sink.doubleTakes == 0, "the eight it held it kept");
+    layer.OnDetach(registry);
+    CHECK(sink.live.empty() && sink.given.size() == 9);
+}
+
+// A level that places no lightmap bakes nothing, whatever the sink; and one that is drawn with no sink at all names the keys
+// all the same (every suite but these runs so). FAILS UNDER: a bake for an unmarked sprite, or a held list that waits for a sink.
+void ALevelWithNoLightmapBakesNothingAndNoSinkBakesNothing() {
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        RecordingSink sink;
+        registry.ctx().emplace<MagicPortalsLayer::LightmapSink*>(&sink);
+        MagicPortalsLayer layer(TestPaths(), "level4a");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        CHECK_MSG(sink.taken.empty() && sink.live.empty() && layer.HeldLightmaps().empty() && OverlaysOf(registry).empty(),
+                  "2-05 names no lightmap: nothing baked");
+        layer.OnDetach(registry);
+    }
+    {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), "level0");
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.HeldLightmaps().size() == 9 && SortedOverlayPaths(OverlaysOf(registry)) == layer.HeldLightmaps(),
+                  "no sink: the nine keys are named and held, nothing is baked");
+        layer.OnDetach(registry);
+    }
+}
+
 // ---- 3.3: the placed pictures' own callbacks (motions.json `placed`) -----------------
 //
 // ETHCallback_hand_drawn_arrow sways the hint arrow along its own angle by its node's
@@ -34175,6 +34399,9 @@ void runTests() {
     AnArrowAndAHandSwayAlongTheirOwnAngles();
     ADashedCircleBobsAndTurns();
     LightmapsAreDrawnOverTheirSprites();
+    TheBakedLightmapsAreHeldOnceKeptByARetryAndGivenBackWithTheirLevel();
+    ARefusedBakeIsNeitherHeldNorForgottenAndARetryTriesAgain();
+    ALevelWithNoLightmapBakesNothingAndNoSinkBakesNothing();
     TheTorchIsALightAndAHalo();
     AScaledPlacementsLightIsNotScaledAgain();
     AShotCarriesItsOwnLight();

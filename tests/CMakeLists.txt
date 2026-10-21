@@ -208,6 +208,11 @@ add_mp_test(test_mp_sprites)
 # it writes and runs anywhere; only the part that reads the converted levels is
 # skipped without them, and never with 77.
 add_mp_test(test_mp_lighting)
+# The lightmap of a static lit sprite, baked at one texel per bitmap unit as the original bakes it at a screen of
+# 480 px or more (planning step 196, CMP-14; sim/LightmapBake). Entirely synthetic: its sprites, maps and lights are
+# its own, its goldens are an independent offline model's bytes, and it reads nothing under out/ or reference/, so it
+# never skips.
+add_mp_test(test_mp_lightmap_bake)
 # The sky the original pins to the camera: sky.json and sim/Sky's arithmetic, pure,
 # and a census of what the converted levels place, which is skipped without them
 # and never with 77.

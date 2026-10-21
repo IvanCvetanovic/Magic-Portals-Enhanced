@@ -376,9 +376,53 @@ not exist in the APK.)
 `ETHLightmapGen` makes the render target `sprite->GetBitmapSizeF()` (or the cut's rect) (`ETHLightmapGen.cpp:57`)
 and sets the entity's scale to 1 for the bake, dividing each light's position and range by it (`:117-120`); the
 engine then draws the lightmap over the scaled picture. So an entity's `<Scale>` never changes its lightmap's
-size, and the port checks `eth_lightmap` against its sprite's whole units BEFORE the Sprite2D's `scale`
-(`game/sim/Lighting.cpp`, 00_order K9). No shipped placement has both (the 33 with a `<Scale>` carry no
-lightmap); a hand-made one is pinned in the port's `test_mp_lighting` and `test_mp_layer`.
+size, and the port bakes it at its sprite's whole units BEFORE the Sprite2D's `scale`
+(`game/sim/LightmapBake.cpp`, `Lighting::BakeReceiver`, 00_order K9; until planning step 196 it checked the shipped file
+against them). No shipped placement has both (the 33 with a `<Scale>` carry no lightmap); a hand-made one is pinned in
+the port's `test_mp_lighting`, `test_mp_lightmap_bake` and `test_mp_layer`.
+
+**At a screen of 480 px or more the original does not read the shipped `add<id>.png` at all: it BAKES the lightmap at one
+texel per bitmap unit** (2026-10-21, planning step 196, CMP-14; measured in `out/parity/program/MEAS/CMP-14/result.txt`,
+calibrated in `out/parity/program/CMP14/pre/calibration.md`). The chain, each link read in the listing or the source:
+`shouldUsePrerenderedLights()` is `GetScreenSize().y < 480` (`out/parity/asbc/all_functions.txt:61740-61750`, bytes
+313283..313382: `CMPIf v2, 480f; TS`, with `as_context.cpp:2241` and `:1876` for the compare and the set-if-negative);
+`preLoop` calls `EnablePreLoadedLightmapsFromFile(true)` only when it is true (`:61783-61788`), and the flag defaults to
+false (`Script/ETHScriptWrapper.cpp:39`); so `LoadLightmaps()` at the end of `LoadScene` (`ETHScriptWrapper.Scene.cpp:198-204`,
+`:607-609`) calls `GenerateLightmaps()` (`ETHScene.cpp:336-427`), which makes for every static `applyLight` sprite a render
+target of its BITMAP size in units, `static_cast<unsigned>(sprite->GetBitmapSizeF())`
+(`Shader/ETHLightmapGen.cpp:57-58`; `GLES2Sprite.cpp:429-437`: bitmap size = texels / density, so 256 x 32 for the 512 x 64
+hd stone), a `GL_RGB` / `GL_UNSIGNED_SHORT_5_6_5` target, `CLAMP_TO_EDGE`, `GL_LINEAR`, no depth buffer
+(`GLES2Texture.cpp:150-195`). On the 1280 x 720 rig that is 2.8125 px a texel; the shipped files are 2 units a texel
+(5.625 px), which is why the port, which drew them, drew a lightmap twice as coarse as the original's (730 of 730 files are
+exactly half their sprite's units, and the DATA are the same as the original's: the files are the unit bake reduced 2:1
+by a Catmull-Rom filter and stored as 8-bit RGB, `calibration.md` section 0).
+
+What one texel is (`calibration.md` R1-R20, in `game/sim/LightmapBake.cpp`): the sprite is moved to the target's corner
+(`ETHScene.cpp:370-382`, `ETHLightmapGen.cpp:82`) at z 0 and scale 1 (`:117-118`), each static entity with a light, its own
+applyLight irrelevant, becomes a light by `BuildChildLight(light, newPos - oldPos + owner.pos, owner.scale)`
+(`ETHScene.cpp:394-401`; `ETHEntityRenderingManager.cpp:174-184`), and `BeginLightPass(.., screenHeight, 0, lightIntensity,
+0, true)` (`ETHLightmapGen.cpp:121`) turns a non-vertical sprite's light into the sprite's own frame by `RotateZ(-angle)`
+(`ETHPixelLightDiffuseSpecular.cpp:118-128`; the `.tscn` `rotation` is the esc angle's negation) while the sprite is drawn
+unturned (`ETHRenderEntity.cpp:151`). Texel (i, j) is the fragment at `(i + 1/2, j + 1/2)` units from the sprite's top-left
+(`uv = ((i + 1/2) / w, (j + 1/2) / h)`), and the diffuse and the normal map are each ONE bilinear tap at that uv
+(`GL_LINEAR`, `CLAMP_TO_EDGE`, no mipmaps: `SOIL.c:1330-1337`), after `ApplyPixelMask` has zeroed every texel that is exactly
+(255, 0, 255) or has alpha 0 on BOTH maps (`GLES2Texture.cpp:73-92`, `:283-303`; `ETHResourceManager.cpp:136`) and SOIL has
+stretched a non-power-of-two map up to the next power of two (`up_scale_image`, `image_helper.c:13-82`, float32: 4 files,
+47 sprites). The pass is the GLSL form the rig runs (`hPixelLightDiff.ps`, `shaders.h:1261-1304`): the normal decoded
+`-(2 (c - 0.5))` against `P - L` in the original's y-DOWN frame, which is `N = 2n - 1` against `L - P`, NOT renormalised
+(the Cg form that wrote the shipped files renormalises and multiplies by the diffuse alpha), and
+`pass = clamp01(T * C * lightColor * (1 - d2 / r2) * dot(L - P, N) / |L - P|)`, zero at `d2 >= r2`. The pass is stored once
+per light into a black temporary target (a 5/6/5 store; round-to-nearest is the engine's own `Rgb565` rule and a `_guess`,
+`calibration.md` R9) and the temporaries are added into the lightmap (`ETHLightmapGen.cpp:160-167`, `AM_ADD`), so the
+lightmap is the SATURATING INTEGER SUM of the per-light levels (31, 63, 31); the sprite shader reads it as `level / max`
+(`add1.ps`, `glslShaderCode.h:19-30`) at the sprite's own uv, magnified 2.8125 x. `maxHeight` and `minHeight`
+(`ETHLightmapGen.cpp:121` passes the screen height and 0 where the live pass passes the scene's) reach only
+`SetDepth` and a vertical sprite's `spaceLength` (`ETHPixelLightDiffuseSpecular.cpp:108`, `:134`), and a horizontal
+sprite's colour is not a function of them: all 730 are horizontal. Shadows are never drawn: `BeginShadowPass` needs the
+entity's `castShadow` and the light's `castShadows` (`ETHShaderManager.cpp:172-175`), and 0 of 190 `.ent` and 0 of 4,072
+scene instances say `castShadow="1"`. The run-time bake (`ETHCallback_light_off` and `ETHCallback_fire_signal` call
+`GenerateLightmaps`) is the same function at run time and is NOT what the port bakes at load: it stays the port's per-pixel
+path (`Lighting::RuntimeBake`, `torch.json`).
 
 **Counts over all 128 levels** (converter report, 2026-09-14, re-run after the gate fix above and
 recounted from the emitted `.tscn` files; "all instances" ignores the sprite-or-light gate; "design" is
@@ -1013,7 +1057,9 @@ replaces every `.` in the scene filename with `-` and appends `/`:
 (`ETHScene.cpp:315-334`). Observed: `testbed/GeneralTests/scenes/temporary_entity_test-esc/` holds
 `add20.bmp add21.bmp add22.bmp add24.bmp add32.bmp add34.bmp` — uncompressed 24-bit BMPs whose dimensions
 match the source sprites, and whose numbers are all ids present in the scene. Derived data; a converter
-should ignore it but **must not renumber instance ids** if it ever wants to use it.
+should ignore it but **must not renumber instance ids** if it ever wants to use it. (The original reads these files only
+below a screen height of 480 px; at the rig's 720 px it bakes the same lightmaps at twice their resolution: the lighting
+block's 2026-10-21 paragraph, above.)
 
 ### 4.8 Annotated real sample
 `testbed/GeneralTests/scenes/shadowTests.esc` — the complete 69-line file, abbreviated only where marked:

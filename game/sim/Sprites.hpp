@@ -35,8 +35,8 @@
 // ETHSpriteEntity.cpp:652-683) about the pivot times the scale
 // (ETHEntity::ComputeAbsoluteOrigin, ETHEntity.cpp:296). It multiplies the whole
 // units, after the truncation, and the offset as the level wrote it (00_order K9):
-// never the texels or the density. A lightmap is still checked against the units
-// before it (Lighting::Read). Tscn refuses a scale on any node but a Sprite2D,
+// never the texels or the density. A lightmap is baked at the units before it
+// (LightmapBake, CMP-14). Tscn refuses a scale on any node but a Sprite2D,
 // and one that is not two numbers above 0.
 //
 // Renderer-free, like the rest of the simulation side. An image's size comes

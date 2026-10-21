@@ -103,8 +103,10 @@ void LevelVisitLayer::OnAttach(entt::registry& registry) {
             fail(entry.name + "'s lighting: " + error);
             continue;
         }
+        // The keys the layer registers each baked lightmap under and its sprites name (CMP-14), the one function the
+        // layer composes them with: the node's own eth_lightmap is only their suffix.
         for (const auto& [node, look] : lighting.nodes) {
-            if (!look.lightmap.empty()) visit.lightmaps.push_back(look.lightmap);
+            if (!look.lightmap.empty()) visit.lightmaps.push_back(LightmapBake::KeyOf(look.lightmap));
         }
         // The nodes are hashed; sorted, as the layer's HeldLightmaps is.
         std::sort(visit.lightmaps.begin(), visit.lightmaps.end());
@@ -236,7 +238,9 @@ bool LevelVisitLayer::measure(entt::registry& registry, const Visit& visit, bool
             continue;
         }
         // As data: in the port's display-encoded scene a colour map is read as
-        // its file's bytes (SyncResources' decodeColour).
+        // its file's bytes (SyncResources' decodeColour). The key is the layer's bake, registered at
+        // the level's load under "data:" + the key (RegistryKeyOf): a hit; a miss would be the
+        // registry's "Could not load" and the black overlay the check above refuses.
         if (textures.Acquire(material.overlayTexturePath, false, textures.GetBlackTexture()) !=
             renderable.overlayTextureID) {
             fail(visit.name + ": " + material.overlayTexturePath + " is drawn under an id its path does not have");

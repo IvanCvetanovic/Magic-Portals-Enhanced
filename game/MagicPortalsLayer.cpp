@@ -10,7 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <map>
+#include <set>
 #include <random>
 #include <sstream>
 #include <string>
@@ -1308,17 +1310,10 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // fresh Game state - and the bosses' calls watched from nothing.
     m_musicWatch = MusicWatch{};
     startLevelMusic(index);
-    // The lightmaps this level names, held until it goes. The same list again
-    // after a retry, which kept the last one.
+    // The lightmaps this level names, held until it goes: the keys of the bakes its sprites name as their overlay,
+    // pushed by buildSprites as it names them (CMP-14: a node whose bake failed is neither named nor held). The same
+    // list again after a retry, which kept the last one.
     m_heldLightmaps.clear();
-    if (m_lit) {
-        for (const auto& [node, look] : m_look.nodes) {
-            if (!look.lightmap.empty()) m_heldLightmaps.push_back(look.lightmap);
-        }
-        // The nodes are hashed: sorted, so the list does not depend on the map.
-        std::sort(m_heldLightmaps.begin(), m_heldLightmaps.end());
-        m_heldLightmaps.erase(std::unique(m_heldLightmaps.begin(), m_heldLightmaps.end()), m_heldLightmaps.end());
-    }
     // The player's depth, where it is drawn among the art and its lighting height:
     // GameCharacter's 4, in the world's units, over the scale factor the level's own
     // nodes were multiplied by (art.json character.z and depth; R10). Its marker
@@ -1326,6 +1321,9 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // eth_z, 0 but for 2-09's 2.
     m_playerZ = m_artRules.LevelDepth(m_artRules.character.z);
     buildDrawables(registry);
+    // The sprites are walked in the scene's order; sorted, so the list does not depend on it.
+    std::sort(m_heldLightmaps.begin(), m_heldLightmaps.end());
+    m_heldLightmaps.erase(std::unique(m_heldLightmaps.begin(), m_heldLightmaps.end()), m_heldLightmaps.end());
     m_aspect = viewportAspect(registry);
     // The window's safe area, for the modern layout this level is about to be laid out with (zero in a classic run and on a desktop).
     refreshSafeInsets(registry);
@@ -1383,6 +1381,7 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     // registry keeps both until told to drop them; a session walking the chapters
     // would otherwise hold every level's at once (the lighting design's section
     // 6, and step 42's walk). A retry keeps them: it draws them again at once.
+    // Since CMP-14 the textures are the level's own bakes, registered at its load.
     if (!keepLightmaps) releaseLightmaps(registry);
     auto destroy = [&registry](entt::entity& e) {
         if (e != entt::null && registry.valid(e)) registry.destroy(e);
@@ -1549,15 +1548,85 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_ambient = glm::dvec3(1.0);
 }
 
-void MagicPortalsLayer::releaseLightmaps(entt::registry& registry) {
+namespace {
+
+// The texture registry as a LightmapSink: a bake is uploaded under the key the renderer's own Acquire looks an
+// overlay up by, so the lookup HITS it and never reads a file, and Invalidate hands it back with its material sets
+// (the lifecycle the shipped files had). Stateless: it finds the registry in the context at each call, so it reads the
+// scene's colour decoding when the bake is taken and not when the layer was made.
+class TextureRegistrySink final : public MagicPortalsLayer::LightmapSink {
+public:
+    bool Take(entt::registry& registry, const std::string& key, const LightmapBake::Baked& baked) override {
+        Supersonic::TextureRegistry* const textures = TexturesOf(registry);
+        if (textures == nullptr || baked.width <= 0 || baked.height <= 0 ||
+            baked.rgba.size() != static_cast<std::size_t>(baked.width) * static_cast<std::size_t>(baked.height) * 4u) {
+            return false;
+        }
+        const Supersonic::RenderSettings* const settings = registry.ctx().find<Supersonic::RenderSettings>();
+        const bool decodes = settings == nullptr || settings->decodesColourTextures();
+        const std::string registryKey = MagicPortalsLayer::RegistryKeyOf(key, decodes);
+        // Exactly what Acquire passes for a file with no .meta (TextureRegistry.cpp:299-310): linear, repeating (the
+        // sprite's material clamps anyway), a mip chain, in the colour space the scene resolves overlays in.
+        const auto upload = [&] {
+            return textures->UploadRGBA(registryKey, baked.rgba.data(), static_cast<std::uint32_t>(baked.width),
+                                        static_cast<std::uint32_t>(baked.height), decodes, vk::Filter::eLinear,
+                                        vk::SamplerAddressMode::eRepeat, true);
+        };
+        const auto failed = [&](std::uint32_t id) {
+            return id == textures->GetBlackTexture() || id == textures->GetCheckerTexture();
+        };
+        std::uint32_t id = upload();
+        if (failed(id)) {
+            // The key was resolved before it was registered, and a failed resolve caches the fallback under it
+            // (TextureRegistry::Acquire), which UploadRGBA then returns: drop that and register the bake.
+            SUPERSONIC_LOG_WARN("Magic Portals") << key << " had been resolved before it was baked; registering it again"
+                                                 << std::endl;
+            textures->Invalidate(key);
+            id = upload();
+            if (failed(id)) return false;
+        }
+        return true;
+    }
+
+    void Give(entt::registry& registry, const std::string& key) override {
+        // Both colour spaces, whichever the bake went in under; a key never taken is simply not there.
+        if (Supersonic::TextureRegistry* const textures = TexturesOf(registry); textures != nullptr) {
+            textures->Invalidate(key);
+        }
+    }
+
+private:
+    static Supersonic::TextureRegistry* TexturesOf(entt::registry& registry) {
+        auto* const* slot = registry.ctx().find<Supersonic::TextureRegistry*>();
+        return slot != nullptr ? *slot : nullptr;
+    }
+};
+
+} // namespace
+
+std::string MagicPortalsLayer::RegistryKeyOf(const std::string& key, bool decodesColour) {
+    return (decodesColour ? "srgb:" : "data:") + key;
+}
+
+MagicPortalsLayer::LightmapSink* MagicPortalsLayer::lightmapSink(entt::registry& registry) {
+    if (auto* const* published = registry.ctx().find<LightmapSink*>(); published != nullptr && *published != nullptr) {
+        return *published;
+    }
     if (auto* const* textures = registry.ctx().find<Supersonic::TextureRegistry*>();
         textures != nullptr && *textures != nullptr) {
-        // A path never acquired is simply not there; Invalidate says false and
-        // does nothing. Since step 47 each is acquired by the sprite that draws
-        // it, the first frame the level is drawn. Before the sprites go, which
-        // is safe: nothing renders between here and their destruction below.
-        for (const std::string& path : m_heldLightmaps) (*textures)->Invalidate(path);
+        static TextureRegistrySink registrySink;
+        return &registrySink;
     }
+    return nullptr;
+}
+
+void MagicPortalsLayer::releaseLightmaps(entt::registry& registry) {
+    if (LightmapSink* const sink = lightmapSink(registry); sink != nullptr) {
+        // Every bake the sink holds for this level, before the sprites go (safe: nothing renders between here and
+        // their destruction below). A key never taken is not here.
+        for (const std::string& key : m_takenKeys) sink->Give(registry, key);
+    }
+    m_takenKeys.clear();
     m_lightmapsHandedBack += m_heldLightmaps.size();
     m_heldLightmaps.clear();
 }
@@ -5683,6 +5752,101 @@ glm::dvec2 MagicPortalsLayer::playerCellPx(bool noGravity) {
     return frameUnits(drawnImage(originalImage(Art::PlayerSheet(mage, noGravity))), mage.columns, mage.rows);
 }
 
+// One level load's bakes (CMP-14): the level's static lights, read once; the art it decodes, once a file; and the
+// counts the load's log line reports.
+struct MagicPortalsLayer::LightmapRun {
+    bool lightsRead = false;
+    bool lightsOk = false;
+    std::vector<LightmapBake::SourceLight> lights;
+    // By path; a null entry is a file that would not decode (said once).
+    std::map<std::string, std::shared_ptr<const LightmapBake::Image>> images;
+    // The keys this load has named, so two sprites cannot share one bake.
+    std::set<std::string> named;
+    std::size_t baked = 0;   // made and taken
+    std::size_t kept = 0;    // a retry found them still held
+    std::size_t refused = 0; // marked, but not baked (each said why)
+    std::uint64_t texels = 0;
+    std::chrono::steady_clock::duration spent{};
+};
+
+namespace {
+
+// stb_image forced to four channels, as the original's loader forces RGBA whenever it masks (GLES2Texture.cpp:283-300)
+// and the engine's own Acquire does (TextureRegistry.cpp:265). Null when it will not decode.
+std::shared_ptr<const LightmapBake::Image> DecodeForBake(const std::string& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* const pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (pixels == nullptr || width <= 0 || height <= 0) {
+        if (pixels != nullptr) stbi_image_free(pixels);
+        return nullptr;
+    }
+    auto image = std::make_shared<LightmapBake::Image>();
+    image->width = width;
+    image->height = height;
+    image->rgba.assign(pixels, pixels + static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u);
+    stbi_image_free(pixels);
+    return image;
+}
+
+} // namespace
+
+std::string MagicPortalsLayer::bakeLightmap(entt::registry& registry, LightmapRun& run, const Sprites::Sprite& saved,
+                                            const Lighting::Look& look) {
+    const std::string key = LightmapBake::KeyOf(look.lightmap);
+    LightmapSink* const sink = lightmapSink(registry);
+    // Nothing to hold a bake (a suite's bare registry): the sprite names its key all the same, which is all the
+    // layer's lists and its overlay reads need.
+    if (sink == nullptr) return key;
+    const auto refuse = [&](const std::string& why) {
+        ++run.refused;
+        SUPERSONIC_LOG_WARN("Magic Portals") << "lightmap not baked: " << saved.node << ": " << why << std::endl;
+        return std::string();
+    };
+    if (!run.named.insert(key).second) return refuse("another sprite of the level names the same lightmap " + look.lightmap);
+    // A retry finds its bakes where it left them (unloadLevel keeps them), and makes none.
+    if (m_takenKeys.count(key) != 0) {
+        ++run.kept;
+        return key;
+    }
+
+    const auto began = std::chrono::steady_clock::now();
+    if (!run.lightsRead) {
+        run.lightsRead = true;
+        std::string why;
+        run.lightsOk = Lighting::BakeLights(m_data.scene, m_look, run.lights, why);
+        if (!run.lightsOk) SUPERSONIC_LOG_WARN("Magic Portals") << "the level's static lights: " << why << std::endl;
+    }
+    if (!run.lightsOk) return refuse("the level's static lights could not be read");
+    const auto decoded = [&run](const std::string& path) {
+        const auto found = run.images.find(path);
+        if (found != run.images.end()) return found->second;
+        return run.images.emplace(path, DecodeForBake(path)).first->second;
+    };
+    // The picture the scene saved, not the one a script swaps in after LoadScene bakes (Lighting::BakeReceiver), and the
+    // normal map its node names.
+    const std::shared_ptr<const LightmapBake::Image> diffuse = decoded(saved.texture);
+    if (diffuse == nullptr) return refuse(saved.texture + " does not decode");
+    std::shared_ptr<const LightmapBake::Image> normal;
+    if (!look.normal.empty()) {
+        normal = decoded(look.normal);
+        if (normal == nullptr) return refuse(look.normal + " does not decode");
+    }
+    LightmapBake::Baked baked;
+    std::string why;
+    if (!LightmapBake::Bake(m_data.lighting.lightmapBake, Lighting::BakeReceiver(saved, look), *diffuse, normal.get(),
+                            run.lights, baked, why)) {
+        return refuse(why);
+    }
+    if (!sink->Take(registry, key, baked)) return refuse("the texture was refused");
+    m_takenKeys.insert(key);
+    ++run.baked;
+    run.texels += static_cast<std::uint64_t>(baked.width) * static_cast<std::uint64_t>(baked.height);
+    run.spent += std::chrono::steady_clock::now() - began;
+    return key;
+}
+
 void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     using namespace Supersonic;
     std::vector<Sprites::Sprite> sprites;
@@ -5863,7 +6027,18 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             shadowlessTexture = sheet.path;
         }
     }
+    LightmapRun lightmaps;
     for (Sprites::Sprite& sprite : sprites) {
+        // THE PICTURE THE ORIGINAL BAKES A LIGHTMAP FROM is the one the scene saved: LoadScene bakes at its end
+        // (ETHScriptWrapper.Scene.cpp:607-609), and the swaps below are Game::preLoop's and the callbacks', after it.
+        // None of the 730 lightmapped sprites is swapped (the exit doors of the shadowless levels, the fire agents and
+        // the keys carry no lightmap), so this is the faithful order rather than a pixel.
+        std::optional<Sprites::Sprite> saved;
+        if (const auto marked = m_look.nodes.find(sprite.node);
+            m_lit && marked != m_look.nodes.end() && marked->second.isStatic && marked->second.applyLight &&
+            !marked->second.lightmap.empty()) {
+            saved = sprite;
+        }
         // ETHEntity::SetSprite, which readProperties calls before the level's first
         // frame, so the picture is made from the swapped file. The first `door` node
         // is the one SeekEntity finds, and every one of the 128 levels has exactly
@@ -5954,8 +6129,13 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
             // applying light (the design's section 3.1). Lighting::Read
             // already refuses a lightmap anywhere else; the condition is kept
             // so this line says what the engine does rather than what the file
-            // happens to hold.
-            if (look->second.isStatic && look->second.applyLight) drawn.lightmap = look->second.lightmap;
+            // happens to hold. The lightmap is BAKED here, at the level's load, at one
+            // texel per unit as the original does on a screen of 480 px or more; what
+            // the sprite names is the key it is held under (bakeLightmap, CMP-14).
+            if (saved.has_value()) {
+                drawn.lightmap = bakeLightmap(registry, lightmaps, *saved, look->second);
+                if (!drawn.lightmap.empty()) m_heldLightmaps.push_back(drawn.lightmap);
+            }
             // And what it is to the lights (design section 5.2).
             drawn.isStatic = look->second.isStatic;
             drawn.applyLight = look->second.applyLight;
@@ -6504,6 +6684,18 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
         // sets `no_gravity` too - so it is logged rather than drawn.
         SUPERSONIC_LOG_INFO("Magic Portals")
             << "the door is drawn shadowless, with no glow: the level does not set no_gravity" << std::endl;
+    }
+    // WHAT THE LEVEL'S LIGHTMAPS COST, once a load: how many were baked, over how many texels and in how long (the
+    // clock is read here and never by the bake), and how many a retry found still held.
+    if (const std::string levelName = m_current >= 0 ? m_chapters.levels[static_cast<std::size_t>(m_current)].name : std::string();
+        lightmaps.baked > 0) {
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << levelName << " baked " << lightmaps.baked << " lightmap(s), " << lightmaps.texels << " texel(s) at "
+            << m_data.lighting.lightmapBake.unitsPerTexel << " unit(s) a texel from " << lightmaps.lights.size()
+            << " static light(s), in " << std::fixed << std::setprecision(1)
+            << std::chrono::duration<double, std::milli>(lightmaps.spent).count() << " ms" << std::defaultfloat << std::endl;
+    } else if (lightmaps.kept > 0) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << levelName << " kept " << lightmaps.kept << " baked lightmap(s)" << std::endl;
     }
     buildBlackBars(registry);
     m_artReady = true;

@@ -46,15 +46,22 @@
 // Refused, each naming the node's line: an eth_ key it does not know, or one
 // standing where the converter never writes it; a value that is not a quoted
 // string of exactly the numbers the key takes, all finite; a flag that is not
-// "0" or "1"; a path that is not res:// or names no file; a lightmap on a node
-// that is not static, not applyLight or draws no sprite, or whose size times
-// two is not its sprite's; a light or halo key without the key that makes the
-// light (eth_light_range) or the halo (eth_halo); a range that is not positive.
+// "0" or "1"; a path that is not res:// or (but for eth_lightmap) names no file; a
+// lightmap on a node that is not static, not applyLight or draws no sprite; a
+// light or halo key without the key that makes the light (eth_light_range) or the
+// halo (eth_halo); a range that is not positive.
+//
+// eth_lightmap is a MARKER since CMP-14 (planning step 196): the node is one the
+// original bakes a lightmap for, and the value is only its identity, the key its
+// baked lightmap is registered under. The file it names is the shipped add<id>.png,
+// half the sprite per axis, which the original does not read at a screen of 480 px
+// or more and the port no longer does either (LightmapBake.hpp), so it is neither
+// opened nor required to exist, and its size is nobody's business.
 //
 // Renderer-free, like the rest of the simulation side. It is NOT a pure function
 // of the scene's text, in the way Sprites::Find is not: it checks that each path
-// names a file, and reads the headers of the lightmaps and of the sprites
-// (through Sprites::Find) to compare their sizes.
+// (but a lightmap's) names a file, and reads the headers of the sprites (through
+// Sprites::Find) to know which nodes draw one.
 //
 // And what the original's SCRIPT sets over the level file: the port's
 // lighting.json, and the ambient light a level is drawn with at any moment
@@ -64,7 +71,9 @@
 // Since step 49 (G5) each Look::light is a 2D point light and its halo an added
 // quad, and which sprite takes which light is ReceiverMask and LightLayer below.
 
+#include "sim/LightmapBake.hpp"
 #include "sim/RedKey.hpp"
+#include "sim/Sprites.hpp"
 #include "sim/Tiers.hpp"
 #include "sim/Torch.hpp"
 #include "sim/Tscn.hpp"
@@ -73,6 +82,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -101,7 +111,7 @@ struct Look {
     glm::dvec3 emissive{0.0};
     glm::dvec4 colour{1.0};      // the instance colour
     std::string normal;          // the normal map on disk; empty = none
-    std::string lightmap;        // the baked lightmap on disk; empty = none
+    std::string lightmap;        // eth_lightmap, res:// resolved: the node's lightmap MARKER and its bake's key; empty = none
     std::optional<Light> light;
     // The sidecar holding the node's own <Particles>, on disk; empty = the node
     // names none, and carries no particle system (planning steps 89, 91).
@@ -118,10 +128,10 @@ struct Scene {
 
 // Replaces `out`. `resRoot` is the directory res:// stands for, and `tiers` the
 // search a sprite's image goes through, as for Sprites::Find: pass the rules the
-// layer draws with, so a lightmap is checked against the units of the file its
-// sprite is drawn from, before the sprite's scale (planning doc step 61,
-// decision 2; step 93). False, with `error` reading
-// "line N: <node>: why", for anything the reader refuses; `out` is then empty.
+// layer draws with, so the nodes that draw a sprite are the ones the layer draws
+// (a lightmap is no longer checked against its sprite's units: CMP-14). False, with
+// `error` reading "line N: <node>: why", for anything the reader refuses; `out` is
+// then empty.
 bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rules& tiers, Scene& out,
           std::string& error);
 
@@ -142,6 +152,8 @@ struct Rules {
     double haloBrightnessScale = 1.0;
     // The original draws into a 16-bit 5/6/5 surface without dithering.
     bool framebufferRgb565 = true;
+    // How a static lit sprite's lightmap is baked at level load (lighting.json lightmap_bake, CMP-14).
+    LightmapBake::Rules lightmapBake;
 
     // THE SCRIPT'S EMISSIVE OVERRIDES (script_emissive; ScriptEmissive below).
     std::string ignoreEmissiveKey;     // the `properties` datum that switches them on
@@ -158,8 +170,32 @@ struct Rules {
 // light; a halo scale above the formula's own brightness is not one the design
 // considers. And script_emissive: two datum names, the character's emissive and the
 // one it has in its lit world, each three numbers from 0 to 1, and that world a
-// whole number from 0 to 3.
+// whole number from 0 to 3. And lightmap_bake: LightmapBake::ParseRules, last, so a file
+// that lacks it is refused by name.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// ---- what the lightmap bake is given (CMP-14, planning step 196) -------------------
+//
+// LightmapBake takes numbers; these compose them from a level's own data, here and not
+// in the layer so that a test can pin the composition (the pivot's sign, the rotation's
+// sense) against the values the calibration fixed.
+
+// The sprite as ETHLightmapGen sees the entity: its bitmap in whole units BEFORE its scale
+// (the tier file's texels over its density), the scale, where the node stands and the
+// Sprite2D offset (the negated pivot), Godot's rotation, and the node's eth_z and colour.
+// `sprite` is the sprite as Sprites::Find found it, which is the picture the original had
+// loaded when it baked: LoadScene bakes at its end (ETHScriptWrapper.Scene.cpp:607-609),
+// before Game::preLoop's SetSprite swaps (readProperties, the fire agent, setKeyColor).
+LightmapBake::Receiver BakeReceiver(const Sprites::Sprite& sprite, const Look& look);
+
+// Every static light of the level, in the scene's file order, as ETHScene::GenerateLightmaps
+// gathers them: each entity node that owns a light and is static (an owner's own applyLight is
+// irrelevant, ETHScene.cpp:394-401), at its node's position plus the light's offset, the height
+// the owner's eth_z plus the offset's z, the range and the colour x the scene's lightIntensity
+// (LightColour, static owner). A level placement's owner scale is 1: its <Scale> is in its
+// light already (OwnerScaled, K7). False, with `error`, for an owner whose node has no position.
+bool BakeLights(const Tscn::Scene& scene, const Scene& lighting, std::vector<LightmapBake::SourceLight>& out,
+                std::string& error);
 
 // ---- what the script sets over a level's emissive ---------------------------------
 //
@@ -188,8 +224,8 @@ ScriptOverride ScriptEmissive(const Rules& rules, const Tscn::Node* properties, 
 // bit with the sprite's light mask. These are the two layers, and the rule that
 // hands them out: ETHEntitySpriteRenderer.cpp:70 skips a light's pass on a sprite
 // when both are static and lightmaps are on, because a static light is already
-// baked into a static sprite's add<id>.png - and it skips it even where no file
-// was baked (the design's section 5.2: the in-range static sprites without one
+// baked into a static sprite's lightmap - and it skips it even where none was
+// baked (the design's section 5.2: the in-range static sprites without one
 // render at the ambient alone).
 inline constexpr std::uint8_t kLiveLights = 1u << 0;   // owned by an entity that is not static
 inline constexpr std::uint8_t kStaticLights = 1u << 1; // owned by a static entity
@@ -202,13 +238,13 @@ inline constexpr std::uint8_t kStaticLights = 1u << 1; // owned by a static enti
 // `runtimeBake`: once a torch has been lit the level bakes at run time
 // (GenerateLightmaps, torch.json), which is the same lights evaluated per pixel
 // (design section 5.7) - so a static sprite then takes the static lights live
-// too, and its file lightmap is dropped. It stays so for the rest of the level,
+// too, and its baked lightmap is dropped. It stays so for the rest of the level,
 // the torch put back out or not (RuntimeBake).
 std::uint8_t ReceiverMask(bool isStatic, bool applyLight, bool runtimeBake = false);
 
 // Whether the level has baked at run time: true from the first torch lit, for the
 // rest of the level. Putting the torch out calls GenerateLightmaps again, with no
-// static light left, and nothing goes back to the file's lightmaps.
+// static light left, and nothing goes back to the baked lightmaps.
 bool RuntimeBake(const Torch::State& torch);
 
 // The layer a light is on: a light is as static as its owner

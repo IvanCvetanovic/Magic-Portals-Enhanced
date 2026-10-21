@@ -15,6 +15,7 @@
 #include <sstream>
 #include <string_view>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -175,13 +176,19 @@ bool Flag(const std::string& text, bool& out, std::string& why) {
     return true;
 }
 
-// A res:// path, resolved against resRoot, that names a file.
-bool Path(const std::string& text, const std::string& resRoot, std::string& out, std::string& why) {
+// A res:// path, resolved against resRoot, whether or not it names a file.
+bool ResPath(const std::string& text, const std::string& resRoot, std::string& out, std::string& why) {
     if (!text.starts_with(kRes)) {
         why = "\"" + text + "\" is not a res:// path";
         return false;
     }
     out = resRoot + "/" + text.substr(kRes.size());
+    return true;
+}
+
+// A res:// path, resolved against resRoot, that names a file.
+bool Path(const std::string& text, const std::string& resRoot, std::string& out, std::string& why) {
+    if (!ResPath(text, resRoot, out, why)) return false;
     std::error_code ec;
     if (!std::filesystem::is_regular_file(out, ec)) {
         why = out + " is not a file";
@@ -196,15 +203,14 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
           std::string& error) {
     out = Scene{};
 
-    // The sprites' own sizes, for the lightmap's. Sprites::Find is the reader the
-    // layer draws with, so a lightmap is checked against the file the layer will
-    // stretch it over rather than against a second reading of the same scene - in
-    // whole units, BEFORE the sprite's scale (00_order K9): the tier file's texels
-    // over its density, which is what the original baked the lightmap at half of.
+    // Which nodes draw a sprite. Sprites::Find is the reader the layer draws with, so
+    // the answer is the layer's rather than a second reading of the same scene. (Until
+    // CMP-14 it also gave the units a lightmap was checked against; the lightmap is now
+    // baked from the sprite's units and is not a file read.)
     std::vector<Sprites::Sprite> sprites;
     if (!Sprites::Find(scene, resRoot, tiers, sprites, error)) return false;
-    std::unordered_map<std::string, glm::ivec2> spriteUnits;
-    for (const Sprites::Sprite& sprite : sprites) spriteUnits.emplace(sprite.node, Tiers::Units(sprite.texels, sprite.density));
+    std::unordered_set<std::string> spriteNodes;
+    for (const Sprites::Sprite& sprite : sprites) spriteNodes.insert(sprite.node);
 
     Scene read;
     const Tscn::Node* root = nullptr;
@@ -257,7 +263,8 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
                 break;
             }
             case Id::Normal: ok = Path(text, resRoot, look.normal, why); break;
-            case Id::Lightmap: ok = Path(text, resRoot, look.lightmap, why); break;
+            // A marker, not a file the port reads (CMP-14): resolved, not required to exist.
+            case Id::Lightmap: ok = ResPath(text, resRoot, look.lightmap, why); break;
             case Id::LightRange:
                 ok = Scalar(text, light.range, why);
                 // The engine keeps a light only if its range is positive
@@ -283,7 +290,7 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
         if (!isEntity) continue;
 
         const auto present = [&](Id id) { return has[static_cast<std::size_t>(id)]; };
-        const bool drawsSprite = spriteUnits.count(node.name) != 0;
+        const bool drawsSprite = spriteNodes.count(node.name) != 0;
         const bool ownsLight = present(Id::LightRange);
 
         // A light is identified by its range, which the converter always writes;
@@ -316,25 +323,13 @@ bool Read(const Tscn::Scene& scene, const std::string& resRoot, const Tiers::Rul
             if (!look.applyLight) return fail(node, "eth_lightmap on a node that does not apply light");
             if (!drawsSprite) return fail(node, "eth_lightmap on a node that draws no sprite");
 
-            // Every shipped lightmap is half its sprite on both axes (730 of
-            // 730), and the lightmap is sampled at the sprite's own coordinates,
-            // so any other ratio means the pair is not what the original baked.
-            // Half its size in units, the tier file's texels over its density,
-            // not in texels: an hd sprite's file is four times its lightmap on
-            // each axis, and the 730 hold only against units (planning doc step
-            // 61, decision 2). And not in its drawn size: the engine bakes a
-            // lightmap at its sprite's bitmap size with the entity's scale set to
-            // 1 (ETHLightmapGen.cpp:57, :117-118), so a <Scale> stretches the
-            // picture and the lightmap over it alike (planning step 93).
-            int width = 0;
-            int height = 0;
-            if (!Sprites::ImageSize(look.lightmap, width, height, why)) return fail(node, "eth_lightmap: " + why);
-            const glm::ivec2 units = spriteUnits.at(node.name);
-            if (2 * width != units.x || 2 * height != units.y) {
-                return fail(node, "eth_lightmap is " + std::to_string(width) + "x" + std::to_string(height) +
-                                      ", and twice that is not its sprite's " + std::to_string(units.x) + "x" +
-                                      std::to_string(units.y) + " units");
-            }
+            // And nothing more: until CMP-14 the file was opened and had to be half its
+            // sprite's units on both axes (730 of 730 are), because the port drew it. The
+            // original does not read it at a screen of 480 px or more; it bakes the
+            // lightmap at the sprite's bitmap size in units (ETHLightmapGen.cpp:57-58,
+            // with the entity's scale set to 1, :117-118, so a <Scale> stretches the
+            // picture and the lightmap over it alike), and so does the port now
+            // (LightmapBake). The path is the node's identity and its bake's key.
         }
 
         if (ownsLight) look.light = std::move(light);
@@ -451,7 +446,51 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.playerLitWorld = static_cast<int>(litWorld.AsNumber());
+
+    // The lightmap bake, last: a file without the block is refused by its name (CMP-14).
+    std::string bakeError;
+    if (!LightmapBake::ParseRules(root["lightmap_bake"], read.lightmapBake, bakeError)) {
+        error = path + ": " + bakeError;
+        return false;
+    }
     out = read;
+    return true;
+}
+
+LightmapBake::Receiver BakeReceiver(const Sprites::Sprite& sprite, const Look& look) {
+    LightmapBake::Receiver receiver;
+    receiver.units = Tiers::Units(sprite.texels, sprite.density);
+    receiver.scale = sprite.scale;
+    receiver.nodePx = sprite.atPx;
+    receiver.offsetPx = sprite.offsetPx;
+    receiver.turnRad = sprite.rotation;
+    receiver.z = look.z;
+    receiver.colour = glm::dvec3(look.colour);
+    return receiver;
+}
+
+bool BakeLights(const Tscn::Scene& scene, const Scene& lighting, std::vector<LightmapBake::SourceLight>& out,
+                std::string& error) {
+    out.clear();
+    for (const Tscn::Node& node : scene.nodes) {
+        if (node.parent != ".") continue;
+        const auto look = lighting.nodes.find(node.name);
+        if (look == lighting.nodes.end() || !look->second.light || !look->second.isStatic) continue;
+        const Tscn::Value* at = node.Find("position");
+        if (at == nullptr || at->kind != Tscn::Value::Kind::Vector2) {
+            error = node.name + " owns a static light and has no position";
+            out.clear();
+            return false;
+        }
+        // The owner scale of a level placement is 1 (OwnerScaled, K7), which leaves offset and range as they are.
+        const Light from = OwnerScaled(*look->second.light, glm::dvec2(1.0));
+        LightmapBake::SourceLight light;
+        light.world = glm::dvec3(at->numbers[0] + from.offset.x, at->numbers[1] + from.offset.y,
+                                 look->second.z + from.offset.z);
+        light.range = from.range;
+        light.colour = LightColour(from, lighting.intensity, true, 1.0);
+        out.push_back(light);
+    }
     return true;
 }
 

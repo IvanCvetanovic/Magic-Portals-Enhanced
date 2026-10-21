@@ -186,7 +186,8 @@ World N is chapter N+1, and its levels are `level0`…`level31` with the suffix 
 
 `--copy-lighting` copies each level's baked lightmaps (`add<id>.png`), the normal maps and halo
 bitmaps the emitted `metadata/eth_*` keys point at. The keys are written with or without it, so a
-run for the Supersonic port must include it or the port's reader finds paths with no file behind them.
+run for the Supersonic port must include it for the normal maps and the halo bitmaps or the port's reader finds paths with no file behind them;
+the port no longer reads the lightmaps: it bakes each one in memory when its level loads, and `test_mp_lighting` still checks the converter copied the ones the levels name.
 The same holds for `--copy-particles` and the `metadata/eth_particles` key: without the files the
 port refuses the key, and a level whose lighting is refused is drawn unlit.
 

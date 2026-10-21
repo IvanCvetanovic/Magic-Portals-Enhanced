@@ -290,6 +290,21 @@ void TheScriptsAmbientIsReadAndFollowsTheTorch() {
     refused(R"({"darkest_ambient": [0.01, 0.01, 0.01], )" + lit + "}", "darkest_ambient");
     refused(R"({"darkest_ambient": {"value": [0.01, 0.01, 0.01]}})", "torch_lit_ambient");
 
+    // Since CMP-14 (planning step 196): the lightmap bake. The shipped block is the original's at a screen of 480 px or more:
+    // one texel per unit, a 5/6/5 target rounded to nearest (a _guess, calibration R9), and the fixed 2:1 reduction the
+    // shipped add<id>.png files are (the G0 self-check's), whose 8 taps sum to their denominator.
+    {
+        const LightmapBake::Rules& bake = rules.lightmapBake;
+        CHECK_MSG(bake.unitsPerTexel == 1 && bake.bits == (std::array<int, 3>{5, 6, 5}) &&
+                      bake.rounding == LightmapBake::Rounding::Nearest,
+                  "ETHLightmapGen.cpp:57-58: one texel per unit, GLES2Texture.cpp:150-170: 5/6/5");
+        int sum = 0;
+        for (const int tap : bake.reduction.taps) sum += tap;
+        CHECK_MSG(bake.reduction.factor == 2 && bake.reduction.taps.size() == 8 && sum == bake.reduction.denominator &&
+                      bake.reduction.denominator == 256,
+                  "calibration R10: the Keys a = -0.5 kernel at 2:1");
+    }
+
     // Since step 49: the normal maps' green and the halo scale, each required.
     CHECK_MSG(rules.normalMapGreenDown, "hPixelLightDiff.ps's decode: green points down the image");
     CHECK_MSG(rules.haloBrightnessScale > 0.0 && rules.haloBrightnessScale <= 1.0,
@@ -335,10 +350,37 @@ void TheScriptsAmbientIsReadAndFollowsTheTorch() {
             "lit_world");
     refused(script(names + R"(, "player": {"value": [0, 0, 0], "lit_world": 4, "lit_value": [0.2, 0.2, 0.2]})"),
             "lit_world");
+    // Since CMP-14: the lightmap bake, required and read last, so a file without it is refused by its name.
+    const std::string bakeBlock =
+        R"({"units_per_texel": {"value": 2}, "target": {"red_bits": 8, "green_bits": 8, "blue_bits": 8, "rounding": "truncate"}, )"
+        R"("reduction": {"factor": 2, "taps": [-3, -9, 29, 111, 111, 29, -9, -3], "denominator": 256}})";
+    const auto full = [&](const std::string& bake) {
+        return base + R"(, "script_emissive": {)" + names + ", " + player + "}, \"lightmap_bake\": " + bake + "}";
+    };
+    refused(script(names + ", " + player), "lightmap_bake");
+    refused(full("[]"), "lightmap_bake");
+    refused(full(R"({"units_per_texel": {"value": 0}, "target": {"red_bits": 5, "green_bits": 6, "blue_bits": 5, "rounding": "nearest"}, "reduction": {"factor": 2, "taps": [-3, -9, 29, 111, 111, 29, -9, -3], "denominator": 256}})"),
+            "units_per_texel");
+    refused(full(R"({"units_per_texel": {"value": 1}, "target": {"red_bits": 5, "green_bits": 6, "blue_bits": 5, "rounding": "round"}, "reduction": {"factor": 2, "taps": [-3, -9, 29, 111, 111, 29, -9, -3], "denominator": 256}})"),
+            "rounding");
+    refused(full(R"({"units_per_texel": {"value": 1}, "target": {"red_bits": 5, "green_bits": 6, "blue_bits": 5, "rounding": "nearest"}, "reduction": {"factor": 2, "taps": [-3, -9, 29, 111, 111, 29, -9, -2], "denominator": 256}})"),
+            "sum");
+    {
+        const std::string written = full(bakeBlock);
+        Write(path, std::vector<unsigned char>(written.begin(), written.end()));
+        Lighting::Rules read;
+        std::string why;
+        CHECK_MSG(Lighting::LoadRules(path.string(), read, why), why);
+        CHECK_MSG(read.lightmapBake.unitsPerTexel == 2 && read.lightmapBake.bits == (std::array<int, 3>{8, 8, 8}) &&
+                      read.lightmapBake.rounding == LightmapBake::Rounding::Truncate &&
+                      read.lightmapBake.reduction.taps.size() == 8,
+                  "the bake block, as written");
+    }
     {
         const std::string text = "{" + both + R"(, "normal_map_green_down": {"value": false})" + scale +
                                  R"(, "framebuffer_rgb565": {"value": false})" + R"(, "script_emissive": {)" + names +
-                                 R"(, "player": {"value": [0.1, 0.1, 0.1], "lit_world": 1, "lit_value": [0.3, 0.3, 0.3]}}})";
+                                 R"(, "player": {"value": [0.1, 0.1, 0.1], "lit_world": 1, "lit_value": [0.3, 0.3, 0.3]}}, "lightmap_bake": )" +
+                                 bakeBlock + "}";
         Write(path, std::vector<unsigned char>(text.begin(), text.end()));
         Lighting::Rules read;
         std::string why;
@@ -726,8 +768,9 @@ void AnythingElseIsRefusedNamingTheLine() {
                  "metadata/eth_light_range = \"256\"\nmetadata/eth_static = \"1\"\nmetadata/eth_apply_light = \"1\"\n"
                  "metadata/eth_lightmap = \"res://assets/lightmaps/room/add7.png\"\n"),
          "eth_lightmap on a node that draws no sprite", flare.c_str()},
-        {"a lightmap not half its sprite", Replace(kRoom, "room/add7.png", "room/big7.png"),
-         "eth_lightmap is 32x64, and twice that is not its sprite's 32x64", lamp.c_str()},
+        {"a lightmap that is not a res:// path",
+         Replace(kRoom, "\"res://assets/lightmaps/room/add7.png\"", "\"assets/lightmaps/room/add7.png\""),
+         "eth_lightmap: \"assets/lightmaps/room/add7.png\" is not a res:// path", lamp.c_str()},
         {"a path that is not res://", Replace(kRoom, "\"res://assets/entities/normalmaps/wall_n.png\"", "\"assets/entities/normalmaps/wall_n.png\""),
          "eth_normal: \"assets/entities/normalmaps/wall_n.png\" is not a res:// path", wall.c_str()},
         {"a path with no file", Replace(kRoom, "normalmaps/wall_n.png", "normalmaps/none.png"),
@@ -806,66 +849,40 @@ void AnythingElseIsRefusedNamingTheLine() {
     std::printf("  %d refusals, each naming its line\n", refused);
 }
 
-// A LIGHTMAP IS HALF ITS SPRITE IN UNITS, whatever file the sprite is drawn from
-// (planning doc step 61, decision 2; step 66). The lamp's hd file is 64 x 128
-// texels, four times its 16 x 32 lightmap, and 32 x 64 units, twice it: the
-// reader checks the units the layer draws the sprite at, through the same tier
-// search, so an hd sprite keeps its lightmap and a lightmap of the texels' half
-// is still refused.
-void ALightmapIsHalfItsSpritesUnits() {
+// A LIGHTMAP IS A MARKER, NOT A FILE THE PORT READS (CMP-14, planning step 196). Until then the port drew the
+// shipped add<id>.png, half its sprite in units whatever file the sprite was drawn from (planning doc step 61,
+// decision 2; step 66; before the scale, step 93), and refused a level whose lightmap was another size. At a screen of
+// 480 px or more the original does not read those files: it bakes the lightmap at the sprite's bitmap size
+// (ETHLightmapGen.cpp:57-58), and so does the port (sim/LightmapBake). What the key names is the node's identity and the
+// key its bake is held under, so the file is neither opened nor required to exist: a file of the old size, of another
+// size, or none, is read, on an hd sprite and on a scaled one alike. A path that is not res:// is still refused.
+// FAILS UNDER: the size rule coming back (big7.png refused), or the existence check (the missing file refused).
+void ALightmapIsAMarkerWhateverItsFileIs() {
     const std::string res = WriteImages();
     const std::filesystem::path hd = std::filesystem::path(res) / "assets" / "entities" / "hd";
     std::error_code ec;
     std::filesystem::create_directories(hd, ec);
     Write(hd / "lamp.png", PngHeader(64, 128));
-    const Tiers::Rules tiers = TheTiers();
-
-    Tscn::Scene scene;
-    std::string error;
-    CHECK_MSG(Tscn::Parse(kRoom, scene, error), error);
-    Lighting::Scene look;
-    CHECK_MSG(Lighting::Read(scene, res, tiers, look, error), "the hd lamp keeps its 16 x 32 lightmap: " + error);
-    CHECK_MSG(look.nodes.count("lamp_7") == 1 && !look.nodes["lamp_7"].lightmap.empty(), "and it is read");
-
-    Tscn::Scene texelsHalf;
-    CHECK_MSG(Tscn::Parse(Replace(kRoom, "room/add7.png", "room/big7.png"), texelsHalf, error), error);
-    error.clear();
-    const bool read = Lighting::Read(texelsHalf, res, tiers, look, error);
-    CHECK_MSG(!read && error.find("is 32x64, and twice that is not its sprite's 32x64") != std::string::npos,
-              "a lightmap half the hd file's texels is refused against the units: " + error);
-
-    std::filesystem::remove(hd / "lamp.png", ec);
-}
-
-// AND BEFORE ITS SCALE (00_order 9.1, K9; planning step 93). The engine bakes a
-// lightmap at its sprite's bitmap size with the entity's scale set to 1
-// (ETHLightmapGen.cpp:57, :117-118) and draws it over the scaled picture. The
-// lamp at scale 2 is drawn 64 x 128 units and keeps its 16 x 32 lightmap, half
-// its 32 x 64 units; a lightmap half the DRAWN size is refused against the units.
-void ALightmapIsHalfItsSpritesUnitsBeforeItsScale() {
-    const std::string res = WriteImages();
     const std::string scaled =
         Replace(kRoom, "texture = ExtResource(\"tex_0\")\n", "texture = ExtResource(\"tex_0\")\nscale = Vector2(2, 2)\n");
-    Tscn::Scene scene;
-    std::string error;
-    CHECK_MSG(Tscn::Parse(scaled, scene, error), error);
-    std::vector<Sprites::Sprite> sprites;
-    CHECK_MSG(Sprites::Find(scene, res, Tiers::Rules{}, sprites, error), error);
-    const auto lamp = std::find_if(sprites.begin(), sprites.end(), [](const Sprites::Sprite& s) { return s.node == "lamp_7"; });
-    CHECK_MSG(lamp != sprites.end() && lamp->sizePx == glm::dvec2(64.0, 128.0) && lamp->texels == glm::ivec2(32, 64),
-              "the lamp is drawn at twice its 32 x 64 units");
 
-    Lighting::Scene look;
-    CHECK_MSG(Lighting::Read(scene, res, Tiers::Rules{}, look, error),
-              "the scaled lamp keeps its 16 x 32 lightmap: " + error);
-    CHECK_MSG(look.nodes.count("lamp_7") == 1 && !look.nodes["lamp_7"].lightmap.empty(), "and it is read");
-
-    Tscn::Scene drawnHalf;
-    CHECK_MSG(Tscn::Parse(Replace(scaled, "room/add7.png", "room/big7.png"), drawnHalf, error), error);
-    error.clear();
-    const bool read = Lighting::Read(drawnHalf, res, Tiers::Rules{}, look, error);
-    CHECK_MSG(!read && error.find("is 32x64, and twice that is not its sprite's 32x64 units") != std::string::npos,
-              "a lightmap half the scaled picture is refused against the units: " + error);
+    for (const Tiers::Rules& tiers : {TheTiers(), Tiers::Rules{}}) {
+        for (const std::string& room : {kRoom, scaled}) {
+            for (const char* name : {"room/add7.png", "room/big7.png", "room/never_written.png"}) {
+                Tscn::Scene scene;
+                std::string error;
+                CHECK_MSG(Tscn::Parse(Replace(room, "room/add7.png", name), scene, error), error);
+                Lighting::Scene look;
+                const bool read = Lighting::Read(scene, res, tiers, look, error);
+                CHECK_MSG(read, std::string(name) + " is read whatever its size, or none: " + error);
+                const auto lamp = look.nodes.find("lamp_7");
+                CHECK_MSG(lamp != look.nodes.end() && lamp->second.lightmap == res + "/assets/lightmaps/" + name,
+                          std::string(name) + " is the node's marker, resolved against res://");
+            }
+        }
+    }
+    // The lamp's hd file is 64 x 128 texels (32 x 64 units), four times the 16 x 32 file the old rule held it to.
+    std::filesystem::remove(hd / "lamp.png", ec);
 }
 
 // ---- the converted levels ---------------------------------------------------------
@@ -1111,8 +1128,7 @@ MP_SUITE_MAIN("test_mp_lighting") {
     EveryKeyIsReadAndEveryAbsenceIsTheDefault();
     AnythingElseIsRefusedNamingTheLine();
     EachLightReachesTheSpritesItShould();
-    ALightmapIsHalfItsSpritesUnits();
-    ALightmapIsHalfItsSpritesUnitsBeforeItsScale();
+    ALightmapIsAMarkerWhateverItsFileIs();
     AnOwnersScaleDrawsItsLightAndHalo();
     AHalosOwnScaleReplacesTheGlobalOneAndOnlyThat();
 

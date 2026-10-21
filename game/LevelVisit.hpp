@@ -13,7 +13,12 @@
 // descriptor set of its own - 730 lightmaps across the game - and the layer
 // hands a level's lightmaps back when the level unloads (step 45). Steps 42 to
 // 46 had nothing drawing a lightmap, so this used to acquire them itself; now it
-// acquires nothing of its own and watches the layer's.
+// acquires nothing of its own and watches the layer's. Since CMP-14 (planning
+// step 196) a lightmap is not a file: the layer bakes it when the level loads and
+// registers the pixels in the texture registry under a key that names no file
+// (LightmapBake::KeyOf), so the walk is also the device proof that the key is the
+// one the renderer looks the overlay up by, and that a bake is given back, whole,
+// with its level.
 //
 // One thing it does take. The renderer acquires a set only for a sprite it
 // draws, so a lightmapped sprite the camera has not reached has none yet. For

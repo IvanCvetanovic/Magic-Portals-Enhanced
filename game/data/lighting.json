@@ -7,7 +7,8 @@
     "",
     "Only what a built step reads is here: the two ambient lights the script sets (G3, step 45), and",
     "the normal maps' green and the halo scale (G5, step 49), the 16-bit framebuffer (G6, step 55), and",
-    "the script's emissive overrides on the levels that set ignore_emissive (CMP-1, planning step 166)."
+    "the script's emissive overrides on the levels that set ignore_emissive (CMP-1, planning step 166), and",
+    "how a static lit sprite's lightmap is baked at level load (CMP-14, planning step 196)."
   ],
 
   "darkest_ambient": {
@@ -126,6 +127,64 @@
       "value": [0.0, 0.0, 0.0],
       "lit_world": 2,
       "lit_value": [0.2, 0.2, 0.2]
+    }
+  },
+
+  "lightmap_bake": {
+    "_source": [
+      "HOW A STATIC LIT SPRITE'S LIGHTMAP IS MADE (CMP-14, planning step 196; sim/LightmapBake.hpp). At a screen of",
+      "480 px or more the original does NOT read the add<id>.png files it ships: Game's shouldUsePrerenderedLights is",
+      "GetScreenSize().y < 480 (Enhanced's out/parity/asbc/all_functions.txt:61740-61750, bytes 313283..313382, md5",
+      "48fe65ce8baea16b94ed84d8d7be84b0: CMPIf 480f; TS), preLoop calls EnablePreLoadedLightmapsFromFile(true) only then",
+      "(listing :61783-61788), the flag defaults to false (ETHScriptWrapper.cpp:39), so LoadLightmaps() at the end of",
+      "LoadScene runs GenerateLightmaps() (ETHScriptWrapper.Scene.cpp:198-204, :607-609), which bakes every static",
+      "applyLight sprite into a render target of its BITMAP SIZE IN UNITS, one texel per unit (ETHLightmapGen.cpp:57-58,",
+      "ETHScene.cpp:336-427): 2.8125 px a texel on the 1280x720 rig. The shipped files are half the sprite per axis (730 of",
+      "730), so the port drew a lightmap twice as coarse as the original's (Enhanced's out/parity/program/MEAS/CMP-14/",
+      "result.txt, 3A-3E: the lattice test, the dose-response, the offline model). The arithmetic of the bake is the",
+      "calibration judge's resolved choices R1-R20 (out/parity/program/CMP14/pre/calibration.md)."
+    ],
+    "units_per_texel": {
+      "_source": [
+        "The OUTPUT pitch, in units per texel; the light is always evaluated at the unit lattice. 1 is the original at a",
+        "screen of 480 px or more (ETHLightmapGen.cpp:57-58). 2 is the pitch of the shipped files and is the G0 self-check",
+        "of planning step 196 (with the target at 8 bits a channel, below): the unit bake reduced 2:1 by `reduction`",
+        "reproduces the shipped add<id>.png to the tolerance of calibration.md section 4.3. Only 1 and the reduction's",
+        "factor are accepted."
+      ],
+      "value": 1
+    },
+    "target": {
+      "_source": [
+        "The target the bake draws into: GL_RGB / GL_UNSIGNED_SHORT_5_6_5, one store per light into a black temporary",
+        "target and an add of the temporaries (GLES2Texture.cpp:150-170; gs2d/src/Video.h:139; ETHLightmapGen.cpp:86-168),",
+        "so a channel holds 31, 63 and 31 levels and the lightmap is the SATURATING INTEGER SUM of the per-light levels",
+        "(calibration R8). 8, 8, 8 is for the G0 self-check only: the shipped files are 8-bit data (calibration R11)."
+      ],
+      "red_bits": 5,
+      "green_bits": 6,
+      "blue_bits": 5,
+      "rounding": "nearest",
+      "_guess": true,
+      "_note": [
+        "Nothing in the source says how the float-to-fixed store rounds, and the shipped files are 8-bit smooth data that",
+        "cannot rank the rules (calibration R9, spec U1). Nearest is the engine's own Rgb565 rule, fitted to the original's",
+        "5/6/5 FRAMEBUFFER (fit.md 9: 0.28 of 255 with the step against 0.62 without), and is what a GL float-to-fixed gives.",
+        "The other word the reader accepts is truncate."
+      ]
+    },
+    "reduction": {
+      "_source": [
+        "Consulted only when units_per_texel is 2 (the G0 self-check). The shipped add<id>.png files are NOT a render at",
+        "2 units a texel: they are the unit bake reduced 2:1 by a Catmull-Rom filter (Keys a = -0.5, support scaled by 2,",
+        "Pillow's BICUBIC) and stored as 8-bit RGB (calibration.md section 0 and R10; calibA s11/s20, judge j08). Separable,",
+        "output texel k centred at unit 2k + 1, taps over source texels 2k - 3 .. 2k + 4, MIRROR edge (index -1 reads 0, n",
+        "reads n - 1), computed in double and rounded to the nearest 8-bit value, clamped to [0, 255]. The taps sum to the",
+        "denominator, so a constant stays constant."
+      ],
+      "factor": 2,
+      "taps": [-3, -9, 29, 111, 111, 29, -9, -3],
+      "denominator": 256
     }
   }
 }

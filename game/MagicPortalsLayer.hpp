@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -153,6 +154,29 @@ public:
     // culled it, a pass refused the draw, or it was drawn and produced nothing
     // visible. This says which.
     static constexpr const char* kDump = "mp.dump";
+
+    // WHERE A BAKED LIGHTMAP GOES (CMP-14, planning step 196). The layer bakes a static lit sprite's lightmap when its
+    // level loads (sim/LightmapBake.hpp, one texel per bitmap unit as the original does at a screen of 480 px or more)
+    // and hands the pixels to a sink, which holds them under the key the sprite names as its overlay and gives them
+    // back when the level goes. The shipped sink wraps the engine's TextureRegistry: UploadRGBA under the key its own
+    // Acquire looks the overlay up by, Invalidate to give back (the same lifecycle the shipped files had). A suite
+    // publishes its own in the registry's context as a `LightmapSink*`. With neither - every suite's bare registry -
+    // nothing is baked, and a sprite still names its key, so the layer's lists read as they do in a run and the suites
+    // that load a hundred levels do not pay for a bake each.
+    class LightmapSink {
+    public:
+        virtual ~LightmapSink() = default;
+        // Holds `baked` under `key` (LightmapBake::KeyOf). False: refused, and the sprite then names no lightmap.
+        virtual bool Take(entt::registry& registry, const std::string& key, const LightmapBake::Baked& baked) = 0;
+        // The level is gone (or the key was never wanted): hands it back.
+        virtual void Give(entt::registry& registry, const std::string& key) = 0;
+    };
+
+    // What the texture registry caches an overlay named `key` under: Acquire's own composition ("srgb:" or "data:" ahead
+    // of the path, TextureRegistry.cpp:256 and :429) by the predicate RenderSystem::SyncResources resolves overlays with
+    // (RenderSettings::decodesColourTextures, RenderSystem.cpp:384). One function, so the registration and the lookup
+    // cannot disagree; --visit-levels is the device proof.
+    static std::string RegistryKeyOf(const std::string& key, bool decodesColour);
 
     // Where the port reads from. The defaults are where the build was told
     // Enhanced's files are, and the port's own data beside its source.
@@ -310,6 +334,8 @@ public:
     // given back by anything else that unloads it: the next level, the menu,
     // detaching. Each is the overlay of the sprite it was baked for (since step
     // 47), so giving them back gives back a texture and a material set apiece.
+    // Since CMP-14 these are the keys of the BAKED lightmaps (LightmapBake::KeyOf of each node's eth_lightmap), which
+    // name no file; the layer's sprites carry them as their overlay and the sink holds the pixels.
     const std::vector<std::string>& HeldLightmaps() const { return m_heldLightmaps; }
     // How many lightmap paths the layer has handed back over its life, whether or
     // not a registry was there to take them. For the suites, which have none to
@@ -2160,8 +2186,16 @@ private:
     // The live share of the particles of the emitter at `emitter` in m_emitters
     // (Lighting::ParticleRatio): 1 when there is none.
     double particleRatioOf(int emitter) const;
-    // Hands the held lightmaps back to the texture registry, when there is one.
+    // Hands the held lightmaps back to their sink, when there is one.
     void releaseLightmaps(entt::registry& registry);
+    // One level load's bakes (the lights, the decoded art, the counts), made in buildSprites.
+    struct LightmapRun;
+    // The key a sprite names as its overlay: the bake of its lightmap, taken by the sink, or the key alone when there
+    // is no sink; empty when the bake failed (it says why). `saved` is the sprite as the scene saved it.
+    std::string bakeLightmap(entt::registry& registry, LightmapRun& run, const Sprites::Sprite& saved,
+                             const Lighting::Look& look);
+    // The sink a bake goes to: a published one, else the texture registry's; null when there is neither.
+    LightmapSink* lightmapSink(entt::registry& registry);
     void updateHud(entt::registry& registry);
 
     // The level at `index` in chapters.json, in place of whatever was there.
@@ -2314,6 +2348,9 @@ private:
     glm::dvec3 m_ambient{1.0};
     std::vector<std::string> m_heldLightmaps;
     std::size_t m_lightmapsHandedBack{0};
+    // The keys this layer has had its sink take and not yet given back: a retry finds its bakes still there and
+    // makes none (unloadLevel keeps them), anything else gives every one back (releaseLightmaps).
+    std::set<std::string> m_takenKeys;
     Game::Level m_level;
     bool m_loaded{false};
     std::string m_loadError;
