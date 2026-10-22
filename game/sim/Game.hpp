@@ -25,6 +25,7 @@
 
 #include "sim/Boss.hpp"
 #include "sim/Bounce.hpp"
+#include "sim/ContactOrder.hpp"
 #include "sim/DarkDragon.hpp"
 #include "sim/Demolish.hpp"
 #include "sim/Diamonds.hpp"
@@ -107,7 +108,8 @@ struct Data {
     Handle::Rules handle;         // and handle.json: the draggable handle and what follows it
     Hazards::Rules hazards;       // and hazards.json, which is what the role table got wrong
     Resting::Rules resting;       // and resting.json: the piles the original shows at rest, put to sleep at the start
-    std::string levelName;        // the level's file name without its extension, which resting.json is keyed by
+    ContactOrder::Rules contactOrder; // and contact_order.json: the bodies the engine steps in Box2D's order (move after the solve)
+    std::string levelName;        // the level's file name without its extension, which resting.json and contact_order.json are keyed by
     std::filesystem::path prisms; // where LevelBuilder writes the platforms' prisms
 };
 

@@ -147,6 +147,10 @@ add_mp_test(test_mp_handle SKIPS_WITH_77)
 # Seesaws and spinning platforms. No tick of its own: the joint is attached when
 # the level is built and the engine's solver does the rest.
 add_mp_test(test_mp_hinge SKIPS_WITH_77)
+# The bodies the engine steps in Box2D's order, from game/data/contact_order.json (planning step 197, CMP-18): the table's parse and its refusals,
+# the flag on 2-29's stone and plank and on no other body of the 128 levels, the empty table and an unkeyed copy as the control, 2-29's stone
+# against the rig clip's five readings through the layer, and the flagged stone's reading of breakable_wall_883.
+add_mp_test(test_mp_contact_order SKIPS_WITH_77)
 # The minions of worlds 3 and 4: spawned from a marker, walking a prefix of
 # waypoints, and taken by the floor that kills them and nothing else.
 add_mp_test(test_mp_minions SKIPS_WITH_77)

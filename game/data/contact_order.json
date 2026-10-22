@@ -1,0 +1,29 @@
+{
+  "_about": [
+    "The loose bodies the engine steps in Box2D's order (sim/ContactOrder, planning step 197, CMP-18): velocity, the contact solve, THEN the move.",
+    "The key of `levels` is the level's file name without its extension (data.levelName, as resting.json is keyed), its value the nodes' names in the level's .tscn",
+    "whose bodies take the order. A name the level does not build as a loose body is an error at the level's start, never a skip, and a key that is no level of",
+    "the converted directory is an error of test_mp_contact_order; a level that is not here, and a copy of a listed level under another file name, takes none",
+    "(the engine's own order, which is the unkeyed control). The loader accepts an empty `levels`: every exe is compared with itself on the empty table first.",
+    "",
+    "WHY. The original steps Box2D once a frame at 1/30 s and Box2D moves a body AFTER the velocity solve; the engine moves it by the velocity it carried into the step and",
+    "then solves, so every contact acts a step late. On 2-29's stone, a 30-unit sphere on a 14-degree prism ramp, that costs it most of its speed: the original's stone",
+    "creeps at 1.053 units a frame (the rig clip, two takes: out/parity/footage/F18_stone_2-29.mp4 and _take2) where the engine's creeps at 0.281, and the engine at the",
+    "port's carried step IS the engine at 1/30 s to the digit while its creep depends on the step (0.281 at 1/30, 0.855 at 2 x 1/60, 0.985 at 4 x 1/120, 1.032 at 8 x 1/240)",
+    "and Box2D's does not (1.054 to 1.089). The order is worth 3.6 times at the carried step.",
+    "",
+    "THE SET. 2-29's stone and its plank (spinning_platform_no_emissive_ent_890, the seesaw the stone tips), and not the barrel. Measured on the real exe (CMP-18 Part 0:",
+    "the three sets from this file on one build): the stone alone leaves the plank 3.2 to 4.0 degrees behind the rig clip's at equal stone x from 303 to 290 (worst 4.03 at x 297;",
+    "the gate is 3), because a flagged stone meets an UNflagged plank in the engine's other order. The stone and the plank hold it within 1.41 degrees over x 316 to 290 and",
+    "meet all five bands (creep 1.0017 units a frame, free roll 1.957, first plank turn f112.8, landing f132.2, stone at the barrel f191.9, against the clip's 1.053, 2.025,",
+    "107, 123.0, 183.5, the bands +-10 percent round them, the frames paired as clip f = port tick + 1). Adding the barrel moves none of the five by more than 0.2 frame and",
+    "makes a flagged-barrel / unflagged-player pair for nothing (2-29's route carries the barrel through a portal onto the button). The idle player is untouched in all three.",
+    "",
+    "WHICH. Only what was measured: one level. A stone that rests at the foot of a slope is still under-driven by the order alone (the unit table's two shallowest",
+    "overlaps), and the barrel's push needs the friction step (CMP-11), so the table is NOT widened by guess: a body added is a data edit with a rig clip of its own.",
+    "The follow-up (CMP18-2) widens it by DATA ONLY, for a stone a rig clip shows wrong; its first candidates are 2-22's stone (the only other stone that moves in 420",
+    "idle ticks) and 1-09's."
+  ],
+  "_source": "DECODED: Ethanon steps Box2D once a frame at a fixed 1/30 s (reference/ethanon toolkit/Source/src/engine/Physics/ETHPhysicsSimulator.cpp:156-161, Update, the Step at :160; docs/ethanon-formats.md) and Box2D integrates positions AFTER the velocity solve (toolkit/Source/src/box2d/Box2D/Dynamics/b2Island.cpp: velocities v += h g at :206, the velocity constraints at :244-267, then c += h v at :298). MEASURED on the original: the F18 rig clip of 2-29 (creep 1.0533 / 1.0530 u a frame, free floor roll 2.025, first plank turn f107, landing f123.0, stone at x 153.3 on f183.5; two takes; out/parity/program/CMP18/pre/rig.md). CHOSEN among the variants measured on the port (out/parity/program/CMP18/pre/variants.md: the engine at the carried step against the step; the carry removed, a start velocity and the order switch) and on the real exe (out/parity/program/CMP18/fix/part0.md: the stone alone misses the plank gate, 4.03 degrees at x 297 against 3; the stone and the plank meet it, 1.41 at x 300; the barrel adds a pair for nothing). Widened only by data, for a stone a rig clip shows wrong (CMP18-2).",
+  "levels": { "level28a": ["rolling_stone_892", "spinning_platform_no_emissive_ent_890"] }
+}

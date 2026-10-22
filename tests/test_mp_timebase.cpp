@@ -1101,7 +1101,10 @@ const StillMoving kStillMoving[] = {
     // and spinning 0.4 degrees a second, 5 units from where it fell by tick 420. Not the 5.7 units a second creep this suite pins.
     {"level19a", "crate_small_no_emissive_ent_1129",
      "2-20's small crate stacked on the big one below it creeps at 0.3 units a second (observed, cause not diagnosed)"},
-    // OBSERVED: the stone rolls 165 units in the last 120 ticks (61 units a second): it is rolling free.
+    // OBSERVED: the stone rolls 165 units in the last 120 ticks (61 units a second): it is rolling free. That is the engine's own order,
+    // which an empty game/data/contact_order.json leaves it in (the control the exes are first compared on). STEP 197 (CMP-18): the shipped
+    // table steps this stone in Box2D's order, it meets the barrel by tick 195 and is asleep from 235, so on the shipped table the entry is
+    // not met (109 bodies asleep at tick 420 and 4 still moving, were 108 and 5) and it stays for the table that names nothing.
     {"level28a", "rolling_stone_892", "2-29's stone is rolling at 61 units a second, 165 units in the last 120 ticks"},
     // 3-12's stone and crate were named here until resting.json put them to sleep where the original's stills show them (R3b fix 1):
     // the reading that a walking minion pushed them against the wall was an inference and the trace did not bear it out.

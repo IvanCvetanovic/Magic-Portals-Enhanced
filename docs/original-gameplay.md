@@ -483,6 +483,22 @@ B's centre plus attach point B turned by B's angle. Eight of the ten start somew
 places them: 2-31's seesaw 31.8 px (14.0 left, 28.5 down), 3-19's plank 8 px down, 3-15's 4 right, 4-31's 3 up,
 2-28's 2.1 (0.6 right, 2 down), 3-20's 2 left, 2-29's 0.6 right, 4-11's 0.4 left; 2-30's and 3-22's already meet.
 
+### 6.5b The order of a physics step: why 2-29's stone creeps at 1.05 units a frame (planning step 197, CMP-18)
+
+Box2D moves a body AFTER it has solved the body's contacts: the island adds gravity to the velocity, solves the contact and joint velocity
+constraints, and only then adds `h x v` to the position (`b2Island.cpp:206`, `:258-269`, `:298`). The original steps it once a frame at 1/30 s
+(`ETHPhysicsSimulator.cpp:160`). A ball on a shallow ramp therefore keeps the speed its contact lets it have, step after step, and rolls at
+a rate that hardly depends on the step: 1.054 to 1.089 units a frame for 2-29's 30-unit stone on its 14-degree prism, at any step from 1/30 to
+1/240 s. **The rig clip of 2-29 (F18, two takes) reads 1.053 units a frame for the creep, 2.025 for the free roll on the floor, the plank's first
+turn on frame 107, the landing on 123.0 and the stone at the barrel (x 153.3) on 183.5.** The port's engine does the other order (it moves a
+body by the velocity it carried in and then takes the approach out of its contacts), which at the port's carried step (the engine at 1/30 s) is
+worth a factor of 3.6 on this stone: 0.281 a frame, the plank turning on 344, the landing on 363, the barrel at 474. The engine now has Box2D's order
+as an opt-in per body, and the port gives it to 2-29's stone and its plank (`game/data/contact_order.json`): creep 1.0017, free roll 1.957, the
+plank's first turn on frame 113, the landing on 132.2 and the barrel on 191.9, each inside +-10 percent of the clip's reading, one-sided
+(the port is slower than the clip by 3 to 8 percent: the free roll 3.4 percent under, the creep 4.9 under, and the three frames 4.6 to 7.5 percent late). **What this does not close:** the barrel is pushed 1.8 units where the original pushes it 24.9 (the friction step,
+CMP-11), a stone that starts nearly at rest at the foot of a slope is still under-driven, and no other body is known to need the order: the
+table is widened by data, with a rig clip of the body's own.
+
 ### 6.6 Level properties
 
 **DATA.** The `properties` entity, in 102 of 128 levels. Chapter 4 is where they matter:

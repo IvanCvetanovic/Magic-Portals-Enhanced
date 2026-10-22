@@ -202,6 +202,8 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Hazards::LoadRules(portDataDirectory + "/hazards.json", read.hazards, error)) return false;
     // The piles the original shows at rest from its first frame (sim/Resting), by the level's file name.
     if (!Resting::LoadRules(portDataDirectory + "/resting.json", read.resting, error)) return false;
+    // The bodies stepped in Box2D's order, by the same name (sim/ContactOrder).
+    if (!ContactOrder::LoadRules(portDataDirectory + "/contact_order.json", read.contactOrder, error)) return false;
     read.levelName = std::filesystem::path(levelPath).stem().string();
     // The entities a boss adds that no level places (sim/Restock): read beside the
     // level, whose root lighting the table's scene takes, and built by no one until
@@ -384,6 +386,10 @@ bool Start(const Data& data, entt::registry& registry, Level& out, std::string& 
     // The piles the original shows at rest, put to sleep where the level places them: after every body is built and wired,
     // before a physics step has moved one.
     if (!Resting::Apply(registry, data.resting, data.levelName, out.built.entities, error)) return false;
+
+    // And the bodies the engine moves after its contact solve, as Box2D does: set on the rigid bodies the level built, before the
+    // first step.
+    if (!ContactOrder::Apply(registry, data.contactOrder, data.levelName, out.built.entities, error)) return false;
 
     // And the minions the markers ask for, built last: a minion is teleportable,
     // so it joins the portals' travellers the way what a launcher throws does -

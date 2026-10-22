@@ -528,6 +528,10 @@ void ABodysOwnAttachPointStandsOnTheSamePoint() {
 // 2-29's STONE (WT-10, CMP-18): the stone sits on the hinged plank until the plank tips it. Attach B moves that plank 0.6 px
 // right, which is all this step may say about the stone's clock; what is printed is the plank's turn off its rest angle and
 // the stone's centre every 20 ticks, to be read before and after the rule and nothing more - nothing is pinned.
+// STEP 197 (CMP-18): game/data/contact_order.json steps this level's stone and plank in Box2D's order (move after the contact solve),
+// and this table is built through Game::LoadData like every other, so it now reads the flagged pair: the plank first turns past 0.05
+// rad on tick 210 (it was 254 on the engine's own order). It is printed and still not pinned, so the suite passes on an empty table as
+// well, which is the control the exes are first compared on; the flagged world's numbers are pinned by test_mp_contact_order.
 void TheStoneOf2_29RidesThePlank() {
     Run run;
     if (!Begin("level28a", run)) return;

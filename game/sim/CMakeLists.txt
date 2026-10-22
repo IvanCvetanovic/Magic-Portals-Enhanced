@@ -13,6 +13,7 @@ add_library(MagicPortalsSim STATIC
     Camera.cpp
     Carry.cpp
     Chapters.cpp
+    ContactOrder.cpp
     Controls.cpp
     Credits.cpp
     Cutscene.cpp

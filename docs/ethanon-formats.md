@@ -2640,6 +2640,13 @@ the shipped script's listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce
 - **The ceiling.** `b2Island::Solve` clamps a step's translation to `b2_maxTranslation` = 2 m (`box2d/Box2D/Common/b2Settings.h:101`;
   `box2d/Box2D/Dynamics/b2Island.cpp:282-288` and `:480-486`): the whole velocity is scaled down to it, after the contact solve. 100 screen pixels:
   35.6 units at the 720-line emulator, fewer on a taller screen. Gravity is added as `v += h x (gravityScale x gravity + invMass x force)` (`:206`).
+- **The order inside one Box2D step (planning step 197, CMP-18).** `b2Island::Solve` (`box2d/Box2D/Dynamics/b2Island.cpp`) takes a body through: gravity and damping into its
+  velocity (`:205-206`, damping `:209-216`), the contact and joint velocity constraints (`InitializeVelocityConstraints` `:244`, `WarmStart` `:248`, then `velocityIterations` loops of the joints'
+  `SolveVelocityConstraints` and the contact solver's, `:258-269`), THEN the positions (`:274-298`, `c += h * v` at `:298`, after the `b2_maxTranslation` clamp of `:282-288`), then the position constraints
+  (`:307-327`). So **a body is moved by the velocity its contacts left it**, not by the one it brought into the step. `ETHPhysicsSimulator::Update` runs this once a frame at the fixed 1/30 s
+  (`ETHPhysicsSimulator.cpp:156-161`, the `Step` at `:160`). The port's engine moves a body first and solves after, so a contact acts one step late; the engine carries Box2D's order
+  as an opt-in per body (`RigidBodyComponent::integrateAfterSolve`), and `game/data/contact_order.json` says which of the port's bodies take it. Measured on the original: 2-29's stone creeps at
+  1.053 units a frame (`out/parity/program/CMP18/pre/rig.md`), where the engine's order gives 0.281 at the port's carried step.
 - **`SideScrollerCharacter::applyForces`** (bytes 129676..130142): ins 15-24 `elapsedTime = float(min(66, getLastFrameElapsedTime()))`; 26-36 `speedScale
   = g_scale.scale(speed) x elapsedTime / GetCurrentPhysicsTimeStepMS()`; 38-56 `dirVec = (moveVec.x x speedScale, linearVel.y)`; 58-69 off the ground:
   71-84 `dirVec.x = linearVel.x x min(1, GetFPSRate() / 60 x 0.86)`; 86-91 `SetLinearVelocity(dirVec)`. `speed` is 3 (`SideScrollerCharacter`'s constructor,
