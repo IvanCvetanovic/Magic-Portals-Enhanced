@@ -146,6 +146,14 @@ Controls::Policy& TestControlsPolicy() {
     return policy;
 }
 
+// The port's data directory TestPaths() gives a case, when a case that runs a PLAYER'S policy (the feature exists, nothing forced: the style then comes from the data's
+// `default_mode`) needs a default of its own instead of the owner's. Empty: the shipped data. Planning step 198 (CTL-13) made the shipped default modern; a case about a run
+// that starts classic says so here (a scratch copy of the data) and does not lean on the file.
+std::string& TestPortDataOverride() {
+    static std::string dir;
+    return dir;
+}
+
 MagicPortalsLayer::Paths TestPaths() {
     MagicPortalsLayer::Paths paths;
     paths.prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer";
@@ -162,6 +170,7 @@ MagicPortalsLayer::Paths TestPaths() {
                         portData.c_str());
         }
     }
+    if (!TestPortDataOverride().empty()) paths.portData = TestPortDataOverride();
     return paths;
 }
 
@@ -24715,6 +24724,30 @@ std::string ControlsScratchData(const std::string& name, const ControlsRewrite& 
     return to.string();
 }
 
+// The controls.json text with the VALUE of `default_mode` set to `style`. Found by the key, never by the old value's line: planning step 198 (CTL-13) flipped the shipped
+// value to modern, and the rewrite that looked for "classic" found nothing (and its own check said so). It holds whichever value the file ships.
+std::optional<std::string> WithDefaultMode(const std::string& text, Controls::Style style) {
+    const std::string key = "\"default_mode\"";
+    const std::size_t at = text.find(key);
+    CHECK_MSG(at != std::string::npos, "controls.json has the default_mode key this case rewrites");
+    if (at == std::string::npos) return text;
+    const std::size_t colon = text.find(':', at + key.size());
+    const std::size_t open = colon == std::string::npos ? colon : text.find('"', colon);
+    const std::size_t close = open == std::string::npos ? open : text.find('"', open + 1);
+    CHECK_MSG(close != std::string::npos, "and a quoted value after it");
+    if (close == std::string::npos) return text;
+    std::string edited = text;
+    edited.replace(open + 1, close - open - 1, Controls::NameOf(style));
+    return edited;
+}
+
+// A scratch copy of the port's data whose default is `style`: how a case about a player's run that STARTS in one style (the layer's, the Options screen's, the adjustment
+// screen's) gets it whatever the owner has shipped. Each copy has a directory of its own (two layers of one case may be alive together).
+std::string ControlsScratchDefault(const std::string& name, Controls::Style style) {
+    static int made = 0;
+    return ControlsScratchData(name + "-" + Controls::NameOf(style) + "-" + std::to_string(++made), [style](const std::string& text) { return WithDefaultMode(text, style); });
+}
+
 std::string ControlsScratchSaves(const std::string& name) {
     const std::filesystem::path dir = std::filesystem::temp_directory_path() / ("supersonic-test-mp-layer-controls-saves-" + name);
     ControlsScratchDirs().push_back(dir);
@@ -24857,17 +24890,20 @@ void ABareLayerIsClassicAndHasNoStore() {
     CheckLoaded(forced, "--controls modern");
     CHECK_MSG(!ControlsFileExistsIn(saves), "--controls modern writes nothing");
 
-    // And the player's run, which is the one a player has, DRAWS AND CLAIMS what a bare layer does while the shipped default is
-    // classic: the HUD of the same level at the same age and the claim of every 16th unit of the view, hash for hash and point for
-    // point. (Before CTL-6 only the forced-modern run was held to the bare layer's HUD; the run every player has was not.)
+    // And the player's run DRAWS AND CLAIMS what a bare layer does while the data's default is classic: the HUD of the same level at the same age and
+    // the claim of every 16th unit of the view, hash for hash and point for point. (Before CTL-6 only the forced-modern run was held to the bare layer's HUD;
+    // the run every player has was not.) Since planning step 198 (CTL-13) the SHIPPED default is modern, so this run reads a scratch copy of the data that
+    // says classic - the pin is about what the classic default plays, and does not lean on the owner's choice; the shipped value has its own case
+    // (APlayersRunOnTheShippedDataPlaysModern).
     if (OriginalArtIsThere("ABareLayerIsClassicAndHasNoStore: the player's run drawn")) {
-        const ControlsRun playerDrawn = RunControls("a player's run, drawn", PolicyOf(std::nullopt), "", saves, true);
+        const std::string classicDefault = ControlsScratchDefault("bare-classic-default", Controls::Style::Classic);
+        const ControlsRun playerDrawn = RunControls("a player's run, drawn", PolicyOf(std::nullopt), classicDefault, saves, true);
         const ControlsRun bareDrawn = RunControls("a bare layer", Controls::Policy{}, "", saves, true);
         CheckLoaded(playerDrawn, "a player's run, drawn");
         long claimed = 0;
         for (const int claim : bareDrawn.claims) claimed += claim >= 0 ? 1 : 0;
         CHECK_MSG(playerDrawn.style == Controls::Style::Classic && playerDrawn.policy.available && playerDrawn.policy.saveAllowed,
-                  "a player's run on the shipped data plays classic: " + Describe(playerDrawn));
+                  "a player's run on data whose default is classic plays classic: " + Describe(playerDrawn));
         CHECK_MSG(bareDrawn.hud != 0 && playerDrawn.hud == bareDrawn.hud && bareDrawn.leftPads == 1 && playerDrawn.leftPads == 1,
                   "its HUD is the bare layer's, bit for bit: " + PtrHex(playerDrawn.hud) + " against " + PtrHex(bareDrawn.hud));
         CHECK_MSG(!bareDrawn.claims.empty() && playerDrawn.claims == bareDrawn.claims && claimed > 0,
@@ -24879,38 +24915,38 @@ void ABareLayerIsClassicAndHasNoStore() {
 void ControlsStyleReportsTheResolvedStyle() {
     const ControlsScratchGuard scratch;
     const std::string saves = ControlsScratchSaves("style");
-    // The shipped data says classic; a scratch copy says modern, which is the one way to see the default decide.
-    const std::string modernDefault = ControlsScratchData("default-modern", [](const std::string& text) {
-        const std::string from = "\"default_mode\": \"classic\"";
-        const std::size_t at = text.find(from);
-        CHECK_MSG(at != std::string::npos, "controls.json has the default_mode line this case rewrites");
-        std::string edited = text;
-        if (at != std::string::npos) edited.replace(at, from.size(), "\"default_mode\": \"modern\"");
-        return std::optional<std::string>(edited);
-    });
+    // Two scratch copies of the data, one saying each: the default decides a player's run and nothing else, whichever the owner ships (planning step 198 made the shipped
+    // value modern; the third group below runs on the shipped file itself and is the only one that follows it).
+    const std::string classicDefault = ControlsScratchDefault("default-classic", Controls::Style::Classic);
+    const std::string modernDefault = ControlsScratchDefault("default-modern", Controls::Style::Modern);
+    enum class Data { Classic, Modern, Shipped };
     struct Row {
         const char* what;
         std::optional<std::string> flag;
         bool fixedStep;
-        bool modernData; // the data says modern
+        Data data; // what the data's default_mode says
         Controls::Style style;
         bool ready;
         std::string line;
     };
     const std::vector<Row> rows = {
-        // design 2.1, the data saying classic (what ships until CTL-13)
-        {"a player's run", std::nullopt, false, false, Controls::Style::Classic, true, kControlsLineDefault},
-        {"a developer's run", std::nullopt, true, false, Controls::Style::Classic, false, ""},
-        {"--controls classic", "classic", false, false, Controls::Style::Classic, false, kControlsLineFlag},
-        {"--controls modern", "modern", false, false, Controls::Style::Modern, true, kControlsLineModernFlag},
-        {"--controls modern on a developer's run", "modern", true, false, Controls::Style::Modern, true, kControlsLineModernFlag},
+        // design 2.1, the data saying classic (what shipped from planning step 181 to 197)
+        {"a player's run on data that says classic", std::nullopt, false, Data::Classic, Controls::Style::Classic, true, kControlsLineDefault},
+        {"a developer's run", std::nullopt, true, Data::Classic, Controls::Style::Classic, false, ""},
+        {"--controls classic", "classic", false, Data::Classic, Controls::Style::Classic, false, kControlsLineFlag},
+        {"--controls modern", "modern", false, Data::Classic, Controls::Style::Modern, true, kControlsLineModernFlag},
+        {"--controls modern on a developer's run", "modern", true, Data::Classic, Controls::Style::Modern, true, kControlsLineModernFlag},
         // and the data saying modern: the default decides a player's run and nothing else
-        {"a player's run on data that says modern", std::nullopt, false, true, Controls::Style::Modern, true, kControlsLineModernDefault},
-        {"a developer's run on data that says modern", std::nullopt, true, true, Controls::Style::Classic, false, ""},
-        {"--controls classic on data that says modern", "classic", false, true, Controls::Style::Classic, false, kControlsLineFlag},
+        {"a player's run on data that says modern", std::nullopt, false, Data::Modern, Controls::Style::Modern, true, kControlsLineModernDefault},
+        {"a developer's run on data that says modern", std::nullopt, true, Data::Modern, Controls::Style::Classic, false, ""},
+        {"--controls classic on data that says modern", "classic", false, Data::Modern, Controls::Style::Classic, false, kControlsLineFlag},
+        // and the shipped data (the owner's word of 2026-10-22: modern): a player's run starts modern and says why; the rig's runs do not move
+        {"a player's run on the shipped data", std::nullopt, false, Data::Shipped, Controls::Style::Modern, true, kControlsLineModernDefault},
+        {"a developer's run on the shipped data", std::nullopt, true, Data::Shipped, Controls::Style::Classic, false, ""},
+        {"--controls classic on the shipped data", "classic", false, Data::Shipped, Controls::Style::Classic, false, kControlsLineFlag},
     };
     for (const Row& row : rows) {
-        const ControlsRun run = RunControls(row.what, PolicyOf(row.flag, row.fixedStep), row.modernData ? modernDefault : "", saves);
+        const ControlsRun run = RunControls(row.what, PolicyOf(row.flag, row.fixedStep), row.data == Data::Classic ? classicDefault : row.data == Data::Modern ? modernDefault : "", saves);
         CheckLoaded(run, row.what);
         CHECK_MSG(run.style == row.style && run.ready == row.ready,
                   std::string(row.what) + ": style " + Controls::NameOf(run.style) + (run.ready ? " ready" : " not ready") + ", wanted " +
@@ -28815,8 +28851,13 @@ std::string OsDir(const std::string& name) {
 // The paths of a run as main builds them for the flags given (Controls::ResolvePolicy over the flag and the kind of run), a save directory and a scratch
 // directory for what the layer generates of the case's own, so that "nothing was written" is a statement about this run alone. The original's own corner
 // sprites are off, as MdPaths has them: the cases are about the setting, and the pictures are the drawn glyphs.
+//
+// A player's run with nothing saved takes its style from the data's `default_mode`. These cases were written when that was classic, and say what Options, the adjustment
+// screen and a level change FROM a classic start; planning step 198 (CTL-13) made the shipped value modern, so a player's run here reads a scratch copy of the data that
+// says classic (`shippedData` false, the default) and does not lean on the owner's choice. A run that is forced or is a developer's never reads the default and keeps the
+// shipped data. OsPathsShipped is the shipped data itself, for the cases about what the owner ships.
 MagicPortalsLayer::Paths OsPaths(const std::string& saves, const std::string& prisms, const std::optional<std::string>& flag = std::nullopt,
-                                 bool fixedStep = false, bool route = false, bool visitLevels = false) {
+                                 bool fixedStep = false, bool route = false, bool visitLevels = false, bool shippedData = false) {
     MagicPortalsLayer::Paths paths = TestPaths();
     paths.saveDir = saves;
     paths.prisms = prisms;
@@ -28824,7 +28865,12 @@ MagicPortalsLayer::Paths OsPaths(const std::string& saves, const std::string& pr
     CHECK_MSG(paths.controls.valid, "the flag resolves: " + paths.controls.error);
     paths.controls.withoutOriginalArt = true;
     paths.fixedStep = fixedStep;
+    if (!shippedData && paths.controls.available && !paths.controls.forced) paths.portData = ControlsScratchDefault("options-start", Controls::Style::Classic);
     return paths;
+}
+
+MagicPortalsLayer::Paths OsPathsShipped(const std::string& saves, const std::string& prisms) {
+    return OsPaths(saves, prisms, std::nullopt, false, false, false, true);
 }
 
 glm::vec2 OsPx(const glm::dvec2& onView) {
@@ -29240,6 +29286,95 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
         if (!OsOpenOptions(run, "a broken file")) return;
         OsClick(run, OsTileCentre(run.layer, Style::Modern));
         CHECK_MSG(OsSavedFile(broken) == kOsModernFile, "the next choice writes it over: " + OsSavedFile(broken));
+    }
+}
+
+// ---- the shipped default (planning step 198, CTL-13) ---------------------------------------------------------------------------------------------
+//
+// The owner's word of 2026-10-22, in chat: "ctl13 - modern controls should be default contorls." A player's run with nothing saved starts in Modern. These are the cases that
+// run on the SHIPPED data (OsPathsShipped; RunControls with no data directory) and so follow the owner's choice: every other case of this suite gives the run the default it
+// wants (a scratch copy of the data), so that going back is `default_mode` in game/data/controls.json and the cases of this group. They are the in-process form of the capture
+// gate: an empty save directory, an existing save (scores.json, audio.json and achievements.json and no controls.json), a controls.json that says classic - and what Options
+// offers as the way back.
+//
+// FAILS UNDER: the shipped value back at classic (every row of (a), (b) and (d)); a default that outranks a saved choice ((c)); a default that writes a controls.json by being
+// read ((a), (b)); a style that is modern in name only (the drawn HUD and the claim of (d) are those of --controls modern, whose pins are CTL-6's).
+void APlayersRunOnTheShippedDataPlaysModern() {
+    if (!OriginalArtIsThere("APlayersRunOnTheShippedDataPlaysModern")) return;
+    const ControlsScratchGuard scratch;
+    using Style = Controls::Style;
+    const std::string what = "APlayersRunOnTheShippedDataPlaysModern";
+
+    // (a) A fresh install: an empty save directory.
+    const std::string fresh = OsDir("shipped-fresh-saves");
+    {
+        OsRun run(OsPathsShipped(fresh, OsDir("shipped-fresh-prisms")), what + ": a fresh install");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.OptionsAvailable() && layer.ModernReady() && layer.ControlsPolicy().saveAllowed && !layer.ControlsPolicy().forced,
+                  what + ": a player's run: the feature exists, nothing is forced, it may save");
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern, what + ": and it plays modern (N1)");
+        CHECK_MSG(layer.ControlsLine() == kControlsLineModernDefault, what + ": and says why, in the policy's own words: '" + layer.ControlsLine() + "'");
+        CHECK_MSG(layer.ModernArtResolved() && !layer.ModernImage(Controls::Id::Left).empty() && !layer.ModernImage(Controls::Id::Right).empty(),
+                  what + ": its pictures are resolved at attach");
+        CHECK_MSG(layer.ControlsStore().Persists() && !layer.ControlsStore().FromFile() && !layer.ControlsStore().Mode(), what + ": nothing was chosen and nothing was read");
+        CHECK_MSG(!ControlsFileExistsIn(fresh), what + ": and starting writes no controls.json");
+        // Options shows Modern lit and offers Adjust; looking writes nothing.
+        if (!OsOpenOptions(run, what)) return;
+        CHECK_MSG(OsLitTile(layer, run.registry) == "modern" && layer.AdjustAvailable(), what + ": Options opens with the Modern tile lit and Adjust offered: " + OsLitTile(layer, run.registry));
+        CHECK_MSG(!ControlsFileExistsIn(fresh), what + ": and opening it writes no controls.json");
+        // THE WAY BACK: the Classic tile chooses classic, lights it, hides Adjust, and keeps the choice.
+        OsClick(run, OsTileCentre(layer, Style::Classic));
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic && OsLitTile(layer, run.registry) == "classic" && !layer.AdjustAvailable(),
+                  what + ": the Classic tile is the way back: " + OsLitTile(layer, run.registry));
+        CHECK_MSG(OsSavedFile(fresh) == kOsClassicFile, what + ": and the choice is kept: " + OsSavedFile(fresh));
+    }
+    // (c) The next run on that directory reads the file, which says classic: the saved choice beats the default.
+    {
+        OsRun run(OsPathsShipped(fresh, OsDir("shipped-fresh-prisms-2")), what + ": the next run");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ControlsStyle() == Style::Classic && run.layer.ControlsLine() == "controls: classic (saved)" && !run.layer.ModernArtResolved(),
+                  what + ": a controls.json that says classic plays classic, and says it was saved: '" + run.layer.ControlsLine() + "'");
+        CHECK_MSG(OsSavedFile(fresh) == kOsClassicFile, what + ": and starting leaves the file as it was");
+    }
+    // (b) An existing save: scores.json, audio.json and achievements.json, and no controls.json. No migration and no prompt: it plays the shipped default.
+    {
+        const std::string existing = OsDir("shipped-existing-saves");
+        OsWrite(existing, "scores.json", "{\n  \"version\": 1,\n  \"scores\": [\n    {\"world\": 0, \"level\": 0, \"medal\": 3}\n  ]\n}\n");
+        {
+            MagicPortals::Switches::Store switches;
+            std::string error;
+            CHECK(switches.Open(existing, MagicPortals::Switches::Defaults{}, error));
+            switches.SetSound(false);
+            CHECK_MSG(switches.Save(error), "audio.json is written by the store that owns it: " + error);
+        }
+        OsWrite(existing, "achievements.json", "{\"list\":\"\",\"hash\":\"\"}");
+        const std::string scoresBefore = ReadWholeFile(std::filesystem::path(existing) / "scores.json");
+        const std::string audioBefore = ReadWholeFile(std::filesystem::path(existing) / "audio.json");
+        OsRun run(OsPathsShipped(existing, OsDir("shipped-existing-prisms")), what + ": an existing save");
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.ControlsStyle() == Style::Modern && layer.ControlsLine() == kControlsLineModernDefault && !layer.ControlsStore().FromFile(),
+                  what + ": an existing save with no controls.json plays the shipped default, modern, with no migration: '" + layer.ControlsLine() + "'");
+        PtrRest(layer, run.registry, 30);
+        CHECK_MSG(!ControlsFileExistsIn(existing), what + ": and no controls.json appears");
+        CHECK_MSG(ReadWholeFile(std::filesystem::path(existing) / "scores.json") == scoresBefore && ReadWholeFile(std::filesystem::path(existing) / "audio.json") == audioBefore,
+                  what + ": scores.json and audio.json are untouched");
+    }
+    // (d) A run that plays modern draws and claims the modern controls: the player's run on the shipped data and `--controls modern` have one HUD and one claim map.
+    {
+        const std::string playerSaves = ControlsScratchSaves("shipped-drawn");
+        const std::string forcedSaves = ControlsScratchSaves("shipped-drawn-forced");
+        const ControlsRun player = RunControls(what + ": a player's run, drawn", PolicyOf(std::nullopt), "", playerSaves, true);
+        const ControlsRun forced = RunControls(what + ": --controls modern, drawn", PolicyOf("modern"), "", forcedSaves, true);
+        CheckLoaded(player, what + ": a player's run, drawn");
+        CheckLoaded(forced, what + ": --controls modern, drawn");
+        long claimed = 0;
+        for (const int claim : player.claims) claimed += claim >= 0 ? 1 : 0;
+        CHECK_MSG(player.style == Style::Modern && player.ready && forced.style == Style::Modern, what + ": both play modern: " + Describe(player));
+        CHECK_MSG(player.hud != 0 && player.hud == forced.hud, what + ": the player's HUD is --controls modern's, bit for bit: " + PtrHex(player.hud) + " against " + PtrHex(forced.hud));
+        CHECK_MSG(!player.claims.empty() && player.claims == forced.claims && claimed > 0, what + ": and so is its claim over the view (" + std::to_string(claimed) + " of " + std::to_string(player.claims.size()) + " points)");
+        CHECK_MSG(!ControlsFileExistsIn(playerSaves), what + ": and drawing it writes no controls.json");
     }
 }
 
@@ -31010,11 +31145,23 @@ void ATunedFileIsIgnoredByAClassicRunAndPlayedAfterTheSwitch() {
               what + ": and drawn at a fifth of the byte");
 }
 
-// A plain launch of the game is a player's run whose style is the shipped default, classic: no flag, none of the rig's three, so the feature EXISTS (the policy is
+// A plain launch of the game is a player's run whose style is the data's default: no flag, none of the rig's three, so the feature EXISTS (the policy is
 // available) and nothing forces a style. Every CTL-2 pin has so far run under a hand-built `forced == Classic` policy (above) or a bare layer's; this runs the same
 // pins - the held touches, the claim map, the HUD of all 128 levels against the goldens - under the policy a plain launch resolves (planning step 185's LEFT FOR LATER).
+// Since planning step 198 (CTL-13) the SHIPPED default is modern, so "a plain launch that plays classic" is a plain launch on data whose default says classic: the case
+// reads a scratch copy of the data that says so (TestPortDataOverride, for every layer the pins build), and does not follow the owner's choice. What a plain launch on the
+// shipped data plays is APlayersRunOnTheShippedDataPlaysModern's.
+struct TestDataOverrideGuard {
+    explicit TestDataOverrideGuard(const std::string& dir) { TestPortDataOverride() = dir; }
+    ~TestDataOverrideGuard() { TestPortDataOverride().clear(); }
+    TestDataOverrideGuard(const TestDataOverrideGuard&) = delete;
+    TestDataOverrideGuard& operator=(const TestDataOverrideGuard&) = delete;
+};
+
 void AnUnforcedClassicRunPlaysTheClassicClaimsAndHud() {
     if (!OriginalArtIsThere("AnUnforcedClassicRunPlaysTheClassicClaimsAndHud")) return;
+    const ControlsScratchGuard scratch;
+    const TestDataOverrideGuard classicDefault(ControlsScratchDefault("unforced-classic", Controls::Style::Classic));
     Controls::Policy policy = Controls::ResolvePolicy(std::nullopt, false, false, false);
     CHECK_MSG(policy.valid && policy.available && !policy.forced && policy.saveAllowed, "a plain launch resolves to a feature that exists, forces no style, and may save");
     {
@@ -31023,7 +31170,7 @@ void AnUnforcedClassicRunPlaysTheClassicClaimsAndHud() {
         if (!run.ok) return;
         const MagicPortalsLayer& layer = run.layer;
         CHECK_MSG(layer.ControlsPolicy().available && !layer.ControlsPolicy().forced && layer.ModernReady(), "the layer is given that policy and reads the table: " + MdDescribe(layer));
-        CHECK_MSG(layer.ControlsLine() == "controls: classic (the shipped default)", "and plays the shipped default, classic: '" + layer.ControlsLine() + "'");
+        CHECK_MSG(layer.ControlsLine() == "controls: classic (the shipped default)", "and plays the data's default, classic: '" + layer.ControlsLine() + "'");
         CHECK_MSG(layer.OptionsAvailable() && layer.ControlsRectsLine().empty() && layer.ControlsTuningLine().empty(), "with the Options entry, no modern rectangles and no tuning");
     }
     const MdClassicWithEverythingSet set(policy);
@@ -32467,6 +32614,43 @@ void ASizeTapMovesTheLiveButtonsAndIsKept() {
     }
 }
 
+// Planning step 198 (CTL-13), the pin that Steps 187 and 192 left to it ("the tuning is saved without the mode, deliberately"): under the modern DEFAULT a player who never chose a
+// style and steps a size has a file with the tuning and no `mode`, so that a later change of the default still reaches them; the next run plays the default and the kept size.
+// FAILS UNDER: a tuning save that writes the mode the player never chose (the first file), a default that is not read when the file has no mode (the second run), a file that
+// pins the player to modern (the third run, on data whose default says classic, plays classic with the size kept).
+void ATuningStepOnTheModernDefaultIsKeptWithoutAMode() {
+    if (!OriginalArtIsThere("ATuningStepOnTheModernDefaultIsKeptWithoutAMode")) return;
+    const ControlsScratchGuard scratch;
+    const std::string what = "ATuningStepOnTheModernDefaultIsKeptWithoutAMode";
+    const std::string saves = OsDir("adj-default-saves");
+    {
+        OsRun run(OsPathsShipped(saves, OsDir("adj-default-prisms")), what);
+        if (!run.ok) return;
+        MagicPortalsLayer& layer = run.layer;
+        entt::registry& registry = run.registry;
+        const Controls::Rules& rules = layer.ControlsRules();
+        CHECK_MSG(layer.ControlsStyle() == Controls::Style::Modern && layer.ControlsLine() == kControlsLineModernDefault && !layer.ControlsStore().Mode(),
+                  what + ": a player's run on the shipped default, nothing chosen: '" + layer.ControlsLine() + "'");
+        if (!AdOpen(run, what)) return;
+        AdClick(layer, registry, AdjustUi::Widget::SizePlus);
+        CHECK_MSG(layer.ControlsApplied().Size(rules) == 0.8, what + ": the plus tile steps the size to 0.8");
+        CHECK_MSG(OsSavedFile(saves) == "{\"version\":1,\"controls\":{\"layout\":2,\"size\":0.8}}", what + ": and the file holds the size and no mode: " + OsSavedFile(saves));
+        CHECK_MSG(!layer.ControlsStore().Mode(), what + ": the store has chosen nothing");
+    }
+    {
+        OsRun run(OsPathsShipped(saves, OsDir("adj-default-prisms-2")), what + ": the next run");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ControlsStyle() == Controls::Style::Modern && run.layer.ControlsLine() == kControlsLineModernDefault && run.layer.ControlsApplied().Size(run.layer.ControlsRules()) == 0.8,
+                  what + ": the next run plays the default and the kept 0.8: '" + run.layer.ControlsLine() + "'");
+    }
+    {
+        OsRun run(OsPaths(saves, OsDir("adj-default-prisms-3")), what + ": the same file under a classic default");
+        if (!run.ok) return;
+        CHECK_MSG(run.layer.ControlsStyle() == Controls::Style::Classic && run.layer.ControlsLine() == kControlsLineDefault && run.layer.ControlsApplied().Size(run.layer.ControlsRules()) == 0.8,
+                  what + ": under a default of classic the same file plays classic, the size kept for the day it switches: '" + run.layer.ControlsLine() + "'");
+    }
+}
+
 void TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes() {
     if (!OriginalArtIsThere("TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes")) return;
     const ControlsScratchGuard scratch;
@@ -33785,6 +33969,7 @@ void runAdjustTests() {
     AdjustOpensFromOptionsAndTheEntryPressIsDead();
     TheAdjustButtonIsHiddenInClassic();
     ASizeTapMovesTheLiveButtonsAndIsKept();
+    ATuningStepOnTheModernDefaultIsKeptWithoutAMode();
     TheLockIsNeverSavedAndAnOpacityStepDoesNotRelockButASizeStepDoes();
     TheBackButtonAndTheBackKeyLeaveAndSaveWhatIsUnsaved();
     BackLeavesAdjustAndOptionsTakesNothingFromThePress();
@@ -33917,6 +34102,7 @@ void runModernTests() {
     TheOptionsEntryOpensOptionsAndItsPressIsSpent();
     BackLeavesOptionsAndTheMainMenuTakesNothingFromThePress();
     TappingAModernTileSavesAndTheNextLayerStartsModern();
+    APlayersRunOnTheShippedDataPlaysModern();
     ASavedFileFromTheGroupedPairKeepsTheChoiceAndTheSizeAndDropsTheMoves();
     TheFlagBeatsTheSavedValueAndWritesNothing();
     UnderAForcedStyleATileChangesTheRunNotTheFile();

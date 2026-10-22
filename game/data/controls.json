@@ -656,6 +656,6 @@
     }
   },
 
-  "default_mode": "classic",
-  "_default_mode": "PORT, design 2.1: the style a player's run plays when nothing is saved. classic until CTL-13 flips it to modern (the owner's, Q4)."
+  "default_mode": "modern",
+  "_default_mode": "OWNER 2026-10-22 (design Q4, planning step 198, CTL-13): the style a player's run plays when nothing is saved and no --controls flag is given; the chain is design 2.1 (--controls, else a developer's run (--fixed-step, --route, --visit-levels) is classic, else the player's saved controls.json, else this). The owner's words, in chat: 'ctl13 - modern controls should be default contorls.' Shipped as classic from planning step 181 (CTL-5) to step 197; going back is this one value, \"classic\"."
 }

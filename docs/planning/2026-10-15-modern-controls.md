@@ -4,6 +4,12 @@
      lands, CTL-1 = step 177). The "CTL/..." and "out/parity/..." paths it names are working files in the gitignored out/ and may be gone.
      The questions in its section 6 are the owner's and are OPEN until he answers them. -->
 
+> **STATUS, 2026-10-22 (planning Step 198, CTL-13): DONE.** The owner answered Q4 (section 6) in chat on 2026-10-22: "ctl13 - modern controls should be default contorls."
+> `default_mode` in `game/data/controls.json` is `"modern"` (one data value; its note says OWNER 2026-10-22), so a player's run with nothing saved plays Modern - a new install and an
+> existing save with no `controls.json` alike, no migration and no prompt - while every developer's run (`--fixed-step`, `--route`, `--visit-levels`), `--controls classic` and every suite
+> stay classic and byte-identical. The census list of 1.9 (after Step 186's split: `tests/golden/controls_census.json`) was **accepted by the owner's instruction, not reviewed item by
+> item**. The Options toggle is the way back. Section 5's CTL-13 row and section 2.1's "classic until CTL-13" read as history from here.
+
 > **AMENDMENT, 2026-10-16 (planning Step 186, CTL-6b): THE OWNER SPLIT THE WALK ARROWS.** After he saw the layout on his screen the owner decided, in his words:
 > "moving stick should not be only on the left side. you should put one button to the left and one to the right like the classic ones." **This overrides his
 > 2026-10-15 answer that the two walk arrows be grouped in the bottom-left.** The arrows now stand **split**: `walk_left` inset in the bottom-LEFT corner and `walk_right`

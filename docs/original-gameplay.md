@@ -46,7 +46,9 @@ larger controls, the Options screen that chooses between the two, the lit look o
 an enhancement of this port's, not a decoded behaviour, and is off for every developer's run and for
 `--controls classic`, whose pictures and claims are held byte-for-byte to the original's
 (`docs/planning/2026-10-15-modern-controls.md`, planning steps 178 to 185). Where this document says
-what the pads do, it says what **Classic** does.
+what the pads do, it says what **Classic** does. (Since planning step 198 a player's first run starts in Modern - the owner's word of
+2026-10-22 - and Classic is chosen in Options (the gear on the main menu, then the Classic tile) or with `--controls classic`; none of
+this document's statements about the original changed.)
 
 **ENHANCEMENT (planning step 192).** The adjustment screen - reached from Options, only while the style in force is Modern,
 where the size and the opacity of the five modern controls are stepped and kept - is the same kind of thing: **modern controls are

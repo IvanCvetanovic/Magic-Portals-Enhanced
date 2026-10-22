@@ -698,7 +698,8 @@ void TheModernRulesAreTheFilesNumbers() {
     CHECK(rules.ringSizeOverBox == 3.125);
     CHECK(rules.hintMarginUnits == 8.0);
     CHECK(rules.census.emUnits == 16.0 && rules.census.slackUnits == 0.0 && rules.census.characterRowUnits == 206.0);
-    CHECK(rules.defaultMode == Controls::Style::Classic);
+    // OWNER 2026-10-22 (design Q4, planning step 198, CTL-13): the shipped default is Modern. This is the schema walk; TheShippedDefaultIsModern says what the value means for a run.
+    CHECK(rules.defaultMode == Controls::Style::Modern);
     // The margin a picture the port draws itself may carry: a quarter on each side (sim/PadArt's own bound is this number).
     CHECK(Controls::kMaxGeneratedBodyInset == 0.25);
 
@@ -3512,6 +3513,46 @@ void TheFileHoldsDeltasOnly() {
     CHECK_MSG(StoreRead(file) == "{\"version\":1,\"controls\":{\"mode\":\"classic\",\"layout\":2,\"size\":1.4}}", "a size that differs is the one key kept: " + StoreRead(file));
 }
 
+// Planning step 198 (CTL-13). The owner's word of 2026-10-22, in chat, "ctl13 - modern controls should be default contorls.", made Modern the style a player's run starts in
+// when nothing was saved. THE ONE CASE THAT FOLLOWS THE SHIPPED FILE: every other case gives the chain the default it wants (a scratch copy of the data, or the value as an
+// argument), so going back is `default_mode` in game/data/controls.json and this case. It states what the value does and does not reach:
+//   * a player's run with no controls.json (a new install, and an existing save that holds scores.json, audio.json and achievements.json alone) plays Modern;
+//   * a saved choice beats it, either way;
+//   * a developer's run (the rig's three flags, each alone and together) and `--controls classic` stay Classic whatever the value, which is why the sweep, the baselines and every
+//     route and suite are the files they were;
+//   * `--controls modern` is Modern, as before;
+//   * the file says who decided it and when, beside the value.
+// FAILS UNDER: the value back at classic (the first row), a developer's run that reads the default (the third), a default that outranks a saved choice (the second).
+void TheShippedDefaultIsModern() {
+    const Controls::Rules rules = LoadModern();
+    CHECK_MSG(rules.defaultMode == Controls::Style::Modern, "game/data/controls.json default_mode reads modern (the owner, 2026-10-22)");
+    const auto player = [](bool fixedStep, bool route, bool visit) { return Controls::ResolvePolicy(std::nullopt, fixedStep, route, visit); };
+    // A player's run: the default when nothing is saved, the saved choice when there is one.
+    CHECK_MSG(Controls::ResolveStyle(player(false, false, false), std::nullopt, rules.defaultMode) == Controls::Style::Modern, "a player's run with nothing saved plays modern");
+    CHECK_MSG(Controls::ResolveStyle(player(false, false, false), std::optional<Controls::Style>(Controls::Style::Classic), rules.defaultMode) == Controls::Style::Classic,
+              "a saved classic beats the default");
+    CHECK_MSG(Controls::ResolveStyle(player(false, false, false), std::optional<Controls::Style>(Controls::Style::Modern), rules.defaultMode) == Controls::Style::Modern,
+              "and a saved modern agrees with it");
+    // A developer's run, each of the rig's flags alone and all together, with nothing saved and with either choice saved: classic, the default never reached.
+    for (int bits = 1; bits < 8; ++bits) {
+        const Controls::Policy dev = player((bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0);
+        for (const std::optional<Controls::Style> saved : {std::optional<Controls::Style>(), std::optional<Controls::Style>(Controls::Style::Classic), std::optional<Controls::Style>(Controls::Style::Modern)}) {
+            CHECK_MSG(!dev.available && Controls::ResolveStyle(dev, saved, rules.defaultMode) == Controls::Style::Classic,
+                      "a developer's run (rig flags " + std::to_string(bits) + ") is classic whatever is saved and whatever the default says");
+        }
+    }
+    // The flag: classic forces classic over the modern default, modern is modern.
+    const Controls::Policy classic = Controls::ResolvePolicy(std::string("classic"), false, false, false);
+    const Controls::Policy modern = Controls::ResolvePolicy(std::string("modern"), false, false, false);
+    CHECK_MSG(Controls::ResolveStyle(classic, std::nullopt, rules.defaultMode) == Controls::Style::Classic, "--controls classic is classic under the modern default");
+    CHECK_MSG(Controls::ResolveStyle(modern, std::optional<Controls::Style>(Controls::Style::Classic), rules.defaultMode) == Controls::Style::Modern, "--controls modern is modern over a saved classic");
+    // The provenance sits beside the value: the file names the owner, the date and the question it answers.
+    const std::string text = StoreRead(std::filesystem::path(kControls));
+    const std::size_t note = text.find("\"_default_mode\"");
+    CHECK_MSG(note != std::string::npos && text.find("OWNER 2026-10-22", note) != std::string::npos && text.find("Q4", note) != std::string::npos,
+              "default_mode's note says OWNER 2026-10-22 and the design's Q4");
+}
+
 void AMissingFileIsTheShippedDefault() {
     const StoreClean clean;
     const Controls::Rules rules = LoadModern();
@@ -3524,10 +3565,13 @@ void AMissingFileIsTheShippedDefault() {
     const std::filesystem::path later = dir / "not" / "yet";
     Controls::Store elsewhere;
     CHECK_MSG(elsewhere.Open(later.string(), rules, error) && !elsewhere.Mode() && !std::filesystem::exists(later), "a directory that is not there: nothing, and none made");
-    // The style is then the data's default: the policy's chain (ResolveStyle) takes nothing saved.
+    // The style is then the data's default: the policy's chain (ResolveStyle) takes nothing saved. Stated for both values the data may hold, so this case does not
+    // follow the owner's choice (planning step 198 flipped it to modern; TheShippedDefaultIsModern is the one case that names the value).
     Controls::Policy player = Controls::ResolvePolicy(std::nullopt, false, false, false);
     CHECK(player.available && player.saveAllowed);
-    CHECK_MSG(Controls::ResolveStyle(player, store.Mode(), rules.defaultMode) == Controls::Style::Classic, "a player's run with nothing saved plays the shipped default (classic)");
+    CHECK_MSG(Controls::ResolveStyle(player, store.Mode(), Controls::Style::Classic) == Controls::Style::Classic, "a player's run with nothing saved plays a default of classic");
+    CHECK_MSG(Controls::ResolveStyle(player, store.Mode(), Controls::Style::Modern) == Controls::Style::Modern, "and a default of modern");
+    CHECK_MSG(Controls::ResolveStyle(player, store.Mode(), rules.defaultMode) == rules.defaultMode, "and the shipped one, whichever it is");
     CHECK_MSG(Controls::ResolveStyle(player, std::optional<Controls::Style>(Controls::Style::Modern), rules.defaultMode) == Controls::Style::Modern, "and the saved choice when there is one");
     // Saving makes the directory, as the other stores do.
     elsewhere.SetMode(Controls::Style::Modern);
@@ -4119,6 +4163,7 @@ void runTests() {
     ArtHalfDressedNeedsAMagicRampagePictureInAMix();
     ControlsStoreRoundTrips();
     TheFileHoldsDeltasOnly();
+    TheShippedDefaultIsModern();
     AMissingFileIsTheShippedDefault();
     AnUnreadableFileIsDefaultedAndOverwrittenAtTheNextSave();
     AMemoryOnlyStoreWritesNothing();
