@@ -1908,6 +1908,11 @@ On 2026-09-29 the owner said: "proceed with improvements until the only thing le
   memory at level load at one texel per bitmap unit, as the original does at a screen of 480 px or more, in place of the shipped half-resolution `add<id>.png`; the f420
   sweep changes the 67 levels that carry `eth_lightmap` and the other 61 are md5-equal. CMP14-1 (the arches' tier, the owner's call) to CMP14-5 open. CMP-4, -5, -8, -11
   to -13, -17, -18, CMP-low and CMP-R1 stay open, and the section-5 box is still not ticked.*
+  *Wave 4d-2, 2026-10-22 (fourth step): CMP-18 is built (step 197, committed locally as `b8b0df6`, not pushed at this note; the two engine commits it pins, `bfbb0f5`
+  and `e8dbef4`, are on no remote yet): 2-29's rolling stone and its plank are stepped in Box2D's order by an opt-in per-body engine field set from a keyed data table
+  that names one level and two nodes; the f420 sweep changes ONE level (2-29) and the other 127 are md5-equal; 2-29's route is re-flown (8 shots, tick 784). The stone's
+  five bands are met on the real exe; the barrel's end state is not (CMP-11). CMP18-2 to CMP18-7 open. CMP-4, -5, -8, -11 to -13, -17, CMP-low and CMP-R1 stay open, and
+  the section-5 box is still not ticked.*
 - The owner's open calls are listed in one place.
 
 **Wave 1 (2026-09-29 14:51 to 2026-09-30 06:25; closed 2026-09-30).** Three tracks at once: A on `main` (steps
@@ -2811,6 +2816,16 @@ listed as the pre-CMP-14 reference (`CMP20/after/sweep` as the pre-CMP-19 one, `
 md5-equal on the new build:** 10 captures (A1, A1a, A7, A8, K7 = M1, M2, M3, M4, M5) are, and 9 differ on purpose (K1, A1b, A2, A4, A6, A9a and A9b = 1-01 at other ticks
 and windows, A3 = 1-31, A5 = 2-10), each on a lightmapped level; the nine new captures are listed in `BASELINE.txt` under `program/CMP14/verify1/baselines/`, and a later
 step compares those nine against them and the other ten against `CTL/baseline`.*
+*Wave 4d-2, 2026-10-22, item (1) of the list is DONE - CMP-18 is built as planning step 197 (committed locally as `b8b0df6`, not pushed at this note) and verified by an
+independent verifier in its first round; its row is ticked above with the numbers and with what it does not close (the barrel, which waits for CMP-11). **What is left
+of the list: nothing the assistant can do alone.** **PUSH ORDER, because the port's gitlink names an engine commit that is on no remote:** (1) from
+`C:/Users/icvet/Desktop/Supersonic-Engine` push `bfbb0f5` and `e8dbef4` (fast-forward only, the exact hashes, never amended); (2) run `test_physics` there ONCE (never
+run in its committed form: CMP18-5); (3) only then this repository's commits (`b8b0df6` and the devlog's). What waits on the owner: CMP-11 (the barrel; five levels'
+crates), CMP-8, CMP20-1, CMP14-1, CTL-13 (and the grouped-arrows census lists, which gained 2-29), the time base G10-2 (CMP18-6), `docs/permission.md` and the
+repository's going public; the rows that are low or need a rig (CMP18-2 to -7, CMP14-2 to -5, CMP19-1, CMP20-2) are none urgent, and the rig checks are unchanged. **The
+sweep a step is measured against is now `CMP18/after/sweep`** (128 PNG, `MagicPortals.exe` `56361c13`, listed in `out/parity/BASELINE.txt`); it differs from
+`CMP14/after/sweep` on exactly one file, 2-29's, and `CMP14/after/sweep` stays listed as the pre-CMP-18 reference (`CMP19/after/sweep` as the pre-CMP-14 one, and so
+on). The 19 CTL baselines are unchanged by the step (none is a 2-29 capture): the same 10 equal `CTL/baseline`, the same nine equal the CMP-14 captures.*
 
 
 **CK's recorded deviations**, each an open row for the step named (planning step 147 has the evidence, `RECORDED DEVIATIONS` 1-11):
@@ -4538,6 +4553,12 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       (old pass: (-5,+5) at f75, (-10,+6) at f240, (-14,+6) at f450); 2-24 the top barrel (6,+5) px and tilted 1.5 degrees; 2-22 the crate on the tilted block rotated
       about 2 degrees and (-3,+2) px; 3-03 the crate rests 11 px (4 u) further right and 2 px low, the same at h2.8 / f240, h6.3 / f420 and f450 (a rest, not a phase);
       3-05's crate 3 px right and 2 low. 3-03 and 3-05 are the `crate_low_emissive` crates (R3b-3, friction 0.08, a guess). Still the owner's call.*
+      *Step 197 (CMP-18), 2026-10-22: the barrel of 2-29 waits for this row. After CMP-18 the stone arrives at the barrel at 1.9568 u a frame (the clip's 2.025) and
+      rests against it, and the barrel moves 1.8 u where the original moves it 24.9 (G6; held friction 1.0 on the barrel; the decider's energy budget, an estimate and
+      not a run, allows about 13 u at the old arrival speed and about 22 u at the new one if the friction is fixed). Two consequences for whoever builds the friction
+      step: the gate is the barrel's -24.89 u from f213 with the stone at x 128.58 (the clip), and 2-29's route is flown with the barrel carried through a portal and
+      tap 3 aimed at its port position (x 107.2), so a barrel pushed to about x 84 would leave that tap in open air - a re-aim to x <= 98 (the route judge's inference
+      from its sweep, not run).*
 - [ ] **CMP-12. The blue lamp's orb is smaller and bluer than the original's, its bracket dark** (medium; particles; `unknown`; moves no route). Levels: 1-05 (box
       (770,70)-(860,190), window mean R 204.0 against 216.1), 1-08 (box (120,40)-(400,240), 199.3 against 212.6), 1-19 (box 420,0,700,200), 1-22 (box 590,40,730,140,
       core R 233 in the original against 211). Known and open (steps 91-92: not the depth; size and brightness left). The original's orb is a white core with concentric
@@ -4760,7 +4781,7 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       script frames inside the decoded arrival radius, which fits a brake / settle / hold ordering difference (`minions.json` brake 0.3, `settle_px` 16) but is not shown;
       3-08's 30 px is more. The signs differ (the port is right of the original on 3-02, 3-08, 3-20, 4-28 and left on 4-30), as a stop short of a waypoint approached from
       either side would. R24 (the patrol's arrival point) is still the owner's open ruling; the five knights are the check if it is ruled.*
-- [ ] **CMP-18. 2-29's rolling stone is 125-135 px behind the original's in every still (WT-10)** (medium; structural; `unknown`; MOVES A ROUTE). Evidence: 2-29 box
+- [x] **CMP-18. 2-29's rolling stone is 125-135 px behind the original's in every still (WT-10)** (medium; structural; `unknown`; MOVES A ROUTE). Evidence: 2-29 box
       35,455,520,632 (`pairs/2-29_h63_pair.png`; the same lag at `h2.8` and at f450): in the original's h6.3 the stone is against the barrel at x 37-122, the port's at
       f420 at x 342-515 with the barrel unmoved; a constant 125-135 px (0.75 s at its 61 u/s). So the release from the hinged plank is late: the port tips at about tick
       340 and is still rolling at 61 u/s at tick 420 at x 209. Unexplained by the recorded row; the hinge pose (CMP-2) is predicted to move only 0.6 u here. Next, as
@@ -4833,6 +4854,49 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       roll (2.0x), the barrel and 2-22 / 1-09 untouched. The pre-fix port set for the gates is regenerable only on the frozen exe (`MEAS/CMP-18/scripts/launch.sh S1 400
       2`): take it BEFORE the relink. Evidence: `out/parity/program/MEAS/CMP-18/` (`result.txt`, `result.json`, traces, scripts; 5 images listed in
       `out/parity/BASELINE.txt`).*
+      *FIXED by step 197 (CMP-18, wave 4d-2's fourth step), 2026-10-22; COMMITTED LOCALLY as `b8b0df6` (titled "Magic Portals: 2-29's stone and its plank are stepped in
+      Box2D's order, from a keyed data table and an opt-in engine field, and 2-29's route is re-flown"), NOT PUSHED at this note: the audit and the pushes are the
+      owner's assistant's, and the two engine commits the pin names come first (CMP18-5). GAMEPLAY: yes, for ONE level (the stone and the plank of 2-29 move per the
+      original's step order and its route is re-flown); classic pixels change in one frame of 128, 2-29's, the fourth step since CTL-1 that changes them on purpose.
+      Verified by an independent verifier, round 1, top-level pass, on `MagicPortals.exe` `56361c13` (its own relink) and `test_mp.exe` `5c798436`; the implementer's
+      two links of `MagicPortals.exe` were refused by Smart App Control (S9 NOT MET), so every real-exe gate is the verifier's.
+      **Cause, and the fix:** the engine moves a body by the velocity it brought into the step and only then takes the approach out of its contacts; Box2D solves the
+      velocity first and moves the body by what is left (`b2Island.cpp:206`, `:258-269`, `:298`), and the original steps it once a frame at 1/30 s
+      (`ETHPhysicsSimulator.cpp:160`; the rig clip shows one step per rendered frame whatever the frame took). The engine at the port's carried step IS the engine at
+      1/30 s to the digit, and its creep depends on the step (0.281 at 1/30 s, 0.855 at 2 x 1/60, 1.032 at 8 x 1/240) where Box2D's does not (1.054-1.089): the order is
+      worth 3.6x on this stone at this step and the carry 3.0x, so removing the carry (V2) reached no band and moved 109 of 128 f420 frames - the measurement wave's
+      "the carry is the lead" is corrected. The fix is ONE opt-in per-body engine field, `RigidBodyComponent::integrateAfterSolve` (default false = the engine's order
+      today; written to a scene only when true; engine commits `bfbb0f5` and `e8dbef4` above the pin `5781518`, LOCAL), set by the game from a keyed data table
+      `game/data/contact_order.json` (one level, `level28a`; two nodes, `rolling_stone_892` and `spinning_platform_no_emissive_ent_890`; matched by the `.tscn` node
+      name, never a prefix; a strict loader) and applied beside `Resting`. No clock, mover, player, layer or SimRatio change, no substeps, no carry removal, no knob.
+      **The key set was chosen on the real exe:** the stone alone misses the plank gate (4.03 degrees at x 297 against 3: a flagged stone against an unflagged plank),
+      the stone and the plank is the smallest set that meets every gate, and the barrel adds a flagged-barrel / unflagged-player pair for nothing.
+      **What it closes:** the stone's roll, the plank's swing and the stone's timeline on 2-29 - the five bands of the rig clip
+      (`out/parity/footage/F18_stone_2-29.mp4`, two takes) on the real exe: creep 0.281 -> **1.0017** u a frame (clip 1.053; band 0.95-1.16), free floor roll 1.045 ->
+      **1.9568** (2.025; 1.82-2.23), first plank turn tick 342.6 -> **f112.79** (f107; 96-118), landing 362.6 -> **f132.24** (f123.0; 111-135), stone at x 153.3 473.9
+      -> **f191.86** (f183.5; 165-202; clip f = port tick + 1, paired by frame count), the plank within **1.41 degrees** of the clip at every stone x from 316 to 290
+      (27 points; gate 3) and at both G1 states (stone y -0.74 and -1.42, the second restated at +-1.5 because the stone falls 2.5 u a frame there; plank +0.53 and
+      +0.92), the script clock untouched (the caption box over ticks 40-100 pixel-identical to the control, `fireball_spat` on 127 / 378 / 629), the idle player equal
+      to the control. All residuals are one-sided, the port late: creep -4.9 percent, roll -3.4, first turn +5.8 frames, landing +9.2, contact +8.4.
+      **What it does NOT close:** the barrel's end state (G2 / G6). The stone reaches the barrel and rests at (151.7, 193.9) and the plank stands on end, but the barrel
+      is pushed **1.8 u where the original pushes it 24.9** from f213: that waits for CMP-11 (the engine's friction and restitution steps, an owner call), so the route
+      is flown against a timeline the original shows with a barrel the port does not move. G7 stays partial by design (only the level's own drop start is met; a stone
+      that starts nearly at rest at a slope's foot is still under-driven). The row is ticked for what it set out to explain and fix - the stone's roll, which the row's
+      premise had put on the plank's release - and the barrel is CMP-11's.
+      **Controls and set:** G0, with the table EMPTY (a data edit, restored byte for byte), 2-29's 600-tick trace equals the baseline on all 4,800 leaves, the 52 idle
+      traces 52 of 52, the 128-level f420 sweep 128 of 128 byte-equal to `CMP14/after/sweep`, the suites at their counts, the routes' sorted won-on-tick md5 `2a0be7eb`.
+      G8: the keyed twin sweep is **127 of 128 byte-equal and the one different is 2-29's** (the other 23 stone levels, the four plank-only levels, the five
+      stone-and-plank levels and 2-24 equal); 51 of 52 idle traces equal; the 19 CTL baselines 19 of 19 equal to their references (none is a 2-29 capture). **The
+      route:** `tests/routes/level28a.json` is re-flown from its start and wins on tick **784** (win_by 800) with 8 shots and 3 crystals, a **medal 2** where the old
+      6-shot line (tick 564) was a medal 3; 128 of 128 routes won, the sorted won-on-tick list differs from the baseline in the 2-29 line only (md5 `d6b75db1`), the
+      five census variants unchanged, the real-exe `--route` replay equal to the suite's, margins 89.1 / 89.6 / 100 / 92.7 percent (the headline) and 84.7 percent over
+      the dense grid, the one tight input shot 6's aim over the standing plank (372, 66; x -5..+2, y -2..+1 units). The old route in the new world dies on tick 126. The
+      line breaks the wall with the barrel bomb's blast (lit by the carranca's third fireball, carried over the plank-pole by a portal pair), not with the stone, and
+      sends the resting stone through a portal onto the button as the door's holder. Tests: 66 suites, 85,441 checks (85,217 + the new `test_mp_contact_order` 224), one
+      full `test_mp.exe` run, none skipped; `tests/golden/controls_census.json` regenerated by its independent oracle (the new route has two more shot taps).
+      **Not met as worded, and written so in the step:** S9 (two refusals of the implementer's `MagicPortals.exe`); the brief's "a level that does not exist in the
+      data" is a check inside the suite and not in the loader (CMP18-7); the barrel (above). **What it leaves:** CMP18-2 to CMP18-7 below. **The sweep a step is
+      measured against is now `CMP18/after/sweep`** (see the wave-4d-2 note of 2026-10-22).*
 - [x] **CMP-19. The carranca fireball's glow reads weaker than the original's beyond its core** (medium; light; `unknown`; moves no route). NEW TO THE LIST by the
       2026-10-15 re-take (wave 4d-1), not new in the build: the fireball boxes hold 0 changed pixels against the old frame (2-28's 3,319 are the platform at the box's
       foot), and the old readers filed the fireballs only as phase (where the ball is), never its light. Levels: 2-01 to 2-08, 2-28 and 2-32's dragon (10 read; 21 levels
@@ -5229,6 +5293,77 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       converted levels in place (a synthetic scratch level would need a spawn, bounds and an exit); (i) the converter still copies the 730 `add<id>.png` that nothing
       reads (`tools/converter`), and `TextureRegistry::KeyFor` (the layer composes `"data:"` or `"srgb:"` + the key by `UploadRGBA`'s documented convention in one
       function, `RegistryKeyOf`) is an engine-repository change for a later step. Next: fix with the next edit to any of the files; no gate of its own.
+- [ ] **CMP18-2. The fix is calibrated on, and limited to, 2-29's stone: the other 23 stone levels agree in their stills mostly because their stones are at rest**
+      (low-medium; structural; `needs-rig`; MOVES A ROUTE if a stone is widened). Step 197's table names two nodes of one level, and the f420 sweep shows the other 127
+      frames byte-equal BY CONSTRUCTION, not because their stones roll right: the R4d re-take read "agrees" on 1-09, 1-13, 2-30, 2-31, 3-07, 3-15, 3-20 and 3-22, but
+      most of those stones are probably at rest in both frames, which is weak evidence that their rolling is right. The first candidates are **2-22** (a stone falling
+      4.5 u onto a -20 degree bridge; the only other stone that moves in 420 idle ticks, path 14.0 u) and **1-09** (a stone 1 u into a bridge end). Next: a rig clip of
+      each (the recipe is `out/parity/footage/F18.md`), then widen `game/data/contact_order.json` by DATA ONLY (a key and the node names, with their own `_source`
+      citing the clip) for a stone shown wrong; no code changes, but `tests/test_mp_contact_order.cpp` pins the table's scope
+      (`TheShippedTableNamesOneLevelAndTwoBodies`, and no flagged body in any other level), so a widening is a deliberate edit of those pins, a widened stone brings
+      CMP18-4 (its wall reading) and a re-flown route (2-30, 2-31, 3-15, 3-20 and 3-22 are the most clock-sensitive). G7 stays: a stone that starts nearly at rest at a
+      slope's foot is under-driven by the flag alone (0 and 39 percent of Box2D's creep at the two shallowest overlaps); that is the engine's contact response, not the
+      order. Gate: the stone's path against the clip within step 197's bands (+-10 percent), the other levels byte-equal.
+- [ ] **CMP18-3. 2-29's new route leans on two things never measured on the original, and it is an 8-shot line** (medium; structural; `needs-rig`; MOVES A ROUTE). (a)
+      The player walks through the STANDING plank (hold left 205-262 from x 381): a flagged plank against the unflagged player, a mixed-order contact the key set
+      creates, and the route judge could not test another key set. If the original's plank holds the player, the line is a line of the port only; from the plank's right
+      the push goes away from its limit, so a free beam of that inertia plausibly yields in Box2D too (inferred, not measured). (b) Shots 7 and 8 (taps 680 and 732)
+      each place a third portal and need `on_cap_recycle_oldest` (`data/portals.json` labels it a GUESS; the original's `PortalManager::insertPortal` pushes the new
+      portal and, above `maxPortals`, kills `portals[0]`, the oldest: `out/parity/asbc/all_functions.txt` around L27566, instructions 123-146; not checked: whether the
+      shot path refuses a tap at the cap before it gets there). A variant that taps the clear-portals button on tick 678
+      (`out/parity/program/CMP18/fix/route/found1_clearbtn.json`) also wins on 784 without recycling, but it is a classic-layout variant only. (c) The line is a **medal
+      2** (8 portals, 3 crystals, 12,544.0 ms) where the old route was a medal 3 (6 portals, 9,024.0 ms); a 6-shot line exists (W3, won on 651) but relies on a plank
+      kick that is an artefact of the engine's order. (d) The carranca's third fireball is on the script's clock (spat on tick 629) and the route is in 60 Hz ticks
+      (CMP18-6). (e) The one tight input is shot 6's aim over the pole, (372, 66): x -5..+2 units, y -2..+1 (a 9.8 px by 20.9 px target at 1280x720; the pole's top is
+      exact geometry). Next: a rig clip of the player walking into the standing plank (the walk of ticks 205-262) and of a third portal placed at the cap in the
+      original; if either differs, 2-29 needs another line (the search files are in `out/parity/program/CMP18/fix/route/`: `mech.md`, `judge.md`, `W3_*.json`,
+      `cand*.json`).
+- [ ] **CMP18-4. A flagged stone's wall reading: drops of about 6 to 8 u hold the wall where Box2D's would break it, and the portal-exit half is unmeasured** (low;
+      structural; `measured`; GAMEPLAY: yes, at the margin). Step 197's suite prints the reading of the stone against `breakable_wall_883` for a drop from a gap onto
+      the wall (and pins only the rows from 12 u): from 12 u and more the flagged stone breaks it (1.667 at 12, 2.000 at 15; the gate 1.5 m/s) as Box2D does; at 6, 7
+      and 8 u Box2D reads 1.667 and the flagged stone 1.000 / 1.333 / 1.333, so the wall holds where Box2D's breaks (the unflagged engine holds at 6 and 7 too and
+      breaks at 8). A flagged stone is never read by the free-flight replay in `Impacts` (its skin test never finds the pair begun; a post-solve mover is stopped by the
+      engine's speculative brake first) and is judged by the speed it carried into the step, one gravity step under Box2D's. The falls the level can give break with
+      margin and 2-29's route breaks the wall with the barrel's blast, so nothing in the shipped game needs it. The **portal-exit half** (a stone falling out of a
+      portal onto the wall) was NOT measured: the scenario put the stone inside the door's body; by the code its reading is the velocity it carries into its first step,
+      which does not depend on the flag. Next, only if a widened stone (CMP18-2) needs it: a per-body `Impacts` branch (let `FreeFlightVelocity` classify a post-solve
+      mover's steps: a free step is `centre + v_after * dt`) and the exit rows measured with the door raised.
+- [ ] **CMP18-5. `test_physics` has never run in its committed form, the engine commits are unpushed, and the engine's determinism hashes are MSVC-only** (medium;
+      engine; `owner-call`; GAMEPLAY: none). The pin of step 197 names `e8dbef4` (and `bfbb0f5` below it), local commits in `C:/Users/icvet/Desktop/Supersonic-Engine`,
+      none of them on GitHub; `git submodule update` on a fresh clone cannot find the pin until they are pushed. `test_physics` was linked fresh and refused by Smart
+      App Control (exit 126) seven times today (the engine role twice in round 0 and twice in round 1, the reviewer twice, and the follow-up commit's message records
+      one more): NOT RUN. What ran green: `test_determinism` 144 / 0 (26 hashes recorded from the untouched `5781518` tree), `test_serialize` 491 / 0, the editor build
+      and `tools/verify-replay.ps1` (180 of 180 ticks). Expected about 343 checks, 0 failures (an expectation: the one run on the first commit's sources printed 327
+      with the one failure fixed since). Next: the owner (or his assistant, on his word) pushes the two commits fast-forward only with their exact hashes, links
+      `test_physics` ONCE and launches it ONCE from the engine root; **do not amend either commit** (an amend changes both hashes and orphans the gitlink;
+      `out/parity/program/CMP18/fix/engine.md` line 75 says to amend the message, which is wrong for pinned commits); a failing run means a NEW engine commit on top and
+      a re-pin of this repository. Also open, from the engine review: the 26 recorded determinism hashes were taken on MSVC only (run `test_determinism` on Linux before
+      the pin moves to a build that uses it), `StateHash` omits the flag, an older reader silently drops the key. One observation, the owner's call, not touched: the
+      speculative allowance `max(-restitution * alongNormal, -allowedApproach)` is `max(>= 0, < 0)` for an approaching pair, so with no bounce it is 0 and a speculative
+      contact takes ALL the approach out (`PhysicsSystem.cpp:1633`, `:1676-1682`); it points the same way as the creep (dropping the speculative contact moves 2-29's
+      baseline creep 0.279 -> 0.649 at the carried step) and would change every scene's contacts.
+- [ ] **CMP18-6. The time base, G10-2: is the original played at 30 or 60 Hz, and the shot against the stone** (medium; structural; `needs-rig`; MOVES ROUTES). The
+      original's physics world steps a fixed 1/30 s a frame (`ETHPhysicsSimulator.cpp:156-161`; the rig clip confirms one step per rendered frame at 28.5-29 fps) while
+      a shot advances `200 x min(200, the script's whole ms of the last frame) / 1000` units a frame (listing `STimeManager::unitsPerSecond`, L568-590), so the shot,
+      the player's walk, the door, the carranca and the portal clock run on WALL time and the stone, the plank and the barrel on FRAMES: at 60 fps everything the player
+      does is 2x slower in stone-frames than at 30. The port runs one original frame per 1/60 s tick by design (`clock.json` `matched_hz` 60, SimRatio 2) and step 197's
+      route is flown on that clock. Whether a player of the original lives at 30 or 60 Hz (the rig's emulator gives 28.5-29 fps) decides how tight 2-29's route is;
+      R4c2-3 (4-21's 2-unit aim band) is the same question. Next: the owner's answer, or a rig measurement of a real device's frame rate on a portal-heavy level; the
+      route's margins (89.1 / 89.6 / 100 percent) are the port's at 60 Hz.
+- [ ] **CMP18-7. Step 197's known imprecisions, recorded and not fixed** (low; step 197's LEFT FOR LATER and the verifier's D2-D5; GAMEPLAY: none). Left on purpose,
+      because an edit to a compiled file after the verified build leaves the exes older than the sources and needs a relink (a Smart App Control launch): (a) the loader
+      does not name a KEY that is no level of the data: only `ContactOrder::CheckLevels`, called by `test_mp_contact_order` (which exits 77 without `out/levels`), does,
+      so a typo such as `level28aa` starts every level and flags nothing (a load-time check in `Game::LoadData` when the level's directory has other `.tscn` files and
+      the key is not among them would keep the scratch scenes and unkeyed copies the controls need); (b) the plank's reason (the stone alone misses the plank gate, 4.03
+      degrees at x 297) has no behavioural pin: under `{stone}` only four checks fail and all four restate the table (`tests/test_mp_contact_order.cpp` lines 147, 273,
+      278, 315); the suite already reads the hinge angle (`Hinge::AngleOf`) and the clip's plank angles at stone x 316.3 / 312 / 307.4 / 303 / 300 / 296.2 / 293 / 290
+      are numbers (1.4, 4.9, 10.4, 16.4, 21.4, 27.9, 33.5, 38.7 degrees: `out/parity/program/CMP18/pre/skeptic1.md` section 2), so a 3-degree pin at x 300 and 296 is
+      possible on `test_mp`; (c) `tests/test_mp_timebase.cpp` `kStillMoving` keeps "2-29's stone is rolling at 61 units a second, 165 units in the last 120 ticks", true
+      on an empty `contact_order.json` and false on the shipped one (109 asleep and 4 moving at tick 420, was 108 and 5), and nothing detects a stale entry; (d) the new
+      suite leaves `%TEMP%\supersonic-test-mp-contact-order\` (a copy of `game/data`, including a byte-equal `controls.json`, and of a converted 2-29; not a save, not
+      in the owner's folder; delete it at will); (e) `test_mp_hinge` and `test_mp_timebase` print, not pin, 2-29's natural-world numbers (first plank turn tick 210, was
+      254), so their re-pins are comments; (f) `test_mp.exe` `5c798436` was linked before the suite's header comment was shortened by one line, so the next build
+      recompiles that object. Next: fix with the next edit to any of these files; no gate of its own.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -6431,4 +6566,16 @@ repository's going public, which needs his explicit word.
 shipped files; the original's stills do not settle whether that is right (the per-pixel error moves toward the original, the brightness offset away from it). Keep it, or
 bake the arches from the 1x art (a deliberate departure from the source, one more key). To look: the same filename in `out/parity/program/CMP19/after/sweep` and
 `out/parity/program/CMP14/after/sweep` for 1-01, 1-06, 1-08 and 1-16 (e.g. `1-01_level0_f420.png`), beside `out/parity/original/levels/1-01_h6.3.png`; the grant in
+`docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
+*Added by step 197 (CMP-18)*: **the push order** - the pin names two engine commits (`bfbb0f5`, `e8dbef4`) that exist only in
+`C:/Users/icvet/Desktop/Supersonic-Engine`; push them first (fast-forward only, exact hashes, never amended), run `test_physics` there once (it has never run in its
+committed form: seven refused links today), then push this repository, or a fresh clone cannot fetch the pin. The barrel in 2-29 and the engine's friction and
+restitution steps (CMP-11: the original pushes the barrel 24.9 u, the port 1.8; building CMP-11 also moves 2-29's route again, tap 3 would need a re-aim). The time base
+(G10-2, CMP18-6): whether the original is played at 30 or 60 Hz decides how hard the new 2-29 route is. What to look for in play now: **2-29's stone creeps along the
+block at the original's speed, turns the plank at about tick 113 (it was 344) and rests against the barrel; the level is won by a long route** - the barrel is carried
+through a portal, the stone is sent to the button, the wall is broken by the barrel's explosion and not by the stone (CMP18-3: the route walks through the standing
+plank, which may be a line of the port and not of the original). To look at: `out/parity/program/CMP14/after/sweep/2-29_level28a_f420.png` (before) and
+`out/parity/program/CMP18/after/sweep/2-29_level28a_f420.png` (after), beside the original's `out/parity/original/levels/2-29_h6.3.png` and the rig clip
+`out/parity/footage/F18_stone_2-29.mp4`. The arches' tier (CMP14-1) is still listed above as the owner's call; CTL-13 still waits, and now also: the alternative
+`grouped` block of the census golden gained 2-29 because the new route has two more shot taps (the shipped split lists are unchanged); the grant in
 `docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
