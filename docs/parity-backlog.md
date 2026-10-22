@@ -5329,7 +5329,12 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       which does not depend on the flag. Next, only if a widened stone (CMP18-2) needs it: a per-body `Impacts` branch (let `FreeFlightVelocity` classify a post-solve
       mover's steps: a free step is `centre + v_after * dt`) and the exit rows measured with the door raised.
 - [ ] **CMP18-5. `test_physics` has never run in its committed form, the engine commits are unpushed, and the engine's determinism hashes are MSVC-only** (medium;
-      engine; `owner-call`; GAMEPLAY: none). The pin of step 197 names `e8dbef4` (and `bfbb0f5` below it), local commits in `C:/Users/icvet/Desktop/Supersonic-Engine`,
+      engine; `owner-call`; GAMEPLAY: none). **[Corrected 2026-10-22, DEVLOG Session 52: the first two clauses of the title and the push-and-run
+      instructions below are DONE. `bfbb0f5` and `e8dbef4` were pushed fast-forward from `5781518` (`git ls-remote` on the engine's GitHub repository prints
+      `e8dbef4` for `refs/heads/main`), the port's `fdfada3` after them, and `test_physics` ran once from the engine root on `build/tests/test_physics.exe`
+      (md5 `f465116a`): `343 checks, 0 failures`, exit 0, log `out/parity/program/CMP18/test_physics_final_run.txt`. STILL OPEN here: the determinism hashes
+      taken on MSVC only, `StateHash` omitting the flag, an older reader dropping the key, and the speculative-allowance observation at the end.]**
+      The text below is as written before the push. The pin of step 197 names `e8dbef4` (and `bfbb0f5` below it), local commits in `C:/Users/icvet/Desktop/Supersonic-Engine`,
       none of them on GitHub; `git submodule update` on a fresh clone cannot find the pin until they are pushed. `test_physics` was linked fresh and refused by Smart
       App Control (exit 126) seven times today (the engine role twice in round 0 and twice in round 1, the reviewer twice, and the follow-up commit's message records
       one more): NOT RUN. What ran green: `test_determinism` 144 / 0 (26 hashes recorded from the untouched `5781518` tree), `test_serialize` 491 / 0, the editor build
