@@ -2743,7 +2743,7 @@ route. Its own steps from planning step 177 (each takes the next free number whe
 workflow, second pass after two reviews): 14 steps CTL-1 to CTL-14, natural stops after CTL-3, CTL-6, CTL-9 and CTL-13, decided with the owner on 2026-10-15: both walk
 arrows grouped bottom-left, inset from the corner (the right thumb stays free to fire; **overridden by the owner on 2026-10-16 after he saw it: the arrows are split, one inset in each bottom corner, planning step 186**), restart / pause / clear-portals inset by the same margin, a toggle between modern
 and classic in an Options screen (not a developer flag), Magic Rampage's own button art, and its adjustment screen (size 0.4-1.4, opacity, lock and drag, restore) as a
-later step. Defaults: `--controls classic|modern` (a developer run, a route and every suite are classic; modern becomes the default for a player only at CTL-13), the
+later step. Defaults: `--controls classic|modern` (a developer run, a route and every suite are classic; modern becomes the default for a player only at CTL-13 [DONE 2026-10-22, step 198: it is the default now]), the
 `uniform` preset (size 0.7, a 44 px margin on every edge). **The gate that holds the rest: classic reproduces `R4d/CMP/port_f420` and `WALL/after/sweep` byte for byte at
 every step.** The art is read at run time from a gitignored folder, made by a committed tool that holds no Asantee bytes, with a drawn fallback (the hard rule); Magic
 Rampage is another Asantee game that `docs/permission.md` (still the placeholder) does not record, so shipping its art is the owner's question (design Q2). CTL-1 (the art
@@ -2764,7 +2764,7 @@ CMP-19's one-pair reconciliation against step 85's rows, CMP-14's lightmap exper
 (d)'s bob-centre fit, and CMP-18 / WT-10 LAST because its fix would move 2-29's route (re-fly it once, from tap 320); (2) the rig checks, unchanged; (3) the owner's calls,
 unchanged, with one more: CMP20-1, whether the simulation should keep removing a burned `crate_low_emissive` (3-03, 3-05, 3-13, 4-09) as the original does not; (4) CTL-13
 (the modern controls as a player's default) WAITS for the owner, who chose on 2026-10-19 to take the fix wave first, so `game/data/controls.json` `default_mode` is still
-`"classic"`; (5) the ship preparation, unchanged. **The sweep a step is measured against is now `CMP20/after/sweep`** (128 PNG, `MagicPortals.exe` `f23eacd9`, listed in
+`"classic"` [corrected 2026-10-22: the owner gave the word, CTL-13 is DONE (step 198) and `default_mode` is `"modern"`]; (5) the ship preparation, unchanged. **The sweep a step is measured against is now `CMP20/after/sweep`** (128 PNG, `MagicPortals.exe` `f23eacd9`, listed in
 `out/parity/BASELINE.txt`); it differs from `WALL/after/sweep` on exactly 2-05, 2-08, 2-22 and 2-23, and `WALL/after/sweep` stays listed as the pre-CMP-20 reference. The
 step's own leftovers (the lightmap crate of 2-11 at alpha below 1, the static crates' bucket clock, the 52 one-level pixels) are in its LEFT FOR LATER.*
 
@@ -2784,7 +2784,7 @@ levels, derived by count. (3) **CMP-18 LAST and measurement first** (CMP18-1): t
 taken at any time; the fix (remove the carried frame, or the cheap local start velocity) moves 2-29's route and may move others, is entangled with CMP-11 (the barrel
 needs the held friction), and 2-29 is re-flown from its START, not from tap 320. (4) CMP-low (d): nothing to build; the row keeps a comparison rule (mask crystals out of
 pixel-difference verdicts; never read a gem's y at one tick against one still). The rig checks, the owner's calls (CMP-8's halo scale first of them), CTL-13 (it WAITS for
-the owner) and the ship preparation are unchanged. The sweep a step is measured against is still `CMP20/after/sweep`. 44 frames of the measurement are listed in
+the owner [DONE 2026-10-22, step 198]) and the ship preparation are unchanged. The sweep a step is measured against is still `CMP20/after/sweep`. 44 frames of the measurement are listed in
 `out/parity/BASELINE.txt`; the wave's other images were purged and its tables, scripts and results stay under `out/parity/program/MEAS/`.*
 
 *Wave 4d-2, 2026-10-20, item (1) of the measurement wave's list is DONE - CMP-19 is built as planning step 195 (committed locally as `932af62`, not pushed at this note) and
@@ -2797,7 +2797,7 @@ strength of this note:** (1) **CMP-14's fix step**, now that the fireball floors
 a sprite's light pass into an offscreen target (an engine gap fixed in the engine's own repository first, then a pin bump) or the game bakes on the CPU; the expected-changed
 set is the 67 lightmapped levels, derived by count. (2) **CMP-18 LAST and measurement first** (CMP18-1), unchanged: the 12 s rig clip of 2-29 idle and the held-friction
 experiment need no relink; the fix moves 2-29's route, which is re-flown from its START. (3) CMP-low (d): nothing to build. (4) The rig checks, the owner's calls (**CMP-8 first:
-this step moved one entity, the call is still his**; CMP20-1), CTL-13 (it WAITS for the owner: `default_mode` is still `"classic"`) and the ship preparation, unchanged.
+this step moved one entity, the call is still his**; CMP20-1), CTL-13 (it WAITS for the owner: `default_mode` is still `"classic"` [DONE 2026-10-22, step 198: `"modern"`]) and the ship preparation, unchanged.
 **The sweep a step is measured against is now `CMP19/after/sweep`** (128 PNG, `MagicPortals.exe` `8f59fba7`, listed in `out/parity/BASELINE.txt`); it differs from
 `CMP20/after/sweep` on exactly 2-01, 2-03, 2-06, 2-08, 2-14, 2-22, 2-25, 2-28, 2-29, 4-13 and 4-14, and `CMP20/after/sweep` stays listed as the pre-CMP-19 reference
 (`WALL/after/sweep` as the pre-CMP-20 one). The 19 CTL baselines were taken before both steps and are still md5-equal on the new build (none of their levels places a fireball source).*
@@ -2807,7 +2807,7 @@ independent verifier in its first round; its row is ticked above with the number
 S9, and a literal wording of S-HR). **What is left of the list, in the order to take it - a recommendation, not a decision; the owner has so far allowed one step per
 restart, so nothing below starts on the strength of this note:** (1) **CMP-18 LAST and measurement first** (CMP18-1), unchanged: the 12 s rig clip of 2-29 idle and the
 held-friction experiment need no relink; the fix moves 2-29's route, which is re-flown from its START. (2) CMP-low (d): nothing to build. (3) The rig checks, the owner's
-calls (**CMP-8 first**; CMP20-1; **the arches' lightmap tier, CMP14-1**, which the step stopped on), CTL-13 (it WAITS for the owner: `default_mode` is still `"classic"`)
+calls (**CMP-8 first**; CMP20-1; **the arches' lightmap tier, CMP14-1**, which the step stopped on), CTL-13 (it WAITS for the owner: `default_mode` is still `"classic"` [DONE 2026-10-22, step 198: `"modern"`])
 and the ship preparation, unchanged. (4) The rows the step opened, none urgent: CMP14-2 (static sprites with no lightmap file), CMP14-3 (the run-time torch bake, a rig
 clip first), CMP14-4 (the residuals) and CMP14-5 (known imprecisions, which ride the next step that touches the files).
 **The sweep a step is measured against is now `CMP14/after/sweep`** (128 PNG, `MagicPortals.exe` `5e0c8108`, listed in `out/parity/BASELINE.txt`); it differs from
@@ -2821,7 +2821,7 @@ independent verifier in its first round; its row is ticked above with the number
 of the list: nothing the assistant can do alone.** **PUSH ORDER, because the port's gitlink names an engine commit that is on no remote:** (1) from
 `C:/Users/icvet/Desktop/Supersonic-Engine` push `bfbb0f5` and `e8dbef4` (fast-forward only, the exact hashes, never amended); (2) run `test_physics` there ONCE (never
 run in its committed form: CMP18-5); (3) only then this repository's commits (`b8b0df6` and the devlog's). What waits on the owner: CMP-11 (the barrel; five levels'
-crates), CMP-8, CMP20-1, CMP14-1, CTL-13 (and the grouped-arrows census lists, which gained 2-29), the time base G10-2 (CMP18-6), `docs/permission.md` and the
+crates), CMP-8, CMP20-1, CMP14-1, CTL-13 [DONE 2026-10-22, step 198: the owner's word is given and the census was accepted by that instruction, not reviewed item by item; the grouped-arrows census lists, which gained 2-29, are alternative data and stay unreviewed], the time base G10-2 (CMP18-6), `docs/permission.md` and the
 repository's going public; the rows that are low or need a rig (CMP18-2 to -7, CMP14-2 to -5, CMP19-1, CMP20-2) are none urgent, and the rig checks are unchanged. **The
 sweep a step is measured against is now `CMP18/after/sweep`** (128 PNG, `MagicPortals.exe` `56361c13`, listed in `out/parity/BASELINE.txt`); it differs from
 `CMP14/after/sweep` on exactly one file, 2-29's, and `CMP14/after/sweep` stays listed as the pre-CMP-18 reference (`CMP19/after/sweep` as the pre-CMP-14 one, and so
@@ -5369,6 +5369,47 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       in the owner's folder; delete it at will); (e) `test_mp_hinge` and `test_mp_timebase` print, not pin, 2-29's natural-world numbers (first plank turn tick 210, was
       254), so their re-pins are comments; (f) `test_mp.exe` `5c798436` was linked before the suite's header comment was shortened by one line, so the next build
       recompiles that object. Next: fix with the next edit to any of these files; no gate of its own.
+- [x] **CTL-13. Modern controls are the default a player starts with** (medium; structural; `done`; GAMEPLAY: yes for a player's first run only, none for any developer
+      run, route, sweep or suite). Done as planning step 198, committed locally as `e2fcb0e` (not pushed at this note). On the owner's word of 2026-10-22 ("ctl13 - modern
+      controls should be default contorls.", design Q4) `game/data/controls.json` `default_mode` is `"modern"`: one data value, read in place, so `MagicPortals.exe` `56361c13`
+      was not relinked and no non-test C++ changed. **Classic did not move:** the unedited 128-level f420 sweep is 128 of 128 byte-equal to `CMP18/after/sweep`, and so is the
+      same sweep with `--controls classic`; the 19 baselines are 19 of 19 equal; every suite is at its Step 197 count except `test_mp_controls` (+31) and `test_mp_layer`
+      (+246): 66 suites, 85,718 checks, one full `test_mp.exe` 66 passed and 0 skipped, the routes 128 of 128 (2,365 checks). **What a player gets:** a run on a folder with no
+      `controls.json` plays modern (log: `controls: modern (the shipped default)`), and so does an existing save (`scores.json`, `audio.json`, `achievements.json` and no
+      `controls.json`): no migration, no prompt; the Options toggle writes `controls.json` and overrides the default for good, and its Classic tile or `--controls classic` is the
+      way back. The census (13 of the 128 recorded routes, 14 touches: restart 8, pause 3, clear-portals 2, one gate; `tests/golden/controls_census.json`) is **accepted by the
+      owner's instruction, not reviewed item by item**. One clause was NOT MET and is recorded, not hidden: a player-style classic launch cannot equal the classic baseline
+      pixel for pixel (no flag gives a player's run a fixed clock; two identical launches differ by 15 to 31 percent of the pixels, the portals, torches and pads being wall-clock
+      animation), so that gate rests on the log line, the saved file, the Options capture and the style. Going back is one data value PLUS the cases that name the shipped value,
+      which turn red by design (`test_mp_controls.cpp:702, :3528, :3531` and 13 checks in `test_mp_layer.cpp`: Step 198, LEFT FOR THE OWNER 4). CTL-14 (two contacts) is optional
+      and owner-gated and is not part of this.
+- [ ] **CTL13-1. `--help` says "shipped default: classic", and so do about a dozen strings and comments** (low; user-visible text; `needs-relink`; GAMEPLAY: none). `game/main.cpp:650`
+      prints "(shipped default: classic)": **wrong for every player until the next relink of `MagicPortals.exe`**, and the brief of step 198 allowed no relink. With it:
+      `MagicPortalsLayer.hpp:1299-1300`; the `_about` line of `tests/golden/controls_census.json` (line 11) and `tests/test_mp_census.cpp:25, 385` ("re-signed before CTL-13 flips
+      the default": it has flipped, the guard itself is unchanged); failure messages and comments in `tests/test_mp_layer.cpp` (29037, 29215, 29283, 29947, 29267, 29608, and
+      29295-29297 with `tests/test_mp_controls.cpp:3517-3518`, which say "going back is `default_mode` and this case" and overclaim). The log text `kControlsClassicDefault` is
+      accurate and stays. Next: fix with the next step that relinks the exe and `test_mp` (one relink of each, counted under Smart App Control); no gate of its own.
+- [ ] **CTL13-2. The look a stranger sees without Magic Rampage's art is a working fallback, not a finished look** (medium; the owner's call; `needs-owner`; GAMEPLAY: none).
+      `reference/magic-rampage` is gitignored (Asantee's other game, read at run time, never committed; whether its art may ship is design Q2 and `docs/permission.md` is still its
+      placeholder), so a public clone or a CI runner draws the arrows from the game's own glyphs and restart, pause and clear-portals from the original's own corner sprites:
+      two families (flat dark plates with a white triangle at alpha 0.47, bevelled grey buttons), legible at 1280x720, 1170x540 and 800x360 and nothing broken, but the arrows are
+      the weakest element (grey on grey over the light stone floor of level 30) and the set is plainer than Magic Rampage's. Portrait (540x1170) draws but the two arrows' rings
+      meet in the middle; the OS clamped a 1080x2160 window to 1080x1170. Nobody has looked at the all-generated tier (`withoutOriginalArt`, test-only). And a stranger WITHOUT
+      the original's assets gets no menu and no level at all, so the fallback is for someone who owns the original but not Magic Rampage's folder. Look at
+      `out/parity/program/CTL/CTL13/contact_sheet.png` (six pictures, listed in `BASELINE.txt`). Next: his call; if the fallback should look better, a drawn set of the five
+      buttons in one family, with an exe flag or a seam to capture the all-generated tier.
+- [ ] **CTL13-3. A phone build needs a home for the generated glyphs, a portrait answer and real thumb sizes** (medium; for the platform steps; `needs-rig`; GAMEPLAY: none). With
+      modern the default, every player's run (not only a `--controls modern` one) resolves its pictures and writes the generated glyphs (`modern_walk_left.png`,
+      `modern_walk_right.png` and the gear) into `%TEMP%\supersonic-magicportals` (`g6_1280x720.log` lines 142-143); an Android or iOS build must give that directory a writable
+      home before modern can be its default. Portrait shapes and how a thumb finds a 45 px box are measured only on a device (with the safe-area work of Step 183). The
+      Options screen is reached from the gear on the main menu (from a level the five presses of Step 185 stay; design Q7): a player who prefers classic taps the gear and then the Classic tile; revisit with the phone builds.
+- [ ] **CTL13-4. Scripts that run player-style on purpose now start modern** (low; the rig; `known`; GAMEPLAY: none). The audit of step 198 (`out/parity/program/CTL/CTL13/impl/g5_bins.md`
+      and the verifier's `g5_audit.txt`) found that every live gate script carries `--fixed-step` (a developer's run: classic, unchanged) and that the K-recipes of the earlier steps
+      (`CTL10/work/run_player.sh`, `CTL11/v1/work/after_sweep.sh` K11, `CTL12/work/k12.sh` and `k12_v1.sh`) are player-style by design; none was edited (gitignored step records), so a
+      re-run of one that needs the original's controls must add `--controls classic`. README says it (*Which controls a capture draws*). One suggested sentence for `CLAUDE.md`,
+      the owner's file, in *Workflow rules* item 2, *Captures*, after the command block: "A capture without `--fixed-step` is a player's run and plays Modern by default; add
+      `--controls classic` where the original's controls are wanted." A classic pixel gate on a player-style run is not attainable (see CTL-13 above) and needs a fixed clock
+      for a player's run, which no flag gives today. Next: nothing urgent.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -6581,6 +6622,17 @@ block at the original's speed, turns the plank at about tick 113 (it was 344) an
 through a portal, the stone is sent to the button, the wall is broken by the barrel's explosion and not by the stone (CMP18-3: the route walks through the standing
 plank, which may be a line of the port and not of the original). To look at: `out/parity/program/CMP14/after/sweep/2-29_level28a_f420.png` (before) and
 `out/parity/program/CMP18/after/sweep/2-29_level28a_f420.png` (after), beside the original's `out/parity/original/levels/2-29_h6.3.png` and the rig clip
-`out/parity/footage/F18_stone_2-29.mp4`. The arches' tier (CMP14-1) is still listed above as the owner's call; CTL-13 still waits, and now also: the alternative
+`out/parity/footage/F18_stone_2-29.mp4`. The arches' tier (CMP14-1) is still listed above as the owner's call; CTL-13 still waited then [DONE 2026-10-22, step 198], and now also: the alternative
 `grouped` block of the census golden gained 2-29 because the new route has two more shot taps (the shipped split lists are unchanged); the grant in
 `docs/permission.md`, still its placeholder; and the repository's going public, which needs his explicit word.
+*Added by step 198 (CTL-13)*: **modern controls are the default a player starts with** (row CTL-13 above is ticked; the rows it opened are CTL13-1 to CTL13-4). What to look
+for in play now: a run on a folder with no `controls.json` plays modern, and **so does yours**: `%APPDATA%\Magic Portals` holds `scores.json` alone, so the next windowed run of
+`MagicPortals.exe` without `--fixed-step` starts with the walk arrows inset in the bottom corners and restart and pause inset at the top right, whatever you played before. The
+way back is the gear on the main menu, then the Classic tile (which writes `controls.json` and stays), or `--controls classic`; `--help` still says "shipped default: classic"
+until the next relink (CTL13-1). **To look at: `out/parity/program/CTL/CTL13/contact_sheet.png`** (six pictures: the default with Magic Rampage's art, the same without it, the
+clear-portals button, two phone-like landscapes and the classic HUD), and say whether the fallback look (CTL13-2) is acceptable for a public clone. What waits on the owner:
+CTL13-2, the one `CLAUDE.md` sentence (CTL13-4), CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public; the
+rows that are low or need a rig are none urgent, and the rig checks are unchanged. **The sweep a step is measured against is still `CMP18/after/sweep`** (128 PNG,
+`MagicPortals.exe` `56361c13`, listed in `out/parity/BASELINE.txt`): the flip moved no classic pixel, so there is no new reference sweep. **Not pushed:** `git log --oneline
+origin/main..HEAD` lists the port commit `e2fcb0e` and the devlog's; the engine pin `e8dbef4` is already on `origin/main` of the engine (re-checked with `git ls-remote` at this
+close), so a plain fast-forward push of this repository needs nothing else first.
