@@ -5383,7 +5383,13 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       animation), so that gate rests on the log line, the saved file, the Options capture and the style. Going back is one data value PLUS the cases that name the shipped value,
       which turn red by design (`test_mp_controls.cpp:702, :3528, :3531` and 13 checks in `test_mp_layer.cpp`: Step 198, LEFT FOR THE OWNER 4). CTL-14 (two contacts) is optional
       and owner-gated and is not part of this.
-- [ ] **CTL13-1. `--help` says "shipped default: classic", and so do about a dozen strings and comments** (low; user-visible text; `needs-relink`; GAMEPLAY: none). `game/main.cpp:650`
+- [ ] **CTL13-1. `--help` says "shipped default: classic", and so do about a dozen strings and comments** (low; user-visible text; `needs-relink`; GAMEPLAY: none).
+      **[Partly closed 2026-10-23, DEVLOG Session 54, planning step 199, commit `65236d0`: the relink happened (`MagicPortals.exe` `dfc08f52`, `test_mp.exe` `bf375487`), so
+      `--help` now prints "(shipped default: modern)" (`out/parity/program/PORT/PORT1/impl/help_windows.txt`, the implementer's one launch of the new exe), and `MagicPortalsLayer.hpp:1299-1301`
+      and the failure messages and comments of `tests/test_mp_layer.cpp` and `tests/test_mp_controls.cpp` that the row names are corrected (words only, no assertion touched). STILL
+      OPEN, found by `grep` at `65236d0`: `tests/golden/controls_census.json:11` ("before CTL-13 flips the default"; a golden, which step 199's gate S5 kept untouched) and
+      `tests/test_mp_census.cpp:25` and `:386` (a comment and a failure message; a test file, so it waits for the next link of `test_mp.exe`). The row stays unticked for those three
+      lines; PORT1-4 below carries them with the other leftovers that wait for a relink.]** The text below is as written before step 199. `game/main.cpp:650`
       prints "(shipped default: classic)": **wrong for every player until the next relink of `MagicPortals.exe`**, and the brief of step 198 allowed no relink. With it:
       `MagicPortalsLayer.hpp:1299-1300`; the `_about` line of `tests/golden/controls_census.json` (line 11) and `tests/test_mp_census.cpp:25, 385` ("re-signed before CTL-13 flips
       the default": it has flipped, the guard itself is unchanged); failure messages and comments in `tests/test_mp_layer.cpp` (29037, 29215, 29283, 29947, 29267, 29608, and
@@ -5410,6 +5416,66 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       the owner's file, in *Workflow rules* item 2, *Captures*, after the command block: "A capture without `--fixed-step` is a player's run and plays Modern by default; add
       `--controls classic` where the original's controls are wanted." A classic pixel gate on a player-style run is not attainable (see CTL-13 above) and needs a fixed clock
       for a player's run, which no flag gives today. Next: nothing urgent.
+
+**PORT-1's rows** (planning step 199, the first step of the platform program; what the step found or left, each open, grouped by who acts; the step's other leftovers are in its
+LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is partly closed, above).
+- [ ] **PORT1-1. `test_mp_tiers.cpp:174` is red on Linux: the test asserts a Windows host's path syntax** (low-medium; tests; `owner-call`; GAMEPLAY: none). The full `test_mp` on
+      Linux prints `67 suites, 66 passed, 0 skipped, 1 failed` (86,133 checks); the one failure is `FullhdIsTriedBeforeHd`, which builds `dir.string() + "\\half.png"` and expects
+      `<dir>\hd/half.png`. `Tiers::Resolve` splits at the last `/` or `\` (`Tiers.cpp:98`, the original's `AssembleResourceName`), so on Linux the candidate names a folder called
+      `<dir>\hd`, which does not exist, and the name comes back unchanged. **The port is right and the test is the Windows-only part**: no `.tscn` and no resource name in
+      `data/*.json` holds a backslash in a path (the verifier's check; the case audit counts 0). By the rule "never edit a test to pass" it was not edited. The guard that would make
+      it platform-aware is in the Step (LEFT FOR THE OWNER 1, verbatim; `out/parity/program/PORT/PORT1/impl/gen/tiers_guard_patch.txt`); applied to a scratch copy by the verifier
+      it gives `test_mp_tiers` 527 checks, 0 failures on Linux, and it does not change the Windows assertion. Next: his call, leave the suite red on Linux or take the guard; a test
+      file edit needs a new `test_mp.exe` link (counted under Smart App Control), and a Linux CI that runs `test_mp` is red until it is decided.
+- [ ] **PORT1-2. `tools/build_linux.sh` follow-ups, before a CI calls it** (low-medium; tooling; `script-only`, no exe; GAMEPLAY: none). The verifier's, none made because editing
+      the script would have invalidated the md5s it tested. (a) `--clean` runs `rm -rf -- "$build_dir"` on any `--build-dir` outside `/mnt/<drive>`: `--build-dir "$HOME" --clean`
+      deletes it; refuse unless the directory is absent or holds `CMakeCache.txt`. (b) The header says "It changes nothing outside the build directory", which `--clean` and the
+      `git submodule update --init engine` it may run (when `.git` is there and `engine/` is empty) contradict. (c) **The sixth baked path is not passed**:
+      `SUPERSONIC_MAGICPORTALS_PADART` (`game/CMakeLists.txt:59`, default `<repo>/reference/magic-rampage/controls`) is neither an option nor taken from
+      `--assets-from DIR/reference/magic-rampage/controls`; measured on the verifier's stranger build, a `--controls modern` run logs `modern controls art: walk_left=generated
+      walk_right=generated restart=original pause=original clear_portals=original`, so the Modern controls that are now every player's default draw the fallback look (CTL13-2) on a
+      Linux build made by the script (the suites' counts and the classic frames are not affected). (d) `--assets-from` takes `DIR/data` as Enhanced's tables when it exists, which
+      `--help` does not say (it says "the four variables below"). (e) The file is mode 100644 in the index (made on Windows): `git update-index --chmod=+x tools/build_linux.sh` is the
+      owner's (Step 199, LEFT FOR THE OWNER 2) and a CI that calls it directly needs it. Next: (c) and (d) belong with the run-time asset root (planning step 200), which touches
+      the same paths; (a), (b) and (e) any time.
+- [ ] **PORT1-3. The game is silent off Windows: the engine decodes MP3 only through Media Foundation** (medium; audio; `planned`, step 202; engine first; GAMEPLAY: none on Windows).
+      All 46 sounds of `soundfx` are `.mp3`. A probe calling the engine's `AudioClip::Load` on every one fails 46 of 46: "MP3 is decoded through Media Foundation, which is Windows
+      only; convert to WAV for this platform" (`out/parity/program/PORT/PORT1/verify1/linux/probe_mp3.cpp`, text). **No launch printed an `ERROR` line**, because WSL has no ALSA
+      device and the layer drops its sound events before it asks for any file (`MagicPortalsLayer.cpp:12922-12931`); with ALSA's `null` PCM as the default device the engine says
+      the same sentence once per sound the layer asks for (5 in a 500-frame run of level0's route, 1 in 400 frames of the main menu) and names no file. Step 199 measured it and
+      fixed nothing, as its brief says. Next: step 202 (MP3 off Windows through the engine: a change in the engine's own repository first, then a pin bump).
+- [ ] **PORT1-4. Leftovers that wait for the next relink of an exe** (low; `needs-relink`; GAMEPLAY: none). (a) CTL13-1's three lines (above). (b) `tests/test_mp_numbers.cpp:432-437`:
+      the committed `data/*.json` and `game/data/*.json` halves are skipped together with the `.tscn` half when `out/levels` is absent although they need no `out/`; split them
+      so that a fresh clone, and the CI that follows, hold the JSON half (the brief's "exit 77 where out/ is absent" was deliberately not done: Step 199, Deviation 1,
+      `tests/CMakeLists.txt`'s partial-skip rule). (c) **A mutation of `ParseDouble`'s restore of the value** (`game/sim/Numbers.cpp:126-132`): MSVC's library writes an infinity or a
+      zero into the value on `result_out_of_range` and libstdc++'s does not, so only the Windows build can show the branch; no mutation has reached it (the implementer's ten and the
+      verifier's eight are of the fallback), the code was read, and no committed number reaches it (134,804 tokens, 0 mismatches). One caller ignores the result and would differ
+      for a hand-edited out-of-range string token (`game/sim/Demolish.cpp:369`, `rotation->AsNumber(radians);`: it now keeps its initial value where MSVC's `from_chars` alone would
+      have written an infinity or a zero; the converter writes no such token). (d) Stale counts:
+      `README.md:69` ("29 of the 47 suites skip") and the header of `tests/CMakeLists.txt:15` ("all 47"); it is 67 suites now and 31 skip without the data (the README is rewritten
+      for strangers in the release-docs step, which takes its half). (e) `game/main.cpp:808` prints ", Windows code page" before `CodePageText()` on every platform, so a Linux log
+      says "Windows code page UTF-8" (cosmetic, in every Linux frame log). Next: fold into the first step that relinks both exes anyway.
+- [ ] **PORT1-5. What step 199 did not run, so that "five platforms" is not read into it** (medium; platform program; `not-run`; GAMEPLAY: none). **What exists:** Windows
+      unchanged (the f420 sweep 128 of 128 byte-equal, plain and classic; 19 baselines; 128 routes won on the same ticks); **Linux x86-64**: builds with g++ 13 and clang 18 through
+      the script, 66 of 67 suites pass (PORT1-1), the 128 routes are won on the same ticks as on Windows (the sorted list's md5 `d6b75db1...` is equal) and the sweep file has 0 of 128
+      levels differing, a frame renders under WSLg and llvmpipe, and the game is silent (PORT1-3); **Android**: the whole port compiles for `aarch64` and `x86_64` with the NDK
+      r28.2 under `-fsyntax-only`, 153 units each, 0 errors, 0 warnings, and nothing was linked, installed or run; **iOS and macOS**: nothing. **Not run:** Apple's compilers (the only
+      Apple fact is read, not compiled: `std::to_chars(double)` at `game/sim/Controls.cpp:441` is in Apple's libc++ only from macOS 13.3 / iOS 16.3 by its availability attribute, and
+      `std::filesystem` needs macOS 10.15), libc++ on Linux (clang there used libstdc++), 32-bit ARM, an NDK link, any device or emulator, arm64 results (D11: the sim calls libm in
+      `double`; the routes matching on x86-64 Linux says nothing about arm64 or macOS), a real GPU (the Linux frames differ from Windows by 2.5 to 4.7 percent of the pixels, at most
+      25 of 255, the software rasteriser), a real audio device, and the engine's own `test_determinism` on Linux: **CMP18-5 is not closed by the routes' match** (its 26 hashes are
+      MSVC-only; the routes show how the port uses the engine, not the engine's hashes). Next: the program's later steps (Android, Apple CI, the packager and CI).
+- [ ] **PORT1-6. About 25 other `static_cast<int>(x.AsNumber())` reads of committed JSON are undefined for a hand-edited value beyond +-2^31** (low; robustness; `known`; GAMEPLAY:
+      none). Step 199 hardened the two sites its brief named (`game/sim/LevelEnd.cpp:107`, `game/sim/UiLayer.cpp:175`) and left the rest on purpose; the list is
+      `out/parity/program/PLAT/portability.md` 2.3. **The brief's premise for the two sites was wrong and the Step says so (Deviation 2):** they already tested the range before the
+      cast, so no finite value reached it out of range; the engine's JSON reader cannot produce a NaN, the one value that passes both `<` and `>`, and the range is now a positive
+      condition that refuses it. Next: only if a data file may be hand-edited by a stranger; one range-checked helper would cover them.
+- [ ] **PORT1-7. Findings for the engine's own repository** (low; engine; `engine`; GAMEPLAY: none). Not edited (`engine/` stays at `e8dbef4`). The g++ -O3 build prints 21 warnings,
+      all of them engine's and none in `game/` or `tests/`: 20 `-Wmissing-field-initializers` that `entt` raises when the engine instantiates `Supersonic::MeshComponent`
+      (`meshKey`) and `ScriptComponent` (`parameters`, `state`), which have no default member initializer, and one `-Wunused-but-set-variable` at `stb_image.h:5247` (vendored). Under
+      clang there are 6,195 `-Wnullability-extension` reports in `vk_mem_alloc.h`, reached only from engine translation units (the research's matrix passes
+      `-Wno-nullability-extension`, the port's own units raise none without it). The engine's messages when there is no ALSA device are info, not errors. Next: fix in the
+      Supersonic-Engine repository, then a pin bump here; nothing urgent.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -6629,10 +6695,26 @@ plank, which may be a line of the port and not of the original). To look at: `ou
 for in play now: a run on a folder with no `controls.json` plays modern, and **so does yours**: `%APPDATA%\Magic Portals` holds `scores.json` alone, so the next windowed run of
 `MagicPortals.exe` without `--fixed-step` starts with the walk arrows inset in the bottom corners and restart and pause inset at the top right, whatever you played before. The
 way back is the gear on the main menu, then the Classic tile (which writes `controls.json` and stays), or `--controls classic`; `--help` still says "shipped default: classic"
-until the next relink (CTL13-1). **To look at: `out/parity/program/CTL/CTL13/contact_sheet.png`** (six pictures: the default with Magic Rampage's art, the same without it, the
+until the next relink (CTL13-1) [corrected 2026-10-23, step 199: relinked, `--help` says "shipped default: modern"]. **To look at: `out/parity/program/CTL/CTL13/contact_sheet.png`** (six pictures: the default with Magic Rampage's art, the same without it, the
 clear-portals button, two phone-like landscapes and the classic HUD), and say whether the fallback look (CTL13-2) is acceptable for a public clone. What waits on the owner:
 CTL13-2, the one `CLAUDE.md` sentence (CTL13-4), CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public; the
 rows that are low or need a rig are none urgent, and the rig checks are unchanged. **The sweep a step is measured against is still `CMP18/after/sweep`** (128 PNG,
 `MagicPortals.exe` `56361c13`, listed in `out/parity/BASELINE.txt`): the flip moved no classic pixel, so there is no new reference sweep. **Not pushed:** `git log --oneline
 origin/main..HEAD` lists the port commit `e2fcb0e` and the devlog's; the engine pin `e8dbef4` is already on `origin/main` of the engine (re-checked with `git ls-remote` at this
-close), so a plain fast-forward push of this repository needs nothing else first.
+close), so a plain fast-forward push of this repository needs nothing else first [corrected 2026-10-23: both commits are on `origin/main`, which `git ls-remote` printed as `3277d51`
+at the close of step 199].
+*Added by step 199 (PORT-1)*: **the port builds and runs on Linux, compiles for Android, and Windows did not move** (no existing row is ticked; CTL13-1 is partly closed and PORT1-1 to
+PORT1-7 are the rows it opened). The owner asked on 2026-10-22 for the game to be playable on Android, iOS, Windows, Linux and macOS; **this step delivers Windows (unchanged) and Linux
+x86-64 (silent, software-rendered) and a syntax-only pass for Android; iOS and macOS are untouched** (PORT1-5 says what was not run). There is no picture to look at: the gates were
+numbers. What to look at and decide: **(1)** the tiers test on Linux (PORT1-1: leave it red or take the one-assertion guard in the Step); **(2)** `git update-index --chmod=+x
+tools/build_linux.sh` (PORT1-2 (e): the script is committed as a non-executable file); **(3)** one suggested sentence for `CLAUDE.md`, the owner's file, in *Environment*, which
+says nothing about Linux: "Linux: `tools/build_linux.sh --assets-from <folder>` builds `MagicPortals` and `test_mp` in WSL Ubuntu-24.04 on ext4 (never on `/mnt/c`); WSL has no sound
+device, and the engine decodes MP3 only on Windows."; **(4)** if he runs the new `MagicPortals.exe` (`dfc08f52`): it plays and looks as before, `--help` now says modern; **(5)** to try
+Linux himself, `wsl -d Ubuntu-24.04 -- bash -lc "cd ~/mp/repo && ls build/game build/tests"` finds the Release build the implementer ran the suites on (the step leaves `~/mp`, 6.2 GiB, for the next step's cache; the
+verifier's `~/mp-verify1`, 6.5 GiB, and each tree's `build-san` of about 5.7 GiB are deletable and were not deleted). **The sweep a step is measured against is still
+`CMP18/after/sweep`** (128 PNG, `MagicPortals.exe` `56361c13`, listed in `out/parity/BASELINE.txt`): the step's final sweep is 128 of 128 byte-equal to it, plain and with `--controls
+classic`, so no new reference was promoted and `BASELINE.txt` is unchanged. **Not pushed:** `git log --oneline origin/main..HEAD` lists the port commit `65236d0` and the devlog's;
+the engine pin `e8dbef4` is on the engine's `origin/main` (`git ls-remote` at this close, and the verifier's stranger build fetched it from GitHub). What waits on the owner, unchanged:
+CTL13-2, CTL13-4's sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public. **The program's next steps** (the
+Step's LEFT FOR LATER 1): the run-time asset root, Windows release hygiene and the phone-profile seam (CTL13-3 belongs to it), MP3 off Windows through the engine (step 202,
+PORT1-3), Android, Apple CI, the packager and CI, the release docs.
