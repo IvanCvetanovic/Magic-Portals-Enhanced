@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Magic Portals Enhanced on Android (planning step 203, PORT-5): the engine's SupersonicActivity, a NativeActivity with a few lines of Java for what
+    only the UI thread may do (hiding the system bars, reporting the window's safe area; engine/src/platform/android/java/, compiled into classes.dex by
+    tools/package/android_package.py). The platform loads libMagicPortals.so (android.app.lib_name), whose android_main is the engine's
+    (engine/src/platform/android/AndroidApp.cpp) and which calls game/android/AndroidMain.cpp's SupersonicMain.
+
+    NOT RUN ON A PHONE OR AN EMULATOR as of this step: built, packaged and statically checked.
+
+    WHAT IS NOT IN THIS FILE, ON PURPOSE.
+      - versionName and versionCode. versionName is the ONE version definition, project(MagicPortals VERSION ...) in the top-level CMakeLists.txt,
+        and versionCode is a whole number that goes up by one with every release (or Android refuses the update): the packager hands both to aapt2,
+        which writes them in (its version-name and version-code options), so neither is spelled twice.
+      - permissions. The game needs none: no INTERNET, no storage (its files are in its own private folder; the APK's data is unpacked there).
+      - the launcher icon's pictures: tools/art/make_app_icon.py draws them at package time (nothing of the kind is committed).
+    THE APPLICATION ID below is a PLACEHOLDER the owner confirms before anything is published: an id is permanent once an app is on a store. It differs
+    from the original game's and from the sibling port's.
+
+    minSdk 26 is where AAudio begins (the engine's audio on Android). The game needs a Vulkan 1.1 device (uses-feature below; the engine checks it at
+    start, and game/data/engine.json "mobile" sets the lowest minor to 1): only Google Play filters on uses-feature, so a sideloaded APK on a phone
+    that reports less starts and is told so. Landscape only, and every configuration change handled in place, because a NativeActivity that is
+    recreated starts its native thread again over a running game.
+
+    The report below: Android 11 and later can show, at the next start, the system's record of how the last run ended and the end of the game's log
+    (SupersonicActivity.showReport, PostMortem.java). The log is the one main.cpp writes on a phone, <files>/Magic Portals/scratch/magicportals.log
+    (Scratch::ArrangedFor puts it there first on a phone); tools/package/test_android_package.py ties this value to the C++ names it is made of.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ivancvetanovic.magicportals">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
+    <application
+        android:label="Magic Portals Enhanced"
+        android:icon="@mipmap/ic_launcher"
+        android:hasCode="true"
+        android:allowBackup="false"
+        android:extractNativeLibs="true"
+        android:appCategory="game"
+        android:isGame="true"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+        <activity
+            android:name="com.ivancvetanovic.supersonic.SupersonicActivity"
+            android:label="Magic Portals Enhanced"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:resizeableActivity="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale|touchscreen|colorMode">
+
+            <meta-data android:name="android.app.lib_name" android:value="MagicPortals" />
+
+            <!-- The report of a last run that ended unexpectedly, shown at the next start. -->
+            <meta-data android:name="supersonic.reportUnexpectedExit" android:value="true" />
+            <meta-data android:name="supersonic.reportLog" android:value="Magic Portals/scratch/magicportals.log" />
+            <!-- A scripted run (it leaves this file, game/android/AndroidMain.cpp) never meets the report. -->
+            <meta-data android:name="supersonic.reportSkipWhenFile" android:value="magicportals_args.txt" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

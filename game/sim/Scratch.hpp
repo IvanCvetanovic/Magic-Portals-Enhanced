@@ -21,6 +21,11 @@
 // where it always did; (b) the user's data folder's scratch folder, which is the answer wherever (a) is unwritable and is the only one
 // that MAKES a folder (the engine's UserDataDirectory creates the player's data folder), so it is asked for only when (a) failed;
 // (c) the older last resorts (the user's data folder itself, the executable's folder, the working directory).
+//
+// ON A PHONE the user's data folder's scratch folder goes FIRST (planning step 203, PORT-5; ArrangedFor). The probe above already makes the
+// phone fall past an unwritable /data/local/tmp, but a log that lands wherever the probe happened to succeed cannot be NAMED: Android's report of
+// a run that ended unexpectedly reads the game's log from one path inside the app's files folder, which the manifest states
+// (game/android/AndroidManifest.xml, supersonic.reportLog). So a phone's log is always <files>/<the game's title>/<kUserScratchFolder>/<kLogFileName>.
 
 #include <filesystem>
 #include <functional>
@@ -32,6 +37,14 @@ namespace MagicPortals::Scratch {
 // The folder inside a candidate that holds the prisms and the generated pictures. The log sits in the candidate itself (README: the
 // log is %TEMP%\magicportals.log), so a run on a desktop writes exactly the names it always did.
 inline constexpr const char* kPrismFolder = "supersonic-magicportals";
+// The user's data folder's scratch folder, and the log's name: the pieces of the one path the Android manifest names for the post-mortem report.
+// A text tie in tools/package (test_android_package.py, and the packager at package time) reads these two lines and refuses a manifest whose
+// supersonic.reportLog is another path.
+inline constexpr const char* kUserScratchFolder = "scratch";
+inline constexpr const char* kLogFileName = "magicportals.log";
+
+// What a candidate is, for the one rule that moves candidates (ArrangedFor). Everything else keeps the order main gave it.
+enum class Kind { Other, UserDataScratch };
 
 struct Candidate {
     std::string label; // for the log: "the system's temporary folder"
@@ -39,6 +52,7 @@ struct Candidate {
     // data folder is made by asking for it); `makes` says so, and the note then says it.
     std::function<std::filesystem::path()> base;
     bool makes = false;
+    Kind kind = Kind::Other;
 };
 
 // Whether a file can be made in `dir` (made, with its parents, if it is not there). `why` says what stopped it.
@@ -53,6 +67,10 @@ struct Chosen {
     std::string note;             // one line for the log: which, and why each earlier one was passed over
     std::vector<std::string> passedOver; // "<label>: <why>", in order
 };
+
+// The candidates in the order a kind of build wants them. A desktop build (`phone` false) keeps the order it was given, so a Windows run still
+// writes %TEMP%\magicportals.log, as it always has; a phone's build puts the user-data scratch candidate first and keeps the rest in their order.
+std::vector<Candidate> ArrangedFor(std::vector<Candidate> candidates, bool phone);
 
 // The first candidate whose base AND whose prism folder pass the probe. Never throws.
 Chosen Choose(const std::vector<Candidate>& candidates, const Probe& probe);

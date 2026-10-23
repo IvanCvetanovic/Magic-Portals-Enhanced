@@ -1,5 +1,6 @@
 #include "sim/Scratch.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <fstream>
 #include <system_error>
@@ -7,6 +8,13 @@
 #include "sim/Files.hpp"
 
 namespace MagicPortals::Scratch {
+
+std::vector<Candidate> ArrangedFor(std::vector<Candidate> candidates, bool phone) {
+    if (phone) {
+        std::stable_partition(candidates.begin(), candidates.end(), [](const Candidate& candidate) { return candidate.kind == Kind::UserDataScratch; });
+    }
+    return candidates;
+}
 
 Chosen Choose(const std::vector<Candidate>& candidates, const Probe& probe) {
     Chosen chosen;

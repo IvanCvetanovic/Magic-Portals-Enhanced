@@ -44,7 +44,15 @@ if (MAGICPORTALS_DEV_TOOLS_ENABLED)
         Route.cpp        # DEV: --route, never pushed without it; test_mp compiles it too, for test_mp_routes
     )
 endif()
-add_executable(MagicPortals ${_magicPortalsSources})
+if (ANDROID)
+    # A NativeActivity loads the game as libMagicPortals.so (android/AndroidManifest.xml names it). The engine's android_main, linked in with SupersonicCore,
+    # enters the game through SupersonicMain (android/AndroidMain.cpp), which unpacks the APK's data and calls main.cpp's MagicPortalsMain as main() does on a
+    # desktop. The TARGET keeps its name, so that the two definitions below (MAGICPORTALS_MOBILE and MAGICPORTALS_DEV_TOOLS) reach AndroidMain.cpp by the very
+    # line that gives them to main.cpp (planning steps 201 to 203).
+    add_library(MagicPortals SHARED ${_magicPortalsSources} android/AndroidMain.cpp)
+else()
+    add_executable(MagicPortals ${_magicPortalsSources})
+endif()
 
 # The application manifest (planning step 189): the process's code page is UTF-8, so a path with a character the machine's ANSI page lacks
 # (a user name with a c-acute on an English Windows) narrows and opens instead of ending the start with no word. On MagicPortals ALONE; the

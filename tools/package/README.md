@@ -59,11 +59,32 @@ can be compared with `same`. `verify` re-checks a folder against its manifest an
 every name the game can open must resolve, in exact case, inside it, and nothing in it may be surplus. A finished `content` run does that
 before it moves the folder into place.
 
+## The Android packager (`android_package.py`, planning step 203)
+
+Builds the APK from the content folder this tool writes. `tools/build_android.sh` is the front door (it builds the libraries and calls it); the details,
+what the APK holds, and what has **not** been run are in [`docs/android.md`](../../docs/android.md). It is Python standard library only and takes the Android SDK's
+tools (aapt2, zipalign, d8, apksigner, javac) from `--sdk`.
+
+```
+python tools/package/android_package.py build   --repo <repo> --sdk <sdk> --build-tools <ver> --lib <abi>=<libMagicPortals.so> ... (--package <content folder> | --no-data) [--out <dir>]
+python tools/package/android_package.py inspect <apk> --sdk <sdk>          (badging, zipalign, apksigner, the list against the assets, every library as an ELF file)
+python tools/package/android_package.py compare <apk> --package <content folder>      (the APK's unpack list against manifest.json: files, sizes, sha256)
+```
+
+It reads the content folder **only through its `manifest.json`**: a listed file that is missing, short, altered, a link or outside the folder, a file the manifest does not list, a
+name that is not a safe relative path, anything on the never-package list and a folder under `reference/apk` or `reference/ethanon` are all refused (exit 2, with the cause). The shaders
+come from `--shaders` (default `engine/assets/shaders`, plain `.spv` files only). It writes `assets/gamedata.list` (a stamp, then `size TAB path` for each file) beside the files: the
+list the app's first-run unpack reads (`game/sim/Unpack.hpp`). The APK is deterministic: two runs on the same inputs are the same bytes.
+
 ## Tests
 
 ```
 python -m unittest discover -s tools/package -p "test_*.py" -v
 ```
+
+`test_android_package.py` builds a synthetic package, hand-made ELF files and zips in a temporary folder (no SDK, no binary in the repository) and pins the list, the path rules (the same
+table as the C++ suite `test_mp_unpack`), the package loader's refusals, the manifest's policy and its text ties to the C++, the build-tree check, the ELF check, the
+byte-for-byte determinism of the assembled zip, and the command line's refusals. `test_package.py` also ties `Layout::Packaged()` in `game/sim/AssetRoot.cpp` to this tool's `DEST`.
 
 The tests build a miniature tree of invented names and bytes (`tile_a.png`, `boom_a.mp3`, a hand-made UTF-16 `.ent`): no file of the original
 and no name from it is in this repository. They cover the closure, the refusals, the manifest, the never-package list, determinism and the

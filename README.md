@@ -66,7 +66,8 @@ ctest --test-dir build
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
 compiles from a fresh clone, but it plays nothing until the original's levels are converted
-locally, and 29 of the 47 suites skip without them: *Local setup* below, steps 5-8.
+locally, and 31 of the 70 suites skip without them (measured on Linux with `out/levels` and `out/data` hidden; a 32nd, `test_mp_shoot`, then runs fewer
+checks than its floor and fails): *Local setup* below, steps 5-8.
 
 **Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
 with g++ 13 or clang 18, from a clone with its submodule; `--assets-from <folder>` (or the five `SUPERSONIC_MAGICPORTALS_*`
@@ -75,6 +76,10 @@ data suites skip). Build on a Linux file system, not a Windows drive mounted int
 (the engine decodes MP3 through Media Foundation on Windows and through its vendored dr_mp3 everywhere else; a clip starts about 12 ms
 apart between the two): the decoding was checked on the real files, but a Linux run has not been listened to, and a headless one has no
 sound device. `tools/build_linux.sh --help` lists the options.
+
+**Build for Android.** `tools/build_android.sh --data <the content packager's output folder>` builds the game for `arm64-v8a` and `x86_64` with the Android
+NDK (r28 or newer) and packages one APK, with the game's data in it, unpacked into the app's private folder on the first run (`docs/android.md`: what you need,
+the options, what the APK holds, what the owner must decide). It is **built, packaged and statically checked, and has never been run on a phone or an emulator**.
 
 ## How it fits together
 

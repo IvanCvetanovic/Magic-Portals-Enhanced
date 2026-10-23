@@ -35,7 +35,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # (game/sim/AssetRoot.hpp, docs/packaging.md). A run that finds none says so and exits 1. The suites are a developer's tool and read the
 # baked paths, so they are not built by default when this is OFF. Use a build folder of its own: the cache of the other kind keeps its
 # paths.
-option(MAGICPORTALS_BAKED_PATHS "Bake this machine's data paths into the build (ON: a developer's build; OFF: a release build that finds its data at run time)" ON)
+# An Android program is a release build by nature (planning step 203, PORT-5): there is no repository on a phone, so the default there is OFF, and a
+# configure that asks for ON is refused below rather than baking an account name and a checkout path into a program for a phone.
+set(_magicPortalsBakedDefault ON)
+if (ANDROID)
+    set(_magicPortalsBakedDefault OFF)
+endif()
+option(MAGICPORTALS_BAKED_PATHS "Bake this machine's data paths into the build (ON: a developer's build; OFF: a release build that finds its data at run time)" ${_magicPortalsBakedDefault})
+if (ANDROID AND MAGICPORTALS_BAKED_PATHS)
+    message(FATAL_ERROR "MAGICPORTALS_BAKED_PATHS is ON for an Android configure. There is no repository on a phone: the program finds its data in the folder the app unpacks it to "
+                        "(game/android/AndroidMain.cpp). Leave it OFF (tools/build_android.sh does).")
+endif()
 if (NOT MAGICPORTALS_BAKED_PATHS)
     # The engine bakes the absolute path of its own checkout as the last place to look for its shaders, unless the variable is already
     # defined (engine/CMakeLists.txt, SUPERSONIC_ASSET_ROOT). A release finds its shaders beside the program or in the working directory,
@@ -61,6 +71,11 @@ if (ANDROID OR IOS)
     set(_magicPortalsMobileDefault ON)
 endif()
 option(MAGICPORTALS_MOBILE "A phone's build: the phone profile by default, no developer tools (ON by itself for an Android or iOS target)" ${_magicPortalsMobileDefault})
+# The Android program is entered by game/android/AndroidMain.cpp and starts under the phone profile (Vulkan 1.1): without it the engine's default (1.2) refuses
+# many phones' stock drivers. Turning it OFF on an Android configure would build a program that cannot start on them, so it stops here (planning step 203).
+if (ANDROID AND NOT MAGICPORTALS_MOBILE)
+    message(FATAL_ERROR "MAGICPORTALS_MOBILE is OFF for an Android configure. The Android program is a phone's build (the phone profile, Vulkan 1.1); leave it ON, which is its default there.")
+endif()
 
 # MAGICPORTALS_DEV_TOOLS: the developer's command-line flags (--route, --tap, --hold, --visit-levels, --place, --burn-dragon, the measurement
 # switches ...) and the two files behind them (game/LevelVisit.cpp, game/Route.cpp). A player needs none of them and a phone cannot type them. AUTO,
@@ -120,8 +135,12 @@ add_subdirectory(engine)
 option(SUPERSONIC_BUILD_MAGICPORTALS "Build MagicPortals and the MagicPortalsSpike measurement tool" ON)
 add_subdirectory(game)
 
-# Off in a release configure (MAGICPORTALS_BAKED_PATHS=OFF): the suites read the baked paths.
+# Off in a release configure (MAGICPORTALS_BAKED_PATHS=OFF): the suites read the baked paths. Never for Android: they are executables that read the
+# repository, and a phone has neither (planning step 203).
 option(MAGICPORTALS_BUILD_TESTS "Build the port's test_mp_* suites" ${MAGICPORTALS_BAKED_PATHS})
+if (ANDROID AND MAGICPORTALS_BUILD_TESTS)
+    message(FATAL_ERROR "MAGICPORTALS_BUILD_TESTS is ON for an Android configure. The suites are not built for Android: they run on the machine that builds them.")
+endif()
 if (MAGICPORTALS_BUILD_TESTS)
     # The engine enables testing only for its own suites, which are off here.
     enable_testing()

@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -202,6 +203,15 @@ void JoinPutsARelativePathUnderAFolder() {
     CHECK(AR::Join("C:\\a\\b", "tables/chapters.json") == "C:/a/b/tables/chapters.json");
     CHECK_MSG(AR::Join("", "x").empty(), "no folder, no path");
     CHECK(AR::Join("/a/b/c/..", "x") == "/a/b/x");
+    // The file system's root (planning step 203, PORT2-3 (b)): a root of "/" used to join as "//content", a network name to Normalize.
+    // MUTATION: join a slash-only folder as dir + "/" + relative again.
+    CHECK_MSG(AR::Join("/", "content") == "/content", "the root joins as itself: " + AR::Join("/", "content"));
+    CHECK_MSG(AR::Join("/", "a/b") == "/a/b", "and with a longer path");
+    CHECK_MSG(AR::Join("//", "x") == "/x" && AR::Join("///", "x") == "/x", "any number of slashes is the root, as it has always been for two");
+    CHECK_MSG(AR::Join("/", ".") == "/" && AR::Join("/", "") == "/", "and the root itself stays the root");
+    CHECK_MSG(AR::Join("C:/", "x") == "C:/x" && AR::Join("C:", "x") == "C:/x" && AR::Join("C:\\", "x") == "C:/x", "a drive's root is not touched");
+    CHECK_MSG(AR::Join("/a", "content") == "/a/content" && AR::Join("/a/", "content") == "/a/content", "nor is any other folder");
+    CHECK_MSG(AR::Join("/", "../x") == "/x", "and a climb out of the root stays at the root");
 }
 
 // ---- the order of the tiers -----------------------------------------------------------------------------------------------------
@@ -722,6 +732,91 @@ void APrismIsWrittenWhateverStandsAtTheOldFixedPartialName() {
     CHECK_MSG(left.empty(), "and no half-written copy of its own is left behind: " + Joined(left));
 }
 
+// PORT2-3 (a), the part that can be pinned (planning step 203): a prism whose own name is held by a non-empty folder cannot be moved into place. The
+// half-written copy is removed and the failure is the writer's return, not an exception or a silent success. (The twin claim, that a failed WRITE
+// removes the copy, is not pinned: a write that fails after the open succeeded needs a full disk or a fake file system, and the branch is three lines
+// read, not run. The Step says so.)
+// MUTATION: the half-written copy left behind after a refused rename; the refusal ignored (the path returned all the same).
+void APrismWhoseNameIsHeldByAFolderFailsAndLeavesNoHalfFile() {
+    const fs::path dir = Folder("prism-held");
+    const std::vector<double> triangle = {0, -30, 30, 30, -30, 30};
+    std::string error;
+    const std::string first = Prism::Write(triangle, 1.0, dir, error);
+    CHECK_MSG(!first.empty(), error);
+    std::error_code ec;
+    fs::remove(first, ec);
+    fs::create_directories(fs::path(first) / "inner", ec); // a non-empty folder at the prism's own name: no file can be renamed over it
+    error.clear();
+    const std::string again = Prism::Write(triangle, 1.0, dir, error);
+    CHECK_MSG(again.empty(), "a refused move is a failure, not a path: '" + again + "'");
+    CHECK_MSG(error.find("cannot move") != std::string::npos, "and it says what it could not do: " + error);
+    std::vector<std::string> left;
+    for (const std::string& name : Tree(dir)) {
+        if (name.size() > 8 && name.compare(name.size() - 8, 8, ".partial") == 0) left.push_back(name);
+    }
+    CHECK_MSG(left.empty(), "and the half-written copy is gone: " + Joined(left));
+}
+
+// PORT2-3 (a), the probe's file: it is a name of its own, so it never takes, overwrites or removes a file that somebody else's probe (or anything)
+// left in the folder.
+// MUTATION: ProbeWritable writing a fixed file name (".write-probe.tmp" or any of the others here): it would overwrite and then remove that file.
+void TheProbeNeverTouchesAFileItDidNotMake() {
+    const fs::path root = Folder("probe-name");
+    std::error_code ec;
+    fs::create_directories(root, ec);
+    const std::vector<std::string> names = {".write-probe.tmp", ".write-probe", "write-probe.tmp", ".probe", "probe.tmp", ".write-probe-.tmp", "probe"};
+    for (const std::string& name : names) {
+        std::ofstream(root / name, std::ios::binary) << "somebody else's";
+    }
+    std::string why;
+    CHECK_MSG(Scratch::ProbeWritable(root, why), why);
+    bool whole = true;
+    for (const std::string& name : names) {
+        std::ifstream in(root / name, std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        whole = whole && text == "somebody else's";
+    }
+    CHECK_MSG(whole, "every file that was there is as it was");
+    CHECK_MSG(Tree(root).size() == names.size(), "and the probe left none of its own: " + Joined(Tree(root)));
+}
+
+// The phone's order (planning step 203): the user-data scratch folder first, the rest as they were; a desktop keeps main's order.
+// MUTATION: ArrangedFor that ignores `phone`, that always moves, that reverses, that drops the others, that sorts by label or moves the wrong kind.
+void APhonePutsTheUserDataScratchFolderFirstAndADesktopChangesNothing() {
+    std::vector<Scratch::Candidate> given = {At("temp", "/t"), At("user scratch", "/u/scratch", nullptr, true), At("user", "/u", nullptr, true), At("exe", "/x"),
+                                             At("cwd", "/w")};
+    given[1].kind = Scratch::Kind::UserDataScratch;
+    const auto labels = [](const std::vector<Scratch::Candidate>& list) {
+        std::vector<std::string> out;
+        for (const Scratch::Candidate& candidate : list) out.push_back(candidate.label);
+        return out;
+    };
+    CHECK_MSG(labels(Scratch::ArrangedFor(given, false)) == (std::vector<std::string>{"temp", "user scratch", "user", "exe", "cwd"}), "a desktop keeps the order it was given");
+    CHECK_MSG(labels(Scratch::ArrangedFor(given, true)) == (std::vector<std::string>{"user scratch", "temp", "user", "exe", "cwd"}),
+              "a phone puts the scratch folder first and keeps the others in their order: " + Joined(labels(Scratch::ArrangedFor(given, true))));
+    // Nothing marked: nothing moves, on a phone too (the other candidates are not reordered by a rule that does not apply).
+    std::vector<Scratch::Candidate> unmarked = given;
+    unmarked[1].kind = Scratch::Kind::Other;
+    CHECK_MSG(labels(Scratch::ArrangedFor(unmarked, true)) == labels(unmarked), "no candidate of the kind, no move");
+    // Two of the kind keep their own order, both ahead.
+    std::vector<Scratch::Candidate> two = given;
+    two[3].kind = Scratch::Kind::UserDataScratch;
+    CHECK_MSG(labels(Scratch::ArrangedFor(two, true)) == (std::vector<std::string>{"user scratch", "exe", "temp", "user", "cwd"}), "two of the kind: stable");
+    CHECK_MSG(Scratch::ArrangedFor({}, true).empty() && Scratch::ArrangedFor({}, false).empty(), "an empty list stays empty");
+    // The effect: a phone whose temporary folder IS writable still logs in its own scratch folder; a desktop logs in the temporary one.
+    FakeProbe accepting;
+    CHECK_MSG(Scratch::Choose(Scratch::ArrangedFor(given, true), accepting.Fn()).label == "user scratch", "a phone logs in its own folder though /t is writable");
+    FakeProbe again;
+    CHECK_MSG(Scratch::Choose(Scratch::ArrangedFor(given, false), again.Fn()).label == "temp", "a desktop still logs in the temporary folder");
+    // And when the scratch folder cannot be made, the phone falls back to the rest, in their order.
+    FakeProbe refusing;
+    refusing.failing = {"/u/scratch"};
+    const Scratch::Chosen fell = Scratch::Choose(Scratch::ArrangedFor(given, true), refusing.Fn());
+    CHECK_MSG(fell.ok && fell.label == "temp", "a refused scratch folder falls to the next: " + fell.note);
+    // The names that the Android manifest quotes.
+    CHECK_MSG(std::string(Scratch::kUserScratchFolder) == "scratch" && std::string(Scratch::kLogFileName) == "magicportals.log", "the pieces of the log's path on a phone");
+}
+
 // MUTATION: UniqueSuffix returning a constant.
 void TwoSuffixesAreNeverTheSame() {
     std::set<std::string> seen;
@@ -754,6 +849,9 @@ void runTests() {
     TheRealProbeMakesTheFolderTriesAFileAndLeavesNothingBehind();
     AnUnwritableFirstFolderFallsToTheSecondAndOnlyThenIsItMade();
     APrismIsWrittenWhateverStandsAtTheOldFixedPartialName();
+    APrismWhoseNameIsHeldByAFolderFailsAndLeavesNoHalfFile();
+    TheProbeNeverTouchesAFileItDidNotMake();
+    APhonePutsTheUserDataScratchFolderFirstAndADesktopChangesNothing();
     TwoSuffixesAreNeverTheSame();
 }
 

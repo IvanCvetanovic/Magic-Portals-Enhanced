@@ -41,7 +41,8 @@
 #   --mobile             configure with MAGICPORTALS_MOBILE=ON: a phone's build, compiled on this machine. The run starts under the phone
 #                        profile (game/data/engine.json "mobile": a lowest Vulkan version of 1.1 among it) unless --profile desktop says
 #                        otherwise, and the developer tools and the measurement tool are left out unless --dev-tools ON says they stay.
-#                        It adds no Android or iOS entry point; that is a later step. (The Windows release's options, MAGICPORTALS_WIN_GUI
+#                        It builds the Linux program, not the Android one (tools/build_android.sh builds that library and its APK,
+#                        docs/android.md), and adds no iOS entry point; that is a later step. (The Windows release's options, MAGICPORTALS_WIN_GUI
 #                        and MAGICPORTALS_ICON, are MSVC's and are not passed here.)
 #
 # Build:

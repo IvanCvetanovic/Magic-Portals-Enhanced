@@ -105,6 +105,11 @@ add_mp_test(test_mp_tuning)
 # without them refuses; the two build facts main.cpp is given. Pure.
 add_mp_test(test_mp_platform)
 
+# The first-run unpack the Android app does with its APK's data (planning step 203, PORT-5): sim/Unpack's list format and the rules a name in it must pass,
+# the order of a run (the stamp removed first and written last, space checked from the list, the pump, a cancel that is not a failure), the folder sink
+# on a real scratch directory, and the developer's flags file. Pure: invented lists, an in-memory APK and disk, no original file.
+add_mp_test(test_mp_unpack)
+
 # The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
 # what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
 add_mp_test(test_mp_clock)

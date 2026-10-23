@@ -561,5 +561,37 @@ class TheShell(World):
         self.assertEqual(code, 2)
 
 
+class TheLayoutTie(unittest.TestCase):
+    """PORT2-4 (c), planning step 203: the packaged layout is written twice, as `Layout::Packaged()` in game/sim/AssetRoot.cpp and as `DEST` in package.py,
+    and nothing tied them but a sweep from a package. This reads the C++ strings out of the source and holds them to DEST, so a drift of either is red here."""
+
+    def packaged(self):
+        import re
+        repo = os.path.dirname(os.path.dirname(HERE))
+        with open(os.path.join(repo, 'game', 'sim', 'AssetRoot.cpp'), encoding='utf-8') as f:
+            text = f.read()
+        start = text.index('Layout Layout::Packaged()')
+        body = text[start:text.index('\n}', start)]
+        return dict(re.findall(r'layout\.(\w+) = "([^"]*)";', body))
+
+    def test_every_field_of_the_packaged_layout_is_where_the_packager_puts_it(self):
+        layout = self.packaged()
+        self.assertEqual(sorted(layout), sorted(['achievements', 'art', 'chapters', 'data', 'levels', 'name', 'original', 'padArt', 'portData']))
+        self.assertEqual(layout['name'], 'packaged')
+        self.assertEqual(layout['levels'], pk.DEST[cl.OUT_LEVELS])
+        self.assertEqual(layout['original'], pk.DEST[cl.ORIGINAL])
+        self.assertEqual(layout['data'], pk.DEST[cl.DATA])
+        self.assertEqual(layout['portData'], pk.DEST[cl.PORT_DATA])
+        self.assertEqual(layout['chapters'], pk.DEST[cl.OUT_DATA] + '/chapters.json')
+        self.assertEqual(layout['achievements'], pk.DEST[cl.OUT_DATA] + '/achievements.json')
+        self.assertEqual(layout['padArt'], pk.DEST[cl.RAMPAGE] + '/controls')
+        # res:// stands for the root itself ('.'), and the converted art is the root's assets/ folder
+        self.assertEqual(layout['art'], '.')
+        self.assertEqual(pk.DEST[cl.OUT_ASSETS], 'assets')
+
+    def test_the_destination_folders_are_exactly_the_layouts(self):
+        self.assertEqual(sorted(pk.DEST.values()), ['assets', 'data', 'levels', 'original', 'pad-art', 'port-data', 'tables'])
+
+
 if __name__ == '__main__':
     unittest.main()

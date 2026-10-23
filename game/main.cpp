@@ -36,6 +36,7 @@
 #include "LevelVisit.hpp"
 #endif
 #include "MagicPortalsLayer.hpp"
+#include "MagicPortalsMain.hpp"
 #if MAGICPORTALS_DEV_TOOLS
 #include "Route.hpp"
 #endif
@@ -51,6 +52,9 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#endif
+#if defined(__ANDROID__)
+#include "platform/android/AndroidApp.hpp"
 #endif
 
 // Where Magic Rampage's modern-control pictures are looked for (game/CMakeLists.txt, SUPERSONIC_MAGICPORTALS_PADART): a
@@ -90,7 +94,7 @@ namespace {
 
 // The diagnostics file, and the previous run's beside it, both in the temp
 // directory.
-constexpr const char* kLogFile = "magicportals.log";
+constexpr const char* kLogFile = MagicPortals::Scratch::kLogFileName;
 constexpr const char* kPreviousLogFile = "magicportals.prev.log";
 // The game's name: the manifest's title, the user data directory's and the message box's.
 constexpr const char* kTitle = "Magic Portals";
@@ -126,6 +130,12 @@ void ShowFatalDialog(const std::string& utf8) {
     MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, text.data(), wide);
     MessageBoxW(nullptr, text.c_str(), L"Magic Portals", MB_OK | MB_ICONERROR);
 }
+#elif defined(__ANDROID__)
+// A phone: a dialog of the activity (the engine's Android::ShowMessage), which returns when the player closes it, when the app is asked to finish or after
+// five minutes, and keeps the activity answering meanwhile. Without it a phone that cannot start the game shows a black screen and the launcher
+// (planning step 203; the sibling port's E39). Only a player's run gets here (RunKind.hpp). False when the activity is not the engine's: the text is then
+// in the log alone.
+void ShowFatalDialog(const std::string& utf8) { Supersonic::Android::ShowMessage(kTitle, utf8); }
 #else
 void ShowFatalDialog(const std::string&) {}
 #endif
@@ -181,14 +191,19 @@ int ReportFatal(const std::string& what, const FatalContext& context) noexcept {
     return EXIT_FAILURE;
 }
 
-// The code page narrow strings mean in this process: 65001 where the application manifest (game/MagicPortals.manifest) took effect.
-// Said in the log's first line, because a path with a character this page lacks cannot be narrowed at all.
-std::string CodePageText() {
+// What the log's first line says of the machine, after the build and the engine (planning step 203, PORT1-4 (e)). Windows: the code page narrow
+// strings mean in this process, 65001 where the application manifest (game/MagicPortals.manifest) took effect, because a path with a character this
+// page lacks cannot be narrowed at all; the words are the very ones the line has always had there. Android: the phone, in the engine's one line
+// (a log a player sends says what it ran on). Elsewhere paths are UTF-8 bytes and there is nothing to say: the line used to claim a "Windows code page"
+// on every platform.
+std::string PlatformFacts() {
 #if defined(_WIN32)
     const unsigned page = GetACP();
-    return std::to_string(page) + (page == CP_UTF8 ? " (UTF-8)" : "");
+    return ", Windows code page " + std::to_string(page) + (page == CP_UTF8 ? " (UTF-8)" : "");
+#elif defined(__ANDROID__)
+    return ", " + Supersonic::Android::DeviceSummary();
 #else
-    return "UTF-8";
+    return {};
 #endif
 }
 
@@ -945,32 +960,37 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // log): on a desktop that is where this always was, so a Windows run writes %TEMP%\magicportals.log and %TEMP%\supersonic-magicportals
     // as before. Then the user's data folder's scratch folder, the one candidate that makes a folder, so it is asked for only if the first
     // failed; then the older last resorts. Empty when none will do: the game then runs with no log file and writes no prisms, and says so.
-    const MagicPortals::Scratch::Chosen scratch = MagicPortals::Scratch::Choose(
-        {{"the system's temporary folder",
-          [] {
-              std::error_code ec;
-              std::filesystem::path folder = std::filesystem::temp_directory_path(ec);
-              if (ec) folder.clear();
-              return folder;
-          },
-          false},
-         {"the user's data folder, scratch",
-          [] {
-              const std::filesystem::path base = Supersonic::UserDataDirectory(kTitle);
-              return base.empty() ? base : base / "scratch";
-          },
-          true},
-         {"the user's data folder", [] { return Supersonic::UserDataDirectory(kTitle); }, true},
-         {"the executable's folder", [] { return Supersonic::ExecutableDirectory(); }, false},
-         {"the working directory",
-          [] {
-              std::error_code ec;
-              std::filesystem::path folder = std::filesystem::current_path(ec);
-              if (ec) folder.clear();
-              return folder;
-          },
-          false}},
-        MagicPortals::Scratch::ProbeWritable);
+    //
+    // A phone's build puts the user's data folder's scratch folder FIRST (Scratch::ArrangedFor, planning step 203): the NDK's libc++ names
+    // /data/local/tmp as the temporary folder, which an app cannot write, and the log must be at one path the manifest can name for the system's
+    // report of a run that ended unexpectedly. A desktop keeps the order below, so a Windows run still writes %TEMP%\magicportals.log.
+    std::vector<MagicPortals::Scratch::Candidate> scratchCandidates = {
+        {"the system's temporary folder",
+         [] {
+             std::error_code ec;
+             std::filesystem::path folder = std::filesystem::temp_directory_path(ec);
+             if (ec) folder.clear();
+             return folder;
+         },
+         false},
+        {"the user's data folder, scratch",
+         [] {
+             const std::filesystem::path base = Supersonic::UserDataDirectory(kTitle);
+             return base.empty() ? base : base / MagicPortals::Scratch::kUserScratchFolder;
+         },
+         true, MagicPortals::Scratch::Kind::UserDataScratch},
+        {"the user's data folder", [] { return Supersonic::UserDataDirectory(kTitle); }, true},
+        {"the executable's folder", [] { return Supersonic::ExecutableDirectory(); }, false},
+        {"the working directory",
+         [] {
+             std::error_code ec;
+             std::filesystem::path folder = std::filesystem::current_path(ec);
+             if (ec) folder.clear();
+             return folder;
+         },
+         false}};
+    const MagicPortals::Scratch::Chosen scratch =
+        MagicPortals::Scratch::Choose(MagicPortals::Scratch::ArrangedFor(std::move(scratchCandidates), MagicPortals::kMobileBuild), MagicPortals::Scratch::ProbeWritable);
     const std::filesystem::path temp = scratch.ok ? scratch.base : std::filesystem::path();
     if (scratch.ok) paths.prisms = scratch.prisms;
 
@@ -993,21 +1013,24 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         if (Supersonic::Log::SetFileSink(logFile)) {
             // Only now: the box names the log it was told was written, and a sink that failed to open (a read-only file, a full disk)
             // wrote none (planning step 190).
-            fatal.logPath = logFile;
-            std::cout << "[Magic Portals] logging to " << fatal.logPath << std::endl;
+            // A phone's log is in the app's private storage, which no player can open: its box names none (the report the system shows at the
+            // next start prints the end of this very file, supersonic.reportLog in the manifest).
+            if (!MagicPortals::kMobileBuild) fatal.logPath = logFile;
+            std::cout << "[Magic Portals] logging to " << logFile << std::endl;
             // The FILE's lines carry the seconds since the first (the console's do not): a log a player sends can then say a slow
             // start from a stuck one. A capture compares pictures and never this file.
             Supersonic::Log::SetElapsedTimestamps(true);
             // What the next reader of this file needs first, and nothing that changes from one run of the same build to the next:
             // no clock, no process id.
-            SUPERSONIC_LOG_INFO("Magic Portals") << "build: " << kBuildType << ", engine " << MAGICPORTALS_ENGINE_COMMIT
-                                                 << ", Windows code page " << CodePageText() << std::endl;
+            SUPERSONIC_LOG_INFO("Magic Portals") << "build: " << kBuildType << (MagicPortals::kMobileBuild ? " (mobile build)" : "") << ", engine "
+                                                 << MAGICPORTALS_ENGINE_COMMIT << PlatformFacts() << std::endl;
         } else {
             std::cerr << "[Magic Portals] could not open " << logFile << " for writing; continuing without a log file.\n";
         }
     }
-    // The root and the tier that answered, and the scratch folder, next: the first things a report from another person's machine needs
-    // (a log of a start that found nothing is the one place to see where it looked).
+    // The root and the tier that answered, and the scratch folder, next: the first things a report from another person's machine needs. (A start
+    // that found NO root never gets here: it ends above, before any log is open, with a message that names every place it looked, on stderr and
+    // in the box of a player's run; planning step 203, PORT2-3 (d).)
     SUPERSONIC_LOG_INFO("Magic Portals") << assetRoot.why << std::endl;
     SUPERSONIC_LOG_INFO("Magic Portals") << scratch.note << std::endl;
 
@@ -1022,6 +1045,14 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     const MagicPortals::EngineTuning::Resolved tuning =
         MagicPortals::EngineTuning::Resolve(tuningTable, fatal.attended, mobile, tuningFlags);
     paths.spriteReport = tuning.spriteReport;
+    // A phone's run cannot do without its options file (planning step 203, PORT3-3 (d)): the lowest Vulkan version a phone's GPU may report is in it,
+    // and the engine's own defaults ask for 1.2, which many phones' stock drivers do not offer. A start with the defaults would end with a GPU
+    // complaint that blames the phone; this one says what is wrong. A desktop run with the file unreadable goes on with the engine's defaults, as
+    // it always has (the warning below says so).
+    if (mobile && !tuningRead) {
+        throw std::runtime_error("the engine options in " + paths.portData + "/engine.json could not be read (" + tuningWhy +
+                                 "), and a phone's run needs them: its lowest Vulkan version is in them. The game's files are damaged.");
+    }
 
     // Declared, not discovered, for the reason Wolf Brigade's main gives: a
     // game binary is a game whether or not a manifest sits beside it.
@@ -1184,7 +1215,10 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
 // The whole of the game under ONE try. A throw from anywhere in it - an argument, a path that cannot be narrowed, the engine's start,
 // the layer - ends here with the reason in the log, and an exit code that says it failed; not as a process the system kills with no
 // word (the exit 0xC0000409 of a profile folder whose name the ANSI code page lacks, planning step 189).
-int main(int argc, char** argv) {
+//
+// A function of its own since planning step 203 (MagicPortalsMain.hpp): a desktop's main() below calls it, and so does Android's SupersonicMain
+// (game/android/AndroidMain.cpp), which has no main() of its own to keep (the engine owns the process's real entry there).
+int MagicPortalsMain(int argc, char** argv) {
     FatalContext fatal;
     try {
         return RunGame(argc, argv, fatal);
@@ -1194,3 +1228,7 @@ int main(int argc, char** argv) {
         return ReportFatal("an exception that is not a std::exception was thrown", fatal);
     }
 }
+
+#if !defined(__ANDROID__)
+int main(int argc, char** argv) { return MagicPortalsMain(argc, argv); }
+#endif

@@ -88,6 +88,7 @@ add_library(MagicPortalsSim STATIC
     Tscn.cpp
     Turrets.cpp
     UiLayer.cpp
+    Unpack.cpp
     Zerog.cpp
 )
 

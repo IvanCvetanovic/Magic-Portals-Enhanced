@@ -1,7 +1,6 @@
 #include "sim/AssetRoot.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <system_error>
 
@@ -9,7 +8,9 @@ namespace MagicPortals::AssetRoot {
 
 namespace {
 
-bool IsLetter(char c) { return std::isalpha(static_cast<unsigned char>(c)) != 0; }
+// A drive letter is an ASCII letter, always: std::isalpha asks the C locale, which a module that calls itself host-independent must not (planning step
+// 203, PORT2-3 (c); neither the game nor the engine calls setlocale, so this changes no answer, it removes the dependence).
+bool IsLetter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 
 std::string WithForwardSlashes(std::string text) {
     std::replace(text.begin(), text.end(), '\\', '/');
@@ -133,6 +134,10 @@ std::string Normalize(const std::string& text) {
 std::string Join(const std::string& dir, const std::string& relative) {
     if (dir.empty()) return {};
     if (relative.empty() || relative == ".") return Normalize(dir);
+    // A folder that is only slashes is the file system's root, however many it is spelled with: it takes the separator from its own text, or
+    // "/" + "/" + "content" is "//content", which Normalize reads as a network name (planning step 203, PORT2-3 (b)). "//" has always joined as "/".
+    const std::string head = WithForwardSlashes(dir);
+    if (head.find_first_not_of('/') == std::string::npos) return Normalize("/" + relative);
     return Normalize(dir + "/" + relative);
 }
 

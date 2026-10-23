@@ -96,8 +96,10 @@ tables, and exactly the files those name (a texture in its density tiers `fullhd
 bitmaps each entity names; the fonts and their pages; the sounds and the music), then what the entity files themselves name (the picture
 in `<Sprite>`, the normal map in `<Normal>`, the light's `<HaloBitmap>`, and the colour variants: the entity's own name in front of a
 suffix a table spells, such as `_blue.png`), plus the 1x file under a tier twin that was picked.
-On the owner's data (2026-10-23) that is 883 files, 24,584,458 bytes (725 required, 158 fallback: 472 pictures, 180 entity files, 54 tables,
-128 levels, 41 sounds, 5 music tracks, 3 fonts); 896 files and 24,704,515 bytes with `--with-pad-art`; `package.py shell` adds the 17
+On the owner's data (2026-10-23, taken again by Step 203's own run and by its verifier's) that is 883 files, 24,589,032 bytes (Step 200 measured
+24,584,458; the 4,574 bytes between are presumably the edits of `engine.json` and `sounds.json` in Steps 201 and 202, inferred and not measured;
+725 required, 158 fallback: 472 pictures, 180 entity files, 54 tables, 128 levels, 41 sounds, 5 music tracks, 3 fonts); 896 files and
+24,704,515 bytes with `--with-pad-art` (Step 200's figure, **not retaken**: presumably the same 4,574 bytes higher now); `package.py shell` adds the 17
 shaders (118,716 bytes). Compared with the research's list (`PLAT/case_audit/package_files.csv`, 757 files and the 17 shaders): 5 page
 pictures of fonts that no table names are left out (651,321 bytes), and 131 files are added (4,298,588 bytes): 55 sprite pictures, 27
 normal maps, 1 halo and 6 colour variants of entities the closure already held, and the 1x fallbacks under them (42). **The first run of the
@@ -110,7 +112,7 @@ memory and never opens them (planning step 196), which the 128-level sweep run f
 `scenes/` (the converter's input), `.pvr`, `.pkm`, `.par`, the framework folder, the Android bundle, `.enml` files, the APK, the engine
 checkout, build folders, the converter's other output. A table that named one would be an error.
 
-**Not yet:** the Android, iOS and macOS entry points, release archives and licence texts. They are later steps of the platform program. (The
+The Android build and the APK packager (`tools/package/android_package.py`, which takes this packager's output folder) are described in [`android.md`](android.md) (planning step 203; built and statically checked, never run on a device). **Not yet:** the iOS and macOS entry points, release archives and licence texts. They are later steps of the platform program. (The
 Windows release program and its icon are section 6. The original's 46 MP3 sounds decode off Windows since the engine pin of planning step 202,
 through the engine's vendored dr_mp3: that was checked on the real files, with no sound device, so it proves the decoding and not the playback;
 a clip starts about 12 ms apart from the same clip on Windows, which comes out as if its first 528 samples were cut (the engine's
@@ -142,7 +144,8 @@ of these where a file can really be made (it is tried, not assumed):
 2. `<user data folder>/scratch`, the one place that is made if it is not there, and only if the first was refused;
 3. the older last resorts: the user data folder, the program's folder, the working directory.
 
-The second matters on Android, where the temporary folder the C++ library names is one an app cannot write, and on a shared `/tmp` whose
+A phone's build (`MAGICPORTALS_MOBILE`) tries the second FIRST (`Scratch::ArrangedFor`, planning step 203), so that its log is always `<files>/Magic Portals/scratch/magicportals.log`,
+the one path the Android manifest can name for the system's report of a run that ended unexpectedly; a desktop keeps the order above. The second matters on Android, where the temporary folder the C++ library names is one an app cannot write, and on a shared `/tmp` whose
 prism folder belongs to another account. The half-written prism file has a name of its own per call, so two windows building one level
 cannot take each other's file.
 
