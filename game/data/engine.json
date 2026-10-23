@@ -39,7 +39,12 @@
     "",
     "sprite_report attended_run true (DECLINED): the layer's per-frame walk over its sprites for the 'on'/'off'/'GONE' log lines. Game Layers",
     "median 0.1514 ms on, 0.1479 off (ranges overlap, the noise floor is about 0.004 ms), no change on the scrolling or route runs; in a real",
-    "console window the first second's worst frame is 214 to 219 ms either way. Not kept: nothing measurable. The switch stays (--sprite-report)."
+    "console window the first second's worst frame is 214 to 219 ms either way. Not kept: nothing measurable. The switch stays (--sprite-report).",
+    "",
+    "mobile (planning step 201, PORT-3): the PHONE PROFILE, laid over the answers above for a run under it. A phone's build runs under it by default",
+    "(game/BuildProfile.hpp kMobileBuild); `--profile mobile` asks the same of a desktop run, `--profile desktop` the other way. A desktop run never",
+    "reads the block, but this file is checked whole when it is loaded, so a typo in it fails where the file is read. Its keys are described in the",
+    "block itself. Nothing in it has been measured on a phone: no phone has run this port."
   ],
   "shadow_map_resolution": 16,
   "sprites_only_scene_pipelines": false,
@@ -50,5 +55,39 @@
   "sprite_report": {
     "attended_run": true,
     "other_runs": true
+  },
+  "mobile": {
+    "_about": [
+      "THE PHONE PROFILE: each key here, when present, REPLACES the answer above for a run under the profile (sim/EngineTuning.hpp MobileBlock). A key",
+      "left out leaves the desktop's answer. The keys, and only these (any other key that does not begin with an underscore is refused by name):",
+      "",
+      "minimum_vulkan_minor 1 (or 2): the lowest Vulkan 1.x a GPU must report to be used; GameManifest::minimumVulkanMinor (engine/src/core/GameRuntime.hpp:89,",
+      "clamped into 1 to 2 by GameRuntime.cpp:117). Without it the engine wants 1.2, and the stock drivers of many phones on Android 11 and 12 report 1.1: no GPU is",
+      "acceptable, the device constructor throws and the start ends before its first frame. Source: the sibling port Penumbra and the Castle of Shadows Enhanced, its",
+      "step E39, where two testers' phones (an Oppo A54 on Android 11, Vulkan 1.1.131, and an A74 5G on Android 12, 1.1.128) opened to a black screen and the home",
+      "screen, and the engine's author states that it uses nothing newer than 1.1 core (GameRuntime.hpp). Decoded from that record and the engine's code; NOT measured",
+      "here, on any phone. Unverified on a 1.1 driver: the scene fragment stage uses 8 of one known GPU's 8 combined fragment resources (Penumbra E39).",
+      "This is a START/NO-START matter and not a tuning one, which is why it is a key at all and the desktop leaves it out: a desktop run asks for 1.2, the engine's own.",
+      "",
+      "shadow_map_resolution 16: as the top-level key, repeated on purpose. The top-level 16 is a desktop decision (step 190: no sprite samples a shadow map, 192.8 MiB",
+      "of GPU memory saved on a 780M); on a phone the system's low-memory manager counts those bytes, and the sibling port's E43 took the same 16 for it. Written here",
+      "so that a developer who sets the top-level key to 0 to see the lit boxes' shadows does not move a phone with it.",
+      "",
+      "asset_watching false: the engine's per-frame stat of every watched file (step 190: 0.57 to 0.91 ms of CPU a frame on the desktop). On a phone the texture keys are",
+      "virtual and not files at all, so every stat fails every frame (engine/src/core/GameRuntime.hpp, assetWatching). A plain true/false, for both kinds of run: a",
+      "phone has nobody to hot-reload a saved file for. A desktop run's attended answer is already false, so for a player the key says it again.",
+      "",
+      "KEYS THAT DO NOT EXIST YET, on purpose (the _decision_pending note below names them): nothing here turns the scene's sample cap or dynamic resolution on, and no",
+      "reader exists for a key that would."
+    ],
+    "minimum_vulkan_minor": 1,
+    "shadow_map_resolution": 16,
+    "asset_watching": false,
+    "_decision_pending": {
+      "scene_samples": "OWNER DECISION, with edge_cover.enabled and dynamic resolution as one bundle (the platform research's PL-05, owner decision 1): 1 or 2 samples would save 44 or 24 B per pixel of the scene target but move a few percent of edge pixels in a project whose gate is pixels. Could change a pixel. No key, no reader.",
+      "dynamic_resolution": "OWNER DECISION and the phone-profile step: the scene target sized by how fast the GPU draws it, and the HUD and controls blur with it. Inert for --fixed-step and --screenshot, so it could not change a captured pixel, but it changes what a player sees. No key, no reader.",
+      "sprites_only_scene_pipelines": "The phone-profile step: byte-identical in every picture of this port on a desktop (step 190) and a measured gain only on an Adreno 640 in the sibling port; true for a phone is proposed, not decided. Could change a pixel only of the developer's lit boxes. No mobile key; the top-level key (false) applies.",
+      "sprite_report": "The phone-profile step: the layer's per-frame log walk; false for a phone is proposed. Changes no pixel. No mobile key; the top-level key applies."
+    }
   }
 }

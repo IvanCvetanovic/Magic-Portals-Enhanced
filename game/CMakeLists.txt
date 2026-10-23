@@ -35,11 +35,16 @@ if (NOT SUPERSONIC_BUILD_MAGICPORTALS)
     return()
 endif()
 
-add_executable(MagicPortals
-    main.cpp
-    LevelVisit.cpp   # DEV: --visit-levels, never pushed without it
-    Route.cpp        # DEV: --route, never pushed without it; test_mp compiles it too, for test_mp_routes
-)
+# LevelVisit.cpp (--visit-levels) and Route.cpp (--route) are the developer tools' files and are in the program only with MAGICPORTALS_DEV_TOOLS
+# (top-level CMakeLists.txt); test_mp compiles Route.cpp on its own, for test_mp_routes, whatever this says.
+set(_magicPortalsSources main.cpp)
+if (MAGICPORTALS_DEV_TOOLS_ENABLED)
+    list(APPEND _magicPortalsSources
+        LevelVisit.cpp   # DEV: --visit-levels, never pushed without it
+        Route.cpp        # DEV: --route, never pushed without it; test_mp compiles it too, for test_mp_routes
+    )
+endif()
+add_executable(MagicPortals ${_magicPortalsSources})
 
 # The application manifest (planning step 189): the process's code page is UTF-8, so a path with a character the machine's ANSI page lacks
 # (a user name with a c-acute on an English Windows) narrows and opens instead of ending the start with no word. On MagicPortals ALONE; the
@@ -92,16 +97,42 @@ endif()
 set_property(SOURCE main.cpp APPEND PROPERTY
     COMPILE_DEFINITIONS "MAGICPORTALS_ENGINE_COMMIT=\"${_magicPortalsEngineCommit}\"")
 
-add_executable(MagicPortalsSpike
-    spike/main.cpp
-)
+# What kind of program main.cpp is (BuildProfile.hpp, planning step 201): its two facts, spelled out whatever their value, on main.cpp ALONE for the
+# reason above. Nothing else reads them, so nothing else is recompiled when they change.
+set(_magicPortalsMobileValue 0)
+if (MAGICPORTALS_MOBILE)
+    set(_magicPortalsMobileValue 1)
+endif()
+set(_magicPortalsDevToolsValue 0)
+if (MAGICPORTALS_DEV_TOOLS_ENABLED)
+    set(_magicPortalsDevToolsValue 1)
+endif()
+set_property(SOURCE main.cpp APPEND PROPERTY
+    COMPILE_DEFINITIONS "MAGICPORTALS_MOBILE=${_magicPortalsMobileValue}" "MAGICPORTALS_DEV_TOOLS=${_magicPortalsDevToolsValue}")
 
-target_link_libraries(MagicPortalsSpike PRIVATE MagicPortalsSim)
+# The Windows release program (MAGICPORTALS_WIN_GUI, top-level CMakeLists.txt): a function of its own, so the rehearsal of the link calls the same code.
+if (MAGICPORTALS_WIN_GUI)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/windows/MagicPortalsWindows.cmake)
+    magicportals_windows_release(MagicPortals VERSION "${MagicPortals_VERSION}" ICON "${MAGICPORTALS_ICON}")
+endif()
 
 if (MSVC)
     target_compile_options(MagicPortals PRIVATE /W4)
-    target_compile_options(MagicPortalsSpike PRIVATE /W4)
 else()
     target_compile_options(MagicPortals PRIVATE -Wall -Wextra)
-    target_compile_options(MagicPortalsSpike PRIVATE -Wall -Wextra)
+endif()
+
+# The measurement tool is a developer's, and unguarded in its use of the system's temporary folder: never a phone's (planning step 201).
+if (NOT MAGICPORTALS_MOBILE)
+    add_executable(MagicPortalsSpike
+        spike/main.cpp
+    )
+
+    target_link_libraries(MagicPortalsSpike PRIVATE MagicPortalsSim)
+
+    if (MSVC)
+        target_compile_options(MagicPortalsSpike PRIVATE /W4)
+    else()
+        target_compile_options(MagicPortalsSpike PRIVATE -Wall -Wextra)
+    endif()
 endif()

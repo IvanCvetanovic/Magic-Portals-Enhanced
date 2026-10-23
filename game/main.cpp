@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -29,15 +30,21 @@
 #include "core/SupersonicApp.hpp"
 #include "renderer/VulkanContext.hpp"
 
+#include "BuildProfile.hpp"
+#if MAGICPORTALS_DEV_TOOLS
 #include "LevelVisit.hpp"
+#endif
 #include "MagicPortalsLayer.hpp"
+#if MAGICPORTALS_DEV_TOOLS
 #include "Route.hpp"
+#endif
 #include "RunKind.hpp"
 #include "sim/AssetRoot.hpp"
 #include "sim/Controls.hpp"
 #include "sim/EngineTuning.hpp"
 #include "sim/Files.hpp"
 #include "sim/Scratch.hpp"
+#include "sim/StartChecks.hpp"
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -122,6 +129,20 @@ void ShowFatalDialog(const std::string& utf8) {
 void ShowFatalDialog(const std::string&) {}
 #endif
 
+// Whether a library can be loaded by name: the question sim/StartChecks.hpp's CheckVulkanLoader is put (planning step 201). Windows: the very
+// search the delay-load helper makes at the first Vulkan call (LoadLibraryExW with no flags), and the module is left loaded, so that call binds
+// to this copy. Elsewhere nothing is loaded late - the program links its loader outright, or the platform's entry point has loaded it - so the
+// answer is yes.
+bool LibraryLoads(const std::string& name) {
+#if defined(_WIN32)
+    const std::wstring wide(name.begin(), name.end()); // a library's name is ASCII
+    return LoadLibraryExW(wide.c_str(), nullptr, 0) != nullptr;
+#else
+    (void)name;
+    return true;
+#endif
+}
+
 // A run that stopped on an error: the reason into the log BEFORE the file sink closes (it used to go to stderr alone, and the
 // previous run's lines were all a tester had; the log's own console sink says it on stderr too), then - for a player's run and no other - a
 // message box naming the log.
@@ -193,6 +214,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // original shows its current-score plaque only then - from a scores.json
     // written for the purpose, without touching the save of whoever plays.
     std::string savesOverride;
+#if MAGICPORTALS_DEV_TOOLS
     // DEV ONLY: walk levels in one process and check the engine's material
     // descriptor sets go back to its pool (LevelVisit.hpp). Empty = a normal run.
     MagicPortals::LevelVisitLayer::Options visit;
@@ -260,6 +282,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // DEV ONLY: with --route, print Route::Trace every n ticks, on each tap and at the
     // end - test_mp_routes --trace's lines, from the window (planning step 114).
     int routeTrace = 0;
+#endif // MAGICPORTALS_DEV_TOOLS
     // `--controls <classic|modern>[,key=value...]`, as given: which on-screen controls the run plays
     // (docs/planning/2026-10-15-modern-controls.md 2.1, 2.2). Taken out here, before the engine's parser,
     // which refuses what it does not know; resolved below, once the rig's own flags are all read.
@@ -272,9 +295,14 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // DEV ONLY (planning step 190): the engine's optional performance features and the layer's sprite report, over game/data/engine.json for ONE
     // run, so an A/B is one exe with one setting changed. Taken out here, before the engine's parser, which refuses what it does not know.
     MagicPortals::EngineTuning::Overrides tuningFlags;
+    // `--profile <desktop|mobile>` (planning step 201): which engine settings the run asks for. Not given, the build's own (BuildProfile.hpp).
+    std::optional<bool> profileMobile;
+#if MAGICPORTALS_DEV_TOOLS
     std::set<std::string> tuningGiven;
+#endif
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
+#if MAGICPORTALS_DEV_TOOLS
         if (arg == "--light-masks-off") {
             lightMasksOff = true;
             continue;
@@ -317,6 +345,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             }
             continue;
         }
+#endif // MAGICPORTALS_DEV_TOOLS
         if (arg == "--padart") {
             if (i + 1 >= argc) {
                 std::cerr << "--padart needs an absolute directory\n";
@@ -353,6 +382,26 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             controlsFlag = std::string(argv[++i]);
             continue;
         }
+        if (arg == "--profile") {
+            if (i + 1 >= argc) {
+                std::cerr << "--profile needs a value: desktop or mobile\n";
+                return EXIT_FAILURE;
+            }
+            const std::string value = argv[++i];
+            bool mobile = false;
+            if (!MagicPortals::EngineTuning::ParseProfile(value, mobile)) {
+                std::cerr << "--profile takes desktop or mobile, got '" << value << "'\n";
+                return EXIT_FAILURE;
+            }
+            // Twice is a mistake, not an override, as it is for --controls.
+            if (profileMobile) {
+                std::cerr << "--profile is given twice; it takes one value\n";
+                return EXIT_FAILURE;
+            }
+            profileMobile = mobile;
+            continue;
+        }
+#if MAGICPORTALS_DEV_TOOLS
         if (arg == "--route") {
             if (i + 1 >= argc) {
                 std::cerr << "--route needs a route file, e.g. tests/routes/level8.json given absolute\n";
@@ -576,6 +625,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             }
             continue;
         }
+#endif // MAGICPORTALS_DEV_TOOLS
         if (arg == "--no-baked-paths") {
             // The compiled-in tier switched off for this run: how a release package is proven to hold everything it opens, and the
             // run-time twin of a build configured with MAGICPORTALS_BAKED_PATHS=OFF (both give the same answer from Resolve).
@@ -617,12 +667,21 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             }
             continue;
         }
+#if !MAGICPORTALS_DEV_TOOLS
+        // A developer's flag in a build made without the developer tools (MAGICPORTALS_DEV_TOOLS=OFF): refused HERE, by name and with the reason,
+        // where the engine's parser below would say only that it does not know the option.
+        if (MagicPortals::StartChecks::IsDeveloperFlag(arg)) {
+            std::cerr << MagicPortals::StartChecks::DeveloperFlagRefusal(arg) << "\n";
+            return EXIT_FAILURE;
+        }
+#endif
         // The engine's own flag, handed on: the layer is told too, because a run whose frames
         // are the tick's own measures nothing of the display and draws every picture at its
         // tick's place (pictures.json, planning step 150).
         if (arg == "--fixed-step") paths.fixedStep = true;
         engineArgs.push_back(argv[i]);
     }
+#if MAGICPORTALS_DEV_TOOLS
     // A route names its own level, and opens it unless --level says the same.
     std::optional<MagicPortals::Route::Plan> route;
     if (!routeFile.empty()) {
@@ -639,6 +698,15 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         }
         route = std::move(plan);
     }
+#endif // MAGICPORTALS_DEV_TOOLS
+    // The two developer inputs the lines below ask about: what the flags said when the build has them, and no in a build that does not.
+#if MAGICPORTALS_DEV_TOOLS
+    const bool routeGiven = !routeFile.empty();
+    const bool visitGiven = !visit.levels.empty();
+#else
+    const bool routeGiven = false;
+    const bool visitGiven = false;
+#endif
     const auto options = Supersonic::LaunchOptions::Parse(static_cast<int>(engineArgs.size()), engineArgs.data());
     if (options.helpRequested) {
         std::cout << Supersonic::LaunchOptions::Usage()
@@ -653,6 +721,12 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    configured with. A --root that does not hold the game ends the run.\n"
                   << "  --no-baked-paths  ignore the paths this build was configured with: the data must then come from\n"
                   << "                    --root or one of the folders above. What a release build does always\n"
+                  << "  --profile <desktop|mobile>\n"
+                  << "                    which engine settings the run asks for (the 'mobile' block of\n"
+                  << "                    game/data/engine.json is the phone's, among them the lowest Vulkan\n"
+                  << "                    version a GPU may report). Without it the build's own: mobile in a\n"
+                  << "                    phone's build, desktop in any other; with it a desktop run can try\n"
+                  << "                    the phone's settings, and the other way round\n"
                   << "  --levels <dir>    the converted levels (" << DefaultText(paths.levels) << ")\n"
                   << "  --chapters <file> chapters.json, the level order (" << DefaultText(paths.chapters) << ")\n"
                   << "  --achievements <file>\n"
@@ -698,6 +772,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    presses a switch or that unlocks an achievement, without\n"
                   << "                    changing the player's own save. A named --level's start unlocks\n"
                   << "                    silently what the saved medals have earned, as the main menu does.\n"
+#if MAGICPORTALS_DEV_TOOLS
                   << "  --press <what>@<tick>\n"
                   << "                    DEV: press the pause control (pause), one of the pause's\n"
                   << "                    buttons (levels, resume, skip, achievements, sound, music) or\n"
@@ -759,7 +834,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    off for a run), and G dumps all whatever this says\n"
                   << "  --perf-log <seconds>\n"
                   << "                    DEV: the engine's frame statistics (fps, median, 95th percentile,\n"
-                  << "                    worst, the split of the frame) in the log every <seconds>\n";
+                  << "                    worst, the split of the frame) in the log every <seconds>\n"
+#endif // MAGICPORTALS_DEV_TOOLS
+                  ;
         return EXIT_SUCCESS;
     }
     if (!options.ok) {
@@ -771,10 +848,12 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     {
         MagicPortals::DevFlags dev;
         dev.saves = !savesOverride.empty();
+#if MAGICPORTALS_DEV_TOOLS
         dev.route = !routeFile.empty();
         dev.visit = !visit.levels.empty();
         dev.scripted = !presses.empty() || !holds.empty() || !taps.empty() || !drags.empty() || !burns.empty() || !places.empty();
         dev.lightMasksOff = lightMasksOff;
+#endif
         fatal.attended = MagicPortals::AttendedRun(options, dev);
     }
 
@@ -833,7 +912,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // feature does not exist in the run or the table will not read.
     {
         MagicPortals::Controls::Policy policy = MagicPortals::Controls::ResolvePolicy(
-            controlsFlag, paths.fixedStep, !routeFile.empty(), !visit.levels.empty());
+            controlsFlag, paths.fixedStep, routeGiven, visitGiven);
         if (!policy.valid) {
             std::cerr << policy.error << "\n";
             return EXIT_FAILURE;
@@ -936,7 +1015,11 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     MagicPortals::EngineTuning::Table tuningTable;
     std::string tuningWhy;
     const bool tuningRead = MagicPortals::EngineTuning::Load(paths.portData + "/engine.json", tuningTable, tuningWhy);
-    const MagicPortals::EngineTuning::Resolved tuning = MagicPortals::EngineTuning::Resolve(tuningTable, fatal.attended, tuningFlags);
+    // The phone profile (game/data/engine.json "mobile"): the build's own unless --profile says the other. A desktop build never applies the block
+    // unless asked, so every desktop value is the one it was before the block existed.
+    const bool mobile = profileMobile.value_or(MagicPortals::kMobileBuild);
+    const MagicPortals::EngineTuning::Resolved tuning =
+        MagicPortals::EngineTuning::Resolve(tuningTable, fatal.attended, mobile, tuningFlags);
     paths.spriteReport = tuning.spriteReport;
 
     // Declared, not discovered, for the reason Wolf Brigade's main gives: a
@@ -949,6 +1032,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     manifest.spritesOnlyScenePipelines = tuning.spritesOnlyScenePipelines;
     manifest.assetWatching = tuning.assetWatching;
     manifest.perfLogSeconds = tuning.perfLogSeconds;
+    // Asked only where the profile asks (a phone's): left alone, the engine wants Vulkan 1.2 as it always has, and a phone whose stock driver
+    // reports 1.1 would have no GPU the engine accepts and end its start before the first frame (sibling port, E39).
+    if (tuning.minimumVulkanMinor != 0) manifest.minimumVulkanMinor = tuning.minimumVulkanMinor;
     // The window is shown the moment it exists, and nothing reads its messages until the first frame: a start that takes five seconds
     // or more (a cold disk, an antivirus scanning a freshly copied exe, a slow GPU driver compiling its pipelines) makes Windows call
     // it "Not responding" and offer to close it, which looks like a crash. This reads the window's events between the startup stages,
@@ -986,11 +1072,26 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     if (!tuningRead) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "engine options not read, the engine's own defaults are used: " << tuningWhy << std::endl;
     }
+    // The Vulkan minimum is read back from the MANIFEST, what the engine will be handed, and not from the table: a profile that was resolved and
+    // never assigned would show here as 1.2.
     SUPERSONIC_LOG_INFO("Magic Portals") << "engine options (" << (fatal.attended ? "a player's run" : "not a player's run")
-                                         << "): " << MagicPortals::EngineTuning::Describe(tuning) << std::endl;
+                                         << (mobile ? ", mobile profile" : "") << "): " << MagicPortals::EngineTuning::Describe(tuning)
+                                         << ", minimum Vulkan 1." << Supersonic::GameRuntime::ResolveVulkanMinor(manifest) << std::endl;
 
+    // THE VULKAN LOADER, before the engine calls Vulkan once (planning step 201). A Windows release build links vulkan-1.dll late
+    // (MAGICPORTALS_WIN_GUI), so a PC without a graphics driver gets here instead of a loader dialog that names a DLL and nothing more. Thrown, so
+    // that it takes the road every other failed start takes: the log, stderr, ONE message box for a person's run and none for a script's, exit 1.
+    // Every Windows build asks it; where the loader is linked at process start the answer is yes, because the program is running.
+    {
+        const MagicPortals::StartChecks::Verdict loader =
+            MagicPortals::StartChecks::CheckVulkanLoader(LibraryLoads, Supersonic::GameRuntime::ResolveVulkanMinor(manifest));
+        if (!loader.ok) throw std::runtime_error(loader.what);
+    }
+
+#if MAGICPORTALS_DEV_TOOLS
     // Outside the app, because the layer stack is torn down with it.
     MagicPortals::LevelVisitLayer::Result visitResult;
+#endif
     // What the layer and the app say about the run, read before the app goes: the layer's attach has long since run, and the app
     // owns the count of captures it wrote.
     bool startFailed = false;
@@ -1014,15 +1115,20 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             << std::endl;
 
         auto game = std::make_unique<MagicPortals::MagicPortalsLayer>(paths, start);
+#if MAGICPORTALS_DEV_TOOLS
         for (const auto& [tick, press] : presses) game->ScheduleDevPress(tick, press);
         for (const Hold& hold : holds) game->ScheduleDevHold(hold.from, hold.to, hold.direction);
         for (const int burn : burns) game->ScheduleDevBurn(burn);
         for (const auto& [tick, atPx] : places) game->ScheduleDevPlace(tick, atPx);
         for (const Tap& tap : taps) game->ScheduleDevTap(tap.tick, tap.fraction, tap.releaseTick);
         for (const Drag& drag : drags) game->ScheduleDevDrag(drag.tick, drag.from, drag.to, drag.releaseTick);
+#endif
         MagicPortals::MagicPortalsLayer& gameLayer = *game;
+#if MAGICPORTALS_DEV_TOOLS
         gameLayer.ForceLightMasksOff(lightMasksOff);
+#endif
         app.PushLayer(std::move(game));
+#if MAGICPORTALS_DEV_TOOLS
         // After the game's, so each of its ticks follows the game's own (Route.hpp).
         if (route) {
             app.PushLayer(std::make_unique<MagicPortals::Route::ReplayLayer>(gameLayer, std::move(*route), routeTrace));
@@ -1030,6 +1136,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         if (!visit.levels.empty()) {
             app.PushLayer(std::make_unique<MagicPortals::LevelVisitLayer>(gameLayer, paths, visit, visitResult));
         }
+#endif
         app.Run();
         startFailed = gameLayer.StartFailed();
         // Like the engine's own main (engine/src/main.cpp): every way a capture fails only logs, and a script that finds last week's
@@ -1045,6 +1152,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         std::cerr << "[Magic Portals] the game could not start; the reason is above and in the log." << std::endl;
         failed = true;
     }
+#if MAGICPORTALS_DEV_TOOLS
     if (!visit.levels.empty() && (!visitResult.finished || !visitResult.failures.empty())) {
         std::cerr << "[Magic Portals] level visit "
                   << (visitResult.finished ? "failed" : "did not finish") << ": "
@@ -1053,6 +1161,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         std::cerr << std::endl;
         failed = true;
     }
+#endif
     if (!missingCaptures.empty()) {
         std::cerr << "[Magic Portals] " << missingCaptures << std::endl;
         failed = true;

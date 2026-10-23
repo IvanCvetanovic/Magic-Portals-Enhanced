@@ -32,6 +32,18 @@
 #                        program, or the user's data folder; docs/packaging.md). The suites read the baked paths, so this builds the
 #                        game alone (default target MagicPortals) and any data option above is ignored. Use a build directory of its own.
 #
+# What kind of program (planning step 201; docs/packaging.md says which belong in a release). Neither is passed unless given, so a build
+# with neither is the build it was, and an existing build folder keeps what it has:
+#   --dev-tools ON|OFF|AUTO   configure with MAGICPORTALS_DEV_TOOLS: the developer's flags (--route, --tap, --visit-levels, the measurement
+#                        switches ...) and the two files behind them. OFF is a player's program: a developer's flag is refused (exit 1, a
+#                        message that says why), --help does not list them, and the program is smaller. AUTO (the CMake default) is ON,
+#                        and OFF with --mobile. The suites always build with the tools.
+#   --mobile             configure with MAGICPORTALS_MOBILE=ON: a phone's build, compiled on this machine. The run starts under the phone
+#                        profile (game/data/engine.json "mobile": a lowest Vulkan version of 1.1 among it) unless --profile desktop says
+#                        otherwise, and the developer tools and the measurement tool are left out unless --dev-tools ON says they stay.
+#                        It adds no Android or iOS entry point; that is a later step. (The Windows release's options, MAGICPORTALS_WIN_GUI
+#                        and MAGICPORTALS_ICON, are MSVC's and are not passed here.)
+#
 # Build:
 #   --build-dir DIR      where to build (default: <repo>/build; a folder named build is gitignored). Build on a Linux file system:
 #                        a Windows drive mounted into WSL (/mnt/c) is case-insensitive and slow, and a build there is refused unless
@@ -69,6 +81,8 @@ achievements="${SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS:-}"
 datadir="${SUPERSONIC_MAGICPORTALS_DATA:-}"
 padart="${SUPERSONIC_MAGICPORTALS_PADART:-}"
 baked=ON
+devtools=""
+mobile=""
 build_dir="$REPO/build"
 jobs=""
 cxx="${CXX:-}"
@@ -99,6 +113,9 @@ while [ "$#" -gt 0 ]; do
         --data)         [ "$#" -ge 2 ] || die "--data needs a folder"; datadir="$2"; shift 2 ;;
         --padart)       [ "$#" -ge 2 ] || die "--padart needs a folder"; padart="$2"; shift 2 ;;
         --no-baked-paths) baked=OFF; shift ;;
+        --dev-tools)    [ "$#" -ge 2 ] || die "--dev-tools needs ON, OFF or AUTO"
+                        case "$2" in ON|OFF|AUTO) devtools="$2" ;; *) die "--dev-tools takes ON, OFF or AUTO, not $2" ;; esac; shift 2 ;;
+        --mobile)       mobile=ON; shift ;;
         --build-dir)    [ "$#" -ge 2 ] || die "--build-dir needs a folder"; build_dir="$2"; shift 2 ;;
         --jobs)         [ "$#" -ge 2 ] || die "--jobs needs a number"; jobs="$2"; shift 2 ;;
         --cxx)          [ "$#" -ge 2 ] || die "--cxx needs a compiler"; cxx="$2"; shift 2 ;;
@@ -213,6 +230,8 @@ cmake -S "$REPO" -B "$build_dir" -G Ninja \
     -DGLFW_BUILD_WAYLAND="$wayland" \
     -DSUPERSONIC_ENABLE_VALIDATION="$validation" \
     -DMAGICPORTALS_BAKED_PATHS="$baked" \
+    ${devtools:+-DMAGICPORTALS_DEV_TOOLS="$devtools"} \
+    ${mobile:+-DMAGICPORTALS_MOBILE="$mobile"} \
     ${cmake_data[@]+"${cmake_data[@]}"} \
     ${flags[@]+"${flags[@]}"} \
     -DSUPERSONIC_MAGICPORTALS_PARITY_PYTHON="$(command -v python3 || true)"

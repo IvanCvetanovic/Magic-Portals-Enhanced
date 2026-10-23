@@ -96,8 +96,14 @@ add_mp_test(test_mp_robust)
 add_mp_test(test_mp_assetroot)
 
 # What the run asks of the engine's optional performance features (planning step 190): game/data/engine.json as sim/EngineTuning reads
-# it, strictly, for a person's run and for every other, and the flags that override it for one run. Pure sim and a scratch directory.
+# it, strictly, for a person's run and for every other, and the flags that override it for one run; and (planning step 201) the phone
+# profile laid over it, which for a desktop run changes nothing, pinned against a copy of the rule as it was. Pure sim and a scratch directory.
 add_mp_test(test_mp_tuning)
+
+# What the start checks before it touches the engine, and what a build without the developer tools says (planning step 201, PORT-3): the Vulkan
+# loader question asked of an injected loader, in words that name what is missing and what to do; the list of the developer's flags a build
+# without them refuses; the two build facts main.cpp is given. Pure.
+add_mp_test(test_mp_platform)
 
 # The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
 # what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
@@ -328,8 +334,9 @@ set_property(SOURCE test_mp_layer.cpp APPEND PROPERTY
 # Every level a win route plays from its start to its door (game/Route.hpp): the
 # routes are tests/routes/<level>.json, found at run time, so a route is added
 # without touching the suite. Played through the layer on the DEV schedule main's
-# --route uses. Route.cpp is compiled into test_mp (above) and into MagicPortals
-# rather than put in MagicPortalsGame; that kept the other suites from relinking
+# --route uses. Route.cpp is compiled into test_mp (above) and, when
+# MAGICPORTALS_DEV_TOOLS is on, into MagicPortals rather than put in
+# MagicPortalsGame; that kept the other suites from relinking
 # when it changed, which one executable no longer needs, and moving it would
 # relink the game for nothing (step 129 left it). The routes' directory is this
 # one source file's definition, so moving it recompiles one suite.
