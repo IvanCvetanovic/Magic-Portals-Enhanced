@@ -1,6 +1,7 @@
 #include "sim/Controls.hpp"
 
 #include "sim/Files.hpp"
+#include "sim/Numbers.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -429,7 +430,7 @@ bool ParseNumber(const std::string& text, double& out) {
     if (text.empty()) return false;
     double value = 0.0;
     const char* end = text.data() + text.size();
-    const auto [stop, error] = std::from_chars(text.data(), end, value);
+    const auto [stop, error] = Numbers::ParseDouble(text.data(), end, value);
     if (error != std::errc{} || stop != end || !Finite(value)) return false;
     out = value;
     return true;

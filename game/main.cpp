@@ -647,7 +647,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    A player's run (none of the developer's flags\n"
                   << "                    below) has an Options button in the main menu's top-right corner,\n"
                   << "                    where the choice is made; it is kept in controls.json beside the\n"
-                  << "                    other saves and read at the next start (shipped default: classic).\n"
+                  << "                    other saves and read at the next start (shipped default: modern).\n"
                   << "                    With this flag the run STARTS in that style, ignores the saved\n"
                   << "                    choice and writes nothing: Options then chooses for the run only.\n"
                   << "                    `classic` is the original's controls with no Options button. A\n"

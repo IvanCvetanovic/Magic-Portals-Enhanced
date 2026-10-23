@@ -1296,8 +1296,9 @@ public:
     // The style the run RESOLVED to (sim/Controls ResolveStyle over Paths::controls and
     // game/data/controls.json): Classic for a run in which the feature does not exist (a bare
     // layer, a developer's run, --controls classic), for a run whose controls.json would not
-    // read, and for a player's run while the shipped default is classic; Modern for
-    // --controls modern, and for a player's run once the data's default_mode says so.
+    // read, and for a player's run whose data's default_mode says classic; Modern for
+    // --controls modern, and for a player's run whose data's default_mode says so (the shipped
+    // data's has since planning step 198) when nothing was saved.
     //
     // THE LAYER PLAYS WHAT THIS SAYS (planning step 182, CTL-6): under Modern it lays out, draws
     // and claims the five inset controls of sim/Controls (always all five, whatever pictures are
@@ -2170,8 +2171,13 @@ private:
     // and light mask, and a mixed blend made premultiplied - or, on a level whose
     // lighting did not read, C alone on the plain unlit path. Each written only
     // when it changes. The one place a level sprite's colour is written.
+    // Two overloads, not one with `const Receiver& receiver = {}`: a default argument of this class cannot form a
+    // Receiver{} while the class is open (its default member initializers are parsed at the closing brace, CWG 1397), which
+    // g++ and clang refuse and MSVC accepts. The shorter one takes no light.
     void tint(entt::registry& registry, entt::entity quad, const glm::vec4& colour, const glm::dvec3& emissive,
-              const std::string& lightmap = {}, const Receiver& receiver = {}) const;
+              const std::string& lightmap, const Receiver& receiver) const;
+    void tint(entt::registry& registry, entt::entity quad, const glm::vec4& colour, const glm::dvec3& emissive,
+              const std::string& lightmap = {}) const;
     // The level's lights and their halos, one per Lighting::Look::light, made with
     // the sprites and their particles.
     void buildLights(entt::registry& registry);

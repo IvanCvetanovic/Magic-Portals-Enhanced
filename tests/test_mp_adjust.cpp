@@ -1227,11 +1227,13 @@ void TheEditorGlyphsAreEightPicturesOnOnePlate() {
     const double inset = 0.109375;
     const int size = 128;
     std::vector<PadArt::Bitmap> bitmaps;
-    std::set<std::vector<std::uint8_t>> pictures;
+    // The distinct pictures, kept in a vector and found by equality: a std::set of byte vectors compares with a three-way memcmp
+    // that g++ 13 at -O3 reports as reading past the maximum object size (a false positive of its inlining).
+    std::vector<std::vector<std::uint8_t>> pictures;
     for (const PadArt::EditorGlyph glyph : PadArt::kEditorGlyphs) {
         const PadArt::Bitmap bitmap = PadArt::DrawEditor(glyph, size, inset);
         CHECK_MSG(!bitmap.Empty() && bitmap.size == size && bitmap.rgba.size() == static_cast<std::size_t>(size * size * 4), std::string(PadArt::NameOf(glyph)) + " is a 128 px square RGBA");
-        pictures.insert(bitmap.rgba);
+        if (std::find(pictures.begin(), pictures.end(), bitmap.rgba) == pictures.end()) pictures.push_back(bitmap.rgba);
         bitmaps.push_back(bitmap);
     }
     CHECK_MSG(pictures.size() == 8u && PadArt::kEditorGlyphCount == 8u, "eight different pictures");

@@ -103,7 +103,9 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return fail();
     }
     const Json::Value& shownBelow = golden["shown_below_score"];
-    if (!shownBelow.IsNumber() || shownBelow.AsNumber() < 1.0 || shownBelow.AsNumber() > 4.0 ||
+    // The range is asked as a positive condition BEFORE the cast, so that a NaN (which fails both `<` and `>`) is refused here and
+    // never reaches the double-to-int conversion, whose result for a value outside int is undefined and differs by architecture.
+    if (!shownBelow.IsNumber() || !(shownBelow.AsNumber() >= 1.0 && shownBelow.AsNumber() <= 4.0) ||
         shownBelow.AsNumber() != static_cast<double>(static_cast<int>(shownBelow.AsNumber()))) {
         why = "level_end.finished.golden_plaque.shown_below_score is not a whole score within 1..4";
         return fail();

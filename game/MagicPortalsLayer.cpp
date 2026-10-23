@@ -3679,17 +3679,6 @@ void MagicPortalsLayer::layOutMenu() {
     m_menuButtons.clear();
     if (m_screen == Screen::None) return;
     const glm::dvec2 box = MenuBoxPx();
-    const auto at = [&box](double nx, double ny) { return glm::dvec2(nx * box.x, ny * box.y); };
-
-    // A button is drawn at ITS OWN shape. Sizing one by the box alone stretches
-    // whatever is not square, which is how the chapter icons - 84 x 128 - first
-    // went out looking squashed.
-    const auto sized = [this, &box](const char* file, double heightFraction) {
-        const double height = box.y * heightFraction;
-        const glm::dvec2 image = imageSizePx(menuImage(file));
-        const double aspect = image.y > 0.0 ? image.x / image.y : 1.0;
-        return glm::dvec2(height * aspect, height);
-    };
 
     // The loading screen has no button; credits, the dashboard and Options say what a touch
     // is on themselves (sim/Credits.hpp, sim/Dashboard.hpp, sim/Options.hpp).
@@ -8369,6 +8358,11 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::tint(entt::registry& registry, entt::entity quad, const glm::vec4& colour,
+                             const glm::dvec3& emissive, const std::string& lightmap) const {
+    tint(registry, quad, colour, emissive, lightmap, Receiver{});
+}
+
+void MagicPortalsLayer::tint(entt::registry& registry, entt::entity quad, const glm::vec4& colour,
                              const glm::dvec3& emissive, const std::string& lightmap, const Receiver& receiver) const {
     using Supersonic::MaterialComponent;
     if (quad == entt::null || !registry.valid(quad)) return;
@@ -10195,7 +10189,10 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
     }
     const Touch controlsNow = split ? ctl : touch;
     const Portals::TouchRelease& controlsRelease = split ? ctlRelease : handRelease;
-    const std::optional<Control> began = controlsNow.pressed ? std::nullopt : m_pressedControl;
+    // `began`, as two plain values taken before the record is reset: a std::optional copied out of a conditional is what g++ 13
+    // reports as maybe-uninitialized at -O2, and nothing here needs the optional.
+    const bool began = !controlsNow.pressed && m_pressedControl.has_value();
+    const Control beganOn = began ? *m_pressedControl : Control::Left;
     if (controlsNow.pressed || !controlsNow.held || !controlsNow.over) m_pressedControl.reset();
     // On the tick a touch comes up every reader takes the last point it was HELD at (above). A press that went down on a
     // corner button spent the shot's record, so the release tick's own point is the raw one: read where it was last held.
@@ -10223,7 +10220,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         bool act = pressed;
         if (actsOnRelease) {
             if (isCorner && pressed && held) m_pressedControl = kind;
-            act = isCorner && controlsRelease.released && (pressed || began == kind);
+            act = isCorner && controlsRelease.released && (pressed || (began && beganOn == kind));
         }
         switch (kind) {
         // HELD, not tapped: a walk button is leaned on, and IsDown is what a
@@ -10266,7 +10263,7 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // the switch, which a restart may have unloaded the controls under.
         if (modernClaims && held) {
             const bool arrow = kind == Control::Left || kind == Control::Right;
-            if (arrow ? !swallowed : (actsOnRelease && (pressed || began == kind))) m_pressedLook = kind;
+            if (arrow ? !swallowed : (actsOnRelease && (pressed || (began && beganOn == kind)))) m_pressedLook = kind;
         }
         // A TAP THAT WORKED A CONTROL IS SPENT. Without this, leaning on the
         // walk arrow also fires a portal into the floor beneath it every time

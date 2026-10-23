@@ -1,5 +1,7 @@
 #include "sim/Lighting.hpp"
 
+#include "sim/Numbers.hpp"
+
 #include "sim/Sprites.hpp"
 
 #include "core/Json.hpp"
@@ -108,8 +110,8 @@ std::string At(const Tscn::Node& node) {
 }
 
 // Exactly `count` finite numbers with one space between each, which is how the
-// converter's _nums writes them. from_chars rather than strtod, which takes its
-// decimal point from the C locale.
+// converter's _nums writes them. Numbers::ParseDouble (std::from_chars where the library has it) rather than
+// strtod, which takes its decimal point from the C locale.
 bool Numbers(std::string_view text, std::size_t count, double* out) {
     std::size_t got = 0;
     std::size_t from = 0;
@@ -120,7 +122,7 @@ bool Numbers(std::string_view text, std::size_t count, double* out) {
         if (item.empty() || got == count) return false;
         double value = 0.0;
         const char* last = item.data() + item.size();
-        const auto [ptr, ec] = std::from_chars(item.data(), last, value);
+        const auto [ptr, ec] = MagicPortals::Numbers::ParseDouble(item.data(), last, value);
         if (ec != std::errc() || ptr != last || !std::isfinite(value)) return false;
         out[got++] = value;
         if (space == std::string_view::npos) break;

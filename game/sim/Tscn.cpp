@@ -1,5 +1,7 @@
 #include "sim/Tscn.hpp"
 
+#include "sim/Numbers.hpp"
+
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -53,12 +55,12 @@ std::string_view Trim(std::string_view s) {
     return s;
 }
 
-// The whole of s or nothing. from_chars rather than strtod, which takes its
-// decimal point from the C locale.
+// The whole of s or nothing. Numbers::ParseDouble (std::from_chars where the library has it) rather than strtod,
+// which takes its decimal point from the C locale.
 bool ParseNumber(std::string_view s, double& out) {
     if (s.empty()) return false;
     const char* last = s.data() + s.size();
-    const auto [ptr, ec] = std::from_chars(s.data(), last, out);
+    const auto [ptr, ec] = Numbers::ParseDouble(s.data(), last, out);
     return ec == std::errc() && ptr == last && std::isfinite(out);
 }
 

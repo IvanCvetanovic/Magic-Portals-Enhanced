@@ -132,8 +132,14 @@ ReadResult ReadWhole(const std::string& path, std::string& text, int attempts, i
             // told from a missing one is not treated as missing, for a save written over it would be a guess.
             reason = path + ": " + ec.message();
         } else {
-            std::ifstream file(path, std::ios::binary);
-            if (file) {
+            // A directory opens as an empty stream on Linux and macOS (ifstream's open succeeds, the read finds nothing), where
+            // Windows refuses it: it is not a document on either, so both answer Unreadable with the same reason. Only a
+            // directory is asked about, so what Windows opens today it opens still.
+            std::error_code askedAbout; // an answer that fails is "not a directory": the open below then says what it always said
+            const bool isDirectory = std::filesystem::is_directory(path, askedAbout);
+            std::ifstream file;
+            if (!isDirectory) file.open(path, std::ios::binary);
+            if (file.is_open() && file) { // is_open: a stream that was never opened is "good", and a directory is not opened
                 std::ostringstream buffer;
                 buffer << file.rdbuf();
                 text = buffer.str();

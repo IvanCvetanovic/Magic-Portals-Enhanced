@@ -3515,7 +3515,9 @@ void TheFileHoldsDeltasOnly() {
 
 // Planning step 198 (CTL-13). The owner's word of 2026-10-22, in chat, "ctl13 - modern controls should be default contorls.", made Modern the style a player's run starts in
 // when nothing was saved. THE ONE CASE THAT FOLLOWS THE SHIPPED FILE: every other case gives the chain the default it wants (a scratch copy of the data, or the value as an
-// argument), so going back is `default_mode` in game/data/controls.json and this case. It states what the value does and does not reach:
+// argument), so the shipped value is pinned here and in test_mp_layer.cpp (the shipped row of ControlsStyleReportsTheResolvedStyle,
+// APlayersRunOnTheShippedDataPlaysModern, ATuningStepOnTheModernDefaultIsKeptWithoutAMode) and by the schema walk above: going back to classic is
+// `default_mode` in game/data/controls.json and those pins, which turn red by design. This case states what the value does and does not reach:
 //   * a player's run with no controls.json (a new install, and an existing save that holds scores.json, audio.json and achievements.json alone) plays Modern;
 //   * a saved choice beats it, either way;
 //   * a developer's run (the rig's three flags, each alone and together) and `--controls classic` stay Classic whatever the value, which is why the sweep, the baselines and every

@@ -611,7 +611,7 @@ std::string Label(const MagicPortals::Chapters::Table& chapters, const std::stri
     const int at = chapters.Find(level);
     if (at < 0) return "?";
     const auto& entry = chapters.levels[static_cast<std::size_t>(at)];
-    char text[16];
+    char text[32];
     std::snprintf(text, sizeof text, "%d-%02d", entry.world + 1, entry.index + 1);
     return text;
 }

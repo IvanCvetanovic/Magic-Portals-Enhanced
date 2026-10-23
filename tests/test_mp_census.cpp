@@ -55,6 +55,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <tuple>
 #include <utility>
@@ -137,7 +138,7 @@ bool LoadFacts(std::string& error) {
             return false;
         }
         Level level;
-        char label[16];
+        char label[32];
         std::snprintf(label, sizeof(label), "%d-%02d", table.levels[static_cast<std::size_t>(at)].world + 1, table.levels[static_cast<std::size_t>(at)].index + 1);
         level.label = label;
         Tscn::Scene scene;
@@ -343,8 +344,8 @@ Labels BlockedByWalk(const Placed& placed, Controls::Arrows arrows, const glm::d
 
 // ---- the golden, read strictly enough that a missing key is a failure and not a quiet default -------------------------------
 
-const Json::Value& Key(const Json::Value& from, const char* key, const std::string& where) {
-    CHECK_MSG(from.Has(key), "the golden has no \"" + std::string(key) + "\" in " + where);
+const Json::Value& Key(const Json::Value& from, const char* key, std::string_view where) { // by value: a const std::string& made every call "possibly dangling" to g++ 13
+    CHECK_MSG(from.Has(key), "the golden has no \"" + std::string(key) + "\" in " + std::string(where));
     return from[key];
 }
 

@@ -7695,7 +7695,7 @@ void ATrembleIsDrawnWhateverTicksAFrameRuns() {
 // A before-update call's shake after the tick it landed on, where that tick showed
 // its forth: the back, then the halving pairs to the stop (earthquake.json
 // generator), in level units.
-std::vector<double> quakeRestOfShake(double intensity) {
+[[maybe_unused]] std::vector<double> quakeRestOfShake(double intensity) {
     std::vector<double> want;
     double amplitude = quakeRowPx(intensity);
     want.push_back(-amplitude / kQuakePxPerUnit);
@@ -24515,7 +24515,7 @@ GoldenEntries PtrHudEntries() {
         return [ticks](MagicPortalsLayer& layer, entt::registry& registry) { PtrRest(layer, registry, ticks); };
     };
     for (const MagicPortals::Chapters::Level& level : table.levels) {
-        char label[16];
+        char label[32];
         std::snprintf(label, sizeof(label), "%d-%02d", level.world + 1, level.index + 1);
         PtrHudSnapshot(entries, std::string("sweep ") + label + " " + level.name + " tick 420", level.name.c_str(), wide, rest(420));
     }
@@ -29034,7 +29034,7 @@ void TheOptionsEntryOpensOptionsAndItsPressIsSpent() {
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
-    CHECK_MSG(layer.OptionsAvailable() && layer.ControlsStyle() == Controls::Style::Classic, "a player's run, on the shipped default (classic)");
+    CHECK_MSG(layer.OptionsAvailable() && layer.ControlsStyle() == Controls::Style::Classic, "a player's run, on a copy of the data whose default is classic");
     CHECK_MSG(!layer.ModernArtResolved() && layer.ModernArtLine().empty(), "which has resolved no modern pictures");
     std::error_code ec;
     CHECK_MSG(std::filesystem::exists(std::filesystem::path(prisms) / kOsGear, ec) && ArtIsAPng(layer.OptionsEntryImage()), "but has the gear it draws");
@@ -29212,7 +29212,7 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
         if (!run.ok) return;
         MagicPortalsLayer& layer = run.layer;
         if (!OsOpenOptions(run, "the first run")) return;
-        CHECK_MSG(layer.ControlsStyle() == Style::Classic && OsLitTile(layer, run.registry) == "classic", "the shipped default is classic and its tile is the lit one: " + OsLitTile(layer, run.registry));
+        CHECK_MSG(layer.ControlsStyle() == Style::Classic && OsLitTile(layer, run.registry) == "classic", "this copy of the data defaults to classic and its tile is the lit one: " + OsLitTile(layer, run.registry));
         CHECK_MSG(!ControlsFileExistsIn(saves), "nothing is saved by looking");
         const int before = OsSounds(layer, "menu_button");
         // A press that begins on the Modern tile and slides onto the Classic one chooses neither.
@@ -29264,7 +29264,7 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
         CHECK_MSG(run.layer.ControlsStyle() == Style::Classic && run.layer.ControlsLine() == "controls: classic (saved)", "the third run plays Classic, saved: '" + run.layer.ControlsLine() + "'");
         CHECK_MSG(!run.layer.ModernArtResolved(), "and, started classic, resolved no modern pictures");
     }
-    // A choice of Classic made where nothing was saved IS kept, though Classic is the shipped default: it must survive the default changing.
+    // A choice of Classic made where nothing was saved IS kept, though Classic is this copy of the data's default (the shipped default is Modern since step 198): it must survive the default changing.
     {
         const std::string fresh = OsDir("save-fresh");
         OsRun run(OsPaths(fresh, OsDir("save-prisms-4")), "TappingAModernTileSavesAndTheNextLayerStartsModern: classic on a fresh install");
@@ -29280,7 +29280,7 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
         OsWrite(broken, "controls.json", "{this is not json");
         OsRun run(OsPaths(broken, OsDir("save-prisms-5")), "TappingAModernTileSavesAndTheNextLayerStartsModern: a broken file");
         if (!run.ok) return;
-        CHECK_MSG(run.layer.ControlsStyle() == Style::Classic && run.layer.ControlsLine() == "controls: classic (the shipped default)", "a file that will not read: the shipped default");
+        CHECK_MSG(run.layer.ControlsStyle() == Style::Classic && run.layer.ControlsLine() == "controls: classic (the shipped default)", "a file that will not read: the copy of the data's default, classic");
         CHECK_MSG(run.layer.ControlsStore().Persists() && !run.layer.ControlsStore().FromFile(), "kept to be written over");
         CHECK_MSG(OsSavedFile(broken) == "{this is not json", "and not touched by starting");
         if (!OsOpenOptions(run, "a broken file")) return;
@@ -29293,7 +29293,7 @@ void TappingAModernTileSavesAndTheNextLayerStartsModern() {
 //
 // The owner's word of 2026-10-22, in chat: "ctl13 - modern controls should be default contorls." A player's run with nothing saved starts in Modern. These are the cases that
 // run on the SHIPPED data (OsPathsShipped; RunControls with no data directory) and so follow the owner's choice: every other case of this suite gives the run the default it
-// wants (a scratch copy of the data), so that going back is `default_mode` in game/data/controls.json and the cases of this group. They are the in-process form of the capture
+// wants (a scratch copy of the data), so that the shipped value is pinned by the cases of this group, by the shipped row of ControlsStyleReportsTheResolvedStyle, by ATuningStepOnTheModernDefaultIsKeptWithoutAMode and by test_mp_controls.cpp (going back to classic is `default_mode` in game/data/controls.json and those pins). They are the in-process form of the capture
 // gate: an empty save directory, an existing save (scores.json, audio.json and achievements.json and no controls.json), a controls.json that says classic - and what Options
 // offers as the way back.
 //
@@ -29605,7 +29605,7 @@ void TheStyleChosenInOptionsIsPlayedAtTheNextLevel() {
     const std::string saves = OsDir("style-saves");
     const std::string prisms = OsDir("style-prisms");
     OsPictures resolved;
-    // A run that STARTS classic (a player's run on the shipped default), toggled to modern in Options, and then into a level.
+    // A run that STARTS classic (a player's run on a copy of the data whose default is classic), toggled to modern in Options, and then into a level.
     {
         OsRun run(OsPaths(saves, prisms), "TheStyleChosenInOptionsIsPlayedAtTheNextLevel");
         if (!run.ok) return;
@@ -29944,7 +29944,7 @@ void TheOptionsScreenIsDrawn() {
         }
     }
     // The lit tile, now and after a choice.
-    CHECK_MSG(OsLitTile(layer, run.registry) == "classic", "the shipped default's tile is lit");
+    CHECK_MSG(OsLitTile(layer, run.registry) == "classic", "the tile of this copy of the data's default, classic, is lit");
     OsClick(run, OsTileCentre(layer, Style::Modern));
     CHECK_MSG(OsLitTile(layer, run.registry) == "modern", "the chosen tile is lit");
     // The tile held at the press tint while a press is on it.
@@ -30734,7 +30734,7 @@ Controls::Tuning TnKept(std::optional<int> sizeSteps, std::optional<int> opacity
     return kept;
 }
 
-bool TnNoMoves(const Controls::Tuning& tuning) {
+[[maybe_unused]] bool TnNoMoves(const Controls::Tuning& tuning) {
     return std::all_of(tuning.move.begin(), tuning.move.end(), [](const glm::dvec2& move) { return move == glm::dvec2(0.0); });
 }
 
@@ -31670,7 +31670,7 @@ void OneContactBehavesExactlyAsToday() {
     hold(10, scene.right, true);
     lift(scene.right);
     rest(10);
-    const auto agree = [&what](MagicPortalsLayer& x, entt::registry& xr, MagicPortalsLayer& y, entt::registry& yr) {
+    const auto agree = [](MagicPortalsLayer& x, entt::registry& xr, MagicPortalsLayer& y, entt::registry& yr) {
         return playerPx(xr, x) == playerPx(yr, y) && x.CameraCentrePx() == y.CameraCentrePx() && CtFired(x) == CtFired(y) && x.Paused() == y.Paused() &&
                x.TouchSwallowed() == y.TouchSwallowed() && x.LevelAgeMs() == y.LevelAgeMs() && PtrLastTap(x) == PtrLastTap(y) && !x.ContactsSplit();
     };
@@ -32386,7 +32386,10 @@ Hud::Rect AdPreviewRect(const MagicPortalsLayer& layer, Controls::Id id) {
 
 // The rectangle a widget's picture is drawn into: its face with the picture's margin.
 Hud::Rect AdTileRect(const MagicPortalsLayer& layer, AdjustUi::Widget widget) {
-    const AdjustUi::Tile& tile = layer.AdjustLayout().At(widget);
+    // AdjustLayout() returns the layout by value: the tile it holds must outlive this line, so the layout is kept (a reference into
+    // the temporary was a use after the end of its life, which g++ 13 reports as -Wdangling-reference).
+    const AdjustUi::Layout layout = layer.AdjustLayout();
+    const AdjustUi::Tile& tile = layout.At(widget);
     const std::optional<AdjustUi::Picture> picture = AdjustUi::PictureOf(widget, layer.AdjustUnlocked());
     return Controls::DrawRect(tile.box, tile.faceInset, picture && !layer.AdjustImage(*picture).empty() ? layer.AdjustBodyInset(*picture) : 0.0);
 }

@@ -62,6 +62,11 @@ function(add_mp_test name)
 endfunction()
 
 add_mp_test(test_mp_tscn)
+
+# The number parser every platform shares (planning step 199, PORT-1): sim/Numbers' ParseDouble, std::from_chars where the library has the
+# floating-point overload and a fallback where it does not (the Android NDK's libc++, Apple's). The table, the oracle and the fuzz are pure;
+# the part that reads every number of the converted levels and the data skips itself without them, so the suite takes no SKIPS_WITH_77.
+add_mp_test(test_mp_numbers)
 add_mp_test(test_mp_levels SKIPS_WITH_77)
 add_mp_test(test_mp_geometry)
 add_mp_test(test_mp_portal)
@@ -343,7 +348,14 @@ set_property(SOURCE test_mp_census.cpp APPEND PROPERTY
 # converted levels this build reads and compared with tools/parity/reachability.json. It is
 # Python, not a suite, so it is registered only where the parity venv is (README, Parity work);
 # it exits 77 - SKIPPED - without the converted levels, as the suites above do.
-set(SUPERSONIC_MAGICPORTALS_PARITY_PYTHON "${CMAKE_SOURCE_DIR}/tools/parity/.venv/Scripts/python.exe"
+# The venv's interpreter lives in Scripts/ on Windows and bin/ elsewhere; reachability.py needs only the standard library, so a build that has no
+# venv can name any python3 here (tools/build_linux.sh does).
+if (WIN32)
+    set(_parityVenvPython "${CMAKE_SOURCE_DIR}/tools/parity/.venv/Scripts/python.exe")
+else()
+    set(_parityVenvPython "${CMAKE_SOURCE_DIR}/tools/parity/.venv/bin/python")
+endif()
+set(SUPERSONIC_MAGICPORTALS_PARITY_PYTHON "${_parityVenvPython}"
     CACHE FILEPATH "The parity venv's Python, which runs the reachability check")
 if (EXISTS "${SUPERSONIC_MAGICPORTALS_PARITY_PYTHON}")
     add_test(NAME parity_reachability

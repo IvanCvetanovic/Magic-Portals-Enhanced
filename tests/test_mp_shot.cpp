@@ -1485,13 +1485,13 @@ void AnArrivalAsksTheFieldOfTheShotsPosition() {
     Rig probe;
     if (!MakeRig(probe)) return;
     const double radius = probe.state.rules.antiportalRadiusPx;
-    probe.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(300.5 + radius + 1.5, 200.0), 1.0, "ring"});
+    probe.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(300.5 + radius + 1.5, 200.0), 1.0, "ring", 0.0, std::string()});
     CHECK_MSG(!probe.state.InField(glm::dvec2(300.5, 200.0)) && probe.state.InField(glm::dvec2(303.2, 200.0)),
               "the destiny is outside the field and the overshot position inside it");
     Rig watched;
     if (!MakeRig(watched)) return;
     PutBox(watched, "wall", glm::dvec2(310.5, 200.0), glm::dvec2(20.0, 100.0), false);
-    watched.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(300.5 + radius + 1.5, 200.0), 1.0, "ring"});
+    watched.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(300.5 + radius + 1.5, 200.0), 1.0, "ring", 0.0, std::string()});
     CHECK(watched.state.Shoot(watched.registry, glm::dvec2(450.0, 200.0)));
     CHECK_MSG(watched.state.flight && Near(watched.state.flight->toPx, glm::dvec2(300.5, 200.0)), "aimed at the face");
     std::vector<Portals::Failure> ends;
@@ -1512,7 +1512,7 @@ void ANonDoomedArrivalOpensWhereTheRayEnded() {
     const double radius = rig.state.rules.antiportalRadiusPx;
     CHECK_MSG(radius > 25.0 && radius < 35.0, "the field's radius, " + std::to_string(radius) + ", puts 150 out and 160 in");
     PutBox(rig, "crate", glm::dvec2(160.0, 200.0), glm::dvec2(20.0, 20.0), true);
-    rig.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(185.0, 200.0), 1.0, "ring"});
+    rig.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(185.0, 200.0), 1.0, "ring", 0.0, std::string()});
     const glm::dvec2 tap(165.0, 200.0);
     const Portals::FinalPos said = rig.state.Predict(rig.registry, glm::dvec2(100.0, 200.0), tap);
     CHECK_MSG(!said.willDie && Near(said.atPx, glm::dvec2(160.0, 200.0)), "not doomed: " + Px(said.atPx));
@@ -1524,7 +1524,7 @@ void ANonDoomedArrivalOpensWhereTheRayEnded() {
     // A portal put there by hand is still refused: TryPlace is the port's own test for the suites.
     Rig by_hand;
     if (!MakeRig(by_hand)) return;
-    by_hand.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(185.0, 200.0), 1.0, "ring"});
+    by_hand.state.zones.push_back(Portals::NoPortalZone{glm::dvec2(185.0, 200.0), 1.0, "ring", 0.0, std::string()});
     CHECK(!by_hand.state.TryPlace(glm::dvec2(160.0, 200.0)) && by_hand.state.Insert(glm::dvec2(160.0, 200.0)));
 }
 

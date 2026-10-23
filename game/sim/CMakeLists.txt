@@ -54,6 +54,7 @@ add_library(MagicPortalsSim STATIC
     Motion.cpp
     Notificator.cpp
     Mover.cpp
+    Numbers.cpp
     Options.cpp
     PadArt.cpp
     Particles.cpp

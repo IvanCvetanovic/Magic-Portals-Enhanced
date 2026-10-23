@@ -171,7 +171,8 @@ bool Positive(const Json::Value& block, const char* key, double& out, std::strin
 
 bool Byte(const Json::Value& block, const char* key, int& out, std::string& why, const std::string& where) {
     const Json::Value& value = block[key];
-    if (!value.IsNumber() || value.AsNumber() < 0.0 || value.AsNumber() > 255.0 ||
+    // The range is a positive condition ahead of the cast (a NaN fails it and never reaches the conversion; see LevelEnd.cpp).
+    if (!value.IsNumber() || !(value.AsNumber() >= 0.0 && value.AsNumber() <= 255.0) ||
         value.AsNumber() != static_cast<double>(static_cast<int>(value.AsNumber()))) {
         why = where + "." + key + " is missing or not a whole number within 0..255";
         return false;

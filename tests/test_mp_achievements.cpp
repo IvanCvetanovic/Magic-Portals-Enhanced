@@ -344,7 +344,7 @@ void EveryTermIsTheOriginalsTest() {
 // rule asks for them, without its gold medal or with its torch lit.
 void TheSevenStealthAchievementsAreTrueAndFalse() {
     const Achievements::Rules rules = TheRules();
-    const auto at = [&rules](const Achievements::Play& play, const FakeWorld& world) {
+    [[maybe_unused]] const auto at = [&rules](const Achievements::Play& play, const FakeWorld& world) {
         return Ids(Achievements::Dispatches(rules, play, &world));
     };
     struct Stealth {

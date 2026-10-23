@@ -737,7 +737,7 @@ void TheFullSweep(const std::string& file, const std::string& bodiesFile) {
     int mismatched = 0;
     for (const Chapters::Level& level : table.levels) {
         // "1-01", as the sweep's files are named (Chapters::Label has no zero).
-        char label[16];
+        char label[32];
         std::snprintf(label, sizeof(label), "%d-%02d", level.world + 1, level.index + 1);
         g_bodiesLabel = label;
         const LevelRun run = RunLevel(level.name, 422, false, 418, 422);

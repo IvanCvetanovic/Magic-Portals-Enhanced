@@ -68,6 +68,12 @@ Configure and build in a shell with MSVC's environment (an x64 Native Tools prom
 compiles from a fresh clone, but it plays nothing until the original's levels are converted
 locally, and 29 of the 47 suites skip without them: *Local setup* below, steps 5-8.
 
+**Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
+with g++ 13 or clang 18, from a clone with its submodule; `--assets-from <folder>` (or the five `SUPERSONIC_MAGICPORTALS_*`
+variables) gives it the converted levels and the original's assets, and without them it still builds (the game draws boxes and the
+data suites skip). Build on a Linux file system, not a Windows drive mounted into WSL. The game is silent there for now: the
+engine decodes MP3 only on Windows. `tools/build_linux.sh --help` lists the options.
+
 ## How it fits together
 
 ```
