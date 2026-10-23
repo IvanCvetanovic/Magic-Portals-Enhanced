@@ -12,7 +12,7 @@
 # Smart App Control on the owner's machine: it refuses the first launch of a share
 # of freshly linked, unsigned executables, and every refusal is a notification to
 # the owner. Every suite links MagicPortalsSim, so a change to a widely included
-# header relinked all 47 (wave 1's merge alone drew 41 refusals). One executable
+# header relinked every suite - 47 of them then (wave 1's merge alone drew 41 refusals). One executable
 # makes a relink one new binary. What the rule gives a suite is kept on test_mp by
 # hand, below: the harness, SupersonicCore and the GLM configuration its interface
 # carries, and /W4. That copy is what the engine's rule exists to avoid, so if
@@ -88,6 +88,12 @@ add_mp_test(test_mp_scores)
 # use it, the .bak of the last good file, a directory for the log found without throwing, and the rule of which runs may open a message box.
 # Pure sim and a scratch directory; no converted level, so no skip.
 add_mp_test(test_mp_robust)
+
+# Where the game finds its data and where it may write (planning step 200, PORT-2): sim/AssetRoot's order of tiers (--root, next to the
+# program, the bundle, the user's data folder, the paths the build was configured with), the per-path flags over its answer, and that a
+# resolve only looks; sim/Scratch's rule that the log and the prisms go to the first folder a file can really be made in; and the prism
+# writer's half-written name. Pure: opaque fixture folders and a scratch directory of its own, no converted level, so no skip.
+add_mp_test(test_mp_assetroot)
 
 # What the run asks of the engine's optional performance features (planning step 190): game/data/engine.json as sim/EngineTuning reads
 # it, strictly, for a person's run and for every other, and the flags that override it for one run. Pure sim and a scratch directory.

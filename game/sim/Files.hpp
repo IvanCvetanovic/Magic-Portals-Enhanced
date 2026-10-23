@@ -47,6 +47,11 @@ bool WriteAtomic(const std::string& path, const std::string& bytes, const WriteO
 // "<path>.bak".
 std::string BackupPath(const std::string& path);
 
+// A text no other writer - another window, an earlier run, an earlier call - has used: a random number and a counter. For the name of
+// a half-written copy beside its file ("<file>.<this>.tmp"), which this header's writes use, and the prisms' (sim/Prism.cpp) and the
+// scratch folder's probe (sim/Scratch.cpp) since planning step 200.
+std::string UniqueSuffix();
+
 enum class ReadResult {
     Read,       // `text` holds the file (it may be empty)
     Missing,    // there is no such file

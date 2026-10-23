@@ -168,10 +168,15 @@ void FullhdIsTriedBeforeHd() {
     const Tiers::Resolved folder = Tiers::Resolve(rules, root + "folder.png");
     CHECK_MSG(folder.tier.empty() && folder.density == 1.0f, "a directory is not a tier file: " + folder.path);
 
-    // AssembleResourceName splits at the last separator, either kind.
-    const std::string back = dir.string() + "\\half.png";
+    // AssembleResourceName splits at the last separator, either kind: the host's own, here. The name is built with the separator this host
+    // writes paths with (std::filesystem::path::preferred_separator: '\' on Windows, '/' where it is not), because a candidate path with a
+    // '\' in it names a file only where '\' separates folders - on Linux, macOS and Android "<dir>\hd/half.png" is a folder called
+    // "<dir>\hd", which does not exist, and the name would come back as given (planning step 199's G4 found that, and planning step 200
+    // keeps Windows' assertion byte for byte: the preferred separator there IS the backslash this case always used).
+    const std::string separator(1, static_cast<char>(std::filesystem::path::preferred_separator));
+    const std::string back = dir.string() + separator + "half.png";
     const Tiers::Resolved backslash = Tiers::Resolve(rules, back);
-    CHECK_MSG(backslash.tier == "hd" && backslash.path == dir.string() + "\\hd/half.png", backslash.path);
+    CHECK_MSG(backslash.tier == "hd" && backslash.path == dir.string() + separator + "hd/half.png", backslash.path);
 }
 
 // Only the name is tried: a tier file whose 1x name nobody gives is reached by no

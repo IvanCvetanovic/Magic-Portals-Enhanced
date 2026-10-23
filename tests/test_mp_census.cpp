@@ -22,7 +22,7 @@
 // estimate), written by the design's python at the exact window widths. A level that joins the list fails this suite and so does one that
 // leaves it; a correction to the golden is a file and not a relink. THE LIST IS VALID ONLY FOR THE LAYOUT IT NAMES (`valid_for`), in
 // particular for hit.grow_px = 0 on every control (the owner's answer to Q0): if controls.json changes any of those numbers, the first
-// check that fails says that the census is to be re-run and the list signed again by the owner before the default flips (CTL-13).
+// check that fails says that the census is to be re-run and the list signed again by the owner before the list is relied on again (the default became modern in planning step 198, CTL-13).
 //
 // Reads tests/routes/*.json and the converted levels (the gitignored out/levels and out/data/chapters.json); without them it exits 77.
 
@@ -383,7 +383,7 @@ std::string Difference(const Labels& computed, const Labels& golden) {
 
 void CheckList(const std::string& what, const Labels& computed, const Labels& golden) {
     CHECK_MSG(computed == golden, what + ": " + Difference(computed, golden) +
-                                       ". The census is re-run and the owner signs the list again (design 1.9, CTL-13), then tests/golden/controls_census.json follows.");
+                                       ". The census is re-run and the owner signs the list again (design 1.9; CTL-13 made modern the default in planning step 198), then tests/golden/controls_census.json follows.");
 }
 
 std::array<double, 4> FourOf(const Json::Value& array) {

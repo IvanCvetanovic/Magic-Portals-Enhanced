@@ -8,6 +8,7 @@ add_library(MagicPortalsSim STATIC
     Achievements.cpp
     Adjust.cpp
     Art.cpp
+    AssetRoot.cpp
     Boss.cpp
     Bounce.cpp
     Camera.cpp
@@ -71,6 +72,7 @@ add_library(MagicPortalsSim STATIC
     Restock.cpp
     Roles.cpp
     Scores.cpp
+    Scratch.cpp
     ScriptClock.cpp
     Shot.cpp
     Sky.cpp
@@ -135,13 +137,29 @@ set(SUPERSONIC_MAGICPORTALS_ORIGINAL "${SUPERSONIC_MAGICPORTALS_LEVELS}/../../re
 set(SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS "${SUPERSONIC_MAGICPORTALS_LEVELS}/../data/achievements.json"
     CACHE FILEPATH "The original's achievements, extracted (out/data/achievements.json in this repository)")
 
-target_compile_definitions(MagicPortalsSim PUBLIC
-    MAGICPORTALS_ORIGINAL_DIR="${SUPERSONIC_MAGICPORTALS_ORIGINAL}"
-    MAGICPORTALS_LEVELS_DIR="${SUPERSONIC_MAGICPORTALS_LEVELS}"
-    MAGICPORTALS_DATA_DIR="${SUPERSONIC_MAGICPORTALS_DATA}"
-    MAGICPORTALS_CHAPTERS_FILE="${SUPERSONIC_MAGICPORTALS_CHAPTERS}"
-    MAGICPORTALS_ACHIEVEMENTS_FILE="${SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS}"
-    MAGICPORTALS_PORT_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
+# The seven definitions are the build's baked paths. MAGICPORTALS_ART_DIR is what res:// stands for: the folder above the levels, spelled the
+# way the layer's default always was (LEVELS "/.."). With MAGICPORTALS_BAKED_PATHS=OFF (top-level CMakeLists.txt) every one is an empty
+# string, which MagicPortalsLayer::Paths takes as "none given" - and the game then finds its data through sim/AssetRoot at run time.
+if (MAGICPORTALS_BAKED_PATHS)
+    target_compile_definitions(MagicPortalsSim PUBLIC
+        MAGICPORTALS_ORIGINAL_DIR="${SUPERSONIC_MAGICPORTALS_ORIGINAL}"
+        MAGICPORTALS_LEVELS_DIR="${SUPERSONIC_MAGICPORTALS_LEVELS}"
+        MAGICPORTALS_ART_DIR="${SUPERSONIC_MAGICPORTALS_LEVELS}/.."
+        MAGICPORTALS_DATA_DIR="${SUPERSONIC_MAGICPORTALS_DATA}"
+        MAGICPORTALS_CHAPTERS_FILE="${SUPERSONIC_MAGICPORTALS_CHAPTERS}"
+        MAGICPORTALS_ACHIEVEMENTS_FILE="${SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS}"
+        MAGICPORTALS_PORT_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
+else()
+    message(STATUS "MAGICPORTALS_BAKED_PATHS is OFF: no data path is compiled in; the game finds its data at run time (--root, next to the program, the user's data folder)")
+    target_compile_definitions(MagicPortalsSim PUBLIC
+        MAGICPORTALS_ORIGINAL_DIR=""
+        MAGICPORTALS_LEVELS_DIR=""
+        MAGICPORTALS_ART_DIR=""
+        MAGICPORTALS_DATA_DIR=""
+        MAGICPORTALS_CHAPTERS_FILE=""
+        MAGICPORTALS_ACHIEVEMENTS_FILE=""
+        MAGICPORTALS_PORT_DATA_DIR="")
+endif()
 
 target_include_directories(MagicPortalsSim PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(MagicPortalsSim PUBLIC SupersonicCore)

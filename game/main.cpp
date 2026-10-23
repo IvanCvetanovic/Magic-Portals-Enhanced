@@ -2,10 +2,12 @@
 // original's order, as the port plays them.
 //
 // The levels, their order, their art and Enhanced's data are read from
-// outside this repository, from where the build was told they are
-// (SUPERSONIC_MAGICPORTALS_LEVELS, _CHAPTERS and _DATA; the art beside the
-// levels), or from --levels, --art and --data. Drawn with the levels' own art
-// and a few lines of text. See docs/planning/2026-09-11-magic-portals-remaster.md.
+// outside this repository. Where is decided at run time (sim/AssetRoot.hpp,
+// planning step 200): --root, a folder next to the program, the user's data
+// folder, and last the paths the build was told (SUPERSONIC_MAGICPORTALS_*),
+// with a flag for each path over the answer (--levels, --art, --data, ...).
+// Drawn with the levels' own art and a few lines of text. See
+// docs/planning/2026-09-11-magic-portals-remaster.md.
 
 #include <cstdlib>
 #include <exception>
@@ -31,9 +33,11 @@
 #include "MagicPortalsLayer.hpp"
 #include "Route.hpp"
 #include "RunKind.hpp"
+#include "sim/AssetRoot.hpp"
 #include "sim/Controls.hpp"
 #include "sim/EngineTuning.hpp"
 #include "sim/Files.hpp"
+#include "sim/Scratch.hpp"
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -58,6 +62,12 @@ std::string EditorArtDirBeside(const std::string& padArtDir) {
     std::filesystem::path controls = std::filesystem::path(padArtDir).lexically_normal();
     if (!controls.has_filename()) controls = controls.parent_path(); // "<dir>/" names <dir>
     return (controls.parent_path() / "editor").string();
+}
+
+// What --help says of a path's default: the path the build was configured with, or that a release build has none (it finds its data
+// at run time, see --root).
+std::string DefaultText(const std::string& baked) {
+    return baked.empty() ? std::string("none baked in: found at run time") : "default " + baked;
 }
 
 } // namespace
@@ -165,30 +175,19 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // --level, --levels, --art, --data and --saves are the game's own flags. LaunchOptions
     // refuses anything it does not know, which is right for the engine, so the
     // game takes its flags out first and hands on the rest untouched.
+    // Its fields hold what this build was configured with until the asset root is resolved below (sim/AssetRoot.hpp): all of them are
+    // replaced there, from --root or a folder next to the program or the user's data folder or, last, from these.
     MagicPortals::MagicPortalsLayer::Paths paths;
-    // WHERE THE LOG AND THE PRISMS GO. The system's temporary directory by the error_code overload, which says "no" instead of
-    // throwing when %TEMP% names nothing (the throwing one ended the process with no word and no log); a profile with a folder that
-    // exists, then the executable's own, then the working directory, when it does. Empty when none will do: the game then runs
-    // with no log file and writes no prisms, and says so.
-    std::filesystem::path temp;
-    {
-        std::error_code tempError;
-        temp = std::filesystem::temp_directory_path(tempError);
-        if (tempError) temp.clear();
-        if (temp.empty()) {
-            std::error_code workingError;
-            // UserDataDirectory makes its directory, so it is asked only now that it is needed.
-            temp = MagicPortals::Files::UsableDirectory({Supersonic::UserDataDirectory(kTitle), Supersonic::ExecutableDirectory(),
-                                                         std::filesystem::current_path(workingError)});
-        }
-    }
-    if (!temp.empty()) paths.prisms = temp / "supersonic-magicportals";
     // No --level opens the menu, which is the game's own front door. A named
     // level is entered directly, and that is how the suites and every headless
     // render run: neither ever sees the menu.
     std::string start;
     std::vector<char*> engineArgs{argv[0]};
-    bool artGiven = false;
+    // The asset root (planning step 200): --root and --no-baked-paths, and a flag for each path that replaces the root's answer for
+    // that one path. Resolved after --help, once every flag is read, in the order sim/AssetRoot.hpp states.
+    std::string rootFlag;
+    bool noBakedPaths = false;
+    MagicPortals::AssetRoot::Overrides pathFlags;
     // DEV ONLY: where the medals are kept, instead of the user's own directory.
     // It exists so a parity capture can open a level with a medal recorded - the
     // original shows its current-score plaque only then - from a scores.json
@@ -577,7 +576,14 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             }
             continue;
         }
-        if (arg == "--level" || arg == "--levels" || arg == "--art" || arg == "--data" || arg == "--saves") {
+        if (arg == "--no-baked-paths") {
+            // The compiled-in tier switched off for this run: how a release package is proven to hold everything it opens, and the
+            // run-time twin of a build configured with MAGICPORTALS_BAKED_PATHS=OFF (both give the same answer from Resolve).
+            noBakedPaths = true;
+            continue;
+        }
+        if (arg == "--level" || arg == "--levels" || arg == "--art" || arg == "--data" || arg == "--saves" || arg == "--root" ||
+            arg == "--original" || arg == "--chapters" || arg == "--achievements" || arg == "--port-data") {
             if (i + 1 >= argc) {
                 std::cerr << arg << " needs a value\n";
                 return EXIT_FAILURE;
@@ -585,15 +591,29 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             const std::string value = argv[++i];
             if (arg == "--level") {
                 start = value;
+            } else if (arg == "--root") {
+                // Twice is a mistake, not an override, as it is for --padart and --controls.
+                if (!rootFlag.empty()) {
+                    std::cerr << "--root is given twice; it takes one absolute folder\n";
+                    return EXIT_FAILURE;
+                }
+                rootFlag = value;
             } else if (arg == "--levels") {
-                paths.levels = value;
+                pathFlags.levels = value;
             } else if (arg == "--art") {
-                paths.art = value;
-                artGiven = true;
+                pathFlags.art = value;
             } else if (arg == "--saves") {
                 savesOverride = value;
+            } else if (arg == "--original") {
+                pathFlags.original = value;
+            } else if (arg == "--chapters") {
+                pathFlags.chapters = value;
+            } else if (arg == "--achievements") {
+                pathFlags.achievements = value;
+            } else if (arg == "--port-data") {
+                pathFlags.portData = value;
             } else {
-                paths.data = value;
+                pathFlags.data = value;
             }
             continue;
         }
@@ -619,16 +639,26 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         }
         route = std::move(plan);
     }
-    // The converter writes the art beside the levels, so levels somewhere else
-    // bring their art with them unless --art says otherwise.
-    if (!artGiven && paths.levels != MAGICPORTALS_LEVELS_DIR) paths.art = paths.levels + "/..";
-
     const auto options = Supersonic::LaunchOptions::Parse(static_cast<int>(engineArgs.size()), engineArgs.data());
     if (options.helpRequested) {
         std::cout << Supersonic::LaunchOptions::Usage()
                   << "  --level <name>    the level to start at, as chapters.json names it. Without it\n"
                   << "                    the game opens its menu.\n"
-                  << "  --levels <dir>    the converted levels (default " << paths.levels << ")\n"
+                  << "  --root <dir>      the folder that holds the game's data, an absolute path: laid out like this\n"
+                  << "                    repository (out/levels, data, game/data, reference/...) or like a released\n"
+                  << "                    package (levels, tables, data, port-data, original, assets, pad-art; see\n"
+                  << "                    docs/packaging.md). Without it the data is looked for in a 'content' folder\n"
+                  << "                    next to the program, then the program's own folder, then 'content' in the\n"
+                  << "                    user's data folder for Magic Portals, and last in the paths this build was\n"
+                  << "                    configured with. A --root that does not hold the game ends the run.\n"
+                  << "  --no-baked-paths  ignore the paths this build was configured with: the data must then come from\n"
+                  << "                    --root or one of the folders above. What a release build does always\n"
+                  << "  --levels <dir>    the converted levels (" << DefaultText(paths.levels) << ")\n"
+                  << "  --chapters <file> chapters.json, the level order (" << DefaultText(paths.chapters) << ")\n"
+                  << "  --achievements <file>\n"
+                  << "                    achievements.json (" << DefaultText(paths.achievements) << ")\n"
+                  << "  --original <dir>  the original's extracted assets (" << DefaultText(paths.original) << ")\n"
+                  << "  --port-data <dir> the port's own tables, game/data (" << DefaultText(paths.portData) << ")\n"
                   << "  " << MagicPortals::Controls::FlagUsage() << "\n"
                   << "                    which on-screen controls the run plays: the original's (classic)\n"
                   << "                    or Magic Rampage's inset ones (modern, built step by step:\n"
@@ -654,10 +684,12 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    developer's run (--fixed-step, --route, --visit-levels) is classic\n"
                   << "                    and has no Options button, unless the flag says otherwise\n"
                   << "  --padart <dir>    the folder of Magic Rampage's five control pictures a modern run\n"
-                  << "                    tries first, an absolute path (default " << padArtDir << ");\n"
+                  << "                    tries first, an absolute path (" << DefaultText(padArtDir) << ");\n"
                   << "                    the adjustment screen's eight are in the folder `editor` beside it\n"
-                  << "  --art <dir>       what their res:// stands for (default the directory above them)\n"
-                  << "  --data <dir>      Enhanced's data directory (default " << paths.data << ")\n"
+                  << "  --art <dir>       what their res:// stands for (default the directory above the levels)\n"
+                  << "  --data <dir>      Enhanced's data directory (" << DefaultText(paths.data) << ")\n"
+                  << "                    Each of --levels, --art, --data, --chapters, --achievements, --original,\n"
+                  << "                    --port-data and --padart replaces that one path over the root's answer.\n"
                   << "  --saves <dir>     DEV: keep the medals (scores.json), the sound and music\n"
                   << "                    switches (audio.json), the unlocked achievements\n"
                   << "                    (achievements.json) and the controls chosen in Options\n"
@@ -746,6 +778,54 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         fatal.attended = MagicPortals::AttendedRun(options, dev);
     }
 
+    // WHERE THE GAME'S DATA IS (planning step 200, PORT-2), resolved once and handed down, in the order sim/AssetRoot.hpp states. After
+    // --help, which needs no data, and before anything is opened or made: a --root that does not hold the game ends the run here with a
+    // message that names it, and nothing has been created (the log, the scratch folder and the engine's window all come after).
+    namespace AssetRoot = MagicPortals::AssetRoot;
+    AssetRoot::Resolved assetRoot;
+    {
+        AssetRoot::Inputs inputs;
+        inputs.flagRoot = rootFlag;
+        inputs.exeDir = Supersonic::ExecutableDirectory().string();
+        // Asked for only when --root, the folder next to the program and the bundle have all failed to answer: the engine's
+        // UserDataDirectory MAKES the player's data folder when it answers, and a run that has its data elsewhere has no business making
+        // it. Nothing here makes <that folder>/content, which is only tested for.
+        inputs.userDataContent = [] {
+            const std::filesystem::path base = Supersonic::UserDataDirectory(kTitle);
+            return base.empty() ? std::string() : (base / "content").string();
+        };
+        if (!noBakedPaths) {
+            // What the build was configured with, still in `paths` from its defaults. Empty in a build configured with
+            // MAGICPORTALS_BAKED_PATHS=OFF, which has nothing to offer here.
+            inputs.compiledIn.levels = paths.levels;
+            inputs.compiledIn.art = paths.art;
+            inputs.compiledIn.chapters = paths.chapters;
+            inputs.compiledIn.achievements = paths.achievements;
+            inputs.compiledIn.data = paths.data;
+            inputs.compiledIn.portData = paths.portData;
+            inputs.compiledIn.original = paths.original;
+            inputs.compiledIn.padArt = MAGICPORTALS_PADART_DIR;
+        }
+        // The only question put to the file system, and it only looks.
+        assetRoot = AssetRoot::Resolve(inputs, AssetRoot::HoldsGameOnDisk);
+        if (!assetRoot.ok) {
+            std::cerr << "[Magic Portals] " << assetRoot.error << "\n";
+            // A player's run gets the box a failed start gets (RunKind.hpp); the text names no log, for none is open yet.
+            const std::string text = MagicPortals::FatalText(assetRoot.error, "", fatal.attended);
+            if (!text.empty()) ShowFatalDialog(text);
+            return EXIT_FAILURE;
+        }
+        const AssetRoot::Paths resolved = AssetRoot::Apply(assetRoot.paths, pathFlags);
+        paths.levels = resolved.levels;
+        paths.art = resolved.art;
+        paths.chapters = resolved.chapters;
+        paths.achievements = resolved.achievements;
+        paths.data = resolved.data;
+        paths.portData = resolved.portData;
+        paths.original = resolved.original;
+        if (!padArtGiven) padArtDir = resolved.padArt;
+    }
+
     // WHICH CONTROLS THIS RUN PLAYS (planning step 181), resolved once and handed down: the flag and the kind
     // of run (the rig's three flags make it a developer's, whose controls are the classic ones whatever the
     // data says). After --help, which needs no valid flag, and before anything is opened, so a refused
@@ -778,6 +858,42 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         }
     }
 
+    // WHERE THE LOG AND THE PRISMS GO (planning step 200; the log's own folder was this block's, a step earlier). sim/Scratch.hpp has the
+    // rule and the two failures it answers (an Android temporary folder an app cannot write, a shared /tmp whose prism folder belongs to
+    // another account): a candidate counts only if a file can be made in it. The system's temporary folder first, by the error_code
+    // overload, which says "no" instead of throwing when %TEMP% names nothing (the throwing one ended the process with no word and no
+    // log): on a desktop that is where this always was, so a Windows run writes %TEMP%\magicportals.log and %TEMP%\supersonic-magicportals
+    // as before. Then the user's data folder's scratch folder, the one candidate that makes a folder, so it is asked for only if the first
+    // failed; then the older last resorts. Empty when none will do: the game then runs with no log file and writes no prisms, and says so.
+    const MagicPortals::Scratch::Chosen scratch = MagicPortals::Scratch::Choose(
+        {{"the system's temporary folder",
+          [] {
+              std::error_code ec;
+              std::filesystem::path folder = std::filesystem::temp_directory_path(ec);
+              if (ec) folder.clear();
+              return folder;
+          },
+          false},
+         {"the user's data folder, scratch",
+          [] {
+              const std::filesystem::path base = Supersonic::UserDataDirectory(kTitle);
+              return base.empty() ? base : base / "scratch";
+          },
+          true},
+         {"the user's data folder", [] { return Supersonic::UserDataDirectory(kTitle); }, true},
+         {"the executable's folder", [] { return Supersonic::ExecutableDirectory(); }, false},
+         {"the working directory",
+          [] {
+              std::error_code ec;
+              std::filesystem::path folder = std::filesystem::current_path(ec);
+              if (ec) folder.clear();
+              return folder;
+          },
+          false}},
+        MagicPortals::Scratch::ProbeWritable);
+    const std::filesystem::path temp = scratch.ok ? scratch.base : std::filesystem::path();
+    if (scratch.ok) paths.prisms = scratch.prisms;
+
     // The diagnostics to a FILE as well as the console.
     //
     // Nothing else in the engine opens this sink, and Log.hpp says why it
@@ -785,7 +901,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // so without this its diagnostics go nowhere. That is no use at all when
     // the thing being chased only happens while somebody else is playing.
     if (temp.empty()) {
-        std::cerr << "[Magic Portals] no folder to keep a log in; continuing without one.\n";
+        std::cerr << "[Magic Portals] no folder to keep a log in; continuing without one (" << scratch.note << ").\n";
     } else {
         const std::filesystem::path logPath = temp / kLogFile;
         const std::string logFile = logPath.string();
@@ -810,6 +926,10 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             std::cerr << "[Magic Portals] could not open " << logFile << " for writing; continuing without a log file.\n";
         }
     }
+    // The root and the tier that answered, and the scratch folder, next: the first things a report from another person's machine needs
+    // (a log of a start that found nothing is the one place to see where it looked).
+    SUPERSONIC_LOG_INFO("Magic Portals") << assetRoot.why << std::endl;
+    SUPERSONIC_LOG_INFO("Magic Portals") << scratch.note << std::endl;
 
     // WHAT THE RUN ASKS OF THE ENGINE'S OPTIONAL FEATURES (planning step 190): game/data/engine.json for this kind of run, then the flags over
     // it. A table that will not read leaves the engine as it was (Table{} is that), and the log says so below.
@@ -860,6 +980,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     SUPERSONIC_LOG_INFO("Magic Portals") << "folders: levels " << paths.levels << ", data " << paths.data << ", port data "
                                          << paths.portData << ", saves " << (paths.saveDir.empty() ? "(none)" : paths.saveDir)
                                          << std::endl;
+    SUPERSONIC_LOG_INFO("Magic Portals") << "folders, the rest: art " << paths.art << ", chapters " << paths.chapters << ", original "
+                                         << paths.original << ", achievements " << paths.achievements << ", pad art "
+                                         << (padArtDir.empty() ? "(none)" : padArtDir) << std::endl;
     if (!tuningRead) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "engine options not read, the engine's own defaults are used: " << tuningWhy << std::endl;
     }

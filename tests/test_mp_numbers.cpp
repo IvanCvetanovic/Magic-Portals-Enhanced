@@ -429,27 +429,41 @@ void ReadTree(const std::string& root, const char* extension, Tally& tally) {
 }
 
 void EveryNumberInTheDataReadsTheSameWithinTheFallbackTheHelperAndTheLibrary() {
+    // TWO HALVES (planning step 200, the rider R3). The committed tables (data/, game/data/) are in the repository and need nothing, so they
+    // are read on every clone; the converted levels are the gitignored out/ and are read where it is, with the floors that go with them.
+    // Until this step the first was skipped together with the second, so a clean clone and the CI that follows read no number at all.
     const std::string levels = MAGICPORTALS_LEVELS_DIR;
     std::error_code ec;
-    if (!std::filesystem::is_directory(levels, ec)) {
-        std::printf("  every number of the data SKIPPED - needs the converted levels at %s (the other cases ran)\n", levels.c_str());
-        return;
-    }
+    const bool haveLevels = !levels.empty() && std::filesystem::is_directory(levels, ec);
     Tally tally;
-    ReadTree(levels, ".tscn", tally);
-    const std::size_t tscnFiles = tally.files;
-    const std::size_t tscnTokens = tally.tokens;
+    std::size_t tscnFiles = 0;
+    std::size_t tscnTokens = 0;
+    if (haveLevels) {
+        ReadTree(levels, ".tscn", tally);
+        tscnFiles = tally.files;
+        tscnTokens = tally.tokens;
+    } else {
+        std::printf("  the converted levels' numbers SKIPPED - needs them at %s (the committed tables below ran)\n", levels.c_str());
+    }
+    const Tally levelsOnly = tally;
     ReadTree(MAGICPORTALS_DATA_DIR, ".json", tally);
     ReadTree(MAGICPORTALS_PORT_DATA_DIR, ".json", tally);
-    std::printf("  data: %zu files (%zu tscn), %zu tokens (%zu in the tscn files), %zu of them numbers, %zu mismatches; the library's own from_chars %s\n",
-                tally.files, tscnFiles, tally.tokens, tscnTokens, tally.numbers, tally.mismatches,
+    const std::size_t jsonFiles = tally.files - levelsOnly.files;
+    const std::size_t jsonNumbers = tally.numbers - levelsOnly.numbers;
+    std::printf("  data: %zu files (%zu tscn; %zu committed tables with %zu numbers), %zu tokens (%zu in the tscn files), %zu of them numbers, %zu mismatches; the library's own from_chars %s\n",
+                tally.files, tscnFiles, jsonFiles, jsonNumbers, tally.tokens, tscnTokens, tally.numbers, tally.mismatches,
                 N::kStandardFromChars ? "was the reference" : "is not there: the helper and the fallback are the same code");
     CHECK_EQ(tally.mismatches, static_cast<std::size_t>(0));
-    // The floors: 128 levels, and far more tokens than any path that found one folder only.
-    CHECK(tscnFiles >= 128);
-    CHECK(tscnTokens >= 80000);
-    CHECK(tally.files >= 128 + 20);
-    CHECK(tally.numbers >= 80000);
+    // The committed half's own floors, so a clean clone that finds nothing fails instead of passing over an empty folder.
+    CHECK_MSG(jsonFiles >= 40, std::to_string(jsonFiles) + " committed tables read");
+    CHECK_MSG(jsonNumbers >= 15000, std::to_string(jsonNumbers) + " numbers in the committed tables");
+    if (haveLevels) {
+        // The floors: 128 levels, and far more tokens than any path that found one folder only.
+        CHECK(tscnFiles >= 128);
+        CHECK(tscnTokens >= 80000);
+        CHECK(tally.files >= 128 + 20);
+        CHECK(tally.numbers >= 80000);
+    }
 }
 
 // ---- the locale ---------------------------------------------------------------------------------------------------------------

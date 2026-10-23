@@ -193,7 +193,7 @@ public:
         std::filesystem::path prisms;
         // What res:// stands for: the converter writes the levels' art beside
         // the levels, so the directory above them (Sprites.hpp).
-        std::string art = MAGICPORTALS_LEVELS_DIR "/..";
+        std::string art = MAGICPORTALS_ART_DIR; // LEVELS "/.." in a developer's build, empty in a release build (CMake)
         // The original's extracted assets, whose entities/ holds the images of
         // what no level places (Art.hpp).
         std::string original = MAGICPORTALS_ORIGINAL_DIR;

@@ -61,8 +61,13 @@ set(SUPERSONIC_MAGICPORTALS_PADART "${_magicPortalsPadArt}"
     CACHE PATH "Magic Rampage's modern-control pictures (reference/magic-rampage/controls in this repository, gitignored)")
 # On main.cpp ALONE, as a per-source definition: a PUBLIC one on MagicPortalsSim would recompile every test object
 # and relink test_mp for a path no suite reads. main.cpp hands it to the layer as Paths::controls.artDir.
-set_source_files_properties(main.cpp PROPERTIES
-    COMPILE_DEFINITIONS "MAGICPORTALS_PADART_DIR=\"${SUPERSONIC_MAGICPORTALS_PADART}\"")
+if (MAGICPORTALS_BAKED_PATHS)
+    set_source_files_properties(main.cpp PROPERTIES
+        COMPILE_DEFINITIONS "MAGICPORTALS_PADART_DIR=\"${SUPERSONIC_MAGICPORTALS_PADART}\"")
+else()
+    # A release build carries no checkout path: the pad art is found from the asset root at run time (sim/AssetRoot.hpp).
+    set_source_files_properties(main.cpp PROPERTIES COMPILE_DEFINITIONS "MAGICPORTALS_PADART_DIR=\"\"")
+endif()
 
 # The engine commit this build is configured against, for the first line of the log (planning step 189): a tester's log then says which
 # engine the game ran on. Read at CONFIGURE time from the submodule, on main.cpp alone for the reason above, and configure re-runs when the

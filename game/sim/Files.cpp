@@ -18,8 +18,6 @@
 
 namespace MagicPortals::Files {
 
-namespace {
-
 // A name no other writer - another window, an earlier run - and no earlier call has used for its half-written copy.
 std::string UniqueSuffix() {
     static std::atomic<unsigned> counter{0};
@@ -33,6 +31,8 @@ std::string UniqueSuffix() {
     }
     return std::to_string(random) + "-" + std::to_string(counter.fetch_add(1));
 }
+
+namespace {
 
 // Opened by its WIDE name on Windows, so that a path the narrow functions would mangle still opens.
 std::FILE* OpenForWrite(const std::filesystem::path& file) {

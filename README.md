@@ -381,9 +381,16 @@ The file's lines carry the seconds since the first (`INFO +1.234s [Window] ...`)
 slow start from a stuck one; its first line names the build (Release or Debug, the engine commit, and
 the process's code page: 65001 where the application manifest `game/MagicPortals.manifest` took effect,
 which is what lets a profile name with a character outside the machine's ANSI page start the game at all),
-its second the folders the run reads and writes, and a run that ends on purpose ends with `finished: clean`
-(or `failed`), which a run killed by a crash does not write. Where `%TEMP%` names nothing the log goes to
-the user data directory, then the executable's folder, then the working directory.
+its second the asset root and the tier that found it, its third the scratch folder, a later one the folders the run
+reads and writes, and a run that ends on purpose ends with `finished: clean`
+(or `failed`), which a run killed by a crash does not write. Where `%TEMP%` names nothing, or a file cannot be made
+in it, the log goes to `scratch` in the user data directory, then the user data directory itself, the executable's
+folder, then the working directory.
+
+Where the game finds its data is decided when it starts, not when it is built: `--root <folder>`, a `content` folder
+next to the program, the user's data folder, and last the paths the build was configured with
+(`-DMAGICPORTALS_BAKED_PATHS=OFF` compiles none in). `tools/package/package.py` builds the folder a release ships
+from your own data. All of it is in [docs/packaging.md](docs/packaging.md).
 
 Exit codes (planning step 189): 0 for a run that played and ended; 1 for a run that stopped on an error
 (the reason is the log's `fatal:` line and stderr, and a **player's** run, one with none of the developer's

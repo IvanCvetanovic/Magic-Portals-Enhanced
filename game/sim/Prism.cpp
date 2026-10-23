@@ -1,5 +1,6 @@
 #include "sim/Prism.hpp"
 
+#include "sim/Files.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
@@ -152,19 +153,28 @@ std::string Write(const std::vector<double>& polygonPx, double depthMetres,
     // The name is the contents, so a file already there that reads the same IS
     // this prism, from an earlier run. Anything else - missing, or cut short by
     // a run that died writing it - is rewritten beside it and moved into place,
-    // so a reader never sees half a file.
+    // so a reader never sees half a file. The half-written copy has a name of its
+    // own (Files::UniqueSuffix), because the folder can be shared: two windows, or
+    // two accounts on a shared temporary folder, building the same level at once
+    // each wrote ONE fixed "<prism>.partial" and the rename of the first took the
+    // second's file from under it (planning step 200, the research's PL-15).
     if (ReadAll(path) != text) {
-        const std::filesystem::path partial = path.string() + ".partial";
+        const std::filesystem::path partial = path.string() + "." + Files::UniqueSuffix() + ".partial";
+        bool written = false;
         {
             std::ofstream file(partial, std::ios::binary | std::ios::trunc);
-            if (!(file << text)) {
-                error = "cannot write " + partial.string();
-                return {};
-            }
+            written = static_cast<bool>(file << text);
+        }
+        if (!written) {
+            error = "cannot write " + partial.string();
+            std::filesystem::remove(partial, ec);
+            return {};
         }
         std::filesystem::rename(partial, path, ec);
         if (ec) {
             error = "cannot move " + partial.string() + " into place: " + ec.message();
+            std::error_code ignored;
+            std::filesystem::remove(partial, ignored);
             return {};
         }
     }

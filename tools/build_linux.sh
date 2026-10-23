@@ -2,23 +2,35 @@
 # Configure and build Magic Portals Enhanced on Linux: the game (MagicPortals) and its suites (test_mp), Release, Ninja.
 #
 # Written for Ubuntu 24.04 with g++ 13 or clang 18 and measured there (planning step 199, docs/planning/2026-09-11-magic-portals-remaster.md).
-# It changes nothing outside the build directory, installs nothing, and exits non-zero on the first failure.
+# It installs nothing and exits non-zero on the first failure. It writes into the build directory only, with two exceptions that it
+# says aloud: with no engine checkout it runs `git submodule update --init engine`, and --clean removes the build directory (only a
+# directory that holds THIS repository's CMakeCache.txt: any other is refused, and a missing one is left alone).
 #
 #   tools/build_linux.sh [options]
 #
 # The game's data is NOT in this repository (README, "The data"): the converted levels, the original's extracted assets and the
-# achievements table are the owner's, gitignored, and the port finds them through five paths the build bakes in. Without them the
+# achievements table are the owner's, gitignored, and a developer's build finds them through six paths it bakes in. Without them the
 # game draws boxes and 31 suites skip (exit 77, reported as skipped, never as passed). Give them with one folder or one by one:
 #
 #   --assets-from DIR    a folder laid out like this repository after the converter and the extraction have run:
 #                          DIR/out/levels   DIR/out/data/chapters.json   DIR/out/data/achievements.json
-#                          DIR/reference/extracted/assets
-#                        (the repository root itself qualifies). Sets the four variables below that DIR holds.
+#                          DIR/reference/extracted/assets   DIR/reference/magic-rampage/controls   DIR/data
+#                        (the repository root itself qualifies). Sets each variable below whose part DIR holds. DIR/data (Enhanced's
+#                        tables) is taken when it exists and DIR is not this repository; this repository's own data/ is committed.
 #   --levels DIR         env SUPERSONIC_MAGICPORTALS_LEVELS        the converted levels (default: <repo>/out/levels)
 #   --chapters FILE      env SUPERSONIC_MAGICPORTALS_CHAPTERS      chapters.json (default: <levels>/../data/chapters.json)
 #   --original DIR       env SUPERSONIC_MAGICPORTALS_ORIGINAL      the original's extracted assets (default: <levels>/../../reference/extracted/assets)
 #   --achievements FILE  env SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS achievements.json (default: <levels>/../data/achievements.json)
 #   --data DIR           env SUPERSONIC_MAGICPORTALS_DATA          Enhanced's own tables (default: <repo>/data, committed)
+#   --padart DIR         env SUPERSONIC_MAGICPORTALS_PADART        Magic Rampage's control pictures, optional (default:
+#                                                                  <repo>/reference/magic-rampage/controls); without them a modern-controls
+#                                                                  run draws the original's corner sprites, then its own glyphs
+#
+# A RELEASE build (planning step 200) bakes none of the above:
+#   --no-baked-paths     configure with MAGICPORTALS_BAKED_PATHS=OFF: no data path, no checkout path and no account name is compiled into
+#                        the program, which then finds its data at run time (MagicPortals --root DIR, a "content" folder next to the
+#                        program, or the user's data folder; docs/packaging.md). The suites read the baked paths, so this builds the
+#                        game alone (default target MagicPortals) and any data option above is ignored. Use a build directory of its own.
 #
 # Build:
 #   --build-dir DIR      where to build (default: <repo>/build; a folder named build is gitignored). Build on a Linux file system:
@@ -55,6 +67,8 @@ chapters="${SUPERSONIC_MAGICPORTALS_CHAPTERS:-}"
 original="${SUPERSONIC_MAGICPORTALS_ORIGINAL:-}"
 achievements="${SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS:-}"
 datadir="${SUPERSONIC_MAGICPORTALS_DATA:-}"
+padart="${SUPERSONIC_MAGICPORTALS_PADART:-}"
+baked=ON
 build_dir="$REPO/build"
 jobs=""
 cxx="${CXX:-}"
@@ -75,6 +89,7 @@ while [ "$#" -gt 0 ]; do
             [ -f "$root/out/data/chapters.json" ] && chapters="$root/out/data/chapters.json"
             [ -f "$root/out/data/achievements.json" ] && achievements="$root/out/data/achievements.json"
             [ -d "$root/reference/extracted/assets" ] && original="$root/reference/extracted/assets"
+            [ -d "$root/reference/magic-rampage/controls" ] && padart="$root/reference/magic-rampage/controls"
             [ -d "$root/data" ] && [ "$root" != "$REPO" ] && datadir="$root/data"
             shift 2 ;;
         --levels)       [ "$#" -ge 2 ] || die "--levels needs a folder"; levels="$2"; shift 2 ;;
@@ -82,6 +97,8 @@ while [ "$#" -gt 0 ]; do
         --original)     [ "$#" -ge 2 ] || die "--original needs a folder"; original="$2"; shift 2 ;;
         --achievements) [ "$#" -ge 2 ] || die "--achievements needs a file"; achievements="$2"; shift 2 ;;
         --data)         [ "$#" -ge 2 ] || die "--data needs a folder"; datadir="$2"; shift 2 ;;
+        --padart)       [ "$#" -ge 2 ] || die "--padart needs a folder"; padart="$2"; shift 2 ;;
+        --no-baked-paths) baked=OFF; shift ;;
         --build-dir)    [ "$#" -ge 2 ] || die "--build-dir needs a folder"; build_dir="$2"; shift 2 ;;
         --jobs)         [ "$#" -ge 2 ] || die "--jobs needs a number"; jobs="$2"; shift 2 ;;
         --cxx)          [ "$#" -ge 2 ] || die "--cxx needs a compiler"; cxx="$2"; shift 2 ;;
@@ -96,7 +113,10 @@ while [ "$#" -gt 0 ]; do
         *)              die "unknown option $1 (--help lists them)" ;;
     esac
 done
-[ "${#targets[@]}" -gt 0 ] || targets=(MagicPortals test_mp)
+if [ "${#targets[@]}" -eq 0 ]; then
+    # The suites read the baked paths, so a release configure (tests off) has no test_mp to build.
+    if [ "$baked" = ON ]; then targets=(MagicPortals test_mp); else targets=(MagicPortals); fi
+fi
 
 # ---- the tools --------------------------------------------------------------------------------------------------------------
 command -v cmake >/dev/null 2>&1 || die "cmake is not installed (3.20 or newer)"
@@ -138,6 +158,7 @@ add_path() { # variable, value
 [ -z "$original" ] || case "$original" in /*) ;; *) original="$PWD/$original" ;; esac
 [ -z "$achievements" ] || case "$achievements" in /*) ;; *) achievements="$PWD/$achievements" ;; esac
 [ -z "$datadir" ] || case "$datadir" in /*) ;; *) datadir="$PWD/$datadir" ;; esac
+[ -z "$padart" ] || case "$padart" in /*) ;; *) padart="$PWD/$padart" ;; esac
 # Given one by one, the derived defaults (chapters, original, achievements follow the levels with a lexical ..) would point nowhere
 # useful: state them from the levels folder's parent when only the levels were given.
 if [ -n "$levels" ]; then
@@ -151,7 +172,12 @@ add_path SUPERSONIC_MAGICPORTALS_CHAPTERS "$chapters"
 add_path SUPERSONIC_MAGICPORTALS_ORIGINAL "$original"
 add_path SUPERSONIC_MAGICPORTALS_ACHIEVEMENTS "$achievements"
 add_path SUPERSONIC_MAGICPORTALS_DATA "$datadir"
-if [ -z "$levels" ] && [ ! -d "$REPO/out/levels" ]; then
+add_path SUPERSONIC_MAGICPORTALS_PADART "$padart"
+if [ "$baked" = OFF ]; then
+    # Nothing is baked, so nothing is passed: the cache would only hold paths that no longer reach the program.
+    cmake_data=()
+    note "MAGICPORTALS_BAKED_PATHS=OFF: no data path is compiled in; run it with --root <folder> (docs/packaging.md)"
+elif [ -z "$levels" ] && [ ! -d "$REPO/out/levels" ]; then
     note "no converted levels given and none at $REPO/out/levels: the game will draw boxes and 31 suites will skip (exit 77)"
 fi
 
@@ -165,7 +191,16 @@ if [ -z "$jobs" ]; then
 fi
 
 # ---- configure --------------------------------------------------------------------------------------------------------------
-[ "$clean" -eq 0 ] || { note "removing $build_dir"; rm -rf -- "$build_dir"; }
+if [ "$clean" -eq 1 ] && [ -e "$build_dir" ]; then
+    # rm -rf on a directory the person named: only one that is THIS repository's build (its CMakeCache.txt says so). A mistyped
+    # --build-dir "$HOME" --clean once meant the whole home directory.
+    if [ -f "$build_dir/CMakeCache.txt" ] && grep -qxF "CMAKE_HOME_DIRECTORY:INTERNAL=$REPO" "$build_dir/CMakeCache.txt"; then
+        note "removing $build_dir"
+        rm -rf -- "$build_dir"
+    else
+        die "--clean: $build_dir is not a build directory of this repository (no CMakeCache.txt naming $REPO), so it is not removed"
+    fi
+fi
 flags=()
 if [ "$sanitize" -eq 1 ]; then
     san="-fsanitize=undefined,address -fno-omit-frame-pointer -g"
@@ -177,6 +212,7 @@ cmake -S "$REPO" -B "$build_dir" -G Ninja \
     -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" \
     -DGLFW_BUILD_WAYLAND="$wayland" \
     -DSUPERSONIC_ENABLE_VALIDATION="$validation" \
+    -DMAGICPORTALS_BAKED_PATHS="$baked" \
     ${cmake_data[@]+"${cmake_data[@]}"} \
     ${flags[@]+"${flags[@]}"} \
     -DSUPERSONIC_MAGICPORTALS_PARITY_PYTHON="$(command -v python3 || true)"

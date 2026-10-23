@@ -26,6 +26,26 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Whether the build bakes THIS machine's absolute data paths into the program (planning step 200, PORT-2). ON is a developer's build and
+# is what every build here has been: the program finds the repository's out/, data/ and reference/ with no word from anyone, and the
+# suites read them the same way. OFF is a release build: the six MAGICPORTALS_* paths compile to empty strings, so the program carries no
+# account name and no checkout path, and finds its data at run time from --root, a folder next to the program, or the user's data folder
+# (game/sim/AssetRoot.hpp, docs/packaging.md). A run that finds none says so and exits 1. The suites are a developer's tool and read the
+# baked paths, so they are not built by default when this is OFF. Use a build folder of its own: the cache of the other kind keeps its
+# paths.
+option(MAGICPORTALS_BAKED_PATHS "Bake this machine's data paths into the build (ON: a developer's build; OFF: a release build that finds its data at run time)" ON)
+if (NOT MAGICPORTALS_BAKED_PATHS)
+    # The engine bakes the absolute path of its own checkout as the last place to look for its shaders, unless the variable is already
+    # defined (engine/CMakeLists.txt, SUPERSONIC_ASSET_ROOT). A release finds its shaders beside the program or in the working directory,
+    # so none is baked. A normal variable, not a cache entry: it hides one, and a later ON configure of the same folder is undisturbed.
+    set(SUPERSONIC_ASSET_ROOT "")
+    # And the compiler puts the path of every source file into what it builds (assert and log text, __FILE__): map the checkout and the
+    # build folder to relative names, so no account name is left in the program. For every target, the engine's included.
+    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=." "-ffile-prefix-map=${CMAKE_BINARY_DIR}=.build")
+    endif()
+endif()
+
 if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/engine/CMakeLists.txt")
     message(FATAL_ERROR
         "engine/ is empty: the Supersonic Engine is a git submodule. Run\n"
@@ -39,7 +59,8 @@ add_subdirectory(engine)
 option(SUPERSONIC_BUILD_MAGICPORTALS "Build MagicPortals and the MagicPortalsSpike measurement tool" ON)
 add_subdirectory(game)
 
-option(MAGICPORTALS_BUILD_TESTS "Build the port's test_mp_* suites" ON)
+# Off in a release configure (MAGICPORTALS_BAKED_PATHS=OFF): the suites read the baked paths.
+option(MAGICPORTALS_BUILD_TESTS "Build the port's test_mp_* suites" ${MAGICPORTALS_BAKED_PATHS})
 if (MAGICPORTALS_BUILD_TESTS)
     # The engine enables testing only for its own suites, which are off here.
     enable_testing()
