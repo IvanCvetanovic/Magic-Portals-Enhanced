@@ -5409,6 +5409,9 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       `out/parity/program/CTL/CTL13/contact_sheet.png` (six pictures, listed in `BASELINE.txt`). Next: his call; if the fallback should look better, a drawn set of the five
       buttons in one family, with an exe flag or a seam to capture the all-generated tier.
 - [ ] **CTL13-3. A phone build needs a home for the generated glyphs, a portrait answer and real thumb sizes** (medium; for the platform steps; `needs-rig`; GAMEPLAY: none).
+      **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201, commit `8ebb56d`; the row stays open. Step 201 delivered the seam the phone steps stand on, not a clause of this row:
+      `kMobileBuild`, the `mobile` block of `game/data/engine.json` (`minimum_vulkan_minor` 1, `shadow_map_resolution` 16, `asset_watching` false) and `--profile desktop|mobile`. `main` is still
+      the only entry point, so a mobile shim cannot yet pass its own scratch folder; the portrait answer and the thumb sizes are untouched; nothing ran on a phone (PORT3-5).]**
       **[First clause addressed in code 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d`; the row stays open. The generated glyphs are written to `Paths::prisms`
       (`MagicPortalsLayer.cpp:963-1011`, `:1083-1092`) and `main.cpp:894-895` now sets that to the scratch folder `Scratch::Choose` picks: the first candidate in which a file can
       really be made (the system's temporary folder, then `<user data folder>/scratch`, the one candidate that makes a folder, asked for only after the first failed, then the older
@@ -5467,6 +5470,9 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       the same sentence once per sound the layer asks for (5 in a 500-frame run of level0's route, 1 in 400 frames of the main menu) and names no file. Step 199 measured it and
       fixed nothing, as its brief says. Next: step 202 (MP3 off Windows through the engine: a change in the engine's own repository first, then a pin bump).
 - [ ] **PORT1-4. Leftovers that wait for the next relink of an exe** (low; `needs-relink`; GAMEPLAY: none).
+      **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201, commit `8ebb56d`, which relinked both exes again (`MagicPortals.exe` `53ccd370`, `test_mp.exe` `bab38b61`) and folded none
+      of this in (its brief named none of it). STILL OPEN: (c), (e) and `README.md:69` of (d). (e) is still there: `game/main.cpp:1003` prints ", Windows code page " before `CodePageText()` on
+      every platform.]**
       **[Updated 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d`, which relinked both exes (`MagicPortals.exe` `dd874b70`, `test_mp.exe` `851afcac`). Closed: (a)
       (CTL13-1 is ticked, rider R2); (b) (rider R3: `test_mp_numbers` reads `data/` and `game/data/` on every clone and the `.tscn` half only where `out/levels` is; 457 -> 459 checks
       on Windows; the verifier ran the no-levels branch on Linux by hiding `out/levels`: 442 checks, 0 failures, "the converted levels' numbers SKIPPED ... (the committed tables
@@ -5503,6 +5509,9 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       clang there are 6,195 `-Wnullability-extension` reports in `vk_mem_alloc.h`, reached only from engine translation units (the research's matrix passes
       `-Wno-nullability-extension`, the port's own units raise none without it). The engine's messages when there is no ALSA device are info, not errors. Next: fix in the
       Supersonic-Engine repository, then a pin bump here; nothing urgent.
+      **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201: these are the lines that make Step 201's G2 ("compiles with 0 warnings") NOT MET on its strict wording. A fresh Linux tree
+      prints 21 of them in the default build and 21 in the `MAGICPORTALS_DEV_TOOLS=OFF` build (verifier, `~/mp-verify3`), every one in an `engine/` translation unit and none in `game/` or
+      `tests/`; a tree that already holds the engine's objects prints none. The gate's wording is met only by the fix named here, or by narrowing it to `game/` and `tests/`.]**
 
 **PORT-2's rows** (planning step 200, the second step of the platform program, commit `a8b1c1d`; what the step found or left, each open, grouped by who acts; the step's other
 leftovers are in its LEFT FOR LATER. **Rows it closes:** CTL13-1, PORT1-1, PORT1-2, each with its own note above. **Rows it annotates and leaves open:** CTL13-3, PORT1-4. The reviewer's
@@ -5534,6 +5543,9 @@ and the verifier's defect numbers differ: each is labelled below).
       engine calls `setlocale`, so it is theoretical; `Numbers.cpp:17` says why not to). (d) The comment at `main.cpp:929-930` says that the log of a start that found nothing is the
       place to see where it looked, but a failed resolve returns at `:808-813` before any log is open (reviewer D10). Next: fold into the first step that relinks both exes anyway; the
       next one touches `main`.
+      **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201, commit `8ebb56d`, which relinked both exes and did not fold any of (a) to (d) in: `AssetRoot.*` and `Scratch.*` are
+      untouched (`git diff 45d43ec 8ebb56d --stat` lists neither) and the comment of (d) is unchanged. PORT2-4 (c) and (d) likewise. All still open; the next step that touches `main`
+      (the mobile entry) is the place for them, together with PORT3-2.]**
 - [ ] **PORT2-4. Smaller leftovers around the scratch folder and the two copies of the packaged layout** (low; `known`; GAMEPLAY: none). (a) **PL-16** (`out/parity/program/PLAT/penumbra-delta.md`):
       the engine's pipeline cache path is relative to the working directory, so a read-only install location loses the cache; the engine's to fix (`docs/packaging.md` section 2 says it;
       Step 200's LEFT FOR LATER 7 (g) lists it as not part of the step). (b) PL-15's other half: a `/tmp/magicportals.log` made by another account is not covered by the probe, which
@@ -5556,12 +5568,82 @@ and the verifier's defect numbers differ: each is labelled below).
       an achievement popup no route earns) is covered by none of it. The game's log is not the proof either: it is silent about some missing pictures (the verifier's copy without two
       pictures drew a different level and wrote the same log); the sweep's byte comparison and a trace are what would find the next gap. Next: Windows release hygiene (MSVC), then the
       program's later steps.
+      **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201, commit `8ebb56d`: (1) is narrowed and not closed. The documented release configure (`MAGICPORTALS_BAKED_PATHS=OFF`,
+      `MAGICPORTALS_WIN_GUI=ON`, `MAGICPORTALS_DEV_TOOLS=OFF`, an icon, validation off) was CONFIGURED on MSVC in a scratch tree and its `main.cpp` and resource compiled with 0 warnings
+      (`out/parity/program/PORT/PORT3/impl/rel_cfg.txt`); it was never linked, so a baked-paths-OFF program has still never been made on MSVC. The program that was linked and run was
+      `WIN_GUI=ON`, `DEV_TOOLS=OFF`, `BAKED_PATHS=ON`, validation ON; that tree is deleted. MSVC's path trimming (`/d1trimfile`, `/PDBALTPATH`) is not done (PORT3-3 (c)).]**
 - [ ] **PORT2-6. Texts and notes step 200 left for the release-docs step** (low; docs; `release-docs`; GAMEPLAY: none). (a) `README.md:69` says "29 of the 47 suites skip" (68 suites now).
       (b) `README.md:558` says the modern controls' pad art is "Never part of a release package", where `package.py` has `--with-pad-art` (13 files, 120,057 bytes; off by default, the game
       draws its own without); what is true depends on the owner's answer to whether Magic Rampage's art may ship (CTL13-2; `docs/permission.md` is still its placeholder; Step 200, LEFT FOR
       THE OWNER 3). (c) `python -I tools/package/package.py` fails with `ModuleNotFoundError: closure` (the sibling import needs the script's folder on `sys.path`); the docs say plain
       `python`. (d) With `--no-baked-paths` and all eight per-path flags but no `--root` the run exits 1 "data not found": a per-path flag replaces a tier's answer and cannot stand in for
       the tier (a design note, not a defect against the brief). Next: the release-docs step; (c) and (d) as decided.
+
+**PORT-3's rows** (planning step 201, the third step of the platform program, commit `8ebb56d`; what the step found or left, each open, grouped by who acts; the step's other leftovers are in
+its LEFT FOR LATER. **No existing row is closed by this step** (it opened the release program and the phone seam; the older rows it could have folded in, it did not: see the notes on PORT1-4 and
+PORT2-3). **Rows it annotates and leaves open:** CTL13-3, PORT1-4, PORT1-7, PORT2-3, PORT2-4, PORT2-5. The reviewer's and the verifier's defect numbers differ: each is labelled below).
+- [ ] **PORT3-1. `MAGICPORTALS_DEV_TOOLS` fails open on a typo: a mistyped release configure silently ships the developer tools** (medium; build; `code`, CMake only, no exe changes;
+      GAMEPLAY: none). `CMakeLists.txt:79` is `elseif (_magicPortalsDevTools)`, which is CMake's variable test, so any word that is not a false constant means ON. The verifier ran the
+      option's exact lines under `cmake -P`: `OF` gives ON, `BANANA` gives ON, `OFF`, `off`, `0` and `NO` give OFF, `AUTO` gives ON (OFF with `MAGICPORTALS_MOBILE`), `ON` gives ON
+      (verifier D2, reviewer D5). The option exists to take the sixteen developer flags and the two files behind them out of a player's program; a typo should stop the configure. Fix (the
+      verifier's): `elseif (_magicPortalsDevTools STREQUAL "ON")` with an `else()` that is `message(FATAL_ERROR ...)`, and show, before and after, the same `cmake -P` table over `ON`, `OFF`,
+      `AUTO` and `AUTO` with `MAGICPORTALS_MOBILE=ON`, the valid values unchanged. It changes `CMakeLists.txt`'s md5 and no executable. Until then a release configure must spell the value `OFF`
+      exactly, as `docs/packaging.md` section 6 does. Next: any time; it needs no relink, so it can ride with the next CMake change.
+- [ ] **PORT3-2. Code findings of the review and the verification that wait for the next relink of both exes** (low; `needs-relink`; GAMEPLAY: none). (a) `LibraryLoads` (`game/main.cpp`) returns
+      `LoadLibraryExW(...) != nullptr` and drops `GetLastError()`: error 126 (a missing dependency), 193 (a 32-bit file; the verifier's decoy gave exactly this) and 1114 (the driver's init
+      failed) are all read as "No Vulkan graphics driver was found", and the log a tester sends does not say why; the pure `CheckVulkanLoader` could take the code in its injected answer
+      (reviewer D7, verifier D11a). (b) `game/sim/StartChecks.cpp` clamps the Vulkan version with the literals `1, 2` though `EngineTuning.hpp` has `kVulkanMinorMin` and `kVulkanMinorMax`;
+      `kVulkanLoaderName` and `/DELAYLOAD:vulkan-1.dll` in `game/windows/MagicPortalsWindows.cmake` are two spellings of one name, and `tests/test_mp_platform.cpp:47` says the constant "is the name
+      the Windows release delay-loads" while it only compares it with a literal (reviewer D6, verifier D11b). (c) `game/BuildProfile.hpp`: `kDevTools` is used by no code but the suite (`main.cpp`
+      uses the macro), and `kMobileBuild` and `kDevTools` take their value from a per-source definition that only `main.cpp` receives, so a second translation unit of a mobile build that included
+      the header would silently disagree with `main.cpp` (an ODR trap; reviewer D8, verifier D11c): one more sentence in the header, or an `#error` when the macro is undefined in a game
+      translation unit. (d) A program built with `MAGICPORTALS_DEV_TOOLS=OFF` has a `--help` whose `--controls` entry still says "A player's run (none of the developer's flags below)" with nothing
+      below it, and a sentence that names `--route` and `--visit-levels`, flags that build refuses (the `main.cpp` half of verifier D7, reviewer D9; the `tests/CMakeLists.txt` comment half was fixed
+      before the commit). Each changes `main.cpp`, `StartChecks.*` or `BuildProfile.hpp`, so a fix means new executables, a fresh Smart App Control account and a retake of G0 and G3. Next: the
+      step that splits `main` for the mobile entry, with PORT1-4 and PORT2-3.
+- [ ] **PORT3-3. Release-program behaviours the step deliberately did not add** (low-medium; platform program; `planned` or `owner-call` as marked; GAMEPLAY: none). (a) **`--help` prints
+      nothing in a terminal from a `MAGICPORTALS_WIN_GUI=ON` program** (a GUI-subsystem program is not attached to the console that started it; with the standard handles redirected to files it
+      writes them, which is how the rig and the sweeps read it, and the verifier checked that). `AttachConsole(ATTACH_PARENT_PROCESS)` when the standard handles are absent would give the terminal
+      back; not done because it is a behaviour change in the release build that nobody asked for (Step 201, LEFT FOR LATER 2). (b) **The log's first line does not say the version**
+      (`PROJECT_VERSION` is not passed to `main.cpp`; the sibling port does it, and a tester's log would be better for it); it changes the log of every build (LEFT FOR LATER 3). (c) **MSVC path
+      trimming:** the Windows release still carries the checkout's path in `__FILE__`, assertion text and the program database's path (`/d1trimfile` and `/PDBALTPATH` are the counterparts of
+      `-ffile-prefix-map`); the packaging step owns it, as for PORT2-5 (1) (LEFT FOR LATER 4). (d) **An unreadable `engine.json` on a phone** starts with the engine's defaults (a 1.2 floor) and a
+      WARN, which is step 190's `Table{}` rule; a phone would then refuse itself. Whether a mobile entry treats it as fatal is the Android step's to decide (LEFT FOR LATER 5). (e) **Small
+      remainders:** the `.ico` entries are PNG-compressed at every size including 16, 32 and 48 (`rc.exe` took them and the shell drew the 32; older APIs that cannot read PNG-compressed small
+      icons were not tried); `FILEFLAGS 0x0L` does not set the pre-release flag although 0.1.0 is called a pre-release in the comments (reviewer, harmless); the `VERSIONINFO` resource and the icon
+      are only in a `MAGICPORTALS_WIN_GUI=ON` program (Step 201, Deviation 3), so a developer's `build/` exe has none. Next: (a) and (b) with the first release-docs or CI step that wants them;
+      (c) the packaging step; (d) the Android step.
+- [ ] **PORT3-4. The owner's calls this step left** (medium; `owner-call`; GAMEPLAY: none). (1) **The version number:** `project(MagicPortals VERSION 0.1.0 ...)` in the top-level `CMakeLists.txt` is a
+      pre-release placeholder and the one definition (it feeds `FILEVERSION`, `PRODUCTVERSION` and both strings of the `VERSIONINFO`); what the first release is called is yours. (2) **The wording
+      of the file properties** (`game/windows/MagicPortals.rc.in`): `CompanyName` "Ivan Cvetanovic", `LegalCopyright` "Enhanced edition by Ivan Cvetanovic. Based on Magic Portals by Asantee
+      Games.", `ProductName` and `FileDescription` "Magic Portals Enhanced". Written to claim nothing over the original (no "(c)" for anyone, no licence); say whether they are right, whether the
+      original's author wants a different credit, and whether the port's own code carries a copyright line (there is no `LICENSE` file in the repository). (3) **The icon:** the drawn one (two
+      concentric rings on a dark disc, `tools/art/make_app_icon.py`) is a stand-in made by arithmetic; its orange is the tool's pick for legibility, the original's portals are blue and red
+      (`game/data/art.json`); a hand-made `.ico` replaces it through `MAGICPORTALS_ICON` with no code change, and nothing of either goes into the repository. (4) **What a release does about the C++
+      runtime and Media Foundation:** the release program still loads `MSVCP140.dll`, `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll` at process start (the dynamic runtime) and `MFPlat.DLL` and
+      `MFReadWrite.dll` (the engine's MP3 decoder); a PC without the Visual C++ redistributable, or a Windows N edition without the Media Feature Pack, meets Windows' own dialog before `main()`.
+      Whether the package carries the redistributable's DLLs, tells the player to install it, or the build moves to a static runtime is yours and the packaging step's; delaying Media Foundation
+      is the engine repository's change (its `origin/main` is at `138cb08` "AudioClip: MP3 decodes off Windows through a vendored dr_mp3, Windows keeps Media Foundation" at this close, read from
+      `git ls-remote` and not examined). (5) **The sample cap and dynamic resolution on phones** (the research's PL-05): still undecided, the `mobile` block's `_decision_pending` note names them and
+      no key exists for either. (6) **Two lines for `CLAUDE.md`**, which is yours: the replacement paragraph for "The port finds its inputs through absolute paths baked into
+      `build/CMakeCache.txt`" (Step 200, LEFT FOR THE OWNER 1) and, from this step (Step 201, LEFT FOR THE OWNER 6): "A Windows release tree (`MAGICPORTALS_WIN_GUI=ON`, docs/packaging.md section 6)
+      builds a GUI-subsystem program that has no console: use `build/` for anything that reads stdout, stderr or `--help`." Next: your answers; (4) before the packaging step.
+- [ ] **PORT3-5. What step 201 did not run, so that "the Windows release" and "the phone profile" are not read into it** (medium; platform program; `not-run`; GAMEPLAY: none). **What exists:** an
+      option-controlled GUI-subsystem Windows program (`MAGICPORTALS_WIN_GUI`), delay-loading `vulkan-1.dll` behind a pure, tested check, with a version resource and an optional icon; the
+      `mobile` block and `--profile`; the developer tools as an option; an icon tool. One GUI exe was linked, launched and compared (byte-equal pictures on two levels, a redirect that captures the
+      log, a refused flag, no console by `AttachConsole`), and the failing-loader road was observed with a decoy file (exit 1, no crash, the text on stderr and in the log). **Not run:**
+      (1) **The message box itself:** `vulkan-1.dll` cannot be removed from System32, and the decoy run was unattended, so `MessageBoxW` was reached by no run; it is covered by the pure function,
+      its twelve mutations and the reading of `ShowFatalDialog`. (2) **A PC without the Visual C++ runtime, and a Windows N edition:** read from the import table only. (3) **Explorer's larger
+      icons and the window's title-bar icon:** only the shell's 32 px (`ExtractAssociatedIcon`) was looked at. (4) **`--help` from an interactive terminal with the GUI program** (PORT3-3 (a)).
+      (5) **A baked-paths-OFF program on MSVC:** configured and compiled, never linked (PORT2-5 (1)). (6) **Anything on a phone:** the `mobile` block's three values are the sibling port's E39 and the
+      engine's comments, and nothing ran on a Vulkan 1.1 driver; the `MOBILE=ON` path was run for real on Linux only (a tree with no Spike target, `main.cpp` alone, level0 byte-equal to the default
+      build's under `--profile mobile` and with no `--profile` in a mobile tree). (7) **The Windows wall times:** the full `test_mp.exe` took 712 s (implementer) and 567 s (verifier) against Step
+      200's 201 s, and `test_mp_layer` 287 s and 394 s against 152 s; the verifier's Linux A/B of HEAD against the step's tree (same script, same compiler, alternating twice in one quiet WSL) gave 63.07 s
+      and 62.97 s against 63.53 s and 63.09 s with 12,737 checks both, so the sim code costs the same, but no MSVC A/B was made (a fresh exe in a scratch tree is a Smart App Control exposure).
+      (8) **The first-run anomaly of G2 on WSLg:** the first three level0 launches of the implementer's first pass gave three different pictures, two with the level's log lines printed twice; every
+      later launch (more than 20) was identical and the verifier's run never met it; the lead is the attended 15-second no-flags launch, which writes to the real user data folder. Unexplained,
+      Linux-only. (9) **`tools/parity/play_build.bat` after the deletion of `build-play/`:** not run (a build is a link); it reconfigures from nothing as it did before the step. (10) **The
+      engine's 21 warning lines** keep G2 NOT MET on its wording (PORT1-7). Next: the packaging and CI steps for (2), (3) and (5); the Android step for (6).
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -6819,7 +6901,26 @@ suggested replacement for the paragraph of `CLAUDE.md` that begins "The port fin
 the file is yours). **(4)** `%LOCALAPPDATA%` rather than `%APPDATA%` for the content, and a non-creating user-data call in the engine (PORT2-1). **(5)** WSL: `~/mp-verify1` (6.5 GiB) and
 `~/mp-verify2` (671 MiB) are deletable and were not deleted; `~/mp` (6.3 GiB) stays as the build cache. **The sweep a step is measured against is still `CMP18/after/sweep`**: every
 sweep of this step equals it, so none was promoted and `BASELINE.txt` is unchanged. **Not pushed:** `origin/main` is `e180cdc`; `git log --oneline origin/main..HEAD` lists the port commit
-`a8b1c1d` and the devlog's; the engine pin `e8dbef4` is on the engine's `origin/main` (`git ls-remote` at this close), so a plain fast-forward push needs nothing else first. What waits
+`a8b1c1d` and the devlog's; the engine pin `e8dbef4` is on the engine's `origin/main` (`git ls-remote` at this close), so a plain fast-forward push needs nothing else first. [Stale as of 2026-10-23, DEVLOG Session 56: `git ls-remote origin refs/heads/main` prints
+`45d43ec`; `a8b1c1d` and the devlog commit `45d43ec` were pushed after Session 55 closed.] What waits
 on the owner, unchanged: CTL13-2, CTL13-4's sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public. **The
 program's next steps:** Windows release hygiene and the phone-profile seam (the GUI subsystem, the icon, MSVC's path trimming, and `main` split into an entry that mobile shims call with a
 root and a scratch folder; CTL13-3 belongs to it), MP3 off Windows through the engine (step 202, PORT1-3), Android, Apple CI, the packager's archives and CI, the release docs.
+*Added by step 201 (PORT-3)*: **the Windows program can be made a release program, the engine's settings have a phone profile, and the developer's tools can be left out of a player's build**
+(no existing row is ticked; CTL13-3, PORT1-4, PORT1-7, PORT2-3, PORT2-4 and PORT2-5 are annotated; PORT3-1 to PORT3-5 are the rows it opened). Every capability is an option that is off, or inert,
+in `build/`, and Windows did not move: the 128-level f420 sweep, plain and with `--controls classic`, is 128 of 128 byte-equal to `CMP18/after/sweep` (implementer and verifier each), the 19
+baselines are 19 of 19 and the 128 routes are won on the same ticks; the default exe differs from Step 200's by a `--profile` flag, one more word at the end of one log line (`, minimum Vulkan
+1.2`) and one `--help` entry. `MagicPortals.exe` is `53ccd370` and `test_mp.exe` `bab38b61` (one launching build, 0 refusals). **G2 is NOT MET on its strict wording** (21 compiler warning lines in
+a fresh Linux tree, all in `engine/`, none in `game/` or `tests/`: PORT1-7); every other gate is met. **What to look at and decide: (1)** the icon: `out/dist/icons/icon_256.png` and
+`out/dist/icons/magic_portals.ico` (gitignored; `python tools/art/make_app_icon.py` redraws them, byte for byte on one machine, and the folder also holds the Android set); it is a stand-in, orange
+where the original's portals are red (PORT3-4 (3)). **(2)** PORT3-4: the version, the wording of the file properties, the C++ runtime and Media Foundation, the phone sample cap, two lines for
+`CLAUDE.md`. **(3)** PORT3-1, a CMake-only fix that needs no relink: until it is made, spell `-DMAGICPORTALS_DEV_TOOLS=OFF` exactly. **(4)** The release tree the gates used, `build-play/`, is the
+name of your play build (`tools/parity/play_build.bat`) and was deleted at this close (it held a GUI program, `e846d025`, with validation on and no developer flags); the next `play_build.bat`
+configures a fresh console tree as before, and a release tree belongs in `out/build-release` (`docs/packaging.md` section 6). The release program was not rebuilt at this close (a link is a Smart
+App Control exposure), so to see it, build it with the command of section 6. **(5)** WSL: `~/mp-verify1` (6.5 GiB) and `~/mp-verify2` (671 MiB) are still deletable; `~/mp-verify3` (763 MiB) holds
+the verifier's builds with its capture images deleted. **The sweep a step is measured against is still `CMP18/after/sweep`**: none was promoted and `BASELINE.txt` is unchanged. **Pushed / not
+pushed:** `origin/main` is `45d43ec`; `git log --oneline origin/main..HEAD` lists the port commit `8ebb56d` and the devlog's; the engine pin `e8dbef4` is on the engine's `origin/main`, which has
+since moved to `138cb08` (the engine half of MP3 off Windows, not examined here), so a plain fast-forward push needs nothing else first. What waits on the owner, unchanged: CTL13-2, CTL13-4's
+sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public. **The program's next steps:** MP3 off Windows (the engine's half
+is written; the port's half is a pin bump and a step, PORT1-3), the Android entry (`main` split for a mobile shim, where PORT3-2, PORT1-4 and PORT2-3 fold in), Apple CI, the packager and CI, the
+release docs, and the phone profile's real values (PL-05).
