@@ -13,7 +13,7 @@
     "",
     "The files live in the original's soundfx/ and, like its art, stay outside this",
     "repository. They are mp3; the engine decodes them through Media Foundation on",
-    "Windows and refuses them elsewhere, so a Linux build is silent by design.",
+    "Windows and through its vendored dr_mp3 elsewhere (a clip starts about 12 ms apart from the same clip on Windows).",
     "",
     "EVERY NAME BELOW IS DECODED, none invented. The original keeps two string",
     "arrays, and the byte offsets are in the doc:",

@@ -67,6 +67,10 @@ option(MAGICPORTALS_MOBILE "A phone's build: the phone profile by default, no de
 # the default, is ON, except that MAGICPORTALS_MOBILE turns it OFF; ON or OFF says it outright and wins either way. (Three states and not a plain
 # option, because a plain option's default is written into the cache once: a tree first configured without MAGICPORTALS_MOBILE would keep ON when
 # it was later configured with it.) The suites always build with the tools: test_mp_routes needs Route.cpp.
+# Exactly these three words, in any case, and nothing else (planning step 202, PORT3-1): the option exists to take the developer's flags out of a
+# player's program, so a typo (OF, BANANA, an empty value) must stop the configure and not be read as CMake's truth test of a variable, which
+# calls every word that is not a false constant ON. The old spellings of false (0, NO, FALSE) and of true (1, TRUE, YES) are refused too: no
+# script of this repository passes one (tools/build_linux.sh checks its own argument), and a rule with two spellings of a word is the rule that failed.
 set(MAGICPORTALS_DEV_TOOLS AUTO CACHE STRING "The developer's flags and tools: AUTO (ON; OFF with MAGICPORTALS_MOBILE), ON or OFF")
 set_property(CACHE MAGICPORTALS_DEV_TOOLS PROPERTY STRINGS AUTO ON OFF)
 string(TOUPPER "${MAGICPORTALS_DEV_TOOLS}" _magicPortalsDevTools)
@@ -76,10 +80,14 @@ if (_magicPortalsDevTools STREQUAL "AUTO")
     else()
         set(MAGICPORTALS_DEV_TOOLS_ENABLED ON)
     endif()
-elseif (_magicPortalsDevTools)
+elseif (_magicPortalsDevTools STREQUAL "ON")
     set(MAGICPORTALS_DEV_TOOLS_ENABLED ON)
-else()
+elseif (_magicPortalsDevTools STREQUAL "OFF")
     set(MAGICPORTALS_DEV_TOOLS_ENABLED OFF)
+else()
+    message(FATAL_ERROR "MAGICPORTALS_DEV_TOOLS is \"${MAGICPORTALS_DEV_TOOLS}\", which is not one of its three values: AUTO (ON, and OFF with "
+                        "MAGICPORTALS_MOBILE), ON or OFF (in any case). Nothing was configured: a mistyped value would otherwise ship, or "
+                        "leave out, the developer's flags without a word. Pass -DMAGICPORTALS_DEV_TOOLS=OFF for a player's program.")
 endif()
 
 # MAGICPORTALS_WIN_GUI: the Windows RELEASE executable (game/windows/MagicPortalsWindows.cmake): no console window, vulkan-1.dll loaded late behind a

@@ -2611,6 +2611,14 @@ void ThePlacementsCarryTheSystemsTheirLevelsState() {
 // and a sample rate copied out of a file I had not measured would be a pin on
 // nothing. What it really proves is that the decode path runs at all: both
 // toolchains build it, and no suite in the tree had ever decoded a byte.
+//
+// ON EVERY PLATFORM (planning step 202). The engine decodes MP3 through Media
+// Foundation on Windows and through its vendored dr_mp3 everywhere else (engine
+// 138cb08), so the same checks hold on both and run on both. Nothing here pins
+// where the clip starts or how long it is to the sample: the two decoders agree
+// on the rate, the channels and the waveform and differ by the decoder delay
+// (528 samples, 12 ms at 44.1 kHz; the engine's ARCHITECTURE.md has the
+// measurements), so a number taken from one would fail on the other.
 void TheOriginalsMp3sDecode() {
     const std::string path = kOriginal + "/soundfx/door_open.mp3";
     std::error_code ec;
@@ -2623,7 +2631,6 @@ void TheOriginalsMp3sDecode() {
     std::string error;
     const bool ok = Supersonic::AudioClip::Load(path, clip, error);
 
-#if defined(_WIN32)
     CHECK_MSG(ok, "door_open.mp3 did not decode: " + error);
     if (!ok) return;
     CHECK(clip.valid());
@@ -2633,13 +2640,6 @@ void TheOriginalsMp3sDecode() {
     CHECK_EQ(static_cast<int>(clip.bitsPerSample), 16);
     CHECK_MSG(clip.durationSeconds() > 0.0f,
               "duration " + std::to_string(clip.durationSeconds()));
-#else
-    // Media Foundation is Windows only, so elsewhere this must fail with a
-    // reason rather than half-decode or crash.
-    CHECK_MSG(!ok, "mp3 must not decode without Media Foundation");
-    CHECK(!error.empty());
-    CHECK(!clip.valid());
-#endif
 
     // And a sound the engine does not read is refused by name, on every
     // platform, rather than being guessed at.

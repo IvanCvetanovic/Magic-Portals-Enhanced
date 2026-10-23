@@ -11,9 +11,11 @@
 #     the entry point (/ENTRY:mainCRTStartup; the default entry of a GUI program is WinMainCRTStartup, which wants a WinMain). A shell that
 #     redirects stdout and stderr to a file or a pipe still receives them: the standard handles are inherited, the subsystem does not change
 #     that. Started from Explorer it has none, and the game's log (sim/Scratch.hpp) is where its words go.
-#   - vulkan-1.dll LOADED LATE (/DELAYLOAD plus delayimp.lib): the Vulkan loader is found at the first Vulkan call instead of at process start.
+#   - the Vulkan loader (vulkan-1.dll) LOADED LATE (/DELAYLOAD plus delayimp.lib): it is found at the first Vulkan call instead of at process start.
 #     Loaded at process start, a PC with no graphics driver never reaches main(): Windows refuses to start the program, with a dialog that names
-#     a DLL and nothing else. Late, main() asks first (sim/StartChecks.hpp, game/main.cpp) and says in words what to install.
+#     a DLL and nothing else. Late, main() asks first (sim/StartChecks.hpp, game/main.cpp) and says in words what to install. The loader's NAME has
+#     ONE definition, the C++ constant main() asks for (kVulkanLoaderName in sim/StartChecks.hpp): it is read out of that header below, so the
+#     library that is delayed and the library that is asked for cannot differ (planning step 202; two spellings of it were Step 201's finding).
 #   - a VERSIONINFO resource (the file's properties, which Explorer shows and Windows' Smart App Control reads as part of what an unsigned
 #     program looks like) and, only when ICON names a file, that icon. The application manifest is NOT embedded here: game/MagicPortals.manifest
 #     is a source of the target and the linker merges it (CMake passes it as /MANIFESTINPUT); a second one would collide.
@@ -21,6 +23,7 @@
 # MSVC only (the linker options are its own). Anything else is a configure error, not a silent no-op: a release that quietly lacks them is worse.
 
 set(_MAGICPORTALS_WINDOWS_DIR "${CMAKE_CURRENT_LIST_DIR}")
+set(_MAGICPORTALS_STARTCHECKS_HEADER "${CMAKE_CURRENT_LIST_DIR}/../sim/StartChecks.hpp")
 
 function(magicportals_windows_release target)
     cmake_parse_arguments(PARSE_ARGV 1 MPW "" "VERSION;ICON" "")
@@ -31,6 +34,19 @@ function(magicportals_windows_release target)
         message(FATAL_ERROR "MAGICPORTALS_WIN_GUI is the Windows release build and is made with MSVC (link.exe's /ENTRY, /DELAYLOAD and delayimp.lib); "
                             "this configure is not one. Leave it OFF here.")
     endif()
+
+    # THE LOADER'S NAME, read from the one place that defines it (see the header of this file). The declaration is matched whole, so a comment that
+    # shows the shape cannot be taken for it, and a header that no longer has it stops the configure: a /DELAYLOAD of a guessed name would be worse.
+    # Configure re-runs when the header changes, so the link line follows an edit of the constant.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_MAGICPORTALS_STARTCHECKS_HEADER}")
+    file(STRINGS "${_MAGICPORTALS_STARTCHECKS_HEADER}" _loaderLine REGEX [[^inline constexpr const char\* kVulkanLoaderName = "[^"]+";]])
+    list(LENGTH _loaderLine _loaderLines)
+    if (NOT _loaderLines EQUAL 1 OR NOT "${_loaderLine}" MATCHES [[kVulkanLoaderName = "([^"]+)"]])
+        message(FATAL_ERROR "${_MAGICPORTALS_STARTCHECKS_HEADER} does not declare the Vulkan loader's name as exactly one line of the form\n"
+                            "  inline constexpr const char* kVulkanLoaderName = \"<name>\";\n"
+                            "(found ${_loaderLines}). The Windows release delays that library's load, so the build needs to read the name from there.")
+    endif()
+    set(_vulkanLoader "${CMAKE_MATCH_1}")
 
     # "0.1.0" -> FILEVERSION 0,1,0,0 and the string "0.1.0.0": the four fields a VERSIONINFO has. A project version of fewer fields is padded.
     string(REPLACE "." ";" _fields "${MPW_VERSION}")
@@ -68,6 +84,6 @@ function(magicportals_windows_release target)
     endif()
 
     set_target_properties(${target} PROPERTIES WIN32_EXECUTABLE ON)
-    target_link_options(${target} PRIVATE /ENTRY:mainCRTStartup /DELAYLOAD:vulkan-1.dll)
+    target_link_options(${target} PRIVATE /ENTRY:mainCRTStartup "/DELAYLOAD:${_vulkanLoader}")
     target_link_libraries(${target} PRIVATE delayimp)
 endfunction()

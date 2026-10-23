@@ -1,25 +1,32 @@
 #pragma once
 
-// WHAT KIND OF BUILD THIS IS, as two compile-time constants (planning step 201, PORT-3).
+// WHAT KIND OF BUILD THIS IS, as two compile-time constants (planning step 201, PORT-3; made safe for a second translation unit by step 202).
 //
-// Both come from CMake (game/CMakeLists.txt) and reach main.cpp ALONE, as per-source definitions, for the reason the pad-art folder and the
-// engine commit do: a definition on a library every suite links would recompile and relink all of them for a fact no suite reads.
-// Where a translation unit is given neither, this header says what a developer's desktop build is, so that a suite which includes it
-// sees the build every suite is.
-//
-//   kMobileBuild  a phone's build (an Android or iOS target, or MAGICPORTALS_MOBILE=ON): the run starts under the phone profile,
-//                 game/data/engine.json's "mobile" block, unless --profile says otherwise.
+//   kMobileBuild  a phone's build (an Android or iOS target, or MAGICPORTALS_MOBILE=ON): the run starts under the phone
+//                 profile, game/data/engine.json's "mobile" block, unless --profile says otherwise.
 //   kDevTools     the developer's command-line flags (--route, --tap, --visit-levels ...) and the code behind them are compiled in.
 //                 MAGICPORTALS_DEV_TOOLS=OFF, which a mobile build defaults to, leaves a player's build without them.
+//
+// WHERE THE FACTS COME FROM. CMake (game/CMakeLists.txt) hands both to EVERY source file of the MagicPortals program as definitions of that
+// target, so main.cpp and any file added to the program later agree. A translation unit that is not part of the program (a suite) has no
+// build to describe, and says so outright by defining MAGICPORTALS_BUILD_PROFILE_DESKTOP before it includes this header: it then sees what a
+// developer's desktop build is, no phone and the developer's tools in, which is the build every suite is (test_mp_routes needs Route.cpp).
+//
+// WHAT IT NO LONGER DOES is guess. It used to default a missing fact to the desktop's, so a translation unit of a MOBILE build that was not
+// given the definitions would have compiled, quietly disagreed with main.cpp, and made `kMobileBuild` mean two things in one program (an ODR
+// violation, and a wrong answer). A translation unit that is given neither the facts nor the declaration now stops the build with a message.
 //
 // A macro as well as a constant, because the dev tools are not a value to branch on: with them off, main.cpp does not name the types of
 // LevelVisit.cpp and Route.cpp at all, and those two files are not part of the program.
 
-#ifndef MAGICPORTALS_MOBILE
-#define MAGICPORTALS_MOBILE 0
+#if defined(MAGICPORTALS_BUILD_PROFILE_DESKTOP)
+#if defined(MAGICPORTALS_MOBILE) || defined(MAGICPORTALS_DEV_TOOLS)
+#error "BuildProfile.hpp: this translation unit says it is a developer's desktop one (MAGICPORTALS_BUILD_PROFILE_DESKTOP) and was also given the build's facts (MAGICPORTALS_MOBILE or MAGICPORTALS_DEV_TOOLS): it is one or the other"
 #endif
-#ifndef MAGICPORTALS_DEV_TOOLS
+#define MAGICPORTALS_MOBILE 0
 #define MAGICPORTALS_DEV_TOOLS 1
+#elif !defined(MAGICPORTALS_MOBILE) || !defined(MAGICPORTALS_DEV_TOOLS)
+#error "BuildProfile.hpp: this translation unit was given MAGICPORTALS_MOBILE and MAGICPORTALS_DEV_TOOLS neither as both (game/CMakeLists.txt gives them to every source of the MagicPortals program) nor as MAGICPORTALS_BUILD_PROFILE_DESKTOP (a suite's own declaration). Give it one, so that it cannot disagree with main.cpp."
 #endif
 
 namespace MagicPortals {

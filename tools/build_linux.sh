@@ -65,7 +65,8 @@
 # To run: a display and a Vulkan driver (llvmpipe, from mesa-vulkan-drivers, is enough: software, slow). The suites need neither.
 #   <build-dir>/tests/test_mp                      every suite;  test_mp --list names them;  test_mp test_mp_numbers  runs one
 #   <build-dir>/game/MagicPortals --help           the game's flags
-# Sound: the engine decodes MP3 only on Windows, and the original's 46 sounds are MP3, so the game is silent here (planning step 202).
+# Sound: the engine decodes MP3 through its vendored dr_mp3 here (Media Foundation on Windows), so the original's 46 sounds decode (planning step
+# 202; a clip starts about 12 ms apart from Windows). Playing them needs a sound device (ALSA), which a headless run lacks.
 
 set -euo pipefail
 

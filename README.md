@@ -71,8 +71,10 @@ locally, and 29 of the 47 suites skip without them: *Local setup* below, steps 5
 **Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
 with g++ 13 or clang 18, from a clone with its submodule; `--assets-from <folder>` (or the five `SUPERSONIC_MAGICPORTALS_*`
 variables) gives it the converted levels and the original's assets, and without them it still builds (the game draws boxes and the
-data suites skip). Build on a Linux file system, not a Windows drive mounted into WSL. The game is silent there for now: the
-engine decodes MP3 only on Windows. `tools/build_linux.sh --help` lists the options.
+data suites skip). Build on a Linux file system, not a Windows drive mounted into WSL. The original's 46 MP3 sounds decode there
+(the engine decodes MP3 through Media Foundation on Windows and through its vendored dr_mp3 everywhere else; a clip starts about 12 ms
+apart between the two): the decoding was checked on the real files, but a Linux run has not been listened to, and a headless one has no
+sound device. `tools/build_linux.sh --help` lists the options.
 
 ## How it fits together
 

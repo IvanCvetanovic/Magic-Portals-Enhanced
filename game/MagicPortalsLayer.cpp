@@ -12920,8 +12920,8 @@ void MagicPortalsLayer::playLatched(entt::registry& registry, float deltaTime) {
     Supersonic::AudioEngine** slot = registry.ctx().find<Supersonic::AudioEngine*>();
     Supersonic::AudioEngine* audio = slot != nullptr ? *slot : nullptr;
     if (audio == nullptr || !audio->IsAvailable()) {
-        // No device - a suite, a headless render, or Linux, where the original's
-        // mp3s do not decode. The events are DROPPED rather than kept: a queue
+        // No device - a suite, a headless render, or a machine with no sound
+        // card (WSL has none). The events are DROPPED rather than kept: a queue
         // that grows while nothing plays it is a leak with a delay on it.
         m_latched.clear();
         return;

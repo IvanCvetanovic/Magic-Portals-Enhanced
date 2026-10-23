@@ -9,6 +9,7 @@
 // Drawn with the levels' own art and a few lines of text. See
 // docs/planning/2026-09-11-magic-portals-remaster.md.
 
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -129,18 +130,26 @@ void ShowFatalDialog(const std::string& utf8) {
 void ShowFatalDialog(const std::string&) {}
 #endif
 
-// Whether a library can be loaded by name: the question sim/StartChecks.hpp's CheckVulkanLoader is put (planning step 201). Windows: the very
-// search the delay-load helper makes at the first Vulkan call (LoadLibraryExW with no flags), and the module is left loaded, so that call binds
-// to this copy. Elsewhere nothing is loaded late - the program links its loader outright, or the platform's entry point has loaded it - so the
-// answer is yes.
-bool LibraryLoads(const std::string& name) {
+// Whether a library can be loaded by name, and if not why: the question sim/StartChecks.hpp's CheckVulkanLoader is put (planning step 201). Windows:
+// the very search the delay-load helper makes at the first Vulkan call (LoadLibraryExW with no flags), and the module is left loaded, so that call
+// binds to this copy. A failure carries GetLastError (planning step 202, PORT3-2): 126 is a file not found, 193 a file that is not a valid image
+// (the wrong kind of computer, or damaged), and the pure check tells a player which. It is read at once after the failing call and nowhere else, as
+// the next call of any kind may overwrite it. Elsewhere nothing is loaded late - the program links its loader outright, or the platform's entry
+// point has loaded it - so the answer is yes.
+MagicPortals::StartChecks::LoadResult TryLoadLibrary(const std::string& name) {
+    MagicPortals::StartChecks::LoadResult result;
 #if defined(_WIN32)
     const std::wstring wide(name.begin(), name.end()); // a library's name is ASCII
-    return LoadLibraryExW(wide.c_str(), nullptr, 0) != nullptr;
+    if (LoadLibraryExW(wide.c_str(), nullptr, 0) != nullptr) {
+        result.loaded = true;
+    } else {
+        result.error = static_cast<std::uint32_t>(GetLastError());
+    }
 #else
     (void)name;
-    return true;
+    result.loaded = true;
 #endif
+    return result;
 }
 
 // A run that stopped on an error: the reason into the log BEFORE the file sink closes (it used to go to stderr alone, and the
@@ -748,15 +757,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    screen direction, never scaled by size) tune it: they REPLACE the\n"
                   << "                    tuning a player kept, never merge with it, and a value off its\n"
                   << "                    grid is refused.\n"
-                  << "                    A player's run (none of the developer's flags\n"
-                  << "                    below) has an Options button in the main menu's top-right corner,\n"
-                  << "                    where the choice is made; it is kept in controls.json beside the\n"
-                  << "                    other saves and read at the next start (shipped default: modern).\n"
-                  << "                    With this flag the run STARTS in that style, ignores the saved\n"
-                  << "                    choice and writes nothing: Options then chooses for the run only.\n"
-                  << "                    `classic` is the original's controls with no Options button. A\n"
-                  << "                    developer's run (--fixed-step, --route, --visit-levels) is classic\n"
-                  << "                    and has no Options button, unless the flag says otherwise\n"
+                  << MagicPortals::StartChecks::ControlsRunKindsHelp(MagicPortals::kDevTools)
                   << "  --padart <dir>    the folder of Magic Rampage's five control pictures a modern run\n"
                   << "                    tries first, an absolute path (" << DefaultText(padArtDir) << ");\n"
                   << "                    the adjustment screen's eight are in the folder `editor` beside it\n"
@@ -1084,7 +1085,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // Every Windows build asks it; where the loader is linked at process start the answer is yes, because the program is running.
     {
         const MagicPortals::StartChecks::Verdict loader =
-            MagicPortals::StartChecks::CheckVulkanLoader(LibraryLoads, Supersonic::GameRuntime::ResolveVulkanMinor(manifest));
+            MagicPortals::StartChecks::CheckVulkanLoader(TryLoadLibrary, Supersonic::GameRuntime::ResolveVulkanMinor(manifest));
         if (!loader.ok) throw std::runtime_error(loader.what);
     }
 

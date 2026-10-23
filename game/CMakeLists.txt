@@ -97,8 +97,10 @@ endif()
 set_property(SOURCE main.cpp APPEND PROPERTY
     COMPILE_DEFINITIONS "MAGICPORTALS_ENGINE_COMMIT=\"${_magicPortalsEngineCommit}\"")
 
-# What kind of program main.cpp is (BuildProfile.hpp, planning step 201): its two facts, spelled out whatever their value, on main.cpp ALONE for the
-# reason above. Nothing else reads them, so nothing else is recompiled when they change.
+# What kind of program this is (BuildProfile.hpp, planning step 201): its two facts, spelled out whatever their value, on EVERY source file of the
+# MagicPortals target and on nothing else (planning step 202). Step 201 gave them to main.cpp alone, which left a second file of the program that
+# included the header free to disagree with it; the header now stops a translation unit that has neither the facts nor the suites' declaration.
+# The libraries and the suites are not given them, so none of those is recompiled when they change.
 set(_magicPortalsMobileValue 0)
 if (MAGICPORTALS_MOBILE)
     set(_magicPortalsMobileValue 1)
@@ -107,8 +109,8 @@ set(_magicPortalsDevToolsValue 0)
 if (MAGICPORTALS_DEV_TOOLS_ENABLED)
     set(_magicPortalsDevToolsValue 1)
 endif()
-set_property(SOURCE main.cpp APPEND PROPERTY
-    COMPILE_DEFINITIONS "MAGICPORTALS_MOBILE=${_magicPortalsMobileValue}" "MAGICPORTALS_DEV_TOOLS=${_magicPortalsDevToolsValue}")
+target_compile_definitions(MagicPortals PRIVATE
+    "MAGICPORTALS_MOBILE=${_magicPortalsMobileValue}" "MAGICPORTALS_DEV_TOOLS=${_magicPortalsDevToolsValue}")
 
 # The Windows release program (MAGICPORTALS_WIN_GUI, top-level CMakeLists.txt): a function of its own, so the rehearsal of the link calls the same code.
 if (MAGICPORTALS_WIN_GUI)

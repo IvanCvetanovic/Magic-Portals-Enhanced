@@ -5463,7 +5463,13 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       `--help` does not say (it says "the four variables below"). (e) The file is mode 100644 in the index (made on Windows): `git update-index --chmod=+x tools/build_linux.sh` is the
       owner's (Step 199, LEFT FOR THE OWNER 2) and a CI that calls it directly needs it. Next: (c) and (d) belong with the run-time asset root (planning step 200), which touches
       the same paths; (a), (b) and (e) any time.
-- [ ] **PORT1-3. The game is silent off Windows: the engine decodes MP3 only through Media Foundation** (medium; audio; `planned`, step 202; engine first; GAMEPLAY: none on Windows).
+- [x] **PORT1-3. The game is silent off Windows: the engine decodes MP3 only through Media Foundation** (medium; audio; `planned`, step 202; engine first; GAMEPLAY: none on Windows).
+      **[DONE for the decoding, 2026-10-23, planning step 202 (its DEVLOG session and its commit hash are the close role's and the committer's to add): the engine moved to `138cb08`
+      (dr_mp3 off Windows, Media Foundation kept on Windows), `tests/test_mp_sprites.cpp` decodes the original's mp3 on every platform, and a Linux smoke on the real files found
+      **46 of 46 decoded** where the old pin refused 46 of 46 (the same probe, `out/parity/program/PORT/PORT4/impl/linux/probe_mp3.cpp`); under ALSA's `null` PCM level0's route had 5
+      refusal lines before and has 0 now, with 5 clips loaded, and the menu 1 and 0, with 1 clip. **Not done, and not claimed:** nobody has HEARD a sound off Windows (WSL has no device,
+      the `null` PCM discards the samples: PORT4-1), and a sound starts about 12 ms apart from Windows (PORT4-2). On Windows the 128-level sweep's `AudioEngine` lines (357) are
+      identical to Step 201's, so Media Foundation still decodes there.]**
       All 46 sounds of `soundfx` are `.mp3`. A probe calling the engine's `AudioClip::Load` on every one fails 46 of 46: "MP3 is decoded through Media Foundation, which is Windows
       only; convert to WAV for this platform" (`out/parity/program/PORT/PORT1/verify1/linux/probe_mp3.cpp`, text). **No launch printed an `ERROR` line**, because WSL has no ALSA
       device and the layer drops its sound events before it asks for any file (`MagicPortalsLayer.cpp:12922-12931`); with ALSA's `null` PCM as the default device the engine says
@@ -5582,14 +5588,25 @@ and the verifier's defect numbers differ: each is labelled below).
 **PORT-3's rows** (planning step 201, the third step of the platform program, commit `8ebb56d`; what the step found or left, each open, grouped by who acts; the step's other leftovers are in
 its LEFT FOR LATER. **No existing row is closed by this step** (it opened the release program and the phone seam; the older rows it could have folded in, it did not: see the notes on PORT1-4 and
 PORT2-3). **Rows it annotates and leaves open:** CTL13-3, PORT1-4, PORT1-7, PORT2-3, PORT2-4, PORT2-5. The reviewer's and the verifier's defect numbers differ: each is labelled below).
-- [ ] **PORT3-1. `MAGICPORTALS_DEV_TOOLS` fails open on a typo: a mistyped release configure silently ships the developer tools** (medium; build; `code`, CMake only, no exe changes;
+- [x] **PORT3-1. `MAGICPORTALS_DEV_TOOLS` fails open on a typo: a mistyped release configure silently ships the developer tools** (medium; build; `code`, CMake only, no exe changes;
+      **[DONE 2026-10-23, planning step 202 (DEVLOG session and commit: the close role's and the committer's to add): the option accepts exactly `AUTO`, `ON` and `OFF` (in any case) and
+      anything else is a `message(FATAL_ERROR ...)` that names the option, the value and the three words, before the engine is added. The `cmake -P` table over the option's exact lines
+      (`PORT4/impl/cmake_table.py`, `table_before.txt`, `table_after.txt`): `OF`, `BANANA`, `1`, `TRUE` and `YES` were ON and are refused; `0`, `NO`, `FALSE` and the empty value were OFF and
+      are refused; `ON`, `OFF`, `AUTO`, `AUTO` with `MAGICPORTALS_MOBILE=ON`, `on`, `off`, `Auto` give what they gave. Real configure-only trees of the same values
+      (`PORT4/impl/g3/cfg_before.txt`, `cfg_after.txt`) say the same, and a bad value stops before any engine line. No script of this repository passed a value it now refuses.]**
       GAMEPLAY: none). `CMakeLists.txt:79` is `elseif (_magicPortalsDevTools)`, which is CMake's variable test, so any word that is not a false constant means ON. The verifier ran the
       option's exact lines under `cmake -P`: `OF` gives ON, `BANANA` gives ON, `OFF`, `off`, `0` and `NO` give OFF, `AUTO` gives ON (OFF with `MAGICPORTALS_MOBILE`), `ON` gives ON
       (verifier D2, reviewer D5). The option exists to take the sixteen developer flags and the two files behind them out of a player's program; a typo should stop the configure. Fix (the
       verifier's): `elseif (_magicPortalsDevTools STREQUAL "ON")` with an `else()` that is `message(FATAL_ERROR ...)`, and show, before and after, the same `cmake -P` table over `ON`, `OFF`,
       `AUTO` and `AUTO` with `MAGICPORTALS_MOBILE=ON`, the valid values unchanged. It changes `CMakeLists.txt`'s md5 and no executable. Until then a release configure must spell the value `OFF`
       exactly, as `docs/packaging.md` section 6 does. Next: any time; it needs no relink, so it can ride with the next CMake change.
-- [ ] **PORT3-2. Code findings of the review and the verification that wait for the next relink of both exes** (low; `needs-relink`; GAMEPLAY: none). (a) `LibraryLoads` (`game/main.cpp`) returns
+- [x] **PORT3-2. Code findings of the review and the verification that wait for the next relink of both exes** (low; `needs-relink`; GAMEPLAY: none). (a) `LibraryLoads` (`game/main.cpp`) returns
+      **[DONE 2026-10-23, planning step 202 (DEVLOG session and commit: the close role's and the committer's to add), which relinked both exes (`MagicPortals.exe` `1d5def64`, `test_mp.exe`
+      `95297270`): (a) `TryLoadLibrary` keeps `GetLastError()` and the pure `CheckVulkanLoader` tells 126, 193 and any other code differently (the decoy of Step 201's verifier now gives the
+      193 text, observed on the release exe); (b) the clamp uses `EngineTuning::kVulkanMinorMin` and `Max`, and the loader's name has ONE definition, the constant, which the Windows cmake file
+      reads for `/DELAYLOAD` (rehearsed: a renamed header moves the flag, a header without the line stops the configure); the test claims the value alone; (c) `BuildProfile.hpp` stops a
+      translation unit that has neither the facts nor a suite's declaration, and CMake gives the facts to every source of the program; `kDevTools` is used by `main.cpp`; (d) the tools-off
+      `--help` names none of the 16 flags it refuses (0 hits, was 2) and the default build's `--help` is byte-identical to the old exe's. 36 mutations of the new pins are red.]**
       `LoadLibraryExW(...) != nullptr` and drops `GetLastError()`: error 126 (a missing dependency), 193 (a 32-bit file; the verifier's decoy gave exactly this) and 1114 (the driver's init
       failed) are all read as "No Vulkan graphics driver was found", and the log a tester sends does not say why; the pure `CheckVulkanLoader` could take the code in its injected answer
       (reviewer D7, verifier D11a). (b) `game/sim/StartChecks.cpp` clamps the Vulkan version with the literals `1, 2` though `EngineTuning.hpp` has `kVulkanMinorMin` and `kVulkanMinorMax`;
@@ -5635,7 +5652,7 @@ PORT2-3). **Rows it annotates and leaves open:** CTL13-3, PORT1-4, PORT1-7, PORT
       (1) **The message box itself:** `vulkan-1.dll` cannot be removed from System32, and the decoy run was unattended, so `MessageBoxW` was reached by no run; it is covered by the pure function,
       its twelve mutations and the reading of `ShowFatalDialog`. (2) **A PC without the Visual C++ runtime, and a Windows N edition:** read from the import table only. (3) **Explorer's larger
       icons and the window's title-bar icon:** only the shell's 32 px (`ExtractAssociatedIcon`) was looked at. (4) **`--help` from an interactive terminal with the GUI program** (PORT3-3 (a)).
-      (5) **A baked-paths-OFF program on MSVC:** configured and compiled, never linked (PORT2-5 (1)). (6) **Anything on a phone:** the `mobile` block's three values are the sibling port's E39 and the
+      (5) **A baked-paths-OFF program on MSVC:** configured and compiled, never linked (PORT2-5 (1)). **[Closed by step 202: the documented release command itself (baked paths OFF, validation OFF, the icon) was linked once in `out/build-release` and launched: level0 and 4-32 byte-equal to the default exe's; see `docs/packaging.md` section 6. (1)'s message box and the 126 text are still not seen.]** (6) **Anything on a phone:** the `mobile` block's three values are the sibling port's E39 and the
       engine's comments, and nothing ran on a Vulkan 1.1 driver; the `MOBILE=ON` path was run for real on Linux only (a tree with no Spike target, `main.cpp` alone, level0 byte-equal to the default
       build's under `--profile mobile` and with no `--profile` in a mobile tree). (7) **The Windows wall times:** the full `test_mp.exe` took 712 s (implementer) and 567 s (verifier) against Step
       200's 201 s, and `test_mp_layer` 287 s and 394 s against 152 s; the verifier's Linux A/B of HEAD against the step's tree (same script, same compiler, alternating twice in one quiet WSL) gave 63.07 s
@@ -5644,6 +5661,23 @@ PORT2-3). **Rows it annotates and leaves open:** CTL13-3, PORT1-4, PORT1-7, PORT
       later launch (more than 20) was identical and the verifier's run never met it; the lead is the attended 15-second no-flags launch, which writes to the real user data folder. Unexplained,
       Linux-only. (9) **`tools/parity/play_build.bat` after the deletion of `build-play/`:** not run (a build is a link); it reconfigures from nothing as it did before the step. (10) **The
       engine's 21 warning lines** keep G2 NOT MET on its wording (PORT1-7). Next: the packaging and CI steps for (2), (3) and (5); the Android step for (6).
+
+**PORT-4's rows** (planning step 202, the fourth step of the platform program: the engine pin `138cb08` and the sounds off Windows, with the riders of PORT3-1 and PORT3-2; what the step
+left, each open; the rows it closed are PORT1-3, PORT3-1 and PORT3-2, annotated above).
+- [ ] **PORT4-1. Nobody has heard a sound off Windows** (medium; audio; `owner-call` and `not-run`; GAMEPLAY: none). The Linux smoke proves the DECODING of the 46 real files and the layer's
+      asking for and loading clips; WSL has no audio device and ALSA's `null` PCM discards the samples, so playback, loudness, the loop points of the music and the timing of the effects
+      are unproven on Linux, and nothing at all ran on Android, iOS or macOS. The decode cost on a phone (dr_mp3 decodes a whole file into memory when a clip is first asked for;
+      216 s of sound in all, 46 files) was not measured. Next: a listen on a Linux desktop with a sound device, and the Android step.
+- [ ] **PORT4-2. A sound starts about 12 ms differently off Windows** (low; audio; `owner-call`; GAMEPLAY: none on Windows). For a stream with no LAME header Media Foundation's clip comes out as if
+      the first 528 samples were cut, and for one with a header as if the header frame had been played as a frame of silence and the delay and padding kept; dr_mp3 drops the Info frame and
+      trims the delay and padding the header names, and keeps the first 528 samples when it names none (the engine's `ARCHITECTURE.md` measured 46 files, none with a header, every one
+      528 samples, 12 ms at 44.1 kHz, shorter at the front on Windows, and says the mechanism is inferred from frame counts and alignments, not read out of Media Foundation). Known and harmless for effects; a loop point on a looped music track would
+      differ by the same amount between platforms. Whether it ever matters is for a listener. The engine's way out, if it does, is to decode a game's own clips and hand them over with
+      `AudioEngine::AddClip`.
+- [ ] **PORT4-3. What step 202 did not observe** (low; `not-run`). (1) The message box of a failed loader check, and the 126 words: the decoy file gives 193 (observed on the release exe, on
+      stderr and in the log), `vulkan-1.dll` cannot be taken off System32, and every launch of the step was unattended. (2) The Android, iOS and macOS compiles of `StartChecks` are
+      `-fsyntax-only` only (the NDK for aarch64 and x86_64; nothing for Apple). (3) A fresh `build/` of the Windows default configuration was not made (the pin moved in an existing tree; the
+      release tree was fresh and printed the same 13 `D9025` lines).
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be

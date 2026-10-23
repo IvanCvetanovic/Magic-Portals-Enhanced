@@ -110,8 +110,11 @@ memory and never opens them (planning step 196), which the 128-level sweep run f
 `scenes/` (the converter's input), `.pvr`, `.pkm`, `.par`, the framework folder, the Android bundle, `.enml` files, the APK, the engine
 checkout, build folders, the converter's other output. A table that named one would be an error.
 
-**Not yet:** sound off Windows (the engine decodes MP3 only there), the Android, iOS and macOS entry points, release archives and licence texts.
-They are later steps of the platform program. (The Windows release program and its icon are section 6.)
+**Not yet:** the Android, iOS and macOS entry points, release archives and licence texts. They are later steps of the platform program. (The
+Windows release program and its icon are section 6. The original's 46 MP3 sounds decode off Windows since the engine pin of planning step 202,
+through the engine's vendored dr_mp3: that was checked on the real files, with no sound device, so it proves the decoding and not the playback;
+a clip starts about 12 ms apart from the same clip on Windows, which comes out as if its first 528 samples were cut (the engine's
+audit, inferred from the frame counts of 46 files without an encoder header: it is not read out of Media Foundation).)
 
 ## 4. Proving a package
 
@@ -126,7 +129,8 @@ They are later steps of the platform program. (The Windows release program and i
   the log did not change, the picture did), so "no log line says `could not be read`" is not evidence that nothing is missing. The
   comparison's power was measured that way, and the closure was cross-checked by tracing every file a game process opens over 150 planned
   Linux runs (the 128 win routes, the 18 screens, 4 modern-controls runs): 504 data files, all in the package except the optional pad art.
-  Sound is not traced (Linux cannot decode MP3); the package holds every sound file of the original.
+  Sound was not traced (those runs were made before the engine decoded MP3 off Windows, on a machine with no sound device, where the layer
+  drops its sound events); the package holds every sound file of the original.
 
 ## 5. Where the game writes
 
@@ -148,12 +152,15 @@ The player's saves (`scores.json`, `audio.json`, `achievements.json`, `controls.
 
 Planning step 201 (PORT-3). Five CMake options say what kind of program a configure makes. **At their defaults nothing moves**: `build/` is the
 program it was, and the 128-level sweep, the 19 baselines and the 128 win routes are byte for byte what they were (Step 201's gates). Each option
-is read once, at the top of `CMakeLists.txt`, and reaches `game/main.cpp` alone (a per-source definition: the suites are not rebuilt for it).
+is read once, at the top of `CMakeLists.txt`, and reaches every source file of the `MagicPortals` program and nothing else (a definition of that
+target, `MAGICPORTALS_MOBILE` and `MAGICPORTALS_DEV_TOOLS`: the suites and the libraries are not rebuilt for it). `game/BuildProfile.hpp` stops a
+translation unit that is given neither those two nor a suite's own declaration, so a second file of a mobile program cannot disagree with `main.cpp`
+(planning step 202).
 
 | Option | Default | What it does | In a release build |
 |---|---|---|---|
 | `MAGICPORTALS_BAKED_PATHS` | ON | section 1: the six data paths are compiled in | **OFF** |
-| `MAGICPORTALS_DEV_TOOLS` | `AUTO`: ON, and OFF with `MAGICPORTALS_MOBILE`; `ON` or `OFF` says it outright | the developer's command-line flags and the two files behind them (`game/LevelVisit.cpp`, `game/Route.cpp`) | **OFF** |
+| `MAGICPORTALS_DEV_TOOLS` | `AUTO`: ON, and OFF with `MAGICPORTALS_MOBILE`; `ON` or `OFF` says it outright. **Exactly these three words** (in any case): anything else (`OF`, `0`, `NO`, an empty value) stops the configure, naming the value | the developer's command-line flags and the two files behind them (`game/LevelVisit.cpp`, `game/Route.cpp`) | **OFF** |
 | `MAGICPORTALS_MOBILE` | OFF, and ON by itself for an Android or iOS target | the run starts under the phone profile; no developer tools; no measurement tool (`MagicPortalsSpike`) | ON for a phone's build, and only there |
 | `MAGICPORTALS_WIN_GUI` | OFF | the Windows release program (below) | **ON** on Windows, with MSVC; a configure with it ON on anything else stops |
 | `MAGICPORTALS_ICON` | empty | an `.ico` for the release program (nothing is committed: `tools/art/make_app_icon.py` draws one) | the file that tool writes, or the owner's own; used only with `MAGICPORTALS_WIN_GUI` |
@@ -178,11 +185,17 @@ cmake --build out/build-release --target MagicPortals
 checkout's path out of what MSVC compiles in (`__FILE__`, assertion text, the program database's path); the GCC and Clang builds do (section 1).
 That is the packaging and CI step's.
 
-**What was actually built and run (planning step 201):** the program that was linked and launched was configured with `MAGICPORTALS_WIN_GUI=ON`,
-`MAGICPORTALS_DEV_TOOLS=OFF`, the icon, **`MAGICPORTALS_BAKED_PATHS=ON`** (so that it finds its data without `--root`) and Vulkan validation ON.
-The command above, with baked paths OFF and validation OFF, was configured in a scratch tree and its `main.cpp` and resource were compiled with
-no warning, but **that program was not linked or run**: a Windows build with baked paths OFF has never been made into an executable. The proof of
-the root logic (a run from a package with `--root` and `--no-baked-paths`) is step 200's, on the other program.
+**What was actually built and run.** Step 201 linked and launched a program configured with `MAGICPORTALS_WIN_GUI=ON`, `MAGICPORTALS_DEV_TOOLS=OFF`,
+the icon, `MAGICPORTALS_BAKED_PATHS=ON` and Vulkan validation ON (a tree it later deleted), and only configured and compiled the command above.
+**Planning step 202 linked and launched the command above itself** (baked paths OFF, validation OFF, the icon) in `out/build-release`:
+one `MagicPortals.exe`, GUI subsystem, `vulkan-1.dll` in the delay-load table alone, the version information and the icon in it, 13 `D9025` lines
+(the engine's vendored sources) and no other warning. It finds nothing by itself, so the launches gave it `--root <this repository>` and
+the 17 shader files beside it, and then level0 and 4-32 at frame 420 came out byte for byte as the default program's do, a developer's flag was
+refused with exit 1, and a non-image `vulkan-1.dll` placed beside it ended the start with the Windows-error-193 text (the message box and the
+126 text were not seen). **What a program built with `MAGICPORTALS_BAKED_PATHS=OFF` needs, as that run showed:** the engine's shaders in
+`assets/shaders` beside the program (the engine makes the program's folder its asset root when it holds them, and writes its pipeline cache
+there), and its data from `--root`, a `content` folder beside it or the user's data folder (section 1). The proof of the root logic from a
+package is step 200's, on the other program.
 
 **What `MAGICPORTALS_WIN_GUI` makes** (`game/windows/MagicPortalsWindows.cmake`, one function the rehearsal of the link calls too):
 
@@ -195,9 +208,14 @@ the root logic (a run from a package with `--root` and `--no-baked-paths`) is st
 * **`vulkan-1.dll` is loaded late** (`/DELAYLOAD`, `delayimp.lib`): at the first Vulkan call and not at process start. At process start, a PC
   with no graphics driver at all gets Windows' own dialog, which names a DLL and nothing else, and the game never runs. Late, `main()` asks first
   (`sim/StartChecks.hpp`, `CheckVulkanLoader`, asked of `LoadLibraryExW(L"vulkan-1.dll", nullptr, 0)`, the search the delay-load helper makes
-  itself): a loader that will not load ends the start with ONE message box for a person's run ("No Vulkan graphics driver was found: Windows could
-  not load vulkan-1.dll ... Install or update the graphics driver from the maker of your graphics card (NVIDIA, AMD or Intel), or run Windows
-  Update ... and start the game again."), the same text in the log and on standard error, and exit code 1; a script's run (any engine flag that
+  itself): a loader that will not load ends the start with ONE message box for a person's run, the same text in the log and on standard error, and
+  exit code 1. The words follow the code Windows gave (`GetLastError`, planning step 202): **126**, a file not found ("No Vulkan graphics driver was
+  found: Windows could not load vulkan-1.dll ... because it or a file it needs was not found (Windows error 126) ... Install or update the graphics
+  driver from the maker of your graphics card (NVIDIA, AMD or Intel), or run Windows Update ... and start the game again."); **193**, a file that is
+  there and is not a valid image ("Windows found vulkan-1.dll ... not a valid program file for this computer (Windows error 193) ... Reinstall the
+  graphics driver ... If a file named vulkan-1.dll lies beside the game, take it away."); and any other code, shown as it is ("Windows could not load
+  vulkan-1.dll ... (Windows error 1114)"). The name `vulkan-1.dll` has one definition, the constant the program asks for (`kVulkanLoaderName` in
+  `sim/StartChecks.hpp`); the Windows cmake file reads it from there for `/DELAYLOAD`. A script's run (any engine flag that
   makes it unattended) gets the log and the exit code and no box. The check is asked on every Windows build, delay-loaded or not (where the loader
   is linked at process start the answer is yes, because the program is running). **No run showed the box:** `vulkan-1.dll` cannot be taken from
   this machine, so the box is covered by the pure question and its words (`test_mp_platform`) and by reading the code.
@@ -220,7 +238,8 @@ packaging step's.
 **`MAGICPORTALS_DEV_TOOLS=OFF`** takes out the developer's flags: `--route`, `--route-trace`, `--tap`, `--hold`, `--drag`, `--press`,
 `--place`, `--burn-dragon`, `--visit-levels`, `--visit-passes`, `--light-masks-off`, `--shadow-maps`, `--sprites-only`, `--asset-watching`,
 `--sprite-report` and `--perf-log`. Naming one ends the run with exit code 1 and "`--route` is a developer's flag, and this build was made
-without the developer tools ..."; `--help` does not list them; an unknown flag is the engine's parser's to refuse, as before. What a player's
+without the developer tools ..."; `--help` does not list them, and names none of them in the text of its other entries (the `--controls` entry
+says what a developer's run is, and without the tools that is `--fixed-step` alone); an unknown flag is the engine's parser's to refuse, as before. What a player's
 build keeps: `--level`, `--root`, `--no-baked-paths`, `--levels`, `--art`, `--data`, `--original`, `--chapters`, `--achievements`, `--port-data`,
 `--padart`, `--saves`, `--controls`, `--profile`, `--help` and every flag of the engine (`--window`, `--fixed-step`, `--frames`, `--screenshot`
 ...). (`--saves` is described in `--help` as a developer's flag, and stays: a capture and a package proof need it.) The suites always build with
