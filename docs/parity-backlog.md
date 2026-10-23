@@ -5383,7 +5383,11 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       animation), so that gate rests on the log line, the saved file, the Options capture and the style. Going back is one data value PLUS the cases that name the shipped value,
       which turn red by design (`test_mp_controls.cpp:702, :3528, :3531` and 13 checks in `test_mp_layer.cpp`: Step 198, LEFT FOR THE OWNER 4). CTL-14 (two contacts) is optional
       and owner-gated and is not part of this.
-- [ ] **CTL13-1. `--help` says "shipped default: classic", and so do about a dozen strings and comments** (low; user-visible text; `needs-relink`; GAMEPLAY: none).
+- [x] **CTL13-1. `--help` says "shipped default: classic", and so do about a dozen strings and comments** (low; user-visible text; `needs-relink`; GAMEPLAY: none).
+      **[DONE 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d` (rider R2): the three lines left open below are reworded, words only, no assertion touched:
+      the `_about` line of `tests/golden/controls_census.json` (the one line step 200's gate S5 allowed in `tests/golden`), `tests/test_mp_census.cpp:25` and `:386`. Taken at
+      `a8b1c1d` by this close: `grep -rn "flips the default" tests/ game/` prints nothing. `test_mp.exe` was relinked by that step (`851afcac`), and the census suite is at its
+      Step 199 count. Nothing of this row remains.]**
       **[Partly closed 2026-10-23, DEVLOG Session 54, planning step 199, commit `65236d0`: the relink happened (`MagicPortals.exe` `dfc08f52`, `test_mp.exe` `bf375487`), so
       `--help` now prints "(shipped default: modern)" (`out/parity/program/PORT/PORT1/impl/help_windows.txt`, the implementer's one launch of the new exe), and `MagicPortalsLayer.hpp:1299-1301`
       and the failure messages and comments of `tests/test_mp_layer.cpp` and `tests/test_mp_controls.cpp` that the row names are corrected (words only, no assertion touched). STILL
@@ -5404,7 +5408,13 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
       the original's assets gets no menu and no level at all, so the fallback is for someone who owns the original but not Magic Rampage's folder. Look at
       `out/parity/program/CTL/CTL13/contact_sheet.png` (six pictures, listed in `BASELINE.txt`). Next: his call; if the fallback should look better, a drawn set of the five
       buttons in one family, with an exe flag or a seam to capture the all-generated tier.
-- [ ] **CTL13-3. A phone build needs a home for the generated glyphs, a portrait answer and real thumb sizes** (medium; for the platform steps; `needs-rig`; GAMEPLAY: none). With
+- [ ] **CTL13-3. A phone build needs a home for the generated glyphs, a portrait answer and real thumb sizes** (medium; for the platform steps; `needs-rig`; GAMEPLAY: none).
+      **[First clause addressed in code 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d`; the row stays open. The generated glyphs are written to `Paths::prisms`
+      (`MagicPortalsLayer.cpp:963-1011`, `:1083-1092`) and `main.cpp:894-895` now sets that to the scratch folder `Scratch::Choose` picks: the first candidate in which a file can
+      really be made (the system's temporary folder, then `<user data folder>/scratch`, the one candidate that makes a folder, asked for only after the first failed, then the older
+      last resorts), probed by making a folder and a file and removing them. That is what answers a temporary folder that exists and cannot be written, as the NDK's does. Proven by
+      the suite's cases (a first candidate under a regular file falls to the second, which is then the only one made) and by Windows and Linux runs; **not on a device**, and a
+      mobile shim cannot yet pass its own scratch folder, since `main` is the only entry point. The portrait answer and the thumb sizes below are untouched.]** With
       modern the default, every player's run (not only a `--controls modern` one) resolves its pictures and writes the generated glyphs (`modern_walk_left.png`,
       `modern_walk_right.png` and the gear) into `%TEMP%\supersonic-magicportals` (`g6_1280x720.log` lines 142-143); an Android or iOS build must give that directory a writable
       home before modern can be its default. Portrait shapes and how a thumb finds a 45 px box are measured only on a device (with the safe-area work of Step 183). The
@@ -5419,7 +5429,12 @@ Fixability: `decoded` (the mechanism is read from the listing and a fix can be s
 
 **PORT-1's rows** (planning step 199, the first step of the platform program; what the step found or left, each open, grouped by who acts; the step's other leftovers are in its
 LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is partly closed, above).
-- [ ] **PORT1-1. `test_mp_tiers.cpp:174` is red on Linux: the test asserts a Windows host's path syntax** (low-medium; tests; `owner-call`; GAMEPLAY: none). The full `test_mp` on
+- [x] **PORT1-1. `test_mp_tiers.cpp:174` is red on Linux: the test asserts a Windows host's path syntax** (low-medium; tests; `owner-call`; GAMEPLAY: none).
+      **[DONE 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d` (rider R1). What it closes: `FullhdIsTriedBeforeHd` builds its candidate with
+      `std::filesystem::path::preferred_separator` and `Tiers::Resolve` is untouched, so the guard patch offered below was not taken; the Windows assertion is the one it always was
+      (`test_mp_tiers` 527 checks, as before) and on Linux the suite passes (527 checks) and the full `test_mp` is `68 suites, 68 passed, 0 skipped, 0 failed`, 86,363 checks
+      (the implementer's tree and the verifier's own stranger build). What it does not: on Linux the assertion is the forward-slash case only; that `Resolve` also splits at a
+      backslash (`Tiers.cpp:98`) is asserted on Windows only (verifier, G7).]** The full `test_mp` on
       Linux prints `67 suites, 66 passed, 0 skipped, 1 failed` (86,133 checks); the one failure is `FullhdIsTriedBeforeHd`, which builds `dir.string() + "\\half.png"` and expects
       `<dir>\hd/half.png`. `Tiers::Resolve` splits at the last `/` or `\` (`Tiers.cpp:98`, the original's `AssembleResourceName`), so on Linux the candidate names a folder called
       `<dir>\hd`, which does not exist, and the name comes back unchanged. **The port is right and the test is the Windows-only part**: no `.tscn` and no resource name in
@@ -5427,7 +5442,14 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       it platform-aware is in the Step (LEFT FOR THE OWNER 1, verbatim; `out/parity/program/PORT/PORT1/impl/gen/tiers_guard_patch.txt`); applied to a scratch copy by the verifier
       it gives `test_mp_tiers` 527 checks, 0 failures on Linux, and it does not change the Windows assertion. Next: his call, leave the suite red on Linux or take the guard; a test
       file edit needs a new `test_mp.exe` link (counted under Smart App Control), and a Linux CI that runs `test_mp` is red until it is decided.
-- [ ] **PORT1-2. `tools/build_linux.sh` follow-ups, before a CI calls it** (low-medium; tooling; `script-only`, no exe; GAMEPLAY: none). The verifier's, none made because editing
+- [x] **PORT1-2. `tools/build_linux.sh` follow-ups, before a CI calls it** (low-medium; tooling; `script-only`, no exe; GAMEPLAY: none).
+      **[DONE 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d` (rider R4), all five parts, read by this close in the script and in the verifier's runs. (a) `--clean`
+      refuses a directory that is not absent and does not hold this repository's `CMakeCache.txt`: the verifier ran it on a plain folder with a sentinel file, on a folder whose cache
+      names another project and on a folder under `$HOME` with no cache, exit 1 each, the files kept. (b) The header no longer says the script changes nothing outside the build
+      directory. (c) `--padart DIR` and `--assets-from DIR/reference/magic-rampage/controls` set `SUPERSONIC_MAGICPORTALS_PADART` (the verifier saw the configure set it, with the levels, the original and the data; **no
+      `--controls modern` launch from a script-made build was taken**, so "the Modern controls draw the original's pictures on a Linux build" is read, not run). (d) The header says
+      `DIR/data` is taken when it exists and `DIR` is not this repository. (e) The mode is `100755` in the index, done by `e180cdc` ("tools/build_linux.sh is executable in the
+      index", 2026-10-23 05:20), before step 200. New with the step, documented in the header: `--no-baked-paths` (`MAGICPORTALS_BAKED_PATHS=OFF`).]** The verifier's, none made because editing
       the script would have invalidated the md5s it tested. (a) `--clean` runs `rm -rf -- "$build_dir"` on any `--build-dir` outside `/mnt/<drive>`: `--build-dir "$HOME" --clean`
       deletes it; refuse unless the directory is absent or holds `CMakeCache.txt`. (b) The header says "It changes nothing outside the build directory", which `--clean` and the
       `git submodule update --init engine` it may run (when `.git` is there and `engine/` is empty) contradict. (c) **The sixth baked path is not passed**:
@@ -5444,7 +5466,12 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       device and the layer drops its sound events before it asks for any file (`MagicPortalsLayer.cpp:12922-12931`); with ALSA's `null` PCM as the default device the engine says
       the same sentence once per sound the layer asks for (5 in a 500-frame run of level0's route, 1 in 400 frames of the main menu) and names no file. Step 199 measured it and
       fixed nothing, as its brief says. Next: step 202 (MP3 off Windows through the engine: a change in the engine's own repository first, then a pin bump).
-- [ ] **PORT1-4. Leftovers that wait for the next relink of an exe** (low; `needs-relink`; GAMEPLAY: none). (a) CTL13-1's three lines (above). (b) `tests/test_mp_numbers.cpp:432-437`:
+- [ ] **PORT1-4. Leftovers that wait for the next relink of an exe** (low; `needs-relink`; GAMEPLAY: none).
+      **[Updated 2026-10-23, DEVLOG Session 55, planning step 200, commit `a8b1c1d`, which relinked both exes (`MagicPortals.exe` `dd874b70`, `test_mp.exe` `851afcac`). Closed: (a)
+      (CTL13-1 is ticked, rider R2); (b) (rider R3: `test_mp_numbers` reads `data/` and `game/data/` on every clone and the `.tscn` half only where `out/levels` is; 457 -> 459 checks
+      on Windows; the verifier ran the no-levels branch on Linux by hiding `out/levels`: 442 checks, 0 failures, "the converted levels' numbers SKIPPED ... (the committed tables
+      below ran)", 52 tables with 20,866 numbers; the branch has not run on Windows); and the header of `tests/CMakeLists.txt` in (d) (rider R5). STILL OPEN: (c), (e), and
+      `README.md:69` in (d), which still says "29 of the 47 suites skip" (68 suites now; the release-docs step rewrites the README).]** (a) CTL13-1's three lines (above). (b) `tests/test_mp_numbers.cpp:432-437`:
       the committed `data/*.json` and `game/data/*.json` halves are skipped together with the `.tscn` half when `out/levels` is absent although they need no `out/`; split them
       so that a fresh clone, and the CI that follows, hold the JSON half (the brief's "exit 77 where out/ is absent" was deliberately not done: Step 199, Deviation 1,
       `tests/CMakeLists.txt`'s partial-skip rule). (c) **A mutation of `ParseDouble`'s restore of the value** (`game/sim/Numbers.cpp:126-132`): MSVC's library writes an infinity or a
@@ -5476,6 +5503,65 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       clang there are 6,195 `-Wnullability-extension` reports in `vk_mem_alloc.h`, reached only from engine translation units (the research's matrix passes
       `-Wno-nullability-extension`, the port's own units raise none without it). The engine's messages when there is no ALSA device are info, not errors. Next: fix in the
       Supersonic-Engine repository, then a pin bump here; nothing urgent.
+
+**PORT-2's rows** (planning step 200, the second step of the platform program, commit `a8b1c1d`; what the step found or left, each open, grouped by who acts; the step's other
+leftovers are in its LEFT FOR LATER. **Rows it closes:** CTL13-1, PORT1-1, PORT1-2, each with its own note above. **Rows it annotates and leaves open:** CTL13-3, PORT1-4. The reviewer's
+and the verifier's defect numbers differ: each is labelled below).
+- [ ] **PORT2-1. The player's data folder is made by every run that reaches the resolver's fourth tier, and the brief said never to create it** (low-medium; engine first; `engine`,
+      `owner-call`; GAMEPLAY: none). `Supersonic::UserDataDirectory("Magic Portals")` creates the folder when it answers (`engine/src/platform/ExecutablePath.hpp:155`, "CREATES the
+      directory"); the resolver's tier 4 (`<user data folder>/content`) has to ask it, and a developer's run, which tiers 1-3 never answer, always gets there. Before step 200 a run
+      given `--saves` never called it. So on a machine that has no such folder an ordinary `--saves` run leaves an empty `Magic Portals` there (the verifier reproduced it on Linux:
+      `~/.local/share/Magic Portals` absent, one `--saves <dir> --frames 5` run, an empty folder; reviewer D1, verifier D2). `content` itself is never made. **On the owner's machine the
+      folder exists** (`scores.json` alone, md5 `40bfef3ac396b4e94bdd97990401435a`, directory time 2026-09-29 23:38:48, unchanged by every launch of the wave). `docs/packaging.md` section 1
+      and Step 200's RECORDED DEVIATION 2 say so. Fix: a variant of `UserDataDirectory` that does not create, in the Supersonic-Engine repository, then a pin bump here (the resolver's
+      tier-4 input is already a function, so it is one line in `main`); reading `APPDATA`, `HOME` and `XDG_DATA_HOME` in `main` would do it too and is the environment lookup the brief
+      rules out. Also (Step 200, LEFT FOR THE OWNER 2): `%APPDATA%` roams and 24.6 MB of content belongs in `%LOCALAPPDATA%`; the engine names `%APPDATA%` and the resolver follows it; a
+      portable folder (program + `content`) needs neither. Next: his call on both; the engine first.
+- [ ] **PORT2-2. The packager does not refuse a symbolic link to a sub-folder of a source tree, and a broken link is a traceback** (low-medium; tooling; `code`, Python only, no relink;
+      GAMEPLAY: none). The brief says it "refuses a symlinked source"; it refuses a linked file and a linked tree root. With a tier folder such as `sprites/hd` replaced by a link,
+      `content` exits 0 and builds a package without the files in it (35 instead of 37 in the unit tests' fixture; the 1x pictures are used silently, and `verify` passes because it
+      uses the same model); a dangling link ends in an uncaught `FileNotFoundError` at `closure.py:88` (`os.path.getsize`). Cause: `Tree.__init__` records the link in `Tree.symlinks`,
+      `os.walk` never descends it, and `is_symlinked` is asked only for files already in the plan. Reproduction: `out/parity/program/PORT/PORT2/verify1/d2.py` and `d2.txt` (verifier D1,
+      reviewer D2). Fix: in `plan_content` raise `PackageError` if any tree it reads has an entry in `Tree.symlinks` other than the root, guard the `getsize`, add two unit tests (a
+      linked sub-folder, a broken link: 35 -> 37). A link is not something the converter or the extraction makes, and the sweep from the package alone would show the loss; `tools/package/README.md`
+      and `docs/packaging.md` say what is and is not refused. Next: the next change to the packager; it changes the md5s of `closure.py` and `test_package.py` and nothing the game reads.
+- [ ] **PORT2-3. Claims and small defects in the step's C++ that wait for the next relink of both exes** (low; `needs-relink`; GAMEPLAY: none). (a) Three claims have no pin (verifier D5;
+      mutants that survived `test_mp_assetroot`'s 228 checks): `Prism::Write` removes its half-written file after a failed write (P1b) and after a failed rename (P2b), and the probe file
+      of `Scratch::ProbeWritable` has a name no other process uses (S3b). The Step (WHAT IT BUILDS 5) and `Scratch.hpp`'s header make the claims, and the Step says they are not pinned.
+      Pin them, or soften the sentences. (b) `AssetRoot::Join("/", "content")` returns `//content`, which `Normalize` then reads as a network name (`AssetRoot.cpp:133-137` and `:95-97`;
+      verifier D9, reviewer D9; `out/parity/program/PORT/PORT2/verify1/d9.txt`); only a root of `/` is affected (`Join("/a", ...)` and `Join("C:/", ...)` are fine), and no suite row covers it.
+      (c) `AssetRoot.cpp:12` uses `std::isalpha`, which depends on the locale, in a module whose header says "host-independent by construction" (reviewer D10; neither the game nor the
+      engine calls `setlocale`, so it is theoretical; `Numbers.cpp:17` says why not to). (d) The comment at `main.cpp:929-930` says that the log of a start that found nothing is the
+      place to see where it looked, but a failed resolve returns at `:808-813` before any log is open (reviewer D10). Next: fold into the first step that relinks both exes anyway; the
+      next one touches `main`.
+- [ ] **PORT2-4. Smaller leftovers around the scratch folder and the two copies of the packaged layout** (low; `known`; GAMEPLAY: none). (a) **PL-16** (`out/parity/program/PLAT/penumbra-delta.md`):
+      the engine's pipeline cache path is relative to the working directory, so a read-only install location loses the cache; the engine's to fix (`docs/packaging.md` section 2 says it;
+      Step 200's LEFT FOR LATER 7 (g) lists it as not part of the step). (b) PL-15's other half: a `/tmp/magicportals.log` made by another account is not covered by the probe, which
+      tests the folder and not the log file; the run continues "without a log file" with a message on stderr, and is not fatal (reviewer D11). (c) `Layout::Packaged()` (C++) and
+      `DEST` / `from_package` (Python) are two copies of one list with no test tying them, so only a sweep from a package would notice drift; a unit test in `test_package.py` that reads the
+      string literals of `AssetRoot.cpp` would (reviewer D11). (d) `Files::UsableDirectory` is no longer called by the game (`main` uses `Scratch::Choose`); only `test_mp_robust` uses it
+      (reviewer D11). Next: (c) any time, Python only; (a) with the engine; (b) and (d) when `main` is split for the mobile entry.
+- [ ] **PORT2-5. What step 200 did not run, so that "ready for release" is not read into it** (medium; platform program; `not-run`; GAMEPLAY: none). **What exists:** the game finds its data
+      at run time (`--root`, a `content` folder next to the program, the user data folder, then the paths the build was configured with; `-DMAGICPORTALS_BAKED_PATHS=OFF` bakes none), the log
+      and the prisms go where a file can really be made, and `tools/package/package.py` builds `out/dist/content` (883 files, 24,584,458 bytes) from the owner's data; the 128-level sweep run
+      from that package alone is 128 of 128 byte-equal to `CMP18/after/sweep`, so the package holds what the game opens there and `out/assets/lightmaps` is not read. **Not run:** (1) the MSVC
+      build with `MAGICPORTALS_BAKED_PATHS=OFF`: the claim that the program carries no account name and no absolute repository path was measured with g++ on Linux only (`strings -a`: 0 of
+      `icvet`, `/mnt/c`, `/home`; the ON binary of the same tree: 9); `-ffile-prefix-map` has no MSVC counterpart set (`/d1trimfile` would be it) and an MSVC Release exe also carries its PDB
+      path: the Windows release step's. (2) An attended run with a bad `--root`, the modal box a player gets (every bad-root launch passed developer flags). (3) Sound from the package: Linux
+      cannot decode MP3 and the Windows sweeps do not show that a sound plays; the package holds all 46 of the original's sound files. (4) The packager on macOS and on a Python other than
+      3.14 (Windows) and 3.12 (Linux). (5) A package under a read-only install folder, and any device. (6) **The closure's entity-picture rule is an upper bound, not a trace:** every entity
+      file the closure holds brings its sprite, normal map and halo. The verifier's Linux `open()` trace over 150 runs (the 128 win routes replayed in the window, the 18 CTL recipes, 4
+      modern-controls runs) opened 504 distinct data files, 6 of them not in the package (the optional pad art), 0 lightmap files, and left 385 of the package's 883 files unopened (336 of them
+      under `original/`, among them the 46 sounds, which the trace cannot see). So the 883 are not a minimum, and a screen no route and no recipe reaches (a shot at one particular minion,
+      an achievement popup no route earns) is covered by none of it. The game's log is not the proof either: it is silent about some missing pictures (the verifier's copy without two
+      pictures drew a different level and wrote the same log); the sweep's byte comparison and a trace are what would find the next gap. Next: Windows release hygiene (MSVC), then the
+      program's later steps.
+- [ ] **PORT2-6. Texts and notes step 200 left for the release-docs step** (low; docs; `release-docs`; GAMEPLAY: none). (a) `README.md:69` says "29 of the 47 suites skip" (68 suites now).
+      (b) `README.md:558` says the modern controls' pad art is "Never part of a release package", where `package.py` has `--with-pad-art` (13 files, 120,057 bytes; off by default, the game
+      draws its own without); what is true depends on the owner's answer to whether Magic Rampage's art may ship (CTL13-2; `docs/permission.md` is still its placeholder; Step 200, LEFT FOR
+      THE OWNER 3). (c) `python -I tools/package/package.py` fails with `ModuleNotFoundError: closure` (the sibling import needs the script's folder on `sys.path`); the docs say plain
+      `python`. (d) With `--no-baked-paths` and all eight per-path flags but no `--root` the run exits 1 "data not found": a per-path flag replaces a tier's answer and cannot stand in for
+      the tier (a design note, not a defect against the brief). Next: the release-docs step; (c) and (d) as decided.
 
 **Blockers: levels that cannot be won** (each built as the original does, and the level won by a route).
 - [x] **B1. A barrel's blast breaks no wall** - 2-12, 2-13, 2-14, 2-16, 2-17, 2-19, 2-21, 2-24 and 4-16 cannot be
@@ -6714,7 +6800,26 @@ Linux himself, `wsl -d Ubuntu-24.04 -- bash -lc "cd ~/mp/repo && ls build/game b
 verifier's `~/mp-verify1`, 6.5 GiB, and each tree's `build-san` of about 5.7 GiB are deletable and were not deleted). **The sweep a step is measured against is still
 `CMP18/after/sweep`** (128 PNG, `MagicPortals.exe` `56361c13`, listed in `out/parity/BASELINE.txt`): the step's final sweep is 128 of 128 byte-equal to it, plain and with `--controls
 classic`, so no new reference was promoted and `BASELINE.txt` is unchanged. **Not pushed:** `git log --oneline origin/main..HEAD` lists the port commit `65236d0` and the devlog's;
-the engine pin `e8dbef4` is on the engine's `origin/main` (`git ls-remote` at this close, and the verifier's stranger build fetched it from GitHub). What waits on the owner, unchanged:
+the engine pin `e8dbef4` is on the engine's `origin/main` (`git ls-remote` at this close, and the verifier's stranger build fetched it from GitHub) [corrected 2026-10-23, step 200 close:
+`git ls-remote origin refs/heads/main` prints `e180cdc`, so `65236d0`, `62d4f61` and `e180cdc` are on `origin/main`; and of the owner's asks above, (1) is closed by step 200's rider R1 (the
+guard was not taken: PORT1-1 is ticked) and (2) was done by `e180cdc`, which is the mode change]. What waits on the owner, unchanged:
 CTL13-2, CTL13-4's sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public. **The program's next steps** (the
 Step's LEFT FOR LATER 1): the run-time asset root, Windows release hygiene and the phone-profile seam (CTL13-3 belongs to it), MP3 off Windows through the engine (step 202,
 PORT1-3), Android, Apple CI, the packager and CI, the release docs.
+*Added by step 200 (PORT-2)*: **the game finds its data at run time, and the content package is built from your own copy of the original** (CTL13-1, PORT1-1 and PORT1-2 are ticked;
+CTL13-3 and PORT1-4 are annotated; PORT2-1 to PORT2-6 are the rows it opened). Windows did not move: the 128-level f420 sweep, plain and with `--controls classic`, is 128 of 128
+byte-equal to `CMP18/after/sweep` (implementer and verifier each), the 19 baselines are 19 of 19 and the 128 routes are won on the same ticks; `MagicPortals.exe` is `dd874b70` and
+`test_mp.exe` `851afcac` (both relinked, one refusal by Smart App Control of a first `MagicPortals.exe`, relinked once). There is no picture to look at: the gates were numbers.
+**What to look at and decide: (1)** to see the package work: `out/dist/content` (883 files, 24.6 MB, kept; `python tools/package/package.py verify out/dist/content` says ok) and
+`build\game\MagicPortals.exe --root C:\Users\icvet\Desktop\Magic-Portals-Enhanced\out\dist\content --no-baked-paths` plays from it alone (a run without `--saves` writes your medals to
+`%APPDATA%\Magic Portals\scores.json` as it always did); it is rebuilt by `python tools/package/package.py content --repo <this repository> --reference <its reference folder>` and the
+same data gives the same bytes. **(2)** Whether the package ships Magic Rampage's control pictures (`--with-pad-art`, 13 files, 120 KB, off by default; PORT2-6 (b)) and whether the
+original's art and sound ship at all: your statement of 2026-09-30 is the only record, and `docs/permission.md` is still the placeholder (Step 200, LEFT FOR THE OWNER 3). **(3)** The
+suggested replacement for the paragraph of `CLAUDE.md` that begins "The port finds its inputs through absolute paths baked into `build/CMakeCache.txt`" (Step 200, LEFT FOR THE OWNER 1;
+the file is yours). **(4)** `%LOCALAPPDATA%` rather than `%APPDATA%` for the content, and a non-creating user-data call in the engine (PORT2-1). **(5)** WSL: `~/mp-verify1` (6.5 GiB) and
+`~/mp-verify2` (671 MiB) are deletable and were not deleted; `~/mp` (6.3 GiB) stays as the build cache. **The sweep a step is measured against is still `CMP18/after/sweep`**: every
+sweep of this step equals it, so none was promoted and `BASELINE.txt` is unchanged. **Not pushed:** `origin/main` is `e180cdc`; `git log --oneline origin/main..HEAD` lists the port commit
+`a8b1c1d` and the devlog's; the engine pin `e8dbef4` is on the engine's `origin/main` (`git ls-remote` at this close), so a plain fast-forward push needs nothing else first. What waits
+on the owner, unchanged: CTL13-2, CTL13-4's sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public. **The
+program's next steps:** Windows release hygiene and the phone-profile seam (the GUI subsystem, the icon, MSVC's path trimming, and `main` split into an entry that mobile shims call with a
+root and a scratch folder; CTL13-3 belongs to it), MP3 off Windows through the engine (step 202, PORT1-3), Android, Apple CI, the packager's archives and CI, the release docs.
