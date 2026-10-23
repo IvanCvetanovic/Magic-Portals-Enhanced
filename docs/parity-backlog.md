@@ -5464,7 +5464,7 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       owner's (Step 199, LEFT FOR THE OWNER 2) and a CI that calls it directly needs it. Next: (c) and (d) belong with the run-time asset root (planning step 200), which touches
       the same paths; (a), (b) and (e) any time.
 - [x] **PORT1-3. The game is silent off Windows: the engine decodes MP3 only through Media Foundation** (medium; audio; `planned`, step 202; engine first; GAMEPLAY: none on Windows).
-      **[DONE for the decoding, 2026-10-23, planning step 202 (its DEVLOG session and its commit hash are the close role's and the committer's to add): the engine moved to `138cb08`
+      **[DONE for the decoding, 2026-10-23, planning step 202 (DEVLOG Session 57, commit `c9e7bb1`): the engine moved to `138cb08`
       (dr_mp3 off Windows, Media Foundation kept on Windows), `tests/test_mp_sprites.cpp` decodes the original's mp3 on every platform, and a Linux smoke on the real files found
       **46 of 46 decoded** where the old pin refused 46 of 46 (the same probe, `out/parity/program/PORT/PORT4/impl/linux/probe_mp3.cpp`); under ALSA's `null` PCM level0's route had 5
       refusal lines before and has 0 now, with 5 clips loaded, and the menu 1 and 0, with 1 clip. **Not done, and not claimed:** nobody has HEARD a sound off Windows (WSL has no device,
@@ -5476,6 +5476,9 @@ LEFT FOR LATER; **no existing row is fully closed by this step**: CTL13-1 is par
       the same sentence once per sound the layer asks for (5 in a 500-frame run of level0's route, 1 in 400 frames of the main menu) and names no file. Step 199 measured it and
       fixed nothing, as its brief says. Next: step 202 (MP3 off Windows through the engine: a change in the engine's own repository first, then a pin bump).
 - [ ] **PORT1-4. Leftovers that wait for the next relink of an exe** (low; `needs-relink`; GAMEPLAY: none).
+      **[Annotated 2026-10-23, DEVLOG Session 57, planning step 202, commit `c9e7bb1`, which relinked both exes once more (`MagicPortals.exe` `1d5def64`, `test_mp.exe`
+      `95297270`) and folded none of this in: `game/main.cpp:1004` still prints ", Windows code page " on every platform (e), the mutation of `ParseDouble` (c) is still unrun, and
+      `README.md:69` still says "29 of the 47 suites skip" (d; the commit edited `README.md` at lines 74-77 only, for the sound). STILL OPEN: (c), (e) and `README.md:69` of (d).]**
       **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201, commit `8ebb56d`, which relinked both exes again (`MagicPortals.exe` `53ccd370`, `test_mp.exe` `bab38b61`) and folded none
       of this in (its brief named none of it). STILL OPEN: (c), (e) and `README.md:69` of (d). (e) is still there: `game/main.cpp:1003` prints ", Windows code page " before `CodePageText()` on
       every platform.]**
@@ -5549,6 +5552,8 @@ and the verifier's defect numbers differ: each is labelled below).
       engine calls `setlocale`, so it is theoretical; `Numbers.cpp:17` says why not to). (d) The comment at `main.cpp:929-930` says that the log of a start that found nothing is the
       place to see where it looked, but a failed resolve returns at `:808-813` before any log is open (reviewer D10). Next: fold into the first step that relinks both exes anyway; the
       next one touches `main`.
+      **[Annotated 2026-10-23, DEVLOG Session 57, planning step 202, commit `c9e7bb1`, which relinked both exes once more and again folded none of (a) to (d) in: `git diff 908a60b
+      c9e7bb1 --stat` lists neither `AssetRoot.*` nor `Scratch.*`, and the comment of (d) is unchanged (it is at `game/main.cpp:1010` now). PORT2-4 (c) and (d) likewise. All still open.]**
       **[Annotated 2026-10-23, DEVLOG Session 56, planning step 201, commit `8ebb56d`, which relinked both exes and did not fold any of (a) to (d) in: `AssetRoot.*` and `Scratch.*` are
       untouched (`git diff 45d43ec 8ebb56d --stat` lists neither) and the comment of (d) is unchanged. PORT2-4 (c) and (d) likewise. All still open; the next step that touches `main`
       (the mobile entry) is the place for them, together with PORT3-2.]**
@@ -5589,11 +5594,12 @@ and the verifier's defect numbers differ: each is labelled below).
 its LEFT FOR LATER. **No existing row is closed by this step** (it opened the release program and the phone seam; the older rows it could have folded in, it did not: see the notes on PORT1-4 and
 PORT2-3). **Rows it annotates and leaves open:** CTL13-3, PORT1-4, PORT1-7, PORT2-3, PORT2-4, PORT2-5. The reviewer's and the verifier's defect numbers differ: each is labelled below).
 - [x] **PORT3-1. `MAGICPORTALS_DEV_TOOLS` fails open on a typo: a mistyped release configure silently ships the developer tools** (medium; build; `code`, CMake only, no exe changes;
-      **[DONE 2026-10-23, planning step 202 (DEVLOG session and commit: the close role's and the committer's to add): the option accepts exactly `AUTO`, `ON` and `OFF` (in any case) and
+      **[DONE 2026-10-23, planning step 202 (DEVLOG Session 57, commit `c9e7bb1`): the option accepts exactly `AUTO`, `ON` and `OFF` (in any case) and
       anything else is a `message(FATAL_ERROR ...)` that names the option, the value and the three words, before the engine is added. The `cmake -P` table over the option's exact lines
       (`PORT4/impl/cmake_table.py`, `table_before.txt`, `table_after.txt`): `OF`, `BANANA`, `1`, `TRUE` and `YES` were ON and are refused; `0`, `NO`, `FALSE` and the empty value were OFF and
       are refused; `ON`, `OFF`, `AUTO`, `AUTO` with `MAGICPORTALS_MOBILE=ON`, `on`, `off`, `Auto` give what they gave. Real configure-only trees of the same values
-      (`PORT4/impl/g3/cfg_before.txt`, `cfg_after.txt`) say the same, and a bad value stops before any engine line. No script of this repository passed a value it now refuses.]**
+      (`PORT4/impl/g3/cfg_before.txt`, `cfg_after.txt`) say the same, and a bad value stops before any engine line. No script of this repository passed a value it now refuses. **Not closed:** nothing in a clone holds the rule: it is proved by scripts under the ignored
+      `out/` (`PORT4/impl/cmake_table.py`, the verifier's `cmake_table_v.py`), and a configure-must-fail check belongs to the CI step (Step 202, LEFT FOR LATER 5).]**
       GAMEPLAY: none). `CMakeLists.txt:79` is `elseif (_magicPortalsDevTools)`, which is CMake's variable test, so any word that is not a false constant means ON. The verifier ran the
       option's exact lines under `cmake -P`: `OF` gives ON, `BANANA` gives ON, `OFF`, `off`, `0` and `NO` give OFF, `AUTO` gives ON (OFF with `MAGICPORTALS_MOBILE`), `ON` gives ON
       (verifier D2, reviewer D5). The option exists to take the sixteen developer flags and the two files behind them out of a player's program; a typo should stop the configure. Fix (the
@@ -5601,12 +5607,13 @@ PORT2-3). **Rows it annotates and leaves open:** CTL13-3, PORT1-4, PORT1-7, PORT
       `AUTO` and `AUTO` with `MAGICPORTALS_MOBILE=ON`, the valid values unchanged. It changes `CMakeLists.txt`'s md5 and no executable. Until then a release configure must spell the value `OFF`
       exactly, as `docs/packaging.md` section 6 does. Next: any time; it needs no relink, so it can ride with the next CMake change.
 - [x] **PORT3-2. Code findings of the review and the verification that wait for the next relink of both exes** (low; `needs-relink`; GAMEPLAY: none). (a) `LibraryLoads` (`game/main.cpp`) returns
-      **[DONE 2026-10-23, planning step 202 (DEVLOG session and commit: the close role's and the committer's to add), which relinked both exes (`MagicPortals.exe` `1d5def64`, `test_mp.exe`
+      **[DONE 2026-10-23, planning step 202 (DEVLOG Session 57, commit `c9e7bb1`), which relinked both exes (`MagicPortals.exe` `1d5def64`, `test_mp.exe`
       `95297270`): (a) `TryLoadLibrary` keeps `GetLastError()` and the pure `CheckVulkanLoader` tells 126, 193 and any other code differently (the decoy of Step 201's verifier now gives the
       193 text, observed on the release exe); (b) the clamp uses `EngineTuning::kVulkanMinorMin` and `Max`, and the loader's name has ONE definition, the constant, which the Windows cmake file
       reads for `/DELAYLOAD` (rehearsed: a renamed header moves the flag, a header without the line stops the configure); the test claims the value alone; (c) `BuildProfile.hpp` stops a
       translation unit that has neither the facts nor a suite's declaration, and CMake gives the facts to every source of the program; `kDevTools` is used by `main.cpp`; (d) the tools-off
-      `--help` names none of the 16 flags it refuses (0 hits, was 2) and the default build's `--help` is byte-identical to the old exe's. 36 mutations of the new pins are red.]**
+      `--help` names none of the 16 flags it refuses (0 hits, was 2) and the default build's `--help` is byte-identical to the old exe's. 36 mutations of the new pins are red. **Not closed:** the 126 words, the "other code" words and the `MessageBoxW` were not seen on a real machine (PORT4-3 (1)),
+      and the `#error` branches of `BuildProfile.hpp` have no committed pin (a compile-must-fail check belongs to the CI step, Step 202, LEFT FOR LATER 5).]**
       `LoadLibraryExW(...) != nullptr` and drops `GetLastError()`: error 126 (a missing dependency), 193 (a 32-bit file; the verifier's decoy gave exactly this) and 1114 (the driver's init
       failed) are all read as "No Vulkan graphics driver was found", and the log a tester sends does not say why; the pure `CheckVulkanLoader` could take the code in its injected answer
       (reviewer D7, verifier D11a). (b) `game/sim/StartChecks.cpp` clamps the Vulkan version with the literals `1, 2` though `EngineTuning.hpp` has `kVulkanMinorMin` and `kVulkanMinorMax`;
@@ -6954,7 +6961,26 @@ configures a fresh console tree as before, and a release tree belongs in `out/bu
 App Control exposure), so to see it, build it with the command of section 6. **(5)** WSL: `~/mp-verify1` (6.5 GiB) and `~/mp-verify2` (671 MiB) are still deletable; `~/mp-verify3` (763 MiB) holds
 the verifier's builds with its capture images deleted. **The sweep a step is measured against is still `CMP18/after/sweep`**: none was promoted and `BASELINE.txt` is unchanged. **Pushed / not
 pushed:** `origin/main` is `45d43ec`; `git log --oneline origin/main..HEAD` lists the port commit `8ebb56d` and the devlog's; the engine pin `e8dbef4` is on the engine's `origin/main`, which has
-since moved to `138cb08` (the engine half of MP3 off Windows, not examined here), so a plain fast-forward push needs nothing else first. What waits on the owner, unchanged: CTL13-2, CTL13-4's
+since moved to `138cb08` (the engine half of MP3 off Windows, not examined here), so a plain fast-forward push needs nothing else first. [Stale as of 2026-10-23, DEVLOG Session 57:
+`git ls-remote origin refs/heads/main` prints `908a60b`, so `8ebb56d` and the devlog commit were pushed after Session 56 closed; the engine's `138cb08` is the pin now (step 202).] What waits on the owner, unchanged: CTL13-2, CTL13-4's
 sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and the repository's going public. **The program's next steps:** MP3 off Windows (the engine's half
 is written; the port's half is a pin bump and a step, PORT1-3), the Android entry (`main` split for a mobile shim, where PORT3-2, PORT1-4 and PORT2-3 fold in), Apple CI, the packager and CI, the
 release docs, and the phone profile's real values (PL-05).
+*Added by step 202 (PORT-4)*: **the original's 46 sounds decode off Windows, and the findings Step 201 left for the next relink are closed** (PORT1-3 is ticked for the decoding only,
+PORT3-1 and PORT3-2 are ticked; PORT1-4, PORT2-3 and PORT2-4 are annotated as relinked and not folded in; PORT4-1 to PORT4-3 are the rows it opened). Windows did not move: the
+128-level f420 sweep, plain and with `--controls classic`, is 128 of 128 byte-equal to `CMP18/after/sweep` (implementer and verifier each), the 19 baselines are 19 of 19 against Step
+201's list, the 128 routes are won on the same ticks, and the Windows sound still goes through Media Foundation (the sweep logs' `AudioEngine` lines are the old pin's, clip by clip).
+`MagicPortals.exe` is `1d5def64` and `test_mp.exe` `95297270` (one launching build, 0 refusals), and a release program is in `out/build-release` (`713a952e`). Every gate is met. There
+is no picture to look at. **What to look at and decide: (1)** listen: nobody has heard a sound off Windows (WSL has no device) and a clip starts about 12 ms apart from Windows
+(PORT4-1, PORT4-2). **(2)** If you took the sentence Step 199 suggested for `CLAUDE.md` (item (3) of its paragraph above), its clause "the engine decodes MP3 only on Windows" is now wrong;
+say instead "the engine decodes MP3 through Media Foundation on Windows and through its vendored dr_mp3 elsewhere, and WSL has no sound device". The `CLAUDE.md` in the repository states
+neither, so nothing else is stale. **(3)** The release program: `out/build-release` was left in place (the Step said this close would delete it; DEVLOG Session 57 says why it did not). To
+see it, from Git Bash: `out/build-release/game/MagicPortals.exe --root C:/Users/icvet/Desktop/Magic-Portals-Enhanced --no-baked-paths --saves <a scratch folder>` (the shaders are
+already beside it; it has no console window); `rm -rf out/build-release` removes it, and making it again is a link. **(4)** WSL: `~/mp-verify1` (6.5 GiB), `~/mp-verify2` (671 MiB),
+`~/mp-verify3` (740 MiB) and `~/mp-verify4` (717 MiB) are deletable and were not deleted; `~/mp` (6.6 GiB) stays as the build cache. **The sweep a step is measured against is still
+`CMP18/after/sweep`**: every sweep of this step equals it, so none was promoted and `BASELINE.txt` is unchanged. **Pushed / not pushed:** `origin/main` is `908a60b`; `git log --oneline
+origin/main..HEAD` lists the port commit `c9e7bb1` and the devlog's; the engine pin `138cb08` is on the engine's `origin/main` (`git ls-remote` at this close), so a plain fast-forward
+push needs nothing else first. What waits on the owner, unchanged: CTL13-2, CTL13-4's sentence, CMP-11, CMP-8, CMP20-1, CMP14-1, the time base G10-2 (CMP18-6), `docs/permission.md` and
+the repository's going public. **The program's next steps:** the Android entry (203: `main` split for a mobile shim; the loader check has no Android branch yet, and PORT1-4, PORT2-3 and
+PORT2-4 fold in), Apple CI (204), the packager and CI (205: with the two regression pins this step could not hold, a configure-must-fail check for `MAGICPORTALS_DEV_TOOLS` and a
+compile-must-fail check for `BuildProfile.hpp`), the release docs (206) and the phone profile's real values (207).
