@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Android packager (planning step 203, PORT-5): assembles, signs and checks Magic Portals Enhanced's APK.
 
-NOT RUN ON A PHONE OR AN EMULATOR as of this step: this builds, packages and statically checks. Nothing it makes has ever been installed.
+Built and statically checked in step 203; the APK it makes was run on an x86_64 emulator in step 204 (docs/android.md section 0). NOT RUN ON ANY PHONE.
 
     android_package.py build   --repo <repo> --sdk <sdk> --ndk <ndk> --lib <abi>=<libMagicPortals.so> [--lib ...]
                                (--package <content folder> | --no-data) [--out <dir>] [--build-tools <ver>] [--version-code N]
@@ -71,8 +71,19 @@ MIN_LOAD_ALIGN = 0x4000  # 16 KB pages
 # Stored, not deflated, in the APK: formats that are compressed already (aapt2's own list, shortened to what the game has).
 STORED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.mp3', '.ogg', '.wav'}
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)  # the earliest a zip can say: no clock enters the APK
+# The unpack list's format, which game/sim/Unpack.hpp spells too (kSizeSeparator, kMostSizeDigits, kMostStampChars): the tie is TheListTie in
+# test_android_package.py, which reads those lines out of the header and holds these to them, and regenerates the list that test_mp_unpack parses.
 SIZE_SEPARATOR = '\t'
 MOST_SIZE_DIGITS = 15
+MOST_STAMP_CHARS = 128
+
+# EVERY configuration change the platform defines for targetSdk 35 (aapt2's flag names; platforms/android-35/data/res/values/attrs_manifest.xml, 18 of them),
+# which the activity must handle in place: a recreated NativeActivity starts its native thread again over a running game. Step 203 listed 14 and missed mcc,
+# mnc, fontWeightAdjustment and grammaticalGender (PORT5-9 (a)). read_manifest requires all of these offline, and the build requires every kind the SDK's
+# own platform file lists (check_config_changes), so a newer targetSdk that adds a kind cannot be built until the manifest names it.
+REQUIRED_CONFIG_CHANGES = frozenset({
+    'mcc', 'mnc', 'locale', 'touchscreen', 'keyboard', 'keyboardHidden', 'navigation', 'orientation', 'screenLayout', 'uiMode', 'screenSize',
+    'smallestScreenSize', 'density', 'layoutDirection', 'colorMode', 'grammaticalGender', 'fontScale', 'fontWeightAdjustment'})
 
 # Paths that must never be taken as the package or as a source: the original's APK and the engine of the original (CLAUDE.md, the hard rule).
 FORBIDDEN_INPUT_PAIRS = (('reference', 'apk'), ('reference', 'ethanon'), ('reference', 'apk_work'))
@@ -195,10 +206,9 @@ def read_manifest(path):
     if activity.get(ANDROID_NS + 'screenOrientation') != 'landscape':
         raise PackError('the activity must be locked to landscape')
     changes = set((activity.get(ANDROID_NS + 'configChanges') or '').split('|'))
-    needed = {'orientation', 'screenSize', 'smallestScreenSize', 'screenLayout', 'keyboard', 'keyboardHidden', 'navigation', 'uiMode', 'density',
-              'fontScale', 'layoutDirection', 'locale', 'touchscreen', 'colorMode'}
-    if not needed <= changes:
-        raise PackError('the activity must handle every configuration change in place; missing %s' % ', '.join(sorted(needed - changes)))
+    if not REQUIRED_CONFIG_CHANGES <= changes:
+        raise PackError('the activity must handle every configuration change in place (%d kinds); missing %s' % (len(REQUIRED_CONFIG_CHANGES), ', '.join(sorted(REQUIRED_CONFIG_CHANGES - changes))))
+    facts['configChanges'] = changes
     meta = {m.get(ANDROID_NS + 'name'): m.get(ANDROID_NS + 'value') for m in activity.findall('meta-data')}
     facts['activity'] = activity.get(ANDROID_NS + 'name')
     facts['lib_name'] = meta.get('android.app.lib_name')
@@ -208,6 +218,37 @@ def read_manifest(path):
     if facts['lib_name'] is None or 'lib%s.so' % facts['lib_name'] != LIB_NAME:
         raise PackError('android.app.lib_name must name the library %s' % LIB_NAME)
     return facts
+
+
+def platform_config_changes(sdk, target_sdk):
+    """{kind: bit} of the configChanges flags the platform android-<target_sdk> defines, read from the SDK's own attrs_manifest.xml, or None where the SDK
+    does not ship that file (then only the offline list is checked)."""
+    path = os.path.join(sdk, 'platforms', 'android-%d' % target_sdk, 'data', 'res', 'values', 'attrs_manifest.xml')
+    if not os.path.isfile(path):
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError) as e:
+        raise PackError('%s cannot be read: %s' % (path, e))
+    kinds = {}
+    for attr in root.iter('attr'):
+        if attr.get('name') == 'configChanges':
+            for flag in attr.findall('flag'):
+                kinds[flag.get('name')] = int(flag.get('value'), 0)
+    if not kinds:
+        raise PackError('%s defines no configChanges flags: the SDK platform is not what this packager reads' % path)
+    return kinds
+
+
+def check_config_changes(facts, sdk):
+    """The manifest handles every kind the SDK's platform for its targetSdk defines (not only the offline list). Returns the platform's {kind: bit}, or None."""
+    kinds = platform_config_changes(sdk, facts['targetSdk'])
+    if kinds is None:
+        return None
+    missing = sorted(set(kinds) - facts['configChanges'])
+    if missing:
+        raise PackError('the platform android-%d defines configuration changes the activity does not handle in place: %s' % (facts['targetSdk'], ', '.join(missing)))
+    return kinds
 
 
 def cpp_string_constants(path):
@@ -470,7 +511,7 @@ def parse_list(text):
     lines = text.split('\n')
     if lines and lines[-1] == '':
         lines.pop()
-    if not lines or not re.fullmatch(r'[0-9A-Za-z._\-]{1,128}', lines[0]):
+    if not lines or not re.fullmatch(r'[0-9A-Za-z._\-]{1,%d}' % MOST_STAMP_CHARS, lines[0]):
         raise PackError('the list has no usable stamp')
     out = []
     for n, line in enumerate(lines[1:], start=2):
@@ -669,8 +710,9 @@ def sign(tools, aligned, signed, args, out):
         cmd += ['--ks', args.keystore, '--ks-key-alias', args.key_alias, '--ks-pass', 'file:' + args.keystore_pass_file]
     else:
         cmd += ['--ks', debug_keystore(out), '--ks-pass', 'pass:android', '--key-pass', 'pass:android', '--ks-key-alias', 'androiddebugkey']
-    # No v4 signature: that is an .idsig file beside the APK, for adb's incremental installs only.
-    cmd += ['--v4-signing-enabled', 'false', '--out', signed, aligned]
+    # No v4 signature: that is an .idsig file beside the APK, for adb's incremental installs only. No v1 (JAR) signature either: the minimum SDK is 26 and
+    # v2 is read from 24, so the three META-INF files (221,636 bytes in step 203's APKs) served no phone this app installs on (PORT5-9 (b)).
+    cmd += ['--v1-signing-enabled', 'false', '--v4-signing-enabled', 'false', '--out', signed, aligned]
     run(cmd, 'apksigner sign')
     for stray in (signed + '.idsig',):
         if os.path.exists(stray):
@@ -726,6 +768,19 @@ def inspect_apk(apk, tools, repo, release, keystore=None, pass_file=None, key_al
     if not re.search(r"uses-feature: name='android\.hardware\.screen\.landscape'", badging):
         problems.append('badging does not say the APK needs a landscape screen')
     lines.append('--- manifest (aapt2 dump xmltree): ' + ' '.join(l.strip() for l in xml.split('\n') if 'screenOrientation' in l))
+    # The activity's configChanges as the APK stores it: every kind the platform defines (the manifest's words are checked above; this is the built file).
+    kinds = check_config_changes(facts, tools.sdk)
+    mask_match = re.search(r'configChanges\(0x[0-9a-fA-F]+\)=0x([0-9a-fA-F]+)', xml)
+    if not mask_match:
+        problems.append('the activity states no configChanges')
+    elif kinds is not None:
+        want = 0
+        for bit in kinds.values():
+            want |= bit
+        got = int(mask_match.group(1), 16)
+        lines.append('configChanges in the APK: 0x%08x (%d kinds the platform defines: 0x%08x)' % (got, len(kinds), want))
+        if got & want != want:
+            problems.append('the APK handles configChanges 0x%x and the platform defines 0x%x: missing bits 0x%x' % (got, want, want & ~got))
 
     with zipfile.ZipFile(apk) as z:
         names = z.namelist()
@@ -734,6 +789,11 @@ def inspect_apk(apk, tools, repo, release, keystore=None, pass_file=None, key_al
             problems.append('the zip entry %s is damaged' % bad_zip)
         libs = sorted(n for n in names if n.startswith('lib/'))
         lines.append('lib entries: %s' % ' '.join(libs))
+        # No JAR (v1) signature: the minimum SDK is 26 and v2 begins at 24, so META-INF is dead weight (221,636 bytes in step 203's APKs, PORT5-9 (b)).
+        jar_signature = sorted(n for n in names if n.startswith('META-INF/'))
+        lines.append('META-INF entries: %s' % (' '.join(jar_signature) or 'none'))
+        if jar_signature and facts['minSdk'] >= 24:
+            problems.append('the APK carries a JAR (v1) signature although the minimum SDK is %d: %s' % (facts['minSdk'], ' '.join(jar_signature)))
         got_abis = sorted(n.split('/')[1] for n in libs)
         if abis != got_abis or any(n != 'lib/%s/%s' % (n.split('/')[1], LIB_NAME) for n in libs):
             problems.append('native-code %s does not match the lib/ entries %s' % (abis, got_abis))
@@ -870,6 +930,7 @@ def cmd_build(args):
     manifest_path = os.path.join(repo, 'game', 'android', 'AndroidManifest.xml')
     facts = read_manifest(manifest_path)
     check_ties(repo, facts)
+    check_config_changes(facts, os.path.abspath(args.sdk))
     version = read_version(repo)
     libs = {}
     for spec in args.lib or []:

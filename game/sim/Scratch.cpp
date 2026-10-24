@@ -55,6 +55,20 @@ Chosen Choose(const std::vector<Candidate>& candidates, const Probe& probe) {
     return chosen;
 }
 
+bool KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous, std::string& why) {
+    std::error_code ec;
+    if (!std::filesystem::exists(log, ec) || ec) return true;
+    std::filesystem::rename(log, previous, ec);
+    if (!ec) return true;
+    std::error_code copyError;
+    std::filesystem::copy_file(log, previous, std::filesystem::copy_options::overwrite_existing, copyError);
+    if (copyError) {
+        why = copyError.message();
+        return false;
+    }
+    return true;
+}
+
 bool ProbeWritable(const std::filesystem::path& dir, std::string& why) {
     try {
         std::error_code ec;

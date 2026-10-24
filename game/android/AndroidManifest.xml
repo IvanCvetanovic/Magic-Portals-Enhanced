@@ -5,7 +5,7 @@
     tools/package/android_package.py). The platform loads libMagicPortals.so (android.app.lib_name), whose android_main is the engine's
     (engine/src/platform/android/AndroidApp.cpp) and which calls game/android/AndroidMain.cpp's SupersonicMain.
 
-    NOT RUN ON A PHONE OR AN EMULATOR as of this step: built, packaged and statically checked.
+    Run on an x86_64 emulator by planning step 204 (startup, unpack, input, lifecycle); never on a phone.
 
     WHAT IS NOT IN THIS FILE, ON PURPOSE.
       - versionName and versionCode. versionName is the ONE version definition, project(MagicPortals VERSION ...) in the top-level CMakeLists.txt,
@@ -18,8 +18,11 @@
 
     minSdk 26 is where AAudio begins (the engine's audio on Android). The game needs a Vulkan 1.1 device (uses-feature below; the engine checks it at
     start, and game/data/engine.json "mobile" sets the lowest minor to 1): only Google Play filters on uses-feature, so a sideloaded APK on a phone
-    that reports less starts and is told so. Landscape only, and every configuration change handled in place, because a NativeActivity that is
-    recreated starts its native thread again over a running game.
+    that reports less starts and is told so. Landscape only, and EVERY configuration change handled in place, because a NativeActivity that is
+    recreated starts its native thread again over a running game: the 18 kinds that the android-35 platform defines (platforms/android-35/data/res/
+    values/attrs_manifest.xml, flag names of the configChanges attribute). Step 203 listed 14 and missed mcc, mnc, fontWeightAdjustment and
+    grammaticalGender (PORT5-9 (a)); tools/package/android_package.py requires all 18 offline and, at package time, every kind the SDK's own platform file
+    lists, so a targetSdk that adds one cannot be built until it is named here.
 
     The report below: Android 11 and later can show, at the next start, the system's record of how the last run ended and the end of the game's log
     (SupersonicActivity.showReport, PostMortem.java). The log is the one main.cpp writes on a phone, <files>/Magic Portals/scratch/magicportals.log
@@ -51,7 +54,7 @@
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:resizeableActivity="false"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale|touchscreen|colorMode">
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|density|layoutDirection|colorMode|grammaticalGender|fontScale|fontWeightAdjustment">
 
             <meta-data android:name="android.app.lib_name" android:value="MagicPortals" />
 

@@ -817,6 +817,38 @@ void APhonePutsTheUserDataScratchFolderFirstAndADesktopChangesNothing() {
     CHECK_MSG(std::string(Scratch::kUserScratchFolder) == "scratch" && std::string(Scratch::kLogFileName) == "magicportals.log", "the pieces of the log's path on a phone");
 }
 
+// The last run's log kept beside the log (Scratch::KeepPreviousLog; main.cpp's own function until planning step 204, when the Android entry needed the same
+// rotation). MUTATION: delete the exists test (a missing log is then "kept" and an error), copy instead of rename, keep the log in place, ignore a failed copy,
+// leave the previous log when the new one is moved.
+void TheLastLogIsKeptBesideTheLogAndAnImpossibleKeepIsSaidNotThrown() {
+    const fs::path dir = Folder("keep-previous-log");
+    const fs::path log = dir / "magicportals.log";
+    const fs::path previous = dir / "magicportals.prev.log";
+    std::string why;
+    CHECK_MSG(Scratch::KeepPreviousLog(log, previous, why) && why.empty() && Tree(dir).empty(), "no log, nothing to keep, nothing made");
+    std::ofstream(log, std::ios::binary) << "last run";
+    CHECK_MSG(Scratch::KeepPreviousLog(log, previous, why), why);
+    CHECK_MSG(!fs::exists(log) && fs::exists(previous), "the log was moved");
+    std::ifstream kept(previous, std::ios::binary);
+    std::string text((std::istreambuf_iterator<char>(kept)), std::istreambuf_iterator<char>());
+    CHECK_MSG(text == "last run", "with its bytes: " + text);
+    kept.close();
+    // The previous one is replaced by the next last log.
+    std::ofstream(log, std::ios::binary) << "the run after";
+    CHECK_MSG(Scratch::KeepPreviousLog(log, previous, why), why);
+    std::ifstream again(previous, std::ios::binary);
+    CHECK_MSG(std::string((std::istreambuf_iterator<char>(again)), std::istreambuf_iterator<char>()) == "the run after", "the earlier previous log is replaced");
+    again.close();
+    // A previous log that cannot be written (a non-empty folder stands at its name): said, the log stays where it was, and nothing throws.
+    std::ofstream(log, std::ios::binary) << "x";
+    const fs::path blocked = dir / "blocked.prev.log";
+    fs::create_directories(blocked / "occupied");
+    why.clear();
+    CHECK_MSG(!Scratch::KeepPreviousLog(log, blocked, why), "a previous log that cannot be written is a false");
+    CHECK_MSG(!why.empty() && fs::exists(log), "with a reason, and the log is still there");
+    CHECK_MSG(std::string(Scratch::kPreviousLogFileName) == "magicportals.prev.log", "the name main.cpp has always used");
+}
+
 // MUTATION: UniqueSuffix returning a constant.
 void TwoSuffixesAreNeverTheSame() {
     std::set<std::string> seen;
@@ -852,6 +884,7 @@ void runTests() {
     APrismWhoseNameIsHeldByAFolderFailsAndLeavesNoHalfFile();
     TheProbeNeverTouchesAFileItDidNotMake();
     APhonePutsTheUserDataScratchFolderFirstAndADesktopChangesNothing();
+    TheLastLogIsKeptBesideTheLogAndAnImpossibleKeepIsSaidNotThrown();
     TwoSuffixesAreNeverTheSame();
 }
 

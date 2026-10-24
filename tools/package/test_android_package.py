@@ -8,7 +8,7 @@ zipalign, apksigner, javac, d8) is not exercised here; the Step's gates run the 
 
 What is pinned: the unpack list (format, stamp, determinism); the path rules, the same as the C++ `SafePath` (a table); the package loader's refusals
 (a missing, short, altered or surplus file, a link, a name that climbs, the never-package list, a package under reference/apk); the manifest's policy
-(no permission, no spelled version, Vulkan 1.1 required, landscape, every configuration change handled); the text ties to the C++ that spells the
+(no permission, no spelled version, Vulkan 1.1 required, landscape, all 18 configuration changes handled, and the SDK platform's own list); the text ties to the C++ that spells the
 same names; the build-tree cache check; the ELF check on hand-made ELF files; the byte-for-byte determinism of the assembled zip; the comparison of an
 APK's list with the package's manifest; the output-folder rule; and the command line's refusals, each with a message and a non-zero exit.
 """
@@ -301,7 +301,7 @@ class TheManifest(TempCase):
             ('android:screenOrientation="landscape"', 'android:screenOrientation="portrait"', 'landscape'),
             ('android:allowBackup="false"', 'android:allowBackup="true"', 'allowBackup'),
             ('android:hasCode="true"', 'android:hasCode="false"', 'hasCode'),
-            ('|colorMode"', '"', 'configuration change'),
+            ('|fontWeightAdjustment"', '"', 'configuration change'),
             ('<uses-feature android:name="android.hardware.touchscreen" android:required="false" />', '<uses-feature android:name="android.hardware.touchscreen" android:required="true" />', 'touchscreen'),
             ('<meta-data android:name="android.app.lib_name" android:value="MagicPortals" />', '<meta-data android:name="android.app.lib_name" android:value="Other" />', 'lib_name'),
         ]
@@ -309,6 +309,46 @@ class TheManifest(TempCase):
             with self.assertRaises(ap.PackError, msg=part) as ctx:
                 ap.read_manifest(self.variant(old, new))
             self.assertIn(part, str(ctx.exception))
+
+    def test_every_configuration_change_the_platform_defines_is_handled(self):
+        # Step 203 listed 14 of the 18 kinds and missed mcc, mnc, fontWeightAdjustment and grammaticalGender (PORT5-9 (a)).
+        facts = ap.read_manifest(self.MANIFEST)
+        self.assertEqual(len(ap.REQUIRED_CONFIG_CHANGES), 18)
+        self.assertEqual(facts['configChanges'], set(ap.REQUIRED_CONFIG_CHANGES), 'the manifest names exactly the 18, no other word')
+        with open(self.MANIFEST, encoding='utf-8') as f:
+            text = f.read()
+        for kind in sorted(ap.REQUIRED_CONFIG_CHANGES):
+            start = text.index('android:configChanges="') + len('android:configChanges="')
+            end = text.index('"', start)
+            kept = [k for k in text[start:end].split('|') if k != kind]
+            path = self.path('AndroidManifest.xml')
+            put(path, text[:start] + '|'.join(kept) + text[end:])
+            with self.assertRaises(ap.PackError, msg=kind) as ctx:
+                ap.read_manifest(path)
+            self.assertIn(kind, str(ctx.exception), 'the message names the kind that is missing')
+
+    def test_the_sdks_own_platform_file_is_the_same_18_and_a_new_kind_stops_the_build(self):
+        sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT')
+        kinds = ap.platform_config_changes(sdk, 35) if sdk else None
+        if kinds is not None:
+            self.assertEqual(set(kinds), set(ap.REQUIRED_CONFIG_CHANGES), 'the android-35 platform defines exactly the kinds this packager requires')
+            self.assertEqual(sorted(kinds.values())[-1], 0x40000000)
+        # A made-up platform with a kind the manifest does not name: refused, and the kind is named.
+        fake = self.path('sdk')
+        values = os.path.join(fake, 'platforms', 'android-35', 'data', 'res', 'values')
+        os.makedirs(values)
+        flags = ''.join('<flag name="%s" value="0x%x"/>' % (name, 1 << i) for i, name in enumerate(sorted(ap.REQUIRED_CONFIG_CHANGES) + ['newKind']))
+        put(os.path.join(values, 'attrs_manifest.xml'), '<resources><attr name="configChanges">%s</attr></resources>' % flags)
+        facts = dict(ap.read_manifest(self.MANIFEST))
+        with self.assertRaises(ap.PackError) as ctx:
+            ap.check_config_changes(facts, fake)
+        self.assertIn('newKind', str(ctx.exception))
+        put(os.path.join(values, 'attrs_manifest.xml'), '<resources><attr name="configChanges">%s</attr></resources>' % flags.replace('<flag name="newKind"', '<flag name="locale"'))
+        self.assertEqual(len(ap.check_config_changes(facts, fake)), 18, 'the same kinds: accepted')
+        self.assertIsNone(ap.check_config_changes(facts, self.path('no-sdk-here')), 'an SDK with no platform file is the offline list only')
+        put(os.path.join(values, 'attrs_manifest.xml'), '<resources/>')
+        with self.assertRaises(ap.PackError):
+            ap.check_config_changes(facts, fake)
 
     def test_the_version_is_the_one_cmake_states(self):
         version = ap.read_version(REPO)
@@ -345,6 +385,78 @@ class TheManifest(TempCase):
         # The title goes through the engine's allow-list (a space stays, a dot or a slash does not).
         self.assertEqual(ap.sanitise_title('Magic Portals'), 'Magic Portals')
         self.assertEqual(ap.sanitise_title('  ..Game/Name..  '), 'Game_Name')
+
+
+class TheSigning(unittest.TestCase):
+    def test_no_jar_signature_is_asked_for_and_the_other_options_stay(self):
+        # PORT5-9 (b): the minimum SDK is 26 and v2 is read from 24, so v1 is switched off; v4 stays off (no .idsig).
+        import types
+        seen = []
+        real_run, real_keystore = ap.run, ap.debug_keystore
+        ap.run = lambda cmd, what: seen.append(list(cmd)) or ''
+        ap.debug_keystore = lambda out: 'debug.keystore'
+        try:
+            tools = types.SimpleNamespace(java='java', apksigner_jar='apksigner.jar')
+            ap.sign(tools, 'aligned.apk', 'signed.apk', types.SimpleNamespace(release=False), 'out')
+        finally:
+            ap.run, ap.debug_keystore = real_run, real_keystore
+        self.assertEqual(len(seen), 1)
+        cmd = seen[0]
+        self.assertEqual(cmd[cmd.index('--v1-signing-enabled') + 1], 'false')
+        self.assertEqual(cmd[cmd.index('--v4-signing-enabled') + 1], 'false')
+        self.assertEqual(cmd[-1], 'aligned.apk')
+        self.assertIn('--ks-key-alias', cmd)
+
+
+class TheListTie(unittest.TestCase):
+    """The unpack list's format is spelled in game/sim/Unpack.hpp and in the packager. Nothing but this ties them (step 203's D2)."""
+    HEADER = os.path.join(REPO, 'game', 'sim', 'Unpack.hpp')
+    TEST = os.path.join(REPO, 'tests', 'test_mp_unpack.cpp')
+    # Four invented files; the list the packager makes for them is in tests/test_mp_unpack.cpp between BEGIN and END PACKAGER LIST.
+    FILES = [('GameData/levels/level0.tscn', 1234, sha(b'synthetic level0')), ('GameData/odd name/b c.png', 0, sha(b'')),
+             ('engine/assets/shaders/x.spv', 4096, sha(b'synthetic shader')), ('GameData/a/#b', 7, sha(b'synthetic hash'))]
+
+    def constants(self):
+        with open(self.HEADER, encoding='utf-8') as f:
+            text = f.read()
+        import re
+        found = {}
+        found['separator'] = re.search(r"kSizeSeparator\s*=\s*'(.*)';", text).group(1)
+        found['digits'] = int(re.search(r'kMostSizeDigits\s*=\s*(\d+)\s*;', text).group(1))
+        found['stamp'] = int(re.search(r'kMostStampChars\s*=\s*(\d+)\s*;', text).group(1))
+        return found
+
+    def test_the_constants_are_the_headers(self):
+        found = self.constants()
+        self.assertEqual(found['separator'], '\\t', 'the header spells the TAB as a C++ escape')
+        self.assertEqual(ap.SIZE_SEPARATOR, '\t')
+        self.assertEqual(ap.MOST_SIZE_DIGITS, found['digits'])
+        self.assertEqual(ap.MOST_STAMP_CHARS, found['stamp'])
+        # The stamp the packager makes is inside the parser's alphabet and length.
+        stamp, text = ap.make_list(self.FILES)
+        self.assertLessEqual(len(stamp), found['stamp'])
+        self.assertRegex(stamp, r'^[0-9A-Za-z._-]+$')
+        self.assertEqual(len(stamp), ap.STAMP_CHARS)
+        # The reader's limits are the header's: a size of digits+1 digits and a stamp of stamp+1 characters are refused, the longest ones are not.
+        ap.parse_list('s\n%s\tGameData/a\n' % ('9' * found['digits']))
+        with self.assertRaises(ap.PackError):
+            ap.parse_list('s\n%s\tGameData/a\n' % ('9' * (found['digits'] + 1)))
+        ap.parse_list('%s\n1\tGameData/a\n' % ('a' * found['stamp']))
+        with self.assertRaises(ap.PackError):
+            ap.parse_list('%s\n1\tGameData/a\n' % ('a' * (found['stamp'] + 1)))
+
+    def test_the_list_in_the_cpp_suite_is_the_list_the_packager_makes_today(self):
+        import re
+        with open(self.TEST, encoding='utf-8') as f:
+            text = f.read()
+        block = text.split('// BEGIN PACKAGER LIST', 1)[1].split('// END PACKAGER LIST', 1)[0]
+        pieces = re.findall(r'"((?:[^"\\]|\\.)*)"', block)
+        self.assertGreaterEqual(len(pieces), 5)
+        literal = ''.join(pieces).replace('\\n', '\n').replace('\\t', '\t')
+        self.assertNotIn('\\', literal, 'only the two escapes the packager can make')
+        stamp, made = ap.make_list(self.FILES)
+        self.assertEqual(literal, made, 'tests/test_mp_unpack.cpp parses what the packager makes: regenerate the literal if the format moved')
+        self.assertTrue(literal.startswith(stamp + '\n'))
 
 
 class TheBuildTree(TempCase):

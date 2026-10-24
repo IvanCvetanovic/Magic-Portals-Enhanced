@@ -112,7 +112,7 @@ memory and never opens them (planning step 196), which the 128-level sweep run f
 `scenes/` (the converter's input), `.pvr`, `.pkm`, `.par`, the framework folder, the Android bundle, `.enml` files, the APK, the engine
 checkout, build folders, the converter's other output. A table that named one would be an error.
 
-The Android build and the APK packager (`tools/package/android_package.py`, which takes this packager's output folder) are described in [`android.md`](android.md) (planning step 203; built and statically checked, never run on a device). **Not yet:** the iOS and macOS entry points, release archives and licence texts. They are later steps of the platform program. (The
+The Android build and the APK packager (`tools/package/android_package.py`, which takes this packager's output folder) are described in [`android.md`](android.md) (planning steps 203 and 204; built, statically checked and run on an x86_64 emulator, never on a device). **Not yet:** the iOS and macOS entry points, release archives and licence texts. They are later steps of the platform program. (The
 Windows release program and its icon are section 6. The original's 46 MP3 sounds decode off Windows since the engine pin of planning step 202,
 through the engine's vendored dr_mp3: that was checked on the real files, with no sound device, so it proves the decoding and not the playback;
 a clip starts about 12 ms apart from the same clip on Windows, which comes out as if its first 528 samples were cut (the engine's

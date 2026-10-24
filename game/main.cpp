@@ -95,23 +95,17 @@ namespace {
 // The diagnostics file, and the previous run's beside it, both in the temp
 // directory.
 constexpr const char* kLogFile = MagicPortals::Scratch::kLogFileName;
-constexpr const char* kPreviousLogFile = "magicportals.prev.log";
+constexpr const char* kPreviousLogFile = MagicPortals::Scratch::kPreviousLogFileName;
 // The game's name: the manifest's title, the user data directory's and the message box's.
 constexpr const char* kTitle = "Magic Portals";
 
-// The last run's log moved to `previous`, replacing the one before. Renamed
-// first; copied where the rename is refused, as Windows refuses it while
-// another running copy of the game still holds the file open.
+// The last run's log moved to `previous`, replacing the one before (the rule is Scratch::KeepPreviousLog's, which the Android entry uses too, planning
+// step 204): a log that cannot be kept costs that copy and says so, never the start.
 void KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous) {
-    std::error_code ec;
-    if (!std::filesystem::exists(log, ec) || ec) return;
-    std::filesystem::rename(log, previous, ec);
-    if (!ec) return;
-    std::error_code copyError;
-    std::filesystem::copy_file(log, previous, std::filesystem::copy_options::overwrite_existing, copyError);
-    if (copyError) {
+    std::string why;
+    if (!MagicPortals::Scratch::KeepPreviousLog(log, previous, why)) {
         std::cerr << "[Magic Portals] the last run's log was not kept in " << previous.string() << ": "
-                  << copyError.message() << std::endl;
+                  << why << std::endl;
     }
 }
 

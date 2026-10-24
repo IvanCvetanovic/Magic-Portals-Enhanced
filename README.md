@@ -79,7 +79,8 @@ sound device. `tools/build_linux.sh --help` lists the options.
 
 **Build for Android.** `tools/build_android.sh --data <the content packager's output folder>` builds the game for `arm64-v8a` and `x86_64` with the Android
 NDK (r28 or newer) and packages one APK, with the game's data in it, unpacked into the app's private folder on the first run (`docs/android.md`: what you need,
-the options, what the APK holds, what the owner must decide). It is **built, packaged and statically checked, and has never been run on a phone or an emulator**.
+the options, what the APK holds, what the owner must decide). It is **built, packaged and statically checked, and run on an x86_64 emulator** (installs, unpacks, plays all 128 levels'
+recorded winning routes on the same ticks as Windows (the implementer's on the first build, a sample of 17 on the final one, and the verifier's own 128 of 128 on the final one), survives Back, Home and an update), **and has never been run on a phone**: `tools/android_emulator.py` is the one script that drives an emulator (`docs/android.md`, section 7).
 
 ## How it fits together
 

@@ -64,8 +64,8 @@ endif()
 #
 # MAGICPORTALS_MOBILE: a phone's build. ON by itself when the target is Android or iOS, OFF otherwise. It makes the run start under the phone
 # profile (game/data/engine.json "mobile": a lowest Vulkan version of 1.1 among it) unless --profile says otherwise, and takes the developer
-# tools and the measurement tool out of the program. It adds no entry point: an Android or iOS shell is a later step. It may be turned ON on a
-# desktop to build what a phone's build compiles, which is how the compilers are asked about it without a phone.
+# tools and the measurement tool out of the program. Its Android entry point is game/android/AndroidMain.cpp (planning step 203); an iOS shell is a later
+# step. It may be turned ON on a desktop to build what a phone's build compiles, which is how the compilers are asked about it without a phone.
 set(_magicPortalsMobileDefault OFF)
 if (ANDROID OR IOS)
     set(_magicPortalsMobileDefault ON)

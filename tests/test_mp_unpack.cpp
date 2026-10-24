@@ -14,10 +14,19 @@
 //   - a hostile list never touches the disk (not even the removal of the old copy);
 //   - FsSink on a real folder: the files and the stamp are the bytes, the player's own files beside the owned folders survive a re-copy;
 //   - the developer's flags file: whitespace-separated, double quotes, the two errors.
+// Planning step 204 added, each from a finding of the verification of step 203 or from the first run on an emulator:
+//   - D4: a list whose sizes, rounded up to blocks, would wrap 64 bits is refused when it is read (the verifier's own probe), and the estimate saturates;
+//   - D5/D6: the list's text is capped where its bytes arrive, an asset past its listed size is stopped at the chunk that passes it, and the free-space
+//     sentence rounds the need up and the free figure down;
+//   - D1: every call of the sink that can fail (RemoveStamp, RemoveTree, Begin, End(keep), WriteStamp) ends the run, says why, and stops what follows;
+//   - PORT5-10 (b): space is checked before anything is cleared, and the old copy's own bytes count as given back;
+//   - D2: the list the PACKAGER makes for four invented files (tools/package/test_android_package.py regenerates it) is parsed and unpacked;
+//   - D3: the flags file taken (read once, consumed, unreadable, unparsable, a rename that fails), the dialog rule, the exit after the unpack, the argument
+//     list, and PORT5-10 (a), the log written by a start that stopped in the unpack.
 // Each pin says in "mutation:" the change of sim/Unpack.cpp that turns it red; the Step records that they were run.
 //
-// NOT TESTED, and why: AAssetManager (game/android/AndroidMain.cpp is the thin glue over it: nothing here ran on a phone or an emulator), the dialog, and the real
-// pump. Free of the engine and of the renderer; the only files are a scratch folder's.
+// NOT TESTED, and why: AAssetManager and the dialog and the real pump (game/android/AndroidMain.cpp is the thin glue over them; step 204 ran them on an
+// emulator, which proves startup and the code paths and nothing about a phone). Free of the engine and of the renderer; the only files are a scratch folder's.
 
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
@@ -68,8 +77,12 @@ public:
     std::string failAt;      // an asset that gives half its bytes and then fails
     std::string shortBy;     // an asset that gives one byte fewer than the list says
     std::string longBy;      // an asset that gives one byte more
+    std::string endless;     // an asset that never ends: it gives chunks until it is told to stop (at most kMostChunks, so a reader that never stops fails a check)
     std::size_t chunk = 5;
     int reads = 0;
+    std::size_t chunksGiven = 0; // chunks handed to the reader, over all assets
+    std::size_t endlessChunks = 0; // of them, the ones of the endless asset
+    static constexpr std::size_t kMostChunks = 100000;
 
     bool ReadList(std::string& text, std::string& why) override {
         if (!listReadable) {
@@ -86,11 +99,23 @@ public:
             why = "no such asset";
             return false;
         }
+        if (path == endless) {
+            for (std::size_t i = 0; i < kMostChunks; ++i) {
+                ++chunksGiven;
+                ++endlessChunks;
+                if (!give("abcde", 5)) {
+                    why = "stopped";
+                    return false;
+                }
+            }
+            return true;
+        }
         std::string bytes = found->second;
         if (path == shortBy && !bytes.empty()) bytes.pop_back();
         if (path == longBy) bytes += "X";
         const std::size_t stop = path == failAt ? bytes.size() / 2 : bytes.size();
         for (std::size_t at = 0; at < stop; at += chunk) {
+            ++chunksGiven;
             if (!give(bytes.data() + at, std::min(chunk, stop - at))) {
                 why = "stopped";
                 return false;
@@ -115,6 +140,12 @@ public:
     std::uint64_t written = 0;
     bool stampPresentAtABegin = false; // a stamp that was there when a file was begun: the stamp was not out of the way
     bool stampRemovalFails = false;
+    std::string treeRemovalFails;        // the owned folder whose removal fails
+    std::string beginFails;              // the file whose Begin fails
+    std::string endKeepFails;            // the file whose End(keep) fails
+    bool writeStampFails = false;
+    bool heldUnknown = false;            // HeldBytes cannot say
+    std::uint64_t peak = 0;              // the most bytes any one open file held
     std::string open;
 
     bool ReadStamp(std::string& s) override {
@@ -122,8 +153,12 @@ public:
         s = *stamp;
         return true;
     }
-    bool WriteStamp(const std::string& s, std::string&) override {
+    bool WriteStamp(const std::string& s, std::string& why) override {
         ops.push_back("WriteStamp");
+        if (writeStampFails) {
+            why = "the stamp's file is read-only";
+            return false;
+        }
         stamp = s;
         return true;
     }
@@ -136,8 +171,12 @@ public:
         stamp.reset();
         return true;
     }
-    bool RemoveTree(const std::string& root, std::string&) override {
+    bool RemoveTree(const std::string& root, std::string& why) override {
         ops.push_back("RemoveTree:" + root);
+        if (root == treeRemovalFails) {
+            why = root + " is held by another process";
+            return false;
+        }
         for (auto it = files.begin(); it != files.end();) it = it->first.compare(0, root.size() + 1, root + "/") == 0 ? files.erase(it) : std::next(it);
         return true;
     }
@@ -151,8 +190,20 @@ public:
         ops.push_back("FreeBytes");
         return free;
     }
-    bool Begin(const std::string& path, std::string&) override {
+    std::optional<std::uint64_t> HeldBytes(const std::string& root) override {
+        ops.push_back("HeldBytes:" + root);
+        if (heldUnknown) return std::nullopt;
+        std::uint64_t total = 0;
+        for (const auto& [path, bytes] : files)
+            if (path.compare(0, root.size() + 1, root + "/") == 0) total += Unpack::RoundUpToBlocks(bytes.size());
+        return total;
+    }
+    bool Begin(const std::string& path, std::string& why) override {
         ops.push_back("Begin:" + path);
+        if (path == beginFails) {
+            why = "cannot open the file for writing";
+            return false;
+        }
         if (stamp) stampPresentAtABegin = true;
         files[path].clear();
         open = path;
@@ -165,12 +216,18 @@ public:
         }
         written += size;
         files[open].append(data, size);
+        peak = std::max<std::uint64_t>(peak, files[open].size());
         return true;
     }
-    bool End(bool keep, std::string&) override {
+    bool End(bool keep, std::string& why) override {
         ops.push_back(std::string("End:") + open + (keep ? ":keep" : ":drop"));
-        if (!keep) files.erase(open);
+        const bool fails = keep && open == endKeepFails;
+        if (!keep || fails) files.erase(open);
         open.clear();
+        if (fails) {
+            why = "the disk gave up at the close";
+            return false;
+        }
         return true;
     }
 
@@ -283,7 +340,7 @@ void EveryWayAListCanBeWrongIsRefusedWithTheLine() {
     refused("s\n" + std::string(Unpack::kMostSizeDigits + 1, '9') + "\tGameData/a\n", "digits", "a size too long to be a size");
     CHECK_MSG(Unpack::ParseList("s\n" + std::string(Unpack::kMostSizeDigits, '9') + "\tGameData/a\n", kOwned).ok, "the longest size is fine");
     refused("s\n1\tGameData/a\n1\tGameData/a\n", "twice", "a path listed twice");
-    // mutation: compare ignoring nothing but the first duplicate only when adjacent.
+    // mutation: detect a duplicate only on the line right after the first.
     refused("s\n1\tGameData/a\n1\tGameData/b\n1\tGameData/a\n", "twice", "a path listed twice, not on adjacent lines");
     refused("s\n1\tGameData/a\t2\n", "control", "a TAB inside the path");
     // The sum of the sizes cannot wrap: 20,000 lines of the largest size are more than 64 bits hold.
@@ -377,10 +434,13 @@ void AFreshUnpackCopiesEveryFileAndWritesTheStampLast() {
     const std::ptrdiff_t removeGameData = sink.IndexOf("RemoveTree:GameData");
     const std::ptrdiff_t removeEngine = sink.IndexOf("RemoveTree:engine");
     const std::ptrdiff_t freeAsked = sink.IndexOf("FreeBytes");
+    const std::ptrdiff_t heldAsked = sink.IndexOf("HeldBytes:GameData");
     const std::ptrdiff_t firstBegin = sink.IndexOf("Begin:" + files[0].path);
     CHECK_MSG(removeStamp >= 0 && removeGameData > removeStamp && removeEngine > removeStamp, "the stamp goes before the folders");
-    CHECK_MSG(freeAsked > removeGameData && freeAsked > removeEngine, "space is checked after the old copy is out of the way");
-    CHECK_MSG(firstBegin > freeAsked, "and before the first file is written");
+    // mutation: check the space after the old copy is out of the way (the order step 203 had, and PORT5-10 (b) was about).
+    CHECK_MSG(freeAsked >= 0 && freeAsked < removeStamp && freeAsked < removeGameData, "space is checked BEFORE anything is removed, so a disk that cannot hold the new copy leaves the old one whole");
+    CHECK_MSG(heldAsked >= 0 && heldAsked < freeAsked && sink.IndexOf("HeldBytes:engine") >= 0, "what the old copy would give back is asked first, for both owned folders");
+    CHECK_MSG(firstBegin > removeEngine, "and the first file is written after every removal");
     // The files come in the list's order, each ended before the next begins.
     std::vector<std::string> begins;
     for (const std::string& op : sink.ops)
@@ -747,6 +807,17 @@ void TheFolderSinkWritesBytesAndSurvivesTheOwnersNeighbours() {
         // mutation: write the files in text mode, or one byte short.
         CHECK_MSG(every, "every file is on the real disk with exactly its bytes");
         CHECK_MSG(Slurp(scratch.dir / stampName) == "real-1", "the stamp file holds the stamp and nothing else");
+        // What the old copy holds, as the space check counts it: each file in whole blocks, a folder that is not there as nothing (PORT5-10 (b)).
+        std::uint64_t heldGame = 0;
+        std::uint64_t heldEngine = 0;
+        for (const Mem& file : files) (file.path.compare(0, 9, "GameData/") == 0 ? heldGame : heldEngine) += Unpack::RoundUpToBlocks(file.bytes.size());
+        const std::optional<std::uint64_t> game = sink.HeldBytes("GameData");
+        const std::optional<std::uint64_t> engine = sink.HeldBytes("engine");
+        const std::optional<std::uint64_t> nothing = sink.HeldBytes("neverthere");
+        // mutation: sum the sizes without the blocks; count the stamp or the neighbours; answer "not known" for a folder that is not there.
+        CHECK_MSG(game && *game == heldGame && game > 0, "the content folder holds its files in blocks");
+        CHECK_MSG(engine && *engine == heldEngine && engine > 0, "and so does the engine's");
+        CHECK_MSG(nothing && *nothing == 0, "a folder that is not there holds nothing");
     }
     // A second start: nothing to do. (A sink is made again, as a second process would.)
     {
@@ -835,6 +906,408 @@ void TheFlagsFileIsWhitespaceSeparatedWithDoubleQuotes() {
     CHECK_MSG(!nul.ok && Has(nul.error, "NUL") && nul.args.empty(), "a NUL: " + nul.error);
 }
 
+// ---- Planning step 204: what the verification of step 203 found (D1 to D6, PORT5-10) and what the glue decided without a test (D3) ------------------------------
+
+// D4. The verifier's probe: 18,446 lines of the largest size and one of 744,073,709,570,061 add up to exactly 2^64 - 1 as they are, which the old check (the
+// raw sum against 64 bits) let through; rounded up to blocks they add to 2^64 + 20,480, and the estimate wrapped to 20,480, so the free-space check was skipped.
+void ASumThatWouldWrapTheEstimateIsRefusedWhenTheListIsRead() {
+    std::string probe = "s\n";
+    std::uint64_t raw = 0;
+    for (int i = 0; i < 18446; ++i) {
+        probe += "999999999999999\tGameData/f" + std::to_string(i) + "\n";
+        raw += 999999999999999ull;
+    }
+    probe += "744073709570061\tGameData/last\n";
+    raw += 744073709570061ull;
+    CHECK_MSG(raw == ~std::uint64_t{0}, "the probe's premise: the sizes add up to exactly 2^64 - 1 as they are");
+    const Unpack::Parsed parsed = Unpack::ParseList(probe, kOwned);
+    // mutation: leave the rounded sum unchecked (only the raw one), or check it with a wrapping addition.
+    CHECK_MSG(!parsed.ok, "a list whose estimate would wrap is refused");
+    CHECK_MSG(Has(parsed.error, "allocation blocks") && Has(parsed.error, "line 18448"), "in words that name the line: " + parsed.error);
+    CHECK_MSG(parsed.list.entries.empty(), "and hands nothing on");
+    // The same through the run: nothing on the disk is touched.
+    MemSource source;
+    source.list = probe;
+    MemSink sink;
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    CHECK_MSG(result.outcome == Unpack::Outcome::Failed && Has(result.error, "cannot be used"), "the run refuses it: " + result.error);
+    CHECK_MSG(sink.ops.empty(), "before anything is removed");
+    // One line fewer fits, in both senses: the estimate is then the real, large, sum.
+    std::string fits = "s\n";
+    for (int i = 0; i < 18445; ++i) fits += "999999999999999\tGameData/f" + std::to_string(i) + "\n";
+    const Unpack::Parsed fine = Unpack::ParseList(fits, kOwned);
+    // mutation: refuse any list whose rounded sum passes 2^63.
+    CHECK_MSG(fine.ok, fine.error);
+    CHECK_EQ(Unpack::NeededBytes(fine.list), std::uint64_t{18445} * 1000000000000000ull);
+    // A List made by hand (not through ParseList) whose estimate would pass 64 bits answers the largest number, not a wrapped one.
+    Unpack::List hand;
+    hand.entries = {{"GameData/a", std::uint64_t{1} << 63}, {"GameData/b", std::uint64_t{1} << 63}};
+    // mutation: add without the saturation (the sum is then 0).
+    CHECK_EQ(Unpack::NeededBytes(hand), ~std::uint64_t{0});
+    // mutation: round with (size + block - 1) / block * block, which wraps for a size near 2^64 (the answer is then 0).
+    CHECK_EQ(Unpack::RoundUpToBlocks(0), std::uint64_t{0});
+    CHECK_EQ(Unpack::RoundUpToBlocks(1), Unpack::kBlockBytes);
+    CHECK_EQ(Unpack::RoundUpToBlocks(Unpack::kBlockBytes), Unpack::kBlockBytes);
+    CHECK_EQ(Unpack::RoundUpToBlocks(Unpack::kBlockBytes + 1), 2 * Unpack::kBlockBytes);
+    CHECK_EQ(Unpack::RoundUpToBlocks(~std::uint64_t{0}), ~std::uint64_t{0} - (Unpack::kBlockBytes - 1));
+}
+
+// D5. The list's text is capped where its bytes arrive, and again by the run on whatever a source hands back.
+void TheListTextIsCappedWhereItsBytesArriveAndAgainByTheRun() {
+    std::string text = "abc";
+    std::string why;
+    const std::string rest(Unpack::kMostListTextBytes - 3, 'x');
+    // mutation: no cap; or a cap one byte early (< for <=).
+    CHECK_MSG(Unpack::AppendListChunk(text, rest.data(), rest.size(), why), "a chunk that brings the text exactly to the cap is taken");
+    CHECK_EQ(text.size(), Unpack::kMostListTextBytes);
+    CHECK_MSG(!Unpack::AppendListChunk(text, "y", 1, why) && Has(why, "longer than"), "one byte past the cap is refused, in words: " + why);
+    CHECK_EQ(text.size(), Unpack::kMostListTextBytes);
+    std::string near(Unpack::kMostListTextBytes - 2, 'a');
+    CHECK_MSG(!Unpack::AppendListChunk(near, "abc", 3, why), "a chunk that does not fit whole is refused whole");
+    // mutation: append the part that fits.
+    CHECK_EQ(near.size(), Unpack::kMostListTextBytes - 2);
+    CHECK_MSG(Unpack::AppendListChunk(near, "ab", 2, why) && near.size() == Unpack::kMostListTextBytes, "and the part that does fit is a chunk of its own");
+
+    // The run. A list padded with blank lines (which the parser skips) to exactly the cap is read; one byte more is refused before it is parsed.
+    const std::vector<Mem> files = Invented(6);
+    MemSource exact = SourceFor("cap", files);
+    exact.list += std::string(Unpack::kMostListTextBytes - exact.list.size(), '\n');
+    CHECK_EQ(exact.list.size(), Unpack::kMostListTextBytes);
+    MemSink okSink;
+    CHECK_MSG(Unpack::Run(exact, okSink, Plain()).outcome == Unpack::Outcome::Done, "a list at the cap is unpacked");
+    MemSource over = SourceFor("cap", files);
+    over.list += std::string(Unpack::kMostListTextBytes + 1 - over.list.size(), '\n');
+    MemSink sink;
+    const Unpack::Result result = Unpack::Run(over, sink, Plain());
+    // mutation: no check in the run (the blank lines parse, and the unpack is Done).
+    CHECK_MSG(result.outcome == Unpack::Outcome::Failed && Has(result.error, "longer than"), "one byte over is refused: " + result.error);
+    CHECK_MSG(sink.ops.empty() && over.reads == 0, "and nothing is touched");
+}
+
+// D5. An asset longer than its listed size is stopped at the chunk that passes the size, not read to its end.
+void AnAssetPastItsListedSizeIsRefusedAtTheChunkThatPassesIt() {
+    const std::vector<Mem> files = Invented(8);
+    MemSource source = SourceFor("e", files);
+    source.endless = files[3].path;
+    source.assets[files[3].path] = files[3].bytes; // the list still says its real size
+    MemSink sink;
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    const std::size_t listed = files[3].bytes.size();
+    // mutation: count the bytes only when the source returns (the endless source then gives all its chunks, and the disk is given every one).
+    CHECK_MSG(result.outcome == Unpack::Outcome::Failed, "an asset that never ends fails the unpack");
+    CHECK_MSG(Has(result.error, files[3].path) && Has(result.error, "damaged") && Has(result.error, "longer"), "in words that name the file: " + result.error);
+    CHECK_MSG(source.endlessChunks <= listed / source.chunk + 1, "the source was asked for no more than one chunk past the size: " + std::to_string(source.endlessChunks));
+    // mutation: write the chunk that passes the size before refusing it.
+    CHECK_MSG(sink.peak <= listed, "and the disk was never given a byte past the listed size: " + std::to_string(sink.peak) + " of " + std::to_string(listed));
+    CHECK_MSG(sink.files.count(files[3].path) == 0, "the half file is removed");
+    CHECK_MSG(!sink.stamp.has_value() && sink.Count("Begin:") == 4, "no stamp, and no file after it is begun");
+}
+
+// D1. Each call of the sink that can fail ends the run, with the sink's own reason in the words, and nothing after it is done.
+void EveryFailingCallOfTheSinkEndsTheRunAndSaysWhich() {
+    const std::vector<Mem> files = Invented(23);
+    // mutation (each): ignore the failure of that call.
+    {
+        MemSource source = SourceFor("old", files);
+        MemSink sink;
+        CHECK(Unpack::Run(source, sink, Plain()).outcome == Unpack::Outcome::Done);
+        sink.ops.clear();
+        sink.stampRemovalFails = true;
+        source = SourceFor("new", files);
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, "could not be cleared") && Has(r.error, "read-only"), "the old stamp that cannot be removed: " + r.error);
+        CHECK_MSG(sink.Count("Begin:") == 0 && sink.Count("RemoveTree:") == 0, "no folder is removed and no copy begins while the old stamp stands");
+        CHECK_MSG(sink.stamp && *sink.stamp == "old" && source.reads == 0, "and the old copy is as it was");
+    }
+    for (const std::string& root : {std::string("GameData"), std::string("engine")}) {
+        MemSource source = SourceFor("new", files);
+        MemSink sink;
+        sink.treeRemovalFails = root;
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, "could not be cleared") && Has(r.error, root + " is held"), "an owned folder that cannot be removed (" + root + "): " + r.error);
+        CHECK_MSG(sink.Count("Begin:") == 0 && !sink.stamp.has_value(), "no copy begins, and no stamp is written");
+        CHECK_MSG(root == "engine" ? sink.Did("RemoveTree:GameData") : !sink.Did("RemoveTree:engine"), "the folders are removed in order, and the walk stops at the one that failed");
+    }
+    {
+        MemSource source = SourceFor("new", files);
+        MemSink sink;
+        sink.beginFails = files[4].path;
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, files[4].path) && Has(r.error, "cannot open the file for writing"), "a file that cannot be begun: " + r.error);
+        CHECK_EQ(r.copied, std::size_t{4});
+        CHECK_MSG(sink.Count("Begin:") == 5 && !sink.stamp.has_value() && sink.files.count(files[4].path) == 0, "no file after it is begun, no stamp");
+        CHECK_MSG(source.reads == 4, "and the source was not asked for it");
+    }
+    {
+        MemSource source = SourceFor("new", files);
+        MemSink sink;
+        sink.endKeepFails = files[4].path;
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, files[4].path) && Has(r.error, "the disk gave up at the close"), "a file that cannot be closed whole: " + r.error);
+        CHECK_EQ(r.copied, std::size_t{4});
+        CHECK_MSG(sink.Count("Begin:") == 5 && !sink.stamp.has_value(), "it is not counted as copied, no file after it is begun, no stamp");
+    }
+    {
+        MemSource source = SourceFor("new", files);
+        MemSink sink;
+        sink.writeStampFails = true;
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, "could not be recorded") && Has(r.error, "the stamp's file is read-only"), "a stamp that cannot be written: " + r.error);
+        CHECK_MSG(r.copied == files.size() && !sink.stamp.has_value(), "every file was copied, and there is no stamp, so the next start copies again");
+    }
+}
+
+// PORT5-10 (b). Space is checked before anything is cleared; what the old copy holds counts as given back.
+void SpaceIsCheckedBeforeAnythingIsClearedAndTheOldCopyCountsAsGivenBack() {
+    const std::vector<Mem> oldFiles = Invented(12);
+    const std::vector<Mem> newFiles = Invented(30);
+    MemSource oldSource = SourceFor("old", oldFiles);
+    MemSink sink;
+    CHECK(Unpack::Run(oldSource, sink, Plain()).outcome == Unpack::Outcome::Done);
+    std::uint64_t held = 0;
+    for (const Mem& file : oldFiles) held += Unpack::RoundUpToBlocks(file.bytes.size());
+    std::uint64_t needed = 0;
+    for (const Mem& file : newFiles) needed += Unpack::RoundUpToBlocks(file.bytes.size());
+    CHECK_MSG(needed > held, "the update is the bigger one");
+    const auto filesBefore = sink.files;
+    const auto stampBefore = sink.stamp;
+
+    // One byte short even with the old copy counted: refused, and the old copy is whole, with its stamp.
+    sink.ops.clear();
+    sink.free = needed - held - 1;
+    MemSource newSource = SourceFor("new", newFiles);
+    const Unpack::Result refused = Unpack::Run(newSource, sink, Plain());
+    // mutation: clear first and check after (the old order); ignore what the old copy gives back; count it twice.
+    CHECK_MSG(refused.outcome == Unpack::Outcome::Failed && Has(refused.error, "not enough free space"), "one byte short is refused: " + refused.error);
+    CHECK_MSG(Has(refused.error, "more than the old copy of the game already takes"), "and the words say the old copy was counted: " + refused.error);
+    CHECK_EQ(refused.reclaimable, held);
+    CHECK_EQ(refused.needed, needed);
+    CHECK_MSG(!sink.Did("RemoveStamp") && sink.Count("RemoveTree:") == 0 && sink.Count("Begin:") == 0 && !sink.Did("WriteStamp"), "nothing was removed or written");
+    CHECK_MSG(sink.files == filesBefore && sink.stamp == stampBefore, "the old copy and its stamp are as they were");
+    CHECK_EQ(newSource.reads, 0);
+
+    // Exactly enough with the old copy counted: the update goes through.
+    sink.ops.clear();
+    sink.free = needed - held;
+    const Unpack::Result done = Unpack::Run(newSource, sink, Plain());
+    CHECK_MSG(done.outcome == Unpack::Outcome::Done && sink.stamp && *sink.stamp == "new", "exactly enough, counting the old copy's bytes, is enough: " + done.error);
+
+    // A sink that cannot say what it holds counts none of it.
+    MemSink blind;
+    MemSource first = SourceFor("old", oldFiles);
+    CHECK(Unpack::Run(first, blind, Plain()).outcome == Unpack::Outcome::Done);
+    blind.heldUnknown = true;
+    blind.free = needed - 1;
+    MemSource second = SourceFor("new", newFiles);
+    const Unpack::Result blindRefused = Unpack::Run(second, blind, Plain());
+    // mutation: treat an unknown holding as the whole disk.
+    CHECK_MSG(blindRefused.outcome == Unpack::Outcome::Failed && blindRefused.reclaimable == 0 && !Has(blindRefused.error, "old copy"), "nothing is counted as given back that the sink did not state: " + blindRefused.error);
+    CHECK_MSG(blind.stamp && *blind.stamp == "old", "and the old stamp stands");
+}
+
+// D6. The sentence rounds the need UP and the free figure DOWN.
+void TheFreeSpaceSentenceNeverSaysThePhoneHasWhatItLacks() {
+    // mutation: round the free figure up (the old sentence), or the need down.
+    CHECK_MSG(Unpack::MegabytesNeeded(1) == std::string("1 MB"), Unpack::MegabytesNeeded(1));
+    CHECK_MSG(Unpack::MegabytesNeeded(1048576) == std::string("1 MB"), Unpack::MegabytesNeeded(1048576));
+    CHECK_MSG(Unpack::MegabytesNeeded(1048577) == std::string("2 MB"), Unpack::MegabytesNeeded(1048577));
+    CHECK_MSG(Unpack::MegabytesFree(0) == std::string("less than 1 MB"), Unpack::MegabytesFree(0));
+    CHECK_MSG(Unpack::MegabytesFree(1048575) == std::string("less than 1 MB"), Unpack::MegabytesFree(1048575));
+    CHECK_MSG(Unpack::MegabytesFree(1048576) == std::string("1 MB"), Unpack::MegabytesFree(1048576));
+    CHECK_MSG(Unpack::MegabytesFree(2097151) == std::string("1 MB"), Unpack::MegabytesFree(2097151));
+    // Whatever is short, the two numbers differ: the need is strictly above the free figure.
+    bool never = true;
+    for (const std::uint64_t need : {std::uint64_t{1}, std::uint64_t{4096}, std::uint64_t{1048576}, std::uint64_t{1048577}, std::uint64_t{24707748}, std::uint64_t{3686400}}) {
+        for (const std::uint64_t spare : {std::uint64_t{0}, std::uint64_t{1}, need / 2, need - 1}) {
+            if (spare >= need) continue;
+            never = never && Unpack::MegabytesFree(spare) != Unpack::MegabytesNeeded(need);
+        }
+    }
+    CHECK_MSG(never, "'needs about 24 MB and 24 MB are free' cannot be printed");
+    // From a run: 300 files of 10,000 bytes take 3,686,400 bytes (3.52 MB) in blocks, and 3,686,399 are free (3.52 MB): the old sentence said "4 MB and 4 MB".
+    std::vector<Mem> many;
+    for (int i = 0; i < 300; ++i) many.push_back({"GameData/f" + std::to_string(i), std::string(10000, 'q')});
+    MemSource source = SourceFor("f", many);
+    MemSink sink;
+    sink.free = 3686399;
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    CHECK(result.outcome == Unpack::Outcome::Failed);
+    CHECK_MSG(Has(result.error, "about 4 MB and 3 MB are free"), result.error);
+    sink.free = 700000;
+    MemSource again = SourceFor("f", many);
+    CHECK_MSG(Has(Unpack::Run(again, sink, Plain()).error, "about 4 MB and less than 1 MB are free"), "a disk with under a megabyte says so");
+}
+
+// D2. The list the PACKAGER makes (tools/package/android_package.py make_list) for four invented files, as text: tools/package/test_android_package.py
+// regenerates it from the same four files with the packager's own function and holds it equal to this, so the packager and this parser cannot drift apart
+// unseen. The lines are escaped so that no line ending of a checkout can change them.
+// BEGIN PACKAGER LIST
+const char* const kPackagerList =
+    "ed16440fba8916323446bd8f95d91887\n"
+    "7\tGameData/a/#b\n"
+    "1234\tGameData/levels/level0.tscn\n"
+    "0\tGameData/odd name/b c.png\n"
+    "4096\tengine/assets/shaders/x.spv\n";
+// END PACKAGER LIST
+
+void TheListThePackagerMakesIsTheListThisParses() {
+    const Unpack::Parsed parsed = Unpack::ParseList(kPackagerList, kOwned);
+    // mutation: change the separator, the digit cap or the stamp rule in the parser (the packager's side is tied by the Python test).
+    CHECK_MSG(parsed.ok, parsed.error);
+    CHECK_MSG(parsed.list.stamp == "ed16440fba8916323446bd8f95d91887", "the stamp: 32 hex digits");
+    CHECK_EQ(parsed.list.entries.size(), std::size_t{4});
+    CHECK_EQ(parsed.list.bytes, std::uint64_t{1234 + 7 + 4096});
+    bool every = parsed.list.entries.size() == 4;
+    if (every) {
+        every = parsed.list.entries[0].path == "GameData/a/#b" && parsed.list.entries[0].size == 7 && parsed.list.entries[1].path == "GameData/levels/level0.tscn" &&
+                parsed.list.entries[1].size == 1234 && parsed.list.entries[2].path == "GameData/odd name/b c.png" && parsed.list.entries[2].size == 0 &&
+                parsed.list.entries[3].path == "engine/assets/shaders/x.spv" && parsed.list.entries[3].size == 4096;
+    }
+    CHECK_MSG(every, "every line: a path with a space, a '#', an empty file, a shader");
+    // And the run over it, with invented bytes of the listed sizes: the whole way, as the phone's unpack goes.
+    MemSource source;
+    source.list = kPackagerList;
+    for (const Unpack::Entry& entry : parsed.list.entries) source.assets[entry.path] = std::string(static_cast<std::size_t>(entry.size), 'z');
+    MemSink sink;
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    CHECK_MSG(result.outcome == Unpack::Outcome::Done && result.copied == 4 && sink.stamp && *sink.stamp == "ed16440fba8916323446bd8f95d91887", "unpacked: " + result.error);
+}
+
+// D3. The developer's flags file TAKEN: the rules that were in the Android glue.
+void TheFlagsFileIsReadOnceAndConsumedWhateverItHeld() {
+    const std::string argsName = "magicportals_args.txt";
+    const std::string usedName = "magicportals_args.used";
+    {
+        Folder scratch;
+        const std::string dir = scratch.dir.string();
+        const Unpack::FlagsFile none = Unpack::TakeFlagsFile(dir, argsName, usedName);
+        // mutation: call a missing file present (every launch would then be a scripted one).
+        CHECK_MSG(!none.present && none.args.empty() && none.info.empty() && none.error.empty() && none.warning.empty(), "no file: not a scripted run, nothing to say");
+        CHECK_MSG(!fs::exists(scratch.dir / usedName), "and nothing is made");
+
+        std::ofstream(scratch.dir / argsName, std::ios::binary) << "--level level0 --frames 3\r\n--screenshot \"/a b/c.png\"\r\n";
+        const Unpack::FlagsFile taken = Unpack::TakeFlagsFile(dir, argsName, usedName);
+        CHECK_MSG(taken.present && taken.error.empty() && taken.warning.empty(), "a file there: a scripted run: " + taken.error + taken.warning);
+        using V = std::vector<std::string>;
+        CHECK_MSG(taken.args == (V{"--level", "level0", "--frames", "3", "--screenshot", "/a b/c.png"}), "its flags, quotes and all");
+        CHECK_MSG(Has(taken.info, (scratch.dir / argsName).string()) && Has(taken.info, "--frames 3"), "the log line names the file and the flags: " + taken.info);
+        // mutation: leave the file where it is (the next launch would run it again), or lose its bytes.
+        CHECK_MSG(!fs::exists(scratch.dir / argsName), "the file is consumed");
+        CHECK_MSG(Slurp(scratch.dir / usedName) == "--level level0 --frames 3\r\n--screenshot \"/a b/c.png\"\r\n", "and kept as .used, byte for byte");
+        CHECK_MSG(!Unpack::TakeFlagsFile(dir, argsName, usedName).present, "so the next launch is not scripted");
+
+        // A second scripted run replaces the first one's .used.
+        std::ofstream(scratch.dir / argsName, std::ios::binary) << "--level level1";
+        const Unpack::FlagsFile second = Unpack::TakeFlagsFile(dir, argsName, usedName);
+        CHECK_MSG(second.present && second.args == (V{"--level", "level1"}) && second.warning.empty(), "a second file is taken: " + second.warning);
+        CHECK_MSG(Slurp(scratch.dir / usedName) == "--level level1", "and replaces the earlier .used");
+
+        // An empty file is a scripted run with no flags.
+        std::ofstream(scratch.dir / argsName, std::ios::binary) << "";
+        const Unpack::FlagsFile empty = Unpack::TakeFlagsFile(dir, argsName, usedName);
+        CHECK_MSG(empty.present && empty.args.empty() && empty.error.empty() && !fs::exists(scratch.dir / argsName), "an empty file: scripted, no flags, no complaint, consumed");
+    }
+    {
+        // A file that does not parse is ignored, SAID, present and consumed.
+        Folder scratch;
+        std::ofstream(scratch.dir / argsName, std::ios::binary) << "--level \"level 0 --frames 3";
+        const Unpack::FlagsFile broken = Unpack::TakeFlagsFile(scratch.dir.string(), argsName, usedName);
+        // mutation: take the arguments of a file that did not parse; do not consume a broken file.
+        CHECK_MSG(broken.present && broken.args.empty() && Has(broken.error, "ignored") && Has(broken.error, "quote"), "an unclosed quote: " + broken.error);
+        CHECK_MSG(!fs::exists(scratch.dir / argsName) && fs::exists(scratch.dir / usedName), "and it does not repeat either");
+    }
+    {
+        // A file that cannot be read is still present (the run is a scripted one), ignored, said and consumed. The reader is handed in: a permission cannot be
+        // made the same way on every system.
+        Folder scratch;
+        std::ofstream(scratch.dir / argsName, std::ios::binary) << "--level level0";
+        const Unpack::FlagsFile blind =
+            Unpack::TakeFlagsFile(scratch.dir.string(), argsName, usedName, [](const std::string&, std::string&) { return false; });
+        // mutation: call an unreadable file absent; or parse the empty text as if it were the file.
+        CHECK_MSG(blind.present, "an unreadable file is still a scripted run");
+        CHECK_MSG(blind.args.empty() && Has(blind.error, "could not be read") && blind.info.empty(), "its flags are not taken, and the words say why: " + blind.error);
+        CHECK_MSG(!fs::exists(scratch.dir / argsName) && Slurp(scratch.dir / usedName) == "--level level0", "and it is consumed");
+    }
+    {
+        // Something that is not a regular file at the name is not a flags file.
+        Folder scratch;
+        fs::create_directories(scratch.dir / argsName);
+        const Unpack::FlagsFile folder = Unpack::TakeFlagsFile(scratch.dir.string(), argsName, usedName);
+        CHECK_MSG(!folder.present && folder.args.empty() && fs::is_directory(scratch.dir / argsName), "a folder of that name is not a flags file and is left alone");
+    }
+    {
+        // The rename that cannot be done: the flags are still delivered, the file stays, and the words say that it will be read again.
+        Folder scratch;
+        std::ofstream(scratch.dir / argsName, std::ios::binary) << "--level level0";
+        fs::create_directories(scratch.dir / usedName / "occupied");
+        const Unpack::FlagsFile stuck = Unpack::TakeFlagsFile(scratch.dir.string(), argsName, usedName);
+        // mutation: say nothing of a rename that failed; or drop the flags with it.
+        CHECK_MSG(stuck.present && stuck.args == (std::vector<std::string>{"--level", "level0"}), "the flags are delivered");
+        CHECK_MSG(Has(stuck.warning, "could not be renamed") && Has(stuck.warning, "read again"), "and the words say it will repeat: " + stuck.warning);
+        CHECK_MSG(fs::exists(scratch.dir / argsName), "the file is still there");
+    }
+}
+
+// D3. The decisions after the unpack and the argument list.
+void TheEntrysDecisionsAreRulesThatCanBeRun() {
+    // mutation (each): the other answer.
+    CHECK_MSG(Unpack::ShowsFailureDialog(false), "a player's launch is told in a dialog");
+    CHECK_MSG(!Unpack::ShowsFailureDialog(true), "a scripted one is not: nobody is at it to close the dialog");
+    CHECK_MSG(Unpack::NextAfter(Unpack::Outcome::UpToDate) == Unpack::Next::Continue, "up to date: on to the game");
+    CHECK_MSG(Unpack::NextAfter(Unpack::Outcome::Done) == Unpack::Next::Continue, "unpacked: on to the game");
+    CHECK_MSG(Unpack::NextAfter(Unpack::Outcome::Cancelled) == Unpack::Next::ExitSuccess, "the app was closed: a quiet, successful end, not a failure");
+    CHECK_MSG(Unpack::NextAfter(Unpack::Outcome::Failed) == Unpack::Next::ExitFailure, "failed: an error exit");
+
+    Unpack::Result r;
+    r.stamp = "abc";
+    r.files = 900;
+    r.copied = 31;
+    r.copiedBytes = 4096;
+    r.outcome = Unpack::Outcome::UpToDate;
+    CHECK_MSG(Has(Unpack::Summary(r), "already unpacked") && Has(Unpack::Summary(r), "900 files") && Has(Unpack::Summary(r), "abc"), Unpack::Summary(r));
+    r.outcome = Unpack::Outcome::Done;
+    CHECK_MSG(Has(Unpack::Summary(r), "Unpacked 31 files") && Has(Unpack::Summary(r), "4096 bytes") && Has(Unpack::Summary(r), "abc"), Unpack::Summary(r));
+    r.outcome = Unpack::Outcome::Cancelled;
+    CHECK_MSG(Has(Unpack::Summary(r), "closed during the unpack after 31 files") && Has(Unpack::Summary(r), "next start unpacks again"), Unpack::Summary(r));
+    r.outcome = Unpack::Outcome::Failed;
+    r.error = "the words of the failure";
+    CHECK_MSG(Unpack::Summary(r) == "the words of the failure", "a failure is its own words");
+
+    using V = std::vector<std::string>;
+    CHECK_MSG(Unpack::LaunchArguments("prog", "/files/GameData", {"--level", "level0", "a b"}) == (V{"prog", "--root", "/files/GameData", "--level", "level0", "a b"}),
+              "the program, --root and the folder, then the flags, each as one argument");
+    CHECK_MSG(Unpack::LaunchArguments("prog", "/r", {}) == (V{"prog", "--root", "/r"}), "no flags: just the root");
+    CHECK_MSG(Unpack::LaunchArguments(nullptr, "/r", {}) == (V{Unpack::kDefaultProgramName, "--root", "/r"}), "no program name: the default");
+    CHECK_MSG(Unpack::LaunchArguments("", "/r", {}) == (V{Unpack::kDefaultProgramName, "--root", "/r"}), "an empty one too");
+    CHECK_MSG(std::string(Unpack::kDefaultProgramName) == "MagicPortals", "the default program name");
+}
+
+// PORT5-10 (a). The log of a start that stopped in the unpack.
+void AStartThatStoppedInTheUnpackLeavesItsWordsInTheLogAndKeepsTheLastLog() {
+    Folder scratch;
+    const fs::path folder = scratch.dir / "Magic Portals" / "scratch";
+    const std::string log = (folder / "magicportals.log").string();
+    const std::string prev = (folder / "magicportals.prev.log").string();
+    std::string why;
+    // No folder yet, no earlier log: the folder is made and the words are written, with a final newline.
+    CHECK_MSG(Unpack::RecordFailure(log, prev, "There is not enough free space.", why), why);
+    // mutation: write nothing; do not make the folders; do not end the line.
+    CHECK_MSG(Slurp(log) == "There is not enough free space.\n", "the words are in the file, one line");
+    CHECK_MSG(!fs::exists(prev), "and there was no earlier log to keep");
+    // An earlier log is kept beside it, the one before that goes.
+    CHECK_MSG(Unpack::RecordFailure(log, prev, "second\n", why), why);
+    CHECK_MSG(Slurp(log) == "second\n" && Slurp(prev) == "There is not enough free space.\n", "the last log is the previous one, and the new words are the log");
+    // mutation: double the final newline when the text has one already.
+    CHECK_MSG(Unpack::RecordFailure(log, prev, "third\n", why), why);
+    CHECK_MSG(Slurp(log) == "third\n" && Slurp(prev) == "second\n", "the one before is replaced");
+    // A log that cannot be written: said, not thrown. (A FILE stands where the log's folder should be.)
+    Folder blocked;
+    std::ofstream(blocked.dir / "notafolder", std::ios::binary) << "a file where the log's folder should be";
+    std::string blockedWhy;
+    CHECK_MSG(!Unpack::RecordFailure((blocked.dir / "notafolder" / "magicportals.log").string(), (blocked.dir / "magicportals.prev.log").string(), "x", blockedWhy), "a log that cannot be written is a false");
+    CHECK_MSG(!blockedWhy.empty(), "with a reason");
+}
+
 void runTests() {
     AListOfSizesAndPathsReadsBack();
     BlankLinesAndCarriageReturnsAreToleratedAndNothingIsAComment();
@@ -855,6 +1328,16 @@ void runTests() {
     TheFolderSinkWritesBytesAndSurvivesTheOwnersNeighbours();
     AFolderSinkThatLosesItsSourceLeavesNoStampAndNoHalfFile();
     TheFlagsFileIsWhitespaceSeparatedWithDoubleQuotes();
+    ASumThatWouldWrapTheEstimateIsRefusedWhenTheListIsRead();
+    TheListTextIsCappedWhereItsBytesArriveAndAgainByTheRun();
+    AnAssetPastItsListedSizeIsRefusedAtTheChunkThatPassesIt();
+    EveryFailingCallOfTheSinkEndsTheRunAndSaysWhich();
+    SpaceIsCheckedBeforeAnythingIsClearedAndTheOldCopyCountsAsGivenBack();
+    TheFreeSpaceSentenceNeverSaysThePhoneHasWhatItLacks();
+    TheListThePackagerMakesIsTheListThisParses();
+    TheFlagsFileIsReadOnceAndConsumedWhateverItHeld();
+    TheEntrysDecisionsAreRulesThatCanBeRun();
+    AStartThatStoppedInTheUnpackLeavesItsWordsInTheLogAndKeepsTheLastLog();
 }
 
 } // namespace

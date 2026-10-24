@@ -42,6 +42,8 @@ inline constexpr const char* kPrismFolder = "supersonic-magicportals";
 // supersonic.reportLog is another path.
 inline constexpr const char* kUserScratchFolder = "scratch";
 inline constexpr const char* kLogFileName = "magicportals.log";
+// The run before's log, beside the log. (It was main.cpp's own constant until planning step 204, when the Android entry needed the same name.)
+inline constexpr const char* kPreviousLogFileName = "magicportals.prev.log";
 
 // What a candidate is, for the one rule that moves candidates (ArrangedFor). Everything else keeps the order main gave it.
 enum class Kind { Other, UserDataScratch };
@@ -74,6 +76,12 @@ std::vector<Candidate> ArrangedFor(std::vector<Candidate> candidates, bool phone
 
 // The first candidate whose base AND whose prism folder pass the probe. Never throws.
 Chosen Choose(const std::vector<Candidate>& candidates, const Probe& probe);
+
+// The last run's log moved to `previous`, replacing the one before. Renamed first; copied where the rename is refused, as Windows refuses it while another
+// running copy of the game still holds the file open. True when there was nothing to keep or it was kept; false, with `why`, when the copy failed too (the
+// log is then still where it was, and the caller goes on: a log that cannot be kept never stops a start). It was main.cpp's KeepPreviousLog until planning
+// step 204, when the Android entry needed the same rotation before it writes the log of a start that stopped in the unpack.
+bool KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous, std::string& why);
 
 // The probe the game uses: makes `dir` if it is missing, writes a small file of a name no other process uses into it, and removes the
 // file, so nothing is left behind but the folder. Never throws.

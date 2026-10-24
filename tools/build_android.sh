@@ -3,7 +3,7 @@
 #
 #   tools/build_android.sh (--data <content folder> | --no-data) [options]
 #
-# NOT RUN ON A PHONE OR AN EMULATOR as of this step: this builds, packages and statically checks. What it makes has never been installed.
+# Built and statically checked in step 203; the APK it makes was run on an x86_64 emulator in step 204 (docs/android.md section 0). NOT RUN ON ANY PHONE.
 #
 # Two halves. This script finds the Android SDK and NDK, configures and builds the game's shared library for each ABI in a tree of its own
 # under out/build/ (the repository's .gitignore covers out/ and nothing else), strips it, and hands it to tools/package/android_package.py, which
