@@ -117,8 +117,13 @@ set(_magicPortalsDevToolsValue 0)
 if (MAGICPORTALS_DEV_TOOLS_ENABLED)
     set(_magicPortalsDevToolsValue 1)
 endif()
+# The performance-diagnostic build (planning step 205): a third fact, on the same footing, independent of the other two.
+set(_magicPortalsPerfDiagValue 0)
+if (MAGICPORTALS_PERF_DIAG)
+    set(_magicPortalsPerfDiagValue 1)
+endif()
 target_compile_definitions(MagicPortals PRIVATE
-    "MAGICPORTALS_MOBILE=${_magicPortalsMobileValue}" "MAGICPORTALS_DEV_TOOLS=${_magicPortalsDevToolsValue}")
+    "MAGICPORTALS_MOBILE=${_magicPortalsMobileValue}" "MAGICPORTALS_DEV_TOOLS=${_magicPortalsDevToolsValue}" "MAGICPORTALS_PERF_DIAG=${_magicPortalsPerfDiagValue}")
 
 # The Windows release program (MAGICPORTALS_WIN_GUI, top-level CMakeLists.txt): a function of its own, so the rehearsal of the link calls the same code.
 if (MAGICPORTALS_WIN_GUI)

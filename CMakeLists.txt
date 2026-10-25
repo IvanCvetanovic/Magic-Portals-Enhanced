@@ -105,6 +105,13 @@ else()
                         "leave out, the developer's flags without a word. Pass -DMAGICPORTALS_DEV_TOOLS=OFF for a player's program.")
 endif()
 
+# MAGICPORTALS_PERF_DIAG (planning step 205, PORT-7): a PERFORMANCE-DIAGNOSTIC build, OFF by default and in every release. When ON the engine's frame readout is over the
+# picture and its statistics line goes into the game's own log every 5 seconds (GameManifest::perfOverlay and perfLogSeconds), for a tester's phone to say where its
+# frames go; nothing else changes (not the profile, not the sample cap, not the developer's flags). It is independent of MAGICPORTALS_MOBILE and of MAGICPORTALS_DEV_TOOLS:
+# a tester's build must not carry the developer's flags. When OFF none of it is compiled in. Like the other two it reaches every source of the MagicPortals program as a
+# definition of that target (game/CMakeLists.txt) and BuildProfile.hpp stops a translation unit that lacks it.
+option(MAGICPORTALS_PERF_DIAG "A performance-diagnostic build: the engine's frame readout and a statistics line in the log every 5 s (OFF in every release)" OFF)
+
 # MAGICPORTALS_WIN_GUI: the Windows RELEASE executable (game/windows/MagicPortalsWindows.cmake): no console window, vulkan-1.dll loaded late behind a
 # check that says in words what is missing, and version information. OFF by default and in build/, because a program with no console gives a
 # script no stdout, no stderr and no --help: the parity rig and every script that launches the game need the console program. Use a build folder

@@ -55,6 +55,14 @@ Chosen Choose(const std::vector<Candidate>& candidates, const Probe& probe) {
     return chosen;
 }
 
+LogPaths LogPathsIn(const std::filesystem::path& folder) {
+    return LogPaths{folder / kLogFileName, folder / kPreviousLogFileName};
+}
+
+std::filesystem::path PhoneLogFolder(const std::filesystem::path& userDataFolder) {
+    return userDataFolder.empty() ? userDataFolder : userDataFolder / kUserScratchFolder;
+}
+
 bool KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous, std::string& why) {
     std::error_code ec;
     if (!std::filesystem::exists(log, ec) || ec) return true;

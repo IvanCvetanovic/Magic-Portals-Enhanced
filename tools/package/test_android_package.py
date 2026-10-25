@@ -424,6 +424,13 @@ class TheListTie(unittest.TestCase):
         found['separator'] = re.search(r"kSizeSeparator\s*=\s*'(.*)';", text).group(1)
         found['digits'] = int(re.search(r'kMostSizeDigits\s*=\s*(\d+)\s*;', text).group(1))
         found['stamp'] = int(re.search(r'kMostStampChars\s*=\s*(\d+)\s*;', text).group(1))
+        # Step 205 (PORT6-8 (a)): the two limits a package must not break. The header spells them as products ("4 * 1024 * 1024"), read here as the product.
+        for key, name in (('list_text', 'kMostListTextBytes'), ('block', 'kBlockBytes')):
+            expression = re.search(name + r'\s*=\s*([0-9 *]+?)\s*;', text).group(1)
+            value = 1
+            for factor in expression.split('*'):
+                value *= int(factor.strip())
+            found[key] = value
         return found
 
     def test_the_constants_are_the_headers(self):
@@ -444,6 +451,67 @@ class TheListTie(unittest.TestCase):
         ap.parse_list('%s\n1\tGameData/a\n' % ('a' * found['stamp']))
         with self.assertRaises(ap.PackError):
             ap.parse_list('%s\n1\tGameData/a\n' % ('a' * (found['stamp'] + 1)))
+
+    def test_the_limits_the_app_holds_a_list_to_are_the_headers(self):
+        found = self.constants()
+        self.assertEqual(ap.MOST_LIST_TEXT_BYTES, found['list_text'])
+        self.assertEqual(ap.BLOCK_BYTES, found['block'])
+        self.assertEqual(found['list_text'], 4 * 1024 * 1024)
+        self.assertEqual(ap.MOST_UINT64, 2 ** 64 - 1)
+
+    def test_the_packagers_own_synthetic_list_passes_both_limits_and_round_trips(self):
+        stamp, text = ap.make_list(self.FILES)
+        self.assertEqual(ap.parse_list(text)[0], stamp)
+        ap.check_list_limits([size for _, size, _ in self.FILES], len(text.encode('utf-8')), 'the synthetic list')
+
+    def test_a_list_whose_text_passes_the_apps_cap_is_not_built_and_not_read(self):
+        # One entry's line is '1\tGameData/' + name + '\n'; names are made as long as a safe path allows, so a few entries fill the cap quickly.
+        cap = ap.MOST_LIST_TEXT_BYTES
+        base = len(('s' * ap.STAMP_CHARS) + '\n')
+        line = lambda pad: '1\tGameData/' + 'a' * pad + '\n'  # noqa: E731
+        pad = 4000
+        count = (cap - base) // len(line(pad))
+        text = ('s' * ap.STAMP_CHARS) + '\n' + ''.join('1\tGameData/%s%d\n' % ('a' * (pad - 6), n) for n in range(count))
+        # Top it up to the byte: the cap itself is accepted, one byte past it is refused, on the packager's reader (parse_list) and its limit function.
+        short = cap - len(text.encode('utf-8'))
+        self.assertGreaterEqual(short, 0)
+        exact = text + '1\tGameData/' + 'b' * (short - len('1\tGameData/\n')) + '\n' if short > len('1\tGameData/\n') else text
+        self.assertEqual(len(exact.encode('utf-8')), cap)
+        ap.parse_list(exact)  # at the cap: taken
+        with self.assertRaises(ap.PackError) as caught:
+            ap.parse_list(exact + '\n')  # a blank line is ignored by the format, but it is a byte past the cap
+        self.assertIn('kMostListTextBytes', str(caught.exception))
+        ap.check_list_limits([1], cap, 'x')
+        with self.assertRaises(ap.PackError):
+            ap.check_list_limits([1], cap + 1, 'x')
+
+    def test_make_list_refuses_a_list_the_app_would_refuse_for_its_text(self):
+        # Entries with the longest safe path (the packager has no length limit of its own): 5,000 of them of 900 bytes are over 4 MiB.
+        entries = [('GameData/' + ('d%d/' % n) + 'f' * 880 + '%d' % n, 1, sha(b'x%d' % n)) for n in range(5000)]
+        with self.assertRaises(ap.PackError) as caught:
+            ap.make_list(entries)
+        self.assertIn('kMostListTextBytes', str(caught.exception))
+        ap.make_list(entries[:100])  # the same shape, far under the cap
+
+    def test_sizes_that_round_up_past_sixty_four_bits_are_not_built_and_not_read(self):
+        # The verifier's own probe of step 204 (D4), at the packager: 18,446 files of 999,999,999,999,999 bytes and one of 744,073,709,570,061 add to exactly
+        # 2^64 - 1 as they are and to 2^64 + 20,480 once each is rounded up to a block, which the app refuses.
+        sizes = [999999999999999] * 18446 + [744073709570061]
+        self.assertEqual(sum(sizes), 2 ** 64 - 1)
+        with self.assertRaises(ap.PackError) as caught:
+            ap.check_list_limits(sizes, 100, 'the probe')
+        self.assertIn('64 bits', str(caught.exception))
+        ap.check_list_limits(sizes[:-1], 100, 'one less')  # 18,446 of them: under
+        text = 's\n' + ''.join('%d\tGameData/f%d\n' % (size, n) for n, size in enumerate(sizes))
+        with self.assertRaises(ap.PackError):
+            ap.parse_list(text)
+        entries = [('GameData/f%d' % n, 999999999999999, sha(b'x')) for n in range(18446)] + [('GameData/g', 744073709570061, sha(b'x'))]
+        with self.assertRaises(ap.PackError):
+            ap.make_list(entries)
+
+    def test_the_rounding_is_the_apps(self):
+        for size, rounded in ((0, 0), (1, 4096), (4096, 4096), (4097, 8192), (999999999999999, 1000000000000000 + (4096 - 1000000000000000 % 4096) % 4096)):
+            self.assertEqual(ap.round_up_to_blocks(size), rounded, size)
 
     def test_the_list_in_the_cpp_suite_is_the_list_the_packager_makes_today(self):
         import re
@@ -488,6 +556,68 @@ class TheBuildTree(TempCase):
         os.makedirs(self.path('nothing'))
         with self.assertRaises(ap.PackError):
             ap.check_build_tree(self.path('nothing'), verification=False)
+
+    def test_the_diagnostic_variant_is_its_own_tree_either_way(self):
+        # Planning step 205: a tree configured with MAGICPORTALS_PERF_DIAG=ON is a diagnostic build and only that; a tree with it OFF, or from before the option, is not.
+        ap.check_build_tree(self.tree('d', MAGICPORTALS_PERF_DIAG='ON'), verification=False, perf_diag=True)
+        ap.check_build_tree(self.tree('s', MAGICPORTALS_PERF_DIAG='OFF'), verification=False, perf_diag=False)
+        ap.check_build_tree(self.tree('old'), verification=False, perf_diag=False)  # no such key in the cache: the shipped build
+        with self.assertRaises(ap.PackError) as ctx:
+            ap.check_build_tree(self.tree('d2', MAGICPORTALS_PERF_DIAG='ON'), verification=False, perf_diag=False)
+        self.assertIn('MAGICPORTALS_PERF_DIAG', str(ctx.exception))
+        with self.assertRaises(ap.PackError):
+            ap.check_build_tree(self.tree('s2', MAGICPORTALS_PERF_DIAG='OFF'), verification=False, perf_diag=True)
+        with self.assertRaises(ap.PackError):
+            ap.check_build_tree(self.tree('old2'), verification=False, perf_diag=True)  # an old tree is not a diagnostic build
+
+
+class ThePerformanceDiagnosticVariant(unittest.TestCase):
+    """Planning step 205: `inspect` reads the variant out of the LIBRARY and holds it to the file name, so that the diagnostic build cannot be taken for the shipped one."""
+    MARK = ap.PERF_DIAG_MARKER
+    PLAIN = b'\x7fELF some library bytes with no diagnostic string'
+    DIAG = b'\x7fELF some library bytes ' + ap.PERF_DIAG_MARKER + b' and more'
+
+    def test_the_shipped_apk_is_not_a_diagnostic_build(self):
+        line, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-debug.apk', {'lib/x86_64/libMagicPortals.so': self.PLAIN, 'lib/arm64-v8a/libMagicPortals.so': self.PLAIN})
+        self.assertEqual(problems, [])
+        self.assertIn('not a diagnostic build', line)
+
+    def test_the_diagnostic_apk_says_so_in_its_name_and_in_its_inspect_line(self):
+        line, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-PERFDIAG-debug.apk', {'lib/x86_64/libMagicPortals.so': self.DIAG, 'lib/arm64-v8a/libMagicPortals.so': self.DIAG})
+        self.assertEqual(problems, [])
+        self.assertIn('PERFORMANCE-DIAGNOSTIC', line)
+        self.assertIn('TESTER', line)
+
+    def test_a_diagnostic_library_in_a_shipped_name_is_refused(self):
+        _, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-debug.apk', {'lib/x86_64/libMagicPortals.so': self.DIAG})
+        self.assertEqual(len(problems), 1)
+        self.assertIn('taken for the shipped APK', problems[0])
+
+    def test_a_diagnostic_name_over_a_plain_library_is_refused(self):
+        _, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-PERFDIAG-debug.apk', {'lib/x86_64/libMagicPortals.so': self.PLAIN})
+        self.assertEqual(len(problems), 1)
+        self.assertIn('carries no diagnostic build', problems[0])
+
+    def test_libraries_that_disagree_are_refused(self):
+        _, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-PERFDIAG-debug.apk', {'lib/x86_64/libMagicPortals.so': self.DIAG, 'lib/arm64-v8a/libMagicPortals.so': self.PLAIN})
+        self.assertTrue(problems and 'disagree' in problems[0])
+
+    def test_no_library_is_not_a_variant(self):
+        line, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-debug.apk', {})
+        self.assertEqual(len(problems), 1)
+        self.assertIn('not read', line)
+
+    def test_the_marker_is_the_line_main_writes_and_only_when_the_option_is_on(self):
+        with open(os.path.join(REPO, 'game', 'main.cpp'), encoding='utf-8') as f:
+            text = f.read().replace('\r\n', '\n')
+        marker = ap.PERF_DIAG_MARKER.decode('ascii')
+        self.assertEqual(text.count(marker), 1, 'the string is spelled once in main.cpp')
+        before = text[:text.index(marker)]
+        self.assertIn('#if MAGICPORTALS_PERF_DIAG', before)
+        opened = before.rindex('#if MAGICPORTALS_PERF_DIAG')
+        self.assertNotIn('#endif', before[opened:], 'and inside the #if, so a build without the option does not carry it')
+        self.assertIn('#endif', text[text.index(marker):])
+        self.assertEqual(ap.APK_PERF_DIAG_TAG, '-PERFDIAG')
 
 
 # ---- the ELF check ----------------------------------------------------------------------------------------------------------------------
@@ -651,6 +781,14 @@ class TheCommandLine(TempCase):
         put(lib, make_elf())
         return ['build', '--repo', REPO, '--sdk', self.path('no-sdk'), '--build-tools', '35.0.0', '--out', os.path.join(REPO, 'out', 'android-unit-test'),
                 '--lib', 'x86_64=' + lib] + (['--package', pkg] if '--no-data' not in extra else []) + list(extra)
+
+    def test_the_diagnostic_build_is_never_a_release_and_never_the_verification_build(self):
+        code, err = self.run_main(*self.build_args('--perf-diag', '--release', '--keystore', 'k', '--keystore-pass-file', 'p', '--key-alias', 'a'))
+        self.assertEqual(code, 2)
+        self.assertIn('perf-diag', err)
+        code, err = self.run_main(*self.build_args('--perf-diag', '--verification'))
+        self.assertEqual(code, 2)
+        self.assertIn('developer', err)
 
     def test_release_and_verification_together(self):
         code, err = self.run_main(*self.build_args('--release', '--verification', '--keystore', 'k', '--keystore-pass-file', 'p', '--key-alias', 'a'))

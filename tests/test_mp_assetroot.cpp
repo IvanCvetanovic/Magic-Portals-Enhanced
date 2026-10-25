@@ -849,6 +849,33 @@ void TheLastLogIsKeptBesideTheLogAndAnImpossibleKeepIsSaidNotThrown() {
     CHECK_MSG(std::string(Scratch::kPreviousLogFileName) == "magicportals.prev.log", "the name main.cpp has always used");
 }
 
+// WHERE THE LOG IS, one definition for main.cpp and the Android entry (planning step 205, PORT6-8 (b)): main opens the log in the folder the candidates chose, and
+// AndroidMain writes the words of a start that stopped in the unpack into the same file, before main can run. The post-mortem report reads ONE path the manifest
+// names, so the two must never spell it differently. MUTATION: LogPathsIn swapping the two names, or dropping the previous log's; PhoneLogFolder joining another
+// folder name, or joining onto an empty base (a log at "scratch" in the working directory).
+void TheLogsPathsAreOneDefinitionForTheDesktopMainAndThePhonesFailedStart() {
+    const fs::path folder = fs::path("/data/user/0/app/files") / "Magic Portals" / "scratch";
+    const Scratch::LogPaths logs = Scratch::LogPathsIn(folder);
+    CHECK_MSG(logs.log == folder / "magicportals.log", "the log: " + logs.log.string());
+    CHECK_MSG(logs.previous == folder / "magicportals.prev.log", "and the run before's: " + logs.previous.string());
+    CHECK_MSG(logs.log.parent_path() == logs.previous.parent_path() && logs.log != logs.previous, "beside each other, and two files");
+    // The phone's folder is the user's data folder's scratch folder, the manifest's supersonic.reportLog path.
+    const fs::path userData = fs::path("/data/user/0/app/files") / "Magic Portals";
+    CHECK_MSG(Scratch::PhoneLogFolder(userData) == userData / "scratch", "the phone's log folder: " + Scratch::PhoneLogFolder(userData).string());
+    CHECK_MSG(Scratch::LogPathsIn(Scratch::PhoneLogFolder(userData)).log == userData / "scratch" / "magicportals.log",
+              "so the phone's log is <user data>/scratch/magicportals.log, the path the manifest names");
+    CHECK_MSG(Scratch::PhoneLogFolder(fs::path()).empty(), "no user data folder is no log folder (a name is never joined onto an empty path)");
+    // The effect through the candidate machinery: the user-data scratch candidate main.cpp builds with PhoneLogFolder is chosen on a phone, and the log the
+    // failed-start record writes is in the very folder that choice names.
+    std::vector<Scratch::Candidate> given;
+    given.push_back({"temp", [] { return fs::path("/t"); }, false, Scratch::Kind::Other});
+    given.push_back({"user scratch", [&userData] { return Scratch::PhoneLogFolder(userData); }, true, Scratch::Kind::UserDataScratch});
+    FakeProbe accepting;
+    const Scratch::Chosen phone = Scratch::Choose(Scratch::ArrangedFor(given, true), accepting.Fn());
+    CHECK_MSG(phone.ok && Scratch::LogPathsIn(phone.base).log == Scratch::LogPathsIn(Scratch::PhoneLogFolder(userData)).log,
+              "a phone's chosen log folder is the failed-start record's: " + phone.base.string());
+}
+
 // MUTATION: UniqueSuffix returning a constant.
 void TwoSuffixesAreNeverTheSame() {
     std::set<std::string> seen;
@@ -885,6 +912,7 @@ void runTests() {
     TheProbeNeverTouchesAFileItDidNotMake();
     APhonePutsTheUserDataScratchFolderFirstAndADesktopChangesNothing();
     TheLastLogIsKeptBesideTheLogAndAnImpossibleKeepIsSaidNotThrown();
+    TheLogsPathsAreOneDefinitionForTheDesktopMainAndThePhonesFailedStart();
     TwoSuffixesAreNeverTheSame();
 }
 

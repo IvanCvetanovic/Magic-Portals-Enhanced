@@ -83,6 +83,20 @@ Chosen Choose(const std::vector<Candidate>& candidates, const Probe& probe);
 // step 204, when the Android entry needed the same rotation before it writes the log of a start that stopped in the unpack.
 bool KeepPreviousLog(const std::filesystem::path& log, const std::filesystem::path& previous, std::string& why);
 
+// WHERE THE LOG AND THE RUN BEFORE'S ARE, as ONE definition for every place that spells them (planning step 205, PORT6-8 (b)): main.cpp opens the log in the folder
+// the candidates chose, and the Android entry writes the words of a start that stopped in the unpack into the same file, from the same folder, before main
+// can run. Both used to join the names themselves, so the post-mortem report (which reads one path the manifest names) depended on two spellings agreeing.
+struct LogPaths {
+    std::filesystem::path log;      // <folder>/kLogFileName
+    std::filesystem::path previous; // <folder>/kPreviousLogFileName
+};
+LogPaths LogPathsIn(const std::filesystem::path& folder);
+
+// The folder a PHONE keeps the log in, from the user's data folder (the engine's UserDataDirectory): <base>/kUserScratchFolder. Empty where the base is empty
+// (the platform names no data folder), so a caller never joins a name onto "". It is the folder of the user-data scratch candidate (main.cpp) and of the
+// failed-start record (game/android/AndroidMain.cpp).
+std::filesystem::path PhoneLogFolder(const std::filesystem::path& userDataFolder);
+
 // The probe the game uses: makes `dir` if it is missing, writes a small file of a name no other process uses into it, and removes the
 // file, so nothing is left behind but the folder. Never throws.
 bool ProbeWritable(const std::filesystem::path& dir, std::string& why);

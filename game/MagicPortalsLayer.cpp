@@ -1649,6 +1649,192 @@ void MagicPortalsLayer::goTo(entt::registry& registry, int next) {
     if (const Popup::Class* cls = m_popupRules.FindClass(m_popupRules.gameFinished)) openMenuPopup(*cls);
 }
 
+// ---- THE LEVEL START ON A PHONE (planning step 205, PORT-7; sim/LevelStart.hpp has the rule and the reason) --------------------------------------------
+//
+// Every caller of loadLevel, and what it does under Paths::coverLevelStarts (a phone's run; the others are the old path to the byte):
+//   OnAttach (--level, and a bare layer)        loads at once: no menu is up, the loading screen or nothing is shown, and --level is the entry the route replayer and the visit tool use.
+//   goTo                                        is the synchronous worker the deferred Next calls (via PressMenu); goTo(-1) opens a menu, which is no load.
+//   PressMenu, Level (a tile)                   DEFERRED when it comes from the input (pressFromInput); PressMenu itself stays synchronous: --visit-levels and the suites call it.
+//   PressMenu, Retry and Next                   DEFERRED (the end screen's buttons, the pause's Skip); Next at a chapter's end opens the chapter select at once.
+//   openAchievement (the dashboard's Start)     DEFERRED for a level, at once for a chapter's grid.
+//   the in-level restart control (Control::Reset) DEFERRED: the same stall, and a finger on a control that is held through it.
+//   the N key and the R key (fixedTick)         the old path: keyboard keys (a phone has none; N is the original's development skip).
+
+bool MagicPortalsLayer::pressFromInput(entt::registry& registry, MenuButton button) {
+    if (m_paths.coverLevelStarts) {
+        switch (button.kind) {
+        case MenuButton::Kind::Level:
+            if (button.level >= 0 && button.level < static_cast<int>(m_chapters.levels.size())) {
+                const Chapters::Level& chosen = m_chapters.levels[static_cast<std::size_t>(button.level)];
+                if (Locking::LevelUnlocked(m_lockingRules, m_scores, m_chapters, chosen.world, chosen.index)) {
+                    return requestLevelStart(StartKind::Level, button.level, -1, "level_button");
+                }
+            }
+            break;
+        case MenuButton::Kind::Retry:
+            if (m_current >= 0) return requestLevelStart(StartKind::Retry, m_current, -1, "level_button");
+            break;
+        case MenuButton::Kind::Next:
+            if (m_current >= 0 && m_chapters.Next(m_current) >= 0) return requestLevelStart(StartKind::Next, m_current, -1, "level_button");
+            break;
+        case MenuButton::Kind::Play:
+        case MenuButton::Kind::World:
+        case MenuButton::Kind::Back:
+        case MenuButton::Kind::Forward:
+        case MenuButton::Kind::List:
+            break;
+        }
+    }
+    return PressMenu(registry, button);
+}
+
+void MagicPortalsLayer::openAchievementFromInput(entt::registry& registry, int world, int level) {
+    if (m_paths.coverLevelStarts && world >= 0 && level >= 0 && Locking::LevelUnlocked(m_lockingRules, m_scores, m_chapters, world, level)) {
+        for (const Chapters::Level& entry : m_chapters.levels) {
+            if (entry.world != world || entry.index != level) continue;
+            // The dashboard's start button made its noise when it was pressed (getStartAchievementSoundName), so none is made here.
+            requestLevelStart(StartKind::Achievement, world, level, nullptr);
+            return;
+        }
+    }
+    openAchievement(registry, world, level);
+}
+
+bool MagicPortalsLayer::requestLevelStart(StartKind kind, int index, int extra, const char* sound) {
+    LevelStart::Request request;
+    request.kind = static_cast<int>(kind);
+    request.index = index;
+    request.extra = extra;
+    if (!m_levelStart.Begin(request)) {
+        logLevelStart();
+        return false;
+    }
+    m_startAskedAt = std::chrono::steady_clock::now();
+    if (sound != nullptr) latch(sound);
+    // Which level it is, for the log: a Next asks for the one after the current.
+    int target = index;
+    const char* what = "a tile";
+    switch (kind) {
+    case StartKind::Level:
+        break;
+    case StartKind::Retry:
+        what = "Retry";
+        break;
+    case StartKind::Next:
+        what = "Next";
+        target = m_chapters.Next(index);
+        break;
+    case StartKind::Achievement:
+        what = "the dashboard's Start";
+        target = -1;
+        for (std::size_t i = 0; i < m_chapters.levels.size(); ++i) {
+            if (m_chapters.levels[i].world == index && m_chapters.levels[i].index == extra) target = static_cast<int>(i);
+        }
+        break;
+    case StartKind::Reset:
+        what = "the restart control";
+        break;
+    }
+    const std::string name = target >= 0 && target < static_cast<int>(m_chapters.levels.size()) ? m_chapters.levels[static_cast<std::size_t>(target)].name : std::string("?");
+    SUPERSONIC_LOG_INFO("Magic Portals") << "level start: " << what << " asked for " << name << " on tick " << m_ticks << " (the screen is covered next; the load runs after the cover is drawn)"
+                                         << std::endl;
+    logLevelStart();
+    return true;
+}
+
+bool MagicPortalsLayer::levelStartTick(entt::registry& registry) {
+    const LevelStart::Action action = m_levelStart.Tick();
+    // While the start is the tick's business nothing reads the pointer, and a press edge belongs to ONE tick: unread, it would be lost, and the finger would turn up
+    // later as a hold with no press. So it is read (and a scheduled tap is spent) here, through the rule, which ignores a finger that goes down from now until the
+    // level's first frame and until it lifts.
+    if (action.load || m_levelStart.Covering()) (void)touchThisTick(registry);
+    if (action.load) {
+        m_startLoadBeganAt = std::chrono::steady_clock::now();
+        const bool up = runLevelStart(registry, action.request);
+        const auto now = std::chrono::steady_clock::now();
+        std::ostringstream said;
+        said << std::fixed << std::setprecision(1) << "level start: the load ran on tick " << m_ticks << " in "
+             << std::chrono::duration<double, std::milli>(now - m_startLoadBeganAt).count() << " ms, "
+             << std::chrono::duration<double, std::milli>(now - m_startAskedAt).count() << " ms after the press was asked for; "
+             << (up ? "the level is up" : "the level was refused: " + m_loadError);
+        SUPERSONIC_LOG_INFO("Magic Portals") << said.str() << std::endl;
+        m_levelStart.Loaded(up);
+    }
+    logLevelStart();
+    return action.load || m_levelStart.Covering();
+}
+
+bool MagicPortalsLayer::runLevelStart(entt::registry& registry, const LevelStart::Request& request) {
+    // The calls the old path made, in the same order and with the same arguments: the level a phone's press starts is the level the desktop's starts.
+    MenuButton button;
+    switch (static_cast<StartKind>(request.kind)) {
+    case StartKind::Level:
+        button.kind = MenuButton::Kind::Level;
+        button.level = request.index;
+        PressMenu(registry, button, false);
+        break;
+    case StartKind::Retry:
+        button.kind = MenuButton::Kind::Retry;
+        PressMenu(registry, button, false);
+        break;
+    case StartKind::Next:
+        button.kind = MenuButton::Kind::Next;
+        PressMenu(registry, button, false);
+        break;
+    case StartKind::Achievement:
+        openAchievement(registry, request.index, request.extra);
+        break;
+    case StartKind::Reset:
+        loadLevel(registry, request.index);
+        break;
+    }
+    return m_loaded && m_loadError.empty();
+}
+
+bool MagicPortalsLayer::drawCover(entt::registry& registry) {
+    const bool cover = m_levelStart.Draw() == LevelStart::Frame::Cover;
+    logLevelStart();
+    if (cover) emitCover(registry);
+    return cover;
+}
+
+void MagicPortalsLayer::emitCover(entt::registry& registry) const {
+    using Supersonic::ScreenOverlay;
+    auto* const* slot = registry.ctx().find<ScreenOverlay*>();
+    if (slot == nullptr || *slot == nullptr) return;
+    // A plain black frame, like the original's LoadingScreen background (OnAttach's SceneRendering): one quad over the whole viewport, no texture, no text.
+    ScreenOverlay::Quad quad;
+    quad.min = glm::vec2(0.0f, 0.0f);
+    quad.max = glm::vec2(1.0f, 1.0f);
+    quad.color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    quad.clampToEdge = true;
+    (**slot).Add(std::move(quad));
+}
+
+void MagicPortalsLayer::logLevelStart() {
+    for (const LevelStart::Event& event : m_levelStart.TakeEvents()) {
+        std::ostringstream said;
+        said << LevelStart::Describe(event);
+        if (event.kind == LevelStart::EventKind::CoverIssued || event.kind == LevelStart::EventKind::FirstFrameIssued) {
+            said << std::fixed << std::setprecision(1) << ", " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - m_startAskedAt).count()
+                 << " ms after the press was asked for";
+        }
+        SUPERSONIC_LOG_INFO("Magic Portals") << said.str() << std::endl;
+    }
+}
+
+MagicPortalsLayer::Touch MagicPortalsLayer::filterContact(int id, const Touch& touch) {
+    if (!m_paths.coverLevelStarts) return touch;
+    LevelStart::Contact contact;
+    contact.id = id;
+    contact.pressed = touch.pressed;
+    contact.held = touch.held;
+    contact.released = touch.released;
+    const LevelStart::Verdict verdict = m_levelStart.Filter(contact);
+    logLevelStart();
+    return verdict == LevelStart::Verdict::Pass ? touch : Touch{};
+}
+
 // Defined below. Declared here because recordWin records the FINAL medal and
 // comes first in this file.
 int MedalFor(const MagicPortalsLayer::Cleared& cleared);
@@ -4004,14 +4190,14 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     if (screen == Screen::Loading) loadUiFont(m_loadingRules.dots.font);
 }
 
-bool MagicPortalsLayer::PressMenu(entt::registry& registry, MenuButton button) {
+bool MagicPortalsLayer::PressMenu(entt::registry& registry, MenuButton button, bool sound) {
     // Every button makes a noise, and not the same one: the menu's own is the
     // only thing in the game that plays button.mp3, while the buttons a level
     // puts up - retry, next, the list - are all a teleport. So are the world and
     // level tiles: Page::setupItemButton #127-143 gives each one
     // getItemSelectButtonSoundName (planning step 142; button.mp3 before), which
     // it plays on the press whether or not the tile is open.
-    switch (button.kind) {
+    if (sound) switch (button.kind) {
     case MenuButton::Kind::Play:
     case MenuButton::Kind::Back:
     case MenuButton::Kind::Forward:
@@ -4100,16 +4286,22 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, const ScriptClock::St
             PressMainMenu(registry, pending.main);
             break;
         case PendingMenu::Kind::Button:
-            PressMenu(registry, pending.button);
+            pressFromInput(registry, pending.button);
             break;
         case PendingMenu::Kind::Screen:
             openMenu(registry, pending.screen);
             break;
         case PendingMenu::Kind::Achievement:
-            openAchievement(registry, pending.world, pending.level);
+            openAchievementFromInput(registry, pending.world, pending.level);
             break;
         case PendingMenu::Kind::None:
             break;
+        }
+        // A phone's level start was asked for (planning step 205): the menu stays as it is under the cover, and takes no more input. The pointer is still READ, so that
+        // the rule sees a press that came in this tick (an edge belongs to one tick and is lost unread) and a scheduled tap is spent.
+        if (m_levelStart.Covering()) {
+            (void)touchThisTick(registry);
+            return;
         }
         // A level was entered: this was the tick it loaded on, and its first tick
         // is the next.
@@ -10241,8 +10433,13 @@ float MagicPortalsLayer::readInput(entt::registry& registry) {
         // #207-216, Game::Game #74; planning step 142 - silent before).
         case Control::Reset:
             if (act && m_current >= 0) {
-                latch("level_button");
-                loadLevel(registry, m_current);
+                if (m_paths.coverLevelStarts) {
+                    // A phone's run: a start like a Retry's (sim/LevelStart.hpp); the tick goes on to its end and fixedTick stops stepping the level.
+                    requestLevelStart(StartKind::Reset, m_current, -1, "level_button");
+                } else {
+                    latch("level_button");
+                    loadLevel(registry, m_current);
+                }
             }
             break;
         // GameLayer's menu button calls GameState::showMenuPopup (bytes
@@ -13221,6 +13418,11 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
     // Asked for on the TICK, where a key press is an edge, and answered on the
     // frame, where the picture is.
     if (Input::TickWasPressed(kDump)) m_dumpRequested = true;
+    // A phone's level start in progress takes the tick (planning step 205): the machine's tick, the load when it is time, and nothing else of the menu or the level.
+    if (m_paths.coverLevelStarts && levelStartTick(registry)) {
+        updateHud(registry);
+        return;
+    }
     const bool overLevel = m_screen == Screen::Finished || m_screen == Screen::Dead;
     // A menu is up instead of a level: it takes the tick, and nothing below
     // runs. The two are never both in the registry.
@@ -13233,7 +13435,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
     // step. Only on the tick it resumes does the level take up its tick again,
     // from exactly where the tap left it.
     if (m_pause.open) {
-        if (pauseTick(registry, step) && m_loaded && m_screen == Screen::None) {
+        if (pauseTick(registry, step) && m_loaded && m_screen == Screen::None && !m_levelStart.Covering()) {
             // The tick the pause was opened on read its input and stopped short
             // of BeforeStep; this one runs that half now, with the walk the keys
             // ask for - the pointer is on the button that resumed it, and a tap
@@ -13479,6 +13681,11 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         }
         // Then this tick's input, and what comes before the next step.
         const float direction = readInput(registry);
+        // The restart control asked for a start (a phone's run): the level is not stepped again, the cover is next.
+        if (m_levelStart.Covering()) {
+            updateHud(registry);
+            return;
+        }
         // A control may have opened a pause, or a help block a popup, which stops
         // the level HERE, after the step it has just taken and before the next:
         // the tick it resumes on runs the rest. Or it opened a screen that
@@ -13888,10 +14095,11 @@ MagicPortalsLayer::Touch MagicPortalsLayer::pointerThisTick(const entt::registry
             it = m_devTaps.erase(it);
             continue;
         }
+        const int serial = it->serial;
         if (step == DevTapStep::Released) m_devTaps.erase(it);
-        return touch;
+        return filterContact(kDevFingerBase + serial, touch);
     }
-    return realPointerThisTick(registry);
+    return filterContact(kPointerFinger, realPointerThisTick(registry));
 }
 
 bool MagicPortalsLayer::twoContactsOn() const {
@@ -14064,6 +14272,22 @@ MagicPortalsLayer::Touch MagicPortalsLayer::fingersThisTick(const entt::registry
         if (pointerOwed && (pointer.held || pointer.released)) pointer.pressed = true;
         if (pointer.pressed || pointer.held || pointer.released) fingers.push_back(Finger{kPointerFinger, pointer});
         engineFingers(registry, gap, fingers);
+    }
+    // A phone's level start (planning step 205): a finger that went down before the new level's first frame is not one of the fingers until it lifts. Taken out here,
+    // before the roles are given, so that the controls, the shot and the swallow never see it; and the pointer the one-finger reading falls back on is "nothing" if it
+    // was the one ignored.
+    if (m_paths.coverLevelStarts) {
+        bool removed = false;
+        for (auto it = fingers.begin(); it != fingers.end();) {
+            const Touch kept = filterContact(it->id, it->touch);
+            if (!kept.pressed && !kept.held && !kept.released && (it->touch.pressed || it->touch.held || it->touch.released)) {
+                it = fingers.erase(it);
+                removed = true;
+            } else {
+                ++it;
+            }
+        }
+        if (removed && fingers.empty()) pointer = Touch{};
     }
 
     // THE ROLES. A finger is on a control by the modern claim, at its own place this tick.
@@ -14371,12 +14595,21 @@ bool MagicPortalsLayer::endScreenTick(entt::registry& registry, const ScriptCloc
     // A tap, tested against where each button is on this tick, in view space as
     // the controls are: Button::isPointInButton, its sprite's rectangle - a
     // button still sliding in is pressable where it is.
-    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
-    if (viewport == nullptr || !viewport->pointerOverGame || !Input::TickWasPressed(kTap)) return false;
-    const glm::vec2 size = viewport->Size();
-    if (size.x <= 0.0f || size.y <= 0.0f) return false;
     const glm::dvec2 view = ViewPx();
-    const glm::dvec2 at = glm::dvec2(viewport->ToLocal(Input::MousePosition()) / size) * view;
+    glm::dvec2 at(0.0);
+    if (m_paths.coverLevelStarts) {
+        // A phone's run reads the end screen's press through the one pointer path (planning step 205), which is the same arithmetic as the lines below: a scheduled tap
+        // reaches it (the Step's scripted runs press Retry and Next with --tap), and the level start's contact rule sees the press that asks for the start.
+        const Touch touch = touchThisTick(registry);
+        if (!touch.over || !touch.pressed) return false;
+        at = touch.atView;
+    } else {
+        const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+        if (viewport == nullptr || !viewport->pointerOverGame || !Input::TickWasPressed(kTap)) return false;
+        const glm::vec2 size = viewport->Size();
+        if (size.x <= 0.0f || size.y <= 0.0f) return false;
+        at = glm::dvec2(viewport->ToLocal(Input::MousePosition()) / size) * view;
+    }
     const std::optional<LevelEnd::Button> pressed = LevelEnd::ButtonAt(endPieces(view, m_end.clockMs), at);
     if (!pressed) return false;
     MenuButton button;
@@ -14391,7 +14624,7 @@ bool MagicPortalsLayer::endScreenTick(entt::registry& registry, const ScriptCloc
         button.kind = MenuButton::Kind::List;
         break;
     }
-    PressMenu(registry, button);
+    pressFromInput(registry, button);
     return true;
 }
 
@@ -14477,7 +14710,7 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
         // button is not there otherwise.
         if (m_pause.level.savedMedal <= 0) return false;
         closePause(registry);
-        return PressMenu(registry, MenuButton{MenuButton::Kind::Next});
+        return pressFromInput(registry, MenuButton{MenuButton::Kind::Next});
     case Pause::Button::Achievements:
         // CustomGameMenuLayer::update #38-94: the AchievementsPopup over the pause
         // (planning step 143). OWNER RULING: the button is kept on every level; on a
@@ -14570,11 +14803,15 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     // frame, so a HUD emitted on the tick would vanish from a frame with no tick
     // and double on one with two. It reads the last tick's state and changes
     // nothing.
-    EmitHud(registry);
-    // And the menu states', which never share a frame with the HUD.
-    EmitMenu(registry);
-    // And the Notificator's card over both: main's loop draws it after the state's.
-    EmitNotifications(registry);
+    //
+    // A phone's level start in progress draws a plain black cover INSTEAD of all three (planning step 205): the machine says whether this frame is one.
+    if (!(m_paths.coverLevelStarts && drawCover(registry))) {
+        EmitHud(registry);
+        // And the menu states', which never share a frame with the HUD.
+        EmitMenu(registry);
+        // And the Notificator's card over both: main's loop draws it after the state's.
+        EmitNotifications(registry);
+    }
     // Only the camera's SHAPE, for the viewport this frame is drawn into.
     if (m_camera == entt::null || !registry.valid(m_camera)) return;
     registry.get<Supersonic::CameraComponent>(m_camera).aspect = viewportAspect(registry);

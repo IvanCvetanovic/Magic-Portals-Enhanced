@@ -92,10 +92,6 @@ std::string DefaultText(const std::string& baked) {
 
 namespace {
 
-// The diagnostics file, and the previous run's beside it, both in the temp
-// directory.
-constexpr const char* kLogFile = MagicPortals::Scratch::kLogFileName;
-constexpr const char* kPreviousLogFile = MagicPortals::Scratch::kPreviousLogFileName;
 // The game's name: the manifest's title, the user data directory's and the message box's.
 constexpr const char* kTitle = "Magic Portals";
 
@@ -326,7 +322,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             continue;
         }
         if (arg == "--shadow-maps" || arg == "--sprites-only" || arg == "--asset-watching" || arg == "--sprite-report" ||
-            arg == "--perf-log") {
+            arg == "--perf-log" || arg == "--scene-samples" || arg == "--dynamic-res" || arg == "--perf-overlay") {
             if (i + 1 >= argc) {
                 std::cerr << arg << " needs a value\n";
                 return EXIT_FAILURE;
@@ -342,6 +338,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             const char* takes = "on or off";
             bool onOff = false;
             std::uint32_t pixels = 0;
+            std::uint32_t samples = 0;
             float seconds = 0.0f;
             if (arg == "--shadow-maps") {
                 takes = "0 (the engine's own sizes) or a whole number of pixels from 16 to 4096";
@@ -351,11 +348,17 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                 takes = "a number of seconds above 0 and at most 3600";
                 ok = MagicPortals::EngineTuning::ParsePerfLog(value, seconds);
                 if (ok) tuningFlags.perfLogSeconds = seconds;
+            } else if (arg == "--scene-samples") {
+                takes = "1, 2 or 4 (4 is the engine's own)";
+                ok = MagicPortals::EngineTuning::ParseSceneSamples(value, samples);
+                if (ok) tuningFlags.sceneSamples = samples;
             } else {
                 ok = MagicPortals::EngineTuning::ParseSwitch(value, onOff);
                 if (ok && arg == "--sprites-only") tuningFlags.spritesOnlyScenePipelines = onOff;
                 if (ok && arg == "--asset-watching") tuningFlags.assetWatching = onOff;
                 if (ok && arg == "--sprite-report") tuningFlags.spriteReport = onOff;
+                if (ok && arg == "--dynamic-res") tuningFlags.dynamicResolution = onOff;
+                if (ok && arg == "--perf-overlay") tuningFlags.perfOverlay = onOff;
             }
             if (!ok) {
                 std::cerr << arg << " takes " << takes << ", got '" << value << "'\n";
@@ -845,6 +848,17 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "  --perf-log <seconds>\n"
                   << "                    DEV: the engine's frame statistics (fps, median, 95th percentile,\n"
                   << "                    worst, the split of the frame) in the log every <seconds>\n"
+                  << "  --scene-samples <1|2|4>\n"
+                  << "                    DEV: the most samples per pixel of the scene target for this run (4,\n"
+                  << "                    the default, is the engine's own); what a smaller cap does to the\n"
+                  << "                    pictures is the owner's to judge (docs/android.md)\n"
+                  << "  --dynamic-res <on|off>\n"
+                  << "                    DEV: the scene target sized by how fast the GPU draws it, with the\n"
+                  << "                    numbers of the 'mobile' block of game/data/engine.json; the engine\n"
+                  << "                    never applies it to a capture or a --fixed-step run\n"
+                  << "  --perf-overlay <on|off>\n"
+                  << "                    DEV: the engine's readout of the frame rate and where the frame's\n"
+                  << "                    time went, over the picture\n"
 #endif // MAGICPORTALS_DEV_TOOLS
                   ;
         return EXIT_SUCCESS;
@@ -969,8 +983,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
          false},
         {"the user's data folder, scratch",
          [] {
-             const std::filesystem::path base = Supersonic::UserDataDirectory(kTitle);
-             return base.empty() ? base : base / MagicPortals::Scratch::kUserScratchFolder;
+             return MagicPortals::Scratch::PhoneLogFolder(Supersonic::UserDataDirectory(kTitle));
          },
          true, MagicPortals::Scratch::Kind::UserDataScratch},
         {"the user's data folder", [] { return Supersonic::UserDataDirectory(kTitle); }, true},
@@ -997,13 +1010,15 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     if (temp.empty()) {
         std::cerr << "[Magic Portals] no folder to keep a log in; continuing without one (" << scratch.note << ").\n";
     } else {
-        const std::filesystem::path logPath = temp / kLogFile;
+        // The log and the run before's, from the one definition the Android entry's failed-start record uses too (Scratch::LogPathsIn, planning step 205).
+        const MagicPortals::Scratch::LogPaths logs = MagicPortals::Scratch::LogPathsIn(temp);
+        const std::filesystem::path logPath = logs.log;
         const std::string logFile = logPath.string();
         // THE LAST RUN'S LOG, KEPT. SetFileSink opens its file truncated
         // (engine/src/core/Log.cpp:90), so a crash's log was gone the moment the
         // game was started again to see whether it happens twice. One run back is
         // kept beside it; a failure here costs that copy, never the start.
-        KeepPreviousLog(logPath, temp / kPreviousLogFile);
+        KeepPreviousLog(logPath, logs.previous);
         if (Supersonic::Log::SetFileSink(logFile)) {
             // Only now: the box names the log it was told was written, and a sink that failed to open (a read-only file, a full disk)
             // wrote none (planning step 190).
@@ -1036,9 +1051,16 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // The phone profile (game/data/engine.json "mobile"): the build's own unless --profile says the other. A desktop build never applies the block
     // unless asked, so every desktop value is the one it was before the block existed.
     const bool mobile = profileMobile.value_or(MagicPortals::kMobileBuild);
+#if MAGICPORTALS_PERF_DIAG
+    // A PERFORMANCE-DIAGNOSTIC build asks a PLAYER'S run (a tester's) for the engine's readout and a statistics line every few seconds, unless a flag said otherwise, and for
+    // nothing else: a capture or a route of such a build must not carry the readout in its picture. Compiled out of every other build: code that is not there, not a branch.
+    if (fatal.attended) MagicPortals::EngineTuning::ApplyPerfDiag(tuningFlags);
+#endif
     const MagicPortals::EngineTuning::Resolved tuning =
         MagicPortals::EngineTuning::Resolve(tuningTable, fatal.attended, mobile, tuningFlags);
     paths.spriteReport = tuning.spriteReport;
+    // A phone's run covers its level starts (planning step 205, sim/LevelStart.hpp); every other run starts a level inside the tick that asked, as it always did.
+    paths.coverLevelStarts = mobile;
     // A phone's run cannot do without its options file (planning step 203, PORT3-3 (d)): the lowest Vulkan version a phone's GPU may report is in it,
     // and the engine's own defaults ask for 1.2, which many phones' stock drivers do not offer. A start with the defaults would end with a GPU
     // complaint that blames the phone; this one says what is wrong. A desktop run with the file unreadable goes on with the engine's defaults, as
@@ -1058,6 +1080,19 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     manifest.spritesOnlyScenePipelines = tuning.spritesOnlyScenePipelines;
     manifest.assetWatching = tuning.assetWatching;
     manifest.perfLogSeconds = tuning.perfLogSeconds;
+    manifest.perfOverlay = tuning.perfOverlay;
+    // The scene target's sample cap and dynamic resolution (planning step 205): asked for only where the table's phone block or a flag asks, so that every run that asks
+    // for neither leaves the manifest as it was. The phone block ships with neither on: the owner's decision.
+    if (tuning.sceneSamples != 0) manifest.sceneSamples = tuning.sceneSamples;
+    if (tuning.dynamicResolution.enabled) {
+        manifest.dynamicResolution.enabled = true;
+        manifest.dynamicResolution.startMaxPixels = tuning.dynamicResolution.startMaxPixels;
+        manifest.dynamicResolution.minScale = tuning.dynamicResolution.minScale;
+        manifest.dynamicResolution.targetFps = tuning.dynamicResolution.targetFps;
+        manifest.dynamicResolution.relaxedRise = tuning.dynamicResolution.relaxedRise;
+        manifest.dynamicResolution.minTargetHeight = tuning.dynamicResolution.minTargetHeight;
+        manifest.dynamicResolution.emergencyBelowFps = tuning.dynamicResolution.emergencyBelowFps;
+    }
     // Asked only where the profile asks (a phone's): left alone, the engine wants Vulkan 1.2 as it always has, and a phone whose stock driver
     // reports 1.1 would have no GPU the engine accepts and end its start before the first frame (sibling port, E39).
     if (tuning.minimumVulkanMinor != 0) manifest.minimumVulkanMinor = tuning.minimumVulkanMinor;
@@ -1102,7 +1137,12 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // never assigned would show here as 1.2.
     SUPERSONIC_LOG_INFO("Magic Portals") << "engine options (" << (fatal.attended ? "a player's run" : "not a player's run")
                                          << (mobile ? ", mobile profile" : "") << "): " << MagicPortals::EngineTuning::Describe(tuning)
-                                         << ", minimum Vulkan 1." << Supersonic::GameRuntime::ResolveVulkanMinor(manifest) << std::endl;
+                                         << ", minimum Vulkan 1." << Supersonic::GameRuntime::ResolveVulkanMinor(manifest) << ", scene samples "
+                                         << Supersonic::GameRuntime::ResolveSceneSamples(manifest) << std::endl;
+#if MAGICPORTALS_PERF_DIAG
+    SUPERSONIC_LOG_INFO("Magic Portals") << "PERFORMANCE-DIAGNOSTIC BUILD: a player's run of it has the engine's frame readout over the picture and its statistics in this log every "
+                                         << MagicPortals::EngineTuning::kPerfDiagLogSeconds << " s (this run is " << (fatal.attended ? "a player's" : "not a player's: it has them only if a flag asked") << "); nothing else differs from the shipped game" << std::endl;
+#endif
 
     // THE VULKAN LOADER, before the engine calls Vulkan once (planning step 201). A Windows release build links vulkan-1.dll late
     // (MAGICPORTALS_WIN_GUI), so a PC without a graphics driver gets here instead of a loader dialog that names a DLL and nothing more. Thrown, so

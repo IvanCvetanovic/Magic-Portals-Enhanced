@@ -5,7 +5,7 @@ Built and statically checked in step 203; the APK it makes was run on an x86_64 
 
     android_package.py build   --repo <repo> --sdk <sdk> --ndk <ndk> --lib <abi>=<libMagicPortals.so> [--lib ...]
                                (--package <content folder> | --no-data) [--out <dir>] [--build-tools <ver>] [--version-code N]
-                               [--verification] [--release --keystore F --keystore-pass-file F --key-alias A [--allow-data-less-release]]
+                               [--verification | --perf-diag] [--release --keystore F --keystore-pass-file F --key-alias A [--allow-data-less-release]]
                                [--build-tree <dir>]... [--shaders <dir>] [--java-src <dir>] [--icons <dir>]
     android_package.py inspect <apk> --sdk <sdk> [--build-tools <ver>] [--repo <repo>] [--release --keystore F --keystore-pass-file F --key-alias A]
     android_package.py compare <apk> --package <content folder> [--shaders <dir>] [--repo <repo>]
@@ -71,11 +71,24 @@ MIN_LOAD_ALIGN = 0x4000  # 16 KB pages
 # Stored, not deflated, in the APK: formats that are compressed already (aapt2's own list, shortened to what the game has).
 STORED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.mp3', '.ogg', '.wav'}
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)  # the earliest a zip can say: no clock enters the APK
-# The unpack list's format, which game/sim/Unpack.hpp spells too (kSizeSeparator, kMostSizeDigits, kMostStampChars): the tie is TheListTie in
+# The unpack list's format, which game/sim/Unpack.hpp spells too (kSizeSeparator, kMostSizeDigits, kMostStampChars; kMostListTextBytes and kBlockBytes below): the tie is TheListTie in
 # test_android_package.py, which reads those lines out of the header and holds these to them, and regenerates the list that test_mp_unpack parses.
 SIZE_SEPARATOR = '\t'
 MOST_SIZE_DIGITS = 15
 MOST_STAMP_CHARS = 128
+# THE PERFORMANCE-DIAGNOSTIC VARIANT (planning step 205): the same game with the engine's frame readout over the picture and a statistics line in the game's log every
+# 5 seconds (MAGICPORTALS_PERF_DIAG, game/BuildProfile.hpp). For a tester's phone. Its APK carries PERFDIAG in its file name, and `inspect` reads the variant out of the
+# LIBRARY (the log line main.cpp writes only when the option is on is in the program or it is not) and refuses an APK whose name and library disagree, so that a
+# diagnostic build cannot be taken for the shipped one, nor the shipped one be named a diagnostic.
+PERF_DIAG_MARKER = b'PERFORMANCE-DIAGNOSTIC BUILD'
+APK_PERF_DIAG_TAG = '-PERFDIAG'
+
+# What the app REFUSES (game/sim/Unpack.cpp, kMostListTextBytes and kBlockBytes in Unpack.hpp), so that a package the app would refuse is never built (step 205,
+# PORT6-8 (a)): the list's text past this many bytes, and a list whose sizes, each rounded up to the allocation unit, add up to more than 64 bits (the
+# estimate the free-space check compares).
+MOST_LIST_TEXT_BYTES = 4 * 1024 * 1024
+BLOCK_BYTES = 4096
+MOST_UINT64 = 2 ** 64 - 1
 
 # EVERY configuration change the platform defines for targetSdk 35 (aapt2's flag names; platforms/android-35/data/res/values/attrs_manifest.xml, 18 of them),
 # which the activity must handle in place: a recreated NativeActivity starts its native thread again over a running game. Step 203 listed 14 and missed mcc,
@@ -308,9 +321,13 @@ def read_cache(tree):
     return values
 
 
-def check_build_tree(tree, verification):
+def check_build_tree(tree, verification, perf_diag=False):
     """A tree whose cache does not say what a phone's program needs is refused."""
     v = read_cache(tree)
+    # A tree configured before the option existed has no such key: it is a build without it.
+    if v.get('MAGICPORTALS_PERF_DIAG', 'OFF').upper() != ('ON' if perf_diag else 'OFF'):
+        raise PackError('%s: MAGICPORTALS_PERF_DIAG=%r, wanted %s (%s)' % (tree, v.get('MAGICPORTALS_PERF_DIAG'), 'ON' if perf_diag else 'OFF',
+                                                                         'a diagnostic build is its own variant' if perf_diag else 'the diagnostic build is its own variant: --perf-diag'))
     want = [
         ('CMAKE_BUILD_TYPE', 'Release', 'the native code must be a Release build'),
         ('SUPERSONIC_ENABLE_VALIDATION', 'OFF', 'Vulkan validation is ON: a phone has no validation layers'),
@@ -486,6 +503,23 @@ def load_shaders(folder):
 
 # ---- the list ------------------------------------------------------------------------------------------------------------------------
 
+def round_up_to_blocks(size):
+    """`size` in whole allocation units, as game/sim/Unpack.cpp RoundUpToBlocks does (Python integers do not wrap, so there is nothing to saturate)."""
+    return (size // BLOCK_BYTES + (1 if size % BLOCK_BYTES else 0)) * BLOCK_BYTES
+
+
+def check_list_limits(sizes, text_bytes, what):
+    """The two limits the app's reader holds a list to (Unpack.hpp): the text at most kMostListTextBytes, and the rounded-up sizes' sum within 64 bits.
+    A package that breaks either would be refused by the app on its first start, so the packager refuses to make it."""
+    if text_bytes > MOST_LIST_TEXT_BYTES:
+        raise PackError('%s is %d bytes, over the %d the app reads (kMostListTextBytes in game/sim/Unpack.hpp)' % (what, text_bytes, MOST_LIST_TEXT_BYTES))
+    total = 0
+    for size in sizes:
+        total += round_up_to_blocks(size)
+        if total > MOST_UINT64:
+            raise PackError('%s: the sizes, rounded up to %d-byte allocation blocks, add up to more than 64 bits (the app refuses such a list)' % (what, BLOCK_BYTES))
+
+
 def make_list(entries):
     """(stamp, text) for [(path, size, sha256)] with paths relative to the files folder. The stamp covers the hashes, so it moves with any byte."""
     entries = sorted(entries)
@@ -503,7 +537,9 @@ def make_list(entries):
         h.update(('%s\0%d\0%s\n' % (path, size, sha)).encode('utf-8'))
         lines.append('%d%s%s\n' % (size, SIZE_SEPARATOR, path))
     stamp = h.hexdigest()[:STAMP_CHARS]
-    return stamp, stamp + '\n' + ''.join(lines)
+    text = stamp + '\n' + ''.join(lines)
+    check_list_limits([e[1] for e in entries], len(text.encode('utf-8')), 'the unpack list')
+    return stamp, text
 
 
 def parse_list(text):
@@ -524,6 +560,7 @@ def parse_list(text):
         if why:
             raise PackError('list line %d: %s' % (n, why))
         out.append((path, int(size)))
+    check_list_limits([size for _, size in out], len(text.encode('utf-8')), 'the unpack list')
     return lines[0], out
 
 
@@ -721,6 +758,27 @@ def sign(tools, aligned, signed, args, out):
 
 # ---- checking an APK ----------------------------------------------------------------------------------------------------------------
 
+def check_perf_diag_variant(apk_name, libraries):
+    """(line, problems): the variant an APK is, read out of its libraries and held to its file name. `libraries` is {entry name: bytes}. Pure."""
+    named = APK_PERF_DIAG_TAG in apk_name
+    has = {name: PERF_DIAG_MARKER in data for name, data in sorted(libraries.items())}
+    problems = []
+    if not has:
+        return 'variant: not read (the APK has no library)', ['the APK has no library to read the variant from']
+    if len(set(has.values())) != 1:
+        problems.append('the libraries disagree about the diagnostic build: %s' % ', '.join('%s %s' % (n, 'has it' if h else 'has not') for n, h in has.items()))
+    built = all(has.values())
+    if built and not named:
+        problems.append('the library is a PERFORMANCE-DIAGNOSTIC build and the file is not named %s: it could be taken for the shipped APK' % APK_PERF_DIAG_TAG)
+    if named and not built:
+        problems.append('the file is named %s and the library carries no diagnostic build' % APK_PERF_DIAG_TAG)
+    if built:
+        line = 'variant: PERFORMANCE-DIAGNOSTIC (the engine\'s frame readout over the picture and a statistics line in the game\'s log every 5 s; a TESTER\'S build, never shipped)'
+    else:
+        line = 'variant: not a diagnostic build (the libraries carry none of it)'
+    return line, problems
+
+
 def inspect_apk(apk, tools, repo, release, keystore=None, pass_file=None, key_alias=None, expect_data=None):
     """Runs the static checks on an APK and returns (lines, problems). Everything it prints is something it asked a tool or the zip."""
     lines, problems = [], []
@@ -794,6 +852,9 @@ def inspect_apk(apk, tools, repo, release, keystore=None, pass_file=None, key_al
         lines.append('META-INF entries: %s' % (' '.join(jar_signature) or 'none'))
         if jar_signature and facts['minSdk'] >= 24:
             problems.append('the APK carries a JAR (v1) signature although the minimum SDK is %d: %s' % (facts['minSdk'], ' '.join(jar_signature)))
+        variant_line, variant_problems = check_perf_diag_variant(os.path.basename(apk), {n: z.read(n) for n in libs if n.endswith('/' + LIB_NAME)})
+        lines.append(variant_line)
+        problems.extend(variant_problems)
         got_abis = sorted(n.split('/')[1] for n in libs)
         if abis != got_abis or any(n != 'lib/%s/%s' % (n.split('/')[1], LIB_NAME) for n in libs):
             problems.append('native-code %s does not match the lib/ entries %s' % (abis, got_abis))
@@ -914,6 +975,10 @@ def cmd_build(args):
     check_out(out, repo)
     if args.release and args.verification:
         raise PackError('--release with --verification: the verification build has the developer tools in and is never signed with a release key')
+    if args.perf_diag and args.release:
+        raise PackError('--release with --perf-diag: the diagnostic build is a tester\'s and is never a release')
+    if args.perf_diag and args.verification:
+        raise PackError('--perf-diag with --verification: a tester\'s build must not carry the developer\'s flags')
     if args.release:
         for need in ('keystore', 'keystore_pass_file', 'key_alias'):
             if not getattr(args, need):
@@ -949,7 +1014,7 @@ def cmd_build(args):
         if problems:
             raise PackError('%s (%s) is not fit for a phone:\n  %s' % (path, abi, '\n  '.join(problems)))
     for tree in args.build_tree or []:
-        check_build_tree(os.path.abspath(tree), args.verification)
+        check_build_tree(os.path.abspath(tree), args.verification, args.perf_diag)
 
     shaders = load_shaders(args.shaders or os.path.join(repo, 'engine', 'assets', 'shaders'))
     content = [] if args.no_data else load_package(args.package)
@@ -961,8 +1026,8 @@ def cmd_build(args):
     work = os.path.join(out, 'work')
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
-    name = 'MagicPortals-%s%s%s-%s.apk' % (version, '-nodata' if args.no_data else '', '-VERIFICATION' if args.verification else '',
-                                           'release' if args.release else 'debug')
+    name = 'MagicPortals-%s%s%s%s-%s.apk' % (version, '-nodata' if args.no_data else '', '-VERIFICATION' if args.verification else '',
+                                             APK_PERF_DIAG_TAG if args.perf_diag else '', 'release' if args.release else 'debug')
     final = os.path.join(out, name)
 
     dex = compile_java(tools, args.java_src or os.path.join(repo, 'engine', 'src', 'platform', 'android', 'java'), facts['targetSdk'], facts['minSdk'], work)
@@ -1051,6 +1116,7 @@ def main(argv=None):
     b.add_argument('--no-data', action='store_true')
     b.add_argument('--version-code', type=int, default=1)
     b.add_argument('--verification', action='store_true')
+    b.add_argument('--perf-diag', action='store_true')
     b.add_argument('--release', action='store_true')
     b.add_argument('--keystore')
     b.add_argument('--keystore-pass-file')

@@ -54,6 +54,16 @@ ACTIVITY = 'com.ivancvetanovic.supersonic.SupersonicActivity'
 SYSTEM_IMAGE = 'system-images;android-33;google_apis;x86_64'
 MIN_FREE_MEMORY_BYTES = 6 * 1024 ** 3
 
+# How the emulator is started (Windows creation flags). NOT DETACHED_PROCESS: a process with no console that starts a console program (emulator.exe starts
+# qemu-system-x86_64-headless.exe) gives that program a console of its own, which the default terminal (Windows Terminal) shows as a tab titled with the
+# path of qemu, and an OpenConsole.exe -Embedding process starts with it (step 204: the owner saw the tab). CREATE_NO_WINDOW gives the emulator a console
+# with no window, which qemu inherits, so nothing is shown; CREATE_NEW_PROCESS_GROUP keeps a Ctrl+C aimed at the script from reaching the emulator. Neither
+# ties the emulator to the script: it goes on running after the script has exited (the slot is ended by `stop`, never by the script's end).
+CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_PROCESS_GROUP = 0x00000200
+DETACHED_PROCESS = 0x00000008  # named only so that the test can say it is NOT used
+EMULATOR_CREATIONFLAGS = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+
 # The two slots, and the ONLY serials this file will ever name. Anything else is a bug of the caller, so it stops.
 SLOTS = {
     'impl': {'avd': 'MP_Android_API33_x86_64', 'port': 5564},
@@ -334,8 +344,9 @@ def cmd_start(args):
     out_dir = os.path.dirname(os.path.abspath(log_path()))
     os.makedirs(out_dir, exist_ok=True)
     emulator_log = open(os.path.join(out_dir, 'emulator_%s.log' % _slot['name']), 'ab')
-    flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    proc = subprocess.Popen(argv, stdout=emulator_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, creationflags=flags, close_fds=True)
+    proc = subprocess.Popen(argv, stdout=emulator_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, creationflags=EMULATOR_CREATIONFLAGS,
+                            close_fds=True)
+    emulator_log.close()  # the child holds its own copy of the handle; the parent's would only lock the file
     with open(os.path.join(out_dir, 'emulator_%s.pid' % _slot['name']), 'w') as f:
         f.write(str(proc.pid))
     started = time.time()
@@ -479,7 +490,19 @@ def logcat_dump(out_path, clear=False):
 
 # ---- the command line ------------------------------------------------------------------------------------------------------------------
 
+def make_output_safe(*streams):
+    """A console's code page may lack a character the device printed (a cp1252 console and a name in another script): the verbs that write the device's
+    text to the console (shell, run-as, adb, the failure messages) must not die on it (PORT6-7). The text is written with `?` for what the stream cannot encode.
+    This is a tool for a Windows host; on any other host the streams are UTF-8 and nothing changes."""
+    for stream in streams or (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='replace')
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv=None):
+    make_output_safe()
     parser = argparse.ArgumentParser(prog='android_emulator.py', description=__doc__.split('\n')[0], add_help=True)
     parser.add_argument('--slot', default='impl', choices=sorted(SLOTS))
     parser.add_argument('--log', default=None)

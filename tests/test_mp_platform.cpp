@@ -7,7 +7,7 @@
 // says nothing WHATEVER STALE CODE comes with it, that a "no" -- and a missing loader function -- says what is missing and what to do, and names the
 // Vulkan version the run asks of the GPU, clamped as the engine clamps it (by the engine tuning's own constants). A "no" is told three ways by the
 // operating system's code: 126 (not found), 193 (found and not a valid image) and any other (shown as it is), and the three are told differently.
-// The list of the developer's flags a build without the developer tools refuses: every one of the sixteen is refused with a line that names it and the
+// The list of the developer's flags a build without the developer tools refuses: every one of the nineteen is refused with a line that names it and the
 // option, nothing a player needs is on the list, an exact match only; and the --controls help entry of such a build names none of them while the
 // default build's entry is, byte for byte, what it was. The build facts: a suite is built as a developer's desktop build is, by its own declaration.
 // Each pin says in "mutation:" the change of the code that turns it red; the Step records that they were run.
@@ -200,11 +200,12 @@ void TheLoaderIsAskedByNameAndOnlyThatNameDecides() {
     CHECK_MSG(Has(none.what, "Windows gave no reason"), "and it gave no reason");
 }
 
-void TheDevelopersFlagsAreTheSixteenAndOnlyThose() {
+void TheDevelopersFlagsAreTheNineteenAndOnlyThose() {
     // mutation: drop one from the list, add a player's flag to it, make the match a prefix or case-blind.
     const std::vector<std::string> wanted = {"--route",         "--route-trace", "--tap",           "--hold",         "--drag",        "--press",
                                              "--place",         "--burn-dragon", "--visit-levels",  "--visit-passes", "--light-masks-off",
-                                             "--shadow-maps",   "--sprites-only", "--asset-watching", "--sprite-report", "--perf-log"};
+                                             "--shadow-maps",   "--sprites-only", "--asset-watching", "--sprite-report", "--perf-log",
+                                             "--scene-samples", "--dynamic-res",  "--perf-overlay"};
     CHECK_EQ(StartChecks::kDeveloperFlags.size(), wanted.size());
     std::set<std::string> seen;
     for (const std::string_view flag : StartChecks::kDeveloperFlags) seen.insert(std::string(flag));
@@ -237,7 +238,7 @@ void NothingAPlayerNeedsIsOnTheList() {
 
 void TheControlsHelpOfABuildWithoutTheToolsNamesNoFlagItRefuses() {
     // The tail of --help's --controls entry (game/main.cpp prints it). main.cpp cannot be linked into a suite, so the text is a function of the build's
-    // kind, and this is where its two versions are held to what they must say. The grep of the built programs' whole --help for the sixteen flags is
+    // kind, and this is where its two versions are held to what they must say. The grep of the built programs' whole --help for the nineteen flags is
     // the Step's own proof of the rest of the text.
     const std::string withTools = StartChecks::ControlsRunKindsHelp(true);
     const std::string withoutTools = StartChecks::ControlsRunKindsHelp(false);
@@ -258,8 +259,8 @@ void TheControlsHelpOfABuildWithoutTheToolsNamesNoFlagItRefuses() {
     for (const char* line : before) golden += std::string(20, ' ') + line + '\n';
     CHECK_MSG(withTools == golden, "with the developer tools the text is what --help said before: " + withTools);
     CHECK_MSG(Has(withTools, "--route") && Has(withTools, "--visit-levels"), "and it names the two flags that build has");
-    // Without the tools it names not one of the sixteen flags the build refuses (substring: no flag may appear even inside another word).
-    // mutation: return the with-tools text for false; name any of the sixteen in the without-tools text.
+    // Without the tools it names not one of the nineteen flags the build refuses (substring: no flag may appear even inside another word).
+    // mutation: return the with-tools text for false; name any of the nineteen in the without-tools text.
     for (const std::string_view flag : StartChecks::kDeveloperFlags) {
         CHECK_MSG(!Has(withoutTools, std::string(flag)), "the text of a build without the tools does not name " + std::string(flag));
     }
@@ -305,7 +306,7 @@ void runTests() {
     TheCodeDecidesWhatThePlayerIsTold();
     TheVersionIsClampedByTheEnginesOwnRange();
     TheLoaderIsAskedByNameAndOnlyThatNameDecides();
-    TheDevelopersFlagsAreTheSixteenAndOnlyThose();
+    TheDevelopersFlagsAreTheNineteenAndOnlyThose();
     NothingAPlayerNeedsIsOnTheList();
     TheControlsHelpOfABuildWithoutTheToolsNamesNoFlagItRefuses();
     AnySuiteIsBuiltAsTheDevelopersDesktopBuildIs();

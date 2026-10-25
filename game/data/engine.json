@@ -41,10 +41,14 @@
     "median 0.1514 ms on, 0.1479 off (ranges overlap, the noise floor is about 0.004 ms), no change on the scrolling or route runs; in a real",
     "console window the first second's worst frame is 214 to 219 ms either way. Not kept: nothing measurable. The switch stays (--sprite-report).",
     "",
-    "mobile (planning step 201, PORT-3): the PHONE PROFILE, laid over the answers above for a run under it. A phone's build runs under it by default",
-    "(game/BuildProfile.hpp kMobileBuild); `--profile mobile` asks the same of a desktop run, `--profile desktop` the other way. A desktop run never",
-    "reads the block, but this file is checked whole when it is loaded, so a typo in it fails where the file is read. Its keys are described in the",
-    "block itself. Nothing in it has been measured on a phone: no phone has run this port."
+    "mobile (planning step 201, PORT-3; made to take effect by step 205, PORT-7): the PHONE PROFILE, laid over the answers above for a run under it. A phone's",
+    "build runs under it by default (game/BuildProfile.hpp kMobileBuild); `--profile mobile` asks the same of a desktop run, `--profile desktop` the other",
+    "way. A desktop run never applies the block, but this file is checked whole when it is loaded, so a typo in it fails where the file is read. Its keys are",
+    "described in the block itself. Nothing in it has been measured on a phone: no phone has run this port.",
+    "",
+    "Step 205 turned two of the declined candidates above ON for the phone profile only, on the strength of the same byte-for-byte picture rule: the block's",
+    "sprites_only_scene_pipelines true and sprite_report false. The top-level values above stay what they are (the desktop's). The sample cap and dynamic",
+    "resolution have keys now and are OFF: they are the owner's decision (see the block's _owner_decisions)."
   ],
   "shadow_map_resolution": 16,
   "sprites_only_scene_pipelines": false,
@@ -77,17 +81,52 @@
       "virtual and not files at all, so every stat fails every frame (engine/src/core/GameRuntime.hpp, assetWatching). A plain true/false, for both kinds of run: a",
       "phone has nobody to hot-reload a saved file for. A desktop run's attended answer is already false, so for a player the key says it again.",
       "",
-      "KEYS THAT DO NOT EXIST YET, on purpose (the _decision_pending note below names them): nothing here turns the scene's sample cap or dynamic resolution on, and no",
-      "reader exists for a key that would."
+      "sprites_only_scene_pipelines true (planning step 205): the four scene pipelines are built with the lit surface folded away (GameManifest::spritesOnlyScenePipelines).",
+      "A plain true/false, for both kinds of run. PROVENANCE. The picture rule is this port's and was MEASURED on a desktop: with it on, every picture was byte for byte what it",
+      "was (step 190: the 19 baselines, the 128-level sweep, the S/R/W pictures; step 205 retook it under `--profile mobile`: the 19 baselines and the unedited 128-level",
+      "f420 sweep, plain and classic, byte-equal to the desktop's). The GAIN is NOT measured on this port and is the sibling's, on an Adreno 640: a 2D menu drew in 75 ms",
+      "instead of 117 and a level in 25 instead of 33 (Penumbra E41). On the owner's desktop it cost 2 to 6 ms at every warm start (step 190) and gained nothing a 60 fps FIFO",
+      "machine can show; that is why the top-level key stays false. THE COST of true: the developer's lit boxes (the B key, and a level drawn without its art) draw FLAT under",
+      "it; `--sprites-only off` (a developer's flag) or the top-level desktop answer brings them back. A player never sees them.",
+      "",
+      "sprite_report false (planning step 205): the layer's per-frame walk over its sprites that writes an 'on'/'off'/'GONE' line when one crosses the view. A plain",
+      "true/false, for both kinds of run. Nothing measurable on a desktop (step 190: Game Layers 0.1514 ms on, 0.1479 off, the ranges overlapping); a phone writes every log",
+      "line to flash. It changes no pixel and no tick. The G key's dump of every sprite is kept whatever this says.",
+      "",
+      "scene_samples (planning step 205; ABSENT, which is the owner's decision NOT yet taken): 1, 2 or 4, the scene target's sample cap (GameManifest::sceneSamples). Absent",
+      "is the desktop's answer, the engine's own (the device's best, at most 4). The cost of a phone's 4: 44 B per pixel more than 1 (92 MiB at 2.2 megapixels, step 205's",
+      "arithmetic and the platform research's section 3b); what a smaller cap does to this port's PIXELS is measured in step 205 with `--scene-samples` and is the owner's to",
+      "judge, together with edge_cover.enabled (game/data/edge_cover.json: its strips were built around 4 samples). `--scene-samples <1|2|4>` tries a value for one run.",
+      "",
+      "dynamic_resolution (planning step 205; enabled FALSE, the owner's decision NOT yet taken): the scene target sized by how fast the GPU draws it",
+      "(engine/src/core/DynamicResolution.hpp). All seven keys are required when the object is present. The NUMBERS ARE THE SIBLING'S, Penumbra and the Castle of Shadows",
+      "Enhanced's E41 and E47 (its game/main.cpp), and have NOT been measured on this port or on any phone: start_max_pixels 2200000, min_scale 0.3, target_fps 58.0 (E41);",
+      "relaxed_rise true, min_target_height 360, emergency_below_fps 30.0 (E47, found on a Galaxy A05). The controller needs an unpaced loop to rise, and the HUD and the touch",
+      "controls are drawn into the smaller picture and blur with it (the platform research's PL-09). TO TURN IT ON: set enabled true here. A run can try it without editing the",
+      "file with `--dynamic-res on` (these numbers). The engine never applies it to a capture or a --fixed-step run, so no captured pixel can move."
     ],
     "minimum_vulkan_minor": 1,
     "shadow_map_resolution": 16,
     "asset_watching": false,
-    "_decision_pending": {
-      "scene_samples": "OWNER DECISION, with edge_cover.enabled and dynamic resolution as one bundle (the platform research's PL-05, owner decision 1): 1 or 2 samples would save 44 or 24 B per pixel of the scene target but move a few percent of edge pixels in a project whose gate is pixels. Could change a pixel. No key, no reader.",
-      "dynamic_resolution": "OWNER DECISION and the phone-profile step: the scene target sized by how fast the GPU draws it, and the HUD and controls blur with it. Inert for --fixed-step and --screenshot, so it could not change a captured pixel, but it changes what a player sees. No key, no reader.",
-      "sprites_only_scene_pipelines": "The phone-profile step: byte-identical in every picture of this port on a desktop (step 190) and a measured gain only on an Adreno 640 in the sibling port; true for a phone is proposed, not decided. Could change a pixel only of the developer's lit boxes. No mobile key; the top-level key (false) applies.",
-      "sprite_report": "The phone-profile step: the layer's per-frame log walk; false for a phone is proposed. Changes no pixel. No mobile key; the top-level key applies."
+    "sprites_only_scene_pipelines": true,
+    "sprite_report": false,
+    "dynamic_resolution": {
+      "enabled": false,
+      "start_max_pixels": 2200000,
+      "min_scale": 0.3,
+      "target_fps": 58.0,
+      "relaxed_rise": true,
+      "min_target_height": 360,
+      "emergency_below_fps": 30.0
+    },
+    "_decided": {
+      "sprites_only_scene_pipelines": "IN for the phone profile (step 205): byte-identical in every picture of this port on a desktop (steps 190 and 205), the measured gain is the sibling's. Costs the developer's lit boxes, which draw flat.",
+      "sprite_report": "IN for the phone profile (step 205): false. Changes no pixel and no tick."
+    },
+    "_owner_decisions": {
+      "scene_samples": "STILL THE OWNER'S, with edge_cover.enabled and dynamic resolution as one bundle (the platform research's PL-05, owner decision 1): 1 or 2 samples would save 44 or 24 B per pixel of the scene target but move some edge pixels in a project whose gate is pixels. Step 205 built the key (absent here) and the flag and MEASURED the pixel cost; it decided nothing.",
+      "dynamic_resolution.enabled": "STILL THE OWNER'S (owner decisions 1 and 3): the HUD and the controls blur with the scene target. The numbers above are written with their provenance and the block is OFF.",
+      "edge_cover.enabled": "STILL THE OWNER'S: game/data/edge_cover.json is not touched by the phone profile."
     }
   }
 }

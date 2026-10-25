@@ -20,6 +20,10 @@
 #   --verification       THE VERIFICATION BUILD: MAGICPORTALS_DEV_TOOLS=ON, so the developer's flags (--route, --tap, --visit-levels ...) are in
 #                        the program, for a run on an emulator driven by files/magicportals_args.txt. Its trees, libraries and APK carry
 #                        VERIFICATION in their names, and it is never signed with a release key. A player's APK never has them.
+#   --perf-diag          THE PERFORMANCE-DIAGNOSTIC BUILD (planning step 205): MAGICPORTALS_PERF_DIAG=ON, the engine's frame readout over the picture and a statistics
+#                        line in the game's own log every 5 s, for a tester's phone to say where its frames go (docs/android.md says how to pull the log). Nothing
+#                        else differs: not the profile, not the developer's flags (DEV_TOOLS stays OFF). Its trees, libraries and APK carry PERFDIAG / perfdiag in
+#                        their names, `inspect` says it is one, and it is refused with --release and with --verification. The shipped APK never has it.
 #   --release            THE RELEASE APK: not debuggable, signed with YOUR key, never the debug one. Needs the three key options below. It is
 #                        refused with --verification, and with --no-data unless --allow-data-less-release is also given.
 #     --keystore <file>             the release keystore (PKCS12 or JKS). No default: this repository has no key and takes none from anywhere.
@@ -42,7 +46,7 @@
 # the ones on PATH; a JDK 17 or newer (JAVA_HOME, else PATH) and Python 3. Written for Git Bash on Windows (run) and for bash on Linux and
 # macOS (written from the same rules, NOT RUN: the Linux and macOS paths of this script have never been executed).
 #
-# Output: <out>/MagicPortals-<version>[-nodata][-VERIFICATION]-<debug|release>.apk and <out>/SHA256SUMS.txt.
+# Output: <out>/MagicPortals-<version>[-nodata][-VERIFICATION|-PERFDIAG]-<debug|release>.apk and <out>/SHA256SUMS.txt.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -76,6 +80,7 @@ CONFIG=Release
 DATA=""
 NO_DATA=0
 VERIFICATION=0
+PERF_DIAG=0
 RELEASE=0
 ALLOW_DATALESS_RELEASE=0
 KEYSTORE=""
@@ -97,6 +102,7 @@ while [ $# -gt 0 ]; do
         --data) [ $# -ge 2 ] || die "--data needs a folder"; DATA="$2"; shift 2 ;;
         --no-data) NO_DATA=1; shift ;;
         --verification) VERIFICATION=1; shift ;;
+        --perf-diag) PERF_DIAG=1; shift ;;
         --release) RELEASE=1; shift ;;
         --allow-data-less-release) ALLOW_DATALESS_RELEASE=1; shift ;;
         --keystore) [ $# -ge 2 ] || die "--keystore needs a file"; KEYSTORE="$2"; shift 2 ;;
@@ -128,6 +134,10 @@ if [ "$PACKAGE_ONLY" -eq 1 ] && [ "$BUILD_ONLY" -eq 1 ]; then die "--build-only 
 if [ "$BUILD_ONLY" -eq 0 ]; then
     if [ -n "$DATA" ] && [ "$NO_DATA" -eq 1 ]; then die "--data and --no-data are two answers to one question"; fi
     if [ -z "$DATA" ] && [ "$NO_DATA" -eq 0 ]; then die "say where the game's data is: --data <the content packager's output folder>, or --no-data for a shell without it"; fi
+fi
+if [ "$PERF_DIAG" -eq 1 ]; then
+    [ "$RELEASE" -eq 0 ] || die "--perf-diag and --release together: the diagnostic build is a tester's and is never a release"
+    [ "$VERIFICATION" -eq 0 ] || die "--perf-diag and --verification together: a tester's build must not carry the developer's flags"
 fi
 if [ "$RELEASE" -eq 1 ]; then
     [ "$VERIFICATION" -eq 0 ] || die "--release and --verification together: the verification build has the developer's tools in and is never signed with a release key"
@@ -221,12 +231,15 @@ OUT="$(posixp "$OUT")"
 "$PY" "$(native "$REPO/tools/package/android_package.py")" check-out --repo "$(native "$REPO")" --out "$(native "$OUT")"
 suffix=""
 [ "$VERIFICATION" -eq 0 ] || suffix="-verification"
+[ "$PERF_DIAG" -eq 0 ] || suffix="-perfdiag"
 DEV_TOOLS=OFF
 [ "$VERIFICATION" -eq 0 ] || DEV_TOOLS=ON
+PERF_DIAG_CMAKE=OFF
+[ "$PERF_DIAG" -eq 0 ] || PERF_DIAG_CMAKE=ON
 
 note "host $HOST; SDK $SDK; NDK $NDK (r$ndk_major); build-tools $BUILD_TOOLS_VERSION; platform android-$TARGET_SDK; minSdk $MIN_SDK"
 note "cmake $CMAKE; ninja $NINJA; python $PY; java $JAVA_BIN"
-note "variant: $([ "$VERIFICATION" -eq 1 ] && echo 'VERIFICATION (developer tools ON)' || echo 'player (developer tools OFF)'), $([ "$RELEASE" -eq 1 ] && echo release || echo debug)-signed, $([ "$NO_DATA" -eq 1 ] && echo 'no game data' || echo 'with game data')"
+note "variant: $([ "$VERIFICATION" -eq 1 ] && echo 'VERIFICATION (developer tools ON)' || { [ "$PERF_DIAG" -eq 1 ] && echo 'PERFORMANCE-DIAGNOSTIC (developer tools OFF, frame readout and a log line every 5 s)' || echo 'player (developer tools OFF)'; }), $([ "$RELEASE" -eq 1 ] && echo release || echo debug)-signed, $([ "$NO_DATA" -eq 1 ] && echo 'no game data' || echo 'with game data')"
 
 # ---- Configure and build, one tree per ABI ----------------------------------------------------------------------------------------------
 LIB_ARGS=()
@@ -251,7 +264,8 @@ for abi in "${ABIS[@]}"; do
             -DMAGICPORTALS_BAKED_PATHS=OFF \
             -DMAGICPORTALS_BUILD_TESTS=OFF \
             -DMAGICPORTALS_MOBILE=ON \
-            -DMAGICPORTALS_DEV_TOOLS="$DEV_TOOLS"
+            -DMAGICPORTALS_DEV_TOOLS="$DEV_TOOLS" \
+            -DMAGICPORTALS_PERF_DIAG="$PERF_DIAG_CMAKE"
         note "build $abi"
         "$CMAKE" --build "$(native "$tree")" --target MagicPortals -j "$JOBS"
     fi
@@ -269,6 +283,7 @@ args=(build --repo "$(native "$REPO")" --sdk "$(native "$SDK")" --ndk "$(native 
       --version-code "$VERSION_CODE")
 if [ "$NO_DATA" -eq 1 ]; then args+=(--no-data); else args+=(--package "$(native "$(posixp "$DATA")")"); fi
 [ "$VERIFICATION" -eq 0 ] || args+=(--verification)
+[ "$PERF_DIAG" -eq 0 ] || args+=(--perf-diag)
 if [ "$RELEASE" -eq 1 ]; then
     args+=(--release --keystore "$(native "$(posixp "$KEYSTORE")")" --keystore-pass-file "$(native "$(posixp "$PASS_FILE")")" --key-alias "$KEY_ALIAS")
     [ "$ALLOW_DATALESS_RELEASE" -eq 0 ] || args+=(--allow-data-less-release)

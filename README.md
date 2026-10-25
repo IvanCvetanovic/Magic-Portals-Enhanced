@@ -81,6 +81,9 @@ sound device. `tools/build_linux.sh --help` lists the options.
 NDK (r28 or newer) and packages one APK, with the game's data in it, unpacked into the app's private folder on the first run (`docs/android.md`: what you need,
 the options, what the APK holds, what the owner must decide). It is **built, packaged and statically checked, and run on an x86_64 emulator** (installs, unpacks, plays all 128 levels'
 recorded winning routes on the same ticks as Windows (the implementer's on the first build, a sample of 17 on the final one, and the verifier's own 128 of 128 on the final one), survives Back, Home and an update), **and has never been run on a phone**: `tools/android_emulator.py` is the one script that drives an emulator (`docs/android.md`, section 7).
+A phone's build takes the phone profile (sprites-only pipelines on, the sprite report off) and starts a level behind a plain black cover that a press draws first, with a contact rule for touches made during the load
+(planning step 205, `docs/android.md` section 10); `tools/build_android.sh --perf-diag` builds the tester's variant that writes the engine's frame statistics to the game's log every 5 seconds, for the
+questions only a phone can answer. The sample cap, `edge_cover` and dynamic resolution on a phone are the owner's decision and were measured, not decided.
 
 ## How it fits together
 
@@ -571,6 +574,9 @@ The flags a capture uses (`--help` prints every flag):
 | `--asset-watching <on\|off>` | DEV: the engine's stat of every watched file on every frame (hot reload of a texture a developer saved). Over the table |
 | `--sprite-report <on\|off>` | DEV: the layer's per-frame walk over its sprites that logs one crossing the view's edge (`on`/`off`/`GONE` lines). Over the table; `G` dumps all either way |
 | `--perf-log <seconds>` | DEV: the engine's frame statistics (fps, median, 95th percentile, worst, where the frame went) in the log every `<seconds>`; off unless asked |
+| `--perf-overlay <on\|off>` | DEV: the engine's readout of the frame rate and where the frame's time went, over the picture; off unless asked (the performance-diagnostic build turns it on for a player's run only, `docs/android.md` section 10.3) |
+| `--scene-samples <1\|2\|4>` | DEV: the most samples per pixel of the scene target for this run (4, the engine's own, is the default); what a smaller cap does to the pictures is the owner's to judge (`docs/android.md` section 10.4) |
+| `--dynamic-res <on\|off>` | DEV: the scene target sized by how fast the GPU draws it, with the numbers of the `mobile` block of `game/data/engine.json`; the engine never applies it to a capture or a `--fixed-step` run |
 | `--visit-levels <lightmapped\|all\|name,...>` | DEV: visit these levels in one process; the run fails unless the engine's material descriptor sets return to its pool |
 | `--visit-passes <n>` | DEV: how many times to walk that list (default 1) |
 | `--route <file>` | DEV: replay a win route (`tests/routes/<level>.json`, absolute) in the window, opening its level; says on exit whether it won. Pair it with `--saves <dir>`: a run past the level's end writes its medal |

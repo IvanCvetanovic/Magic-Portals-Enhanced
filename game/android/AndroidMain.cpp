@@ -109,11 +109,13 @@ private:
 // manifest) has something to show (PORT5-10 (a)).
 void RecordInLogFile(const std::string& text) {
     try {
-        const fs::path base = Supersonic::UserDataDirectory(kTitle);
-        if (base.empty()) return;
-        const fs::path scratch = base / MagicPortals::Scratch::kUserScratchFolder;
+        // The folder and the two names are Scratch's own (PhoneLogFolder, LogPathsIn): the very pair main.cpp opens the log with, so the failed start's words land in
+        // the file the next start's report reads (planning step 205, PORT6-8 (b)).
+        const fs::path folder = MagicPortals::Scratch::PhoneLogFolder(Supersonic::UserDataDirectory(kTitle));
+        if (folder.empty()) return;
+        const MagicPortals::Scratch::LogPaths logs = MagicPortals::Scratch::LogPathsIn(folder);
         std::string why;
-        if (!Unpack::RecordFailure((scratch / MagicPortals::Scratch::kLogFileName).string(), (scratch / MagicPortals::Scratch::kPreviousLogFileName).string(), text, why)) {
+        if (!Unpack::RecordFailure(logs.log.string(), logs.previous.string(), text, why)) {
             SUPERSONIC_LOG_WARN(kLogTag) << "The log file could not be written: " << why;
         }
     } catch (const std::exception& e) {

@@ -258,15 +258,21 @@ desktop's answer when present:
 | `minimum_vulkan_minor` | 1 | the lowest Vulkan 1.x a GPU may report. The engine wants 1.2; the stock drivers of many phones on Android 11 and 12 report 1.1, so with the default the start ends before the first frame (the sibling port's step E39). A desktop run leaves it out and asks for 1.2. The log line says what the run was given: `... minimum Vulkan 1.2` or, under the profile, `1.1` |
 | `shadow_map_resolution` | 16 | as the desktop's own key, repeated so that changing the desktop's does not move a phone |
 | `asset_watching` | false | the engine's per-frame stat of every watched file, for both kinds of run: a phone has nobody to hot-reload for |
+| `sprites_only_scene_pipelines` | true | the four scene pipelines built with the lit surface folded away (planning step 205). Every picture of this port was byte for byte the desktop's with it on (the 19 baselines and the 128-level f420 sweep, plain and classic, under `--profile mobile`); the gain is the sibling port's, on an Adreno 640 (a 2D menu in 75 ms instead of 117), and the cost is the developer's lit boxes, which draw flat |
+| `sprite_report` | false | the layer's per-frame walk that logs a sprite crossing the view's edge (planning step 205): changes no pixel and no tick, and a phone writes every log line to flash |
+| `dynamic_resolution` | `enabled` false | seven keys, the flag and the six numbers of the sibling's E41 and E47 (start budget, floor scale, target rate, relaxed rise, floor in lines, emergency rate), written and **off** (`enabled` false): turning dynamic resolution on is the owner's decision (below) |
 
-The scene's sample cap and dynamic resolution are **not** in the block, on purpose: they are the owner's decision (the block's
-`_decision_pending` note says so), and a key for them is refused when the file is read until code that reads it exists. As shipped, nothing in the
-block changes a picture on a desktop (the three keys concern which GPU is acceptable, the size of shadow maps, and a file watch);
-`--profile mobile` on a desktop is byte-identical to the default for three levels at frame 420. `shadow_map_resolution` is the one key of the block
-that would change pixels if it were edited: as shipped it equals the desktop's own 16, so it changes nothing, but the developer's lit boxes
-sample the maps, and `engine.json`'s own `_about` records 165,280 of 921,600 pixels differing between 16 and the engine's sizes. The other keys
-that could change a pixel are the ones that are not there: `scene_samples` (edge pixels), `sprites_only_scene_pipelines` (only the developer's
-lit boxes), dynamic resolution (only outside a fixed-step run), and `minimum_vulkan_minor` only through which GPU a machine with more than one picks.
+The scene's sample cap, dynamic resolution and `edge_cover` are **the owner's decision** as one bundle (the block's `_owner_decisions` note says so). Since step 205 they have their keys and flags
+and nothing is decided: `scene_samples` is absent from the block (the engine's own 4), `dynamic_resolution.enabled` is `false`, `--scene-samples <1|2|4>` and `--dynamic-res <on|off>` try either for one run,
+and `docs/android.md` section 10.4 says what each cap costs in pixels on this PC. A key the reader does not know is refused by name when the file is read, and `Resolve(..., mobile=false)` gives the
+answers it gave before the block had these keys (pinned over a grid in `tests/test_mp_tuning.cpp`). As shipped, `--profile mobile` on a desktop is byte-identical to the default for the 19 CTL baselines and for the
+128-level f420 sweep, plain and classic. `shadow_map_resolution` is the one key of the block that would change pixels if it were edited: as shipped it equals the desktop's own 16, so it changes nothing, but the
+developer's lit boxes sample the maps, and `engine.json`'s own `_about` records 165,280 of 921,600 pixels differing between 16 and the engine's sizes. The keys that could change a pixel and are not set are
+`scene_samples` (edge pixels) and dynamic resolution (only outside a fixed-step run); `minimum_vulkan_minor` only through which GPU a machine with more than one picks.
+
+**The performance-diagnostic build.** `-DMAGICPORTALS_PERF_DIAG=ON` (default OFF; independent of `MAGICPORTALS_DEV_TOOLS`) turns on the engine's frame readout over the picture and its statistics line in the
+game's own log every 5 seconds, **for a player's (a tester's) run only** (a capture, a route or any other run of such a build gets neither unless a flag asks: fix round R of step 205); `tools/build_android.sh --perf-diag` builds it for a phone (`docs/android.md` section 10.3). It is a build constant like `MAGICPORTALS_MOBILE`
+(`game/BuildProfile.hpp` stops a file that lacks it), and the string `PERFORMANCE-DIAGNOSTIC BUILD` is in a diagnostic program and in no other.
 
 **The icon tool.** `python tools/art/make_app_icon.py [--out DIR]` draws the icon (two concentric rings, blue and orange, on a dark disc) with
 arithmetic alone: nothing is read, no file of the original is opened, and the output is the same bytes on one machine twice. Into `out/dist/icons`

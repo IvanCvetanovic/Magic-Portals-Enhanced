@@ -110,6 +110,15 @@ add_mp_test(test_mp_platform)
 # on a real scratch directory, and the developer's flags file. Pure: invented lists, an in-memory APK and disk, no original file.
 add_mp_test(test_mp_unpack)
 
+# How a level is started on a phone (planning step 205, PORT-7): sim/LevelStart's state machine, the cover that is drawn before the load and the rule that
+# ignores a finger that went down before the new level's first frame, until it lifts. Scripts of the machine's five inputs and the traces they must give; pure.
+add_mp_test(test_mp_levelstart)
+
+# The same rule through the real layer (planning step 205): a bare layer with Paths::coverLevelStarts, ticked and drawn as the app does, walked from the menu to a tile:
+# nothing loads in the asking frame, the next frame is a single black quad, the load runs in the tick after it, and a press made under the cover or queued during the load
+# fires no shot. Needs the converted levels like test_mp_layer, and is skipped (77) without them.
+add_mp_test(test_mp_startflow SKIPS_WITH_77)
+
 # The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
 # what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
 add_mp_test(test_mp_clock)

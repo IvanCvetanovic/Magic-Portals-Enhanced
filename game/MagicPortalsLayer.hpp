@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
@@ -43,6 +44,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Hud.hpp"
 #include "sim/Impacts.hpp"
 #include "sim/LevelEnd.hpp"
+#include "sim/LevelStart.hpp"
 #include "sim/Lighting.hpp"
 #include "sim/Loading.hpp"
 #include "sim/Locking.hpp"
@@ -227,6 +229,12 @@ public:
         // dropped-draw alarm and G's full dump are kept whatever this says.
         bool spriteReport = true;
 
+        // HOW A LEVEL IS STARTED (planning step 205, PORT-7; sim/LevelStart.hpp): false, the default, is the old path to the byte, a press that loads the level inside
+        // its own tick. True is the phone's: a press on a tile, a Retry or Next button, the dashboard's Start or the in-level restart control asks for a start; the
+        // next frame the layer draws is a plain black cover, the load runs in the first tick after it was drawn, and a finger that went down before the new level's
+        // first frame is ignored until it lifts. main passes the phone profile (kMobileBuild or --profile mobile). Every suite's bare Paths keeps the old path.
+        bool coverLevelStarts = false;
+
         // WHICH CONTROLS THE RUN PLAYS (planning step 181, CTL-5; the design's 2.1): what main's
         // Controls::ResolvePolicy made of --controls and of the kind of run. The default is the
         // policy of a run with no such thing - "classic, nothing": the feature does not exist, no
@@ -372,7 +380,13 @@ public:
     // out again, which clears the very vector the caller's button lives in -
     // the click loop below iterates that vector - so a reference would dangle
     // before the level it names could be read out of it.
-    bool PressMenu(entt::registry& registry, MenuButton button);
+    //
+    // `sound` false is the press's noise already made: a level start that was deferred (LevelStart) played it when it was asked for, and its load calls this once the
+    // cover has been drawn. The visit tool and the suites call it with the default, and it loads at once, as it always did.
+    bool PressMenu(entt::registry& registry, MenuButton button, bool sound = true);
+
+    // The state machine of a phone's level start (sim/LevelStart.hpp), for the suites and the log.
+    const LevelStart::Machine& LevelStartMachine() const { return m_levelStart; }
 
     // The sound events latched and not yet played, oldest first.
     //
@@ -3235,6 +3249,29 @@ private:
         int level{-1};
     };
     PendingMenu m_pendingMenu;
+
+    // ---- THE LEVEL START ON A PHONE (planning step 205, PORT-7; Paths::coverLevelStarts) -------------------------------------------------------------------
+    // What a request is: the machine's Request carries it as a plain int.
+    enum class StartKind { Level, Retry, Next, Achievement, Reset };
+    LevelStart::Machine m_levelStart;
+    std::chrono::steady_clock::time_point m_startAskedAt{};
+    std::chrono::steady_clock::time_point m_startLoadBeganAt{};
+    // A press from the input: a tile, Retry and Next are deferred on a phone, every other button is PressMenu's as it was.
+    bool pressFromInput(entt::registry& registry, MenuButton button);
+    // The dashboard's Start, from the input: a level is deferred, a chapter's grid opens at once.
+    void openAchievementFromInput(entt::registry& registry, int world, int level);
+    // Asks the machine for a start (and plays the press's sound now). False where one is already in progress.
+    bool requestLevelStart(StartKind kind, int index, int extra, const char* sound);
+    // First thing in every tick of a phone's run: the machine's tick. True when this tick is the start's (it loaded, or the cover is still up) and the rest of the
+    // tick must not run.
+    bool levelStartTick(entt::registry& registry);
+    // The load the machine said to run: the very call the old path made. True when the level came up.
+    bool runLevelStart(entt::registry& registry, const LevelStart::Request& request);
+    // The draw side: asks the machine what this frame is, emits the cover when it is one. True for a cover.
+    bool drawCover(entt::registry& registry);
+    void emitCover(entt::registry& registry) const;
+    // The machine's events, to the log, one line each.
+    void logLevelStart();
     // The main menu's music switch, on the state's clock: when its entrance began
     // and when it was last dismissed (SoundPanelLayer::manageMusicSwitch).
     double m_mainMusicAddedMs{0.0};
@@ -3761,6 +3798,9 @@ private:
     // the menus, the loading screen, a popup, the achievements popup - and it forgets the fingers (a screen that reads one finger leaves no
     // memory of two, so a level that takes the tick again finds a gap). A scheduled tap is stepped as it is read.
     Touch touchThisTick(const entt::registry& registry);
+    // One contact, through the level start's rule (planning step 205, sim/LevelStart.hpp): the touch itself, or "nothing there" for a finger that went down before the
+    // new level's first frame and has not lifted. A run that does not cover its level starts gets every touch back untouched. Declared here, after Touch.
+    Touch filterContact(int id, const Touch& touch);
     // The touch a LEVEL reads its input by (planning step 191): touchThisTick, or, with two contacts on, the WORLD's finger - the one that is
     // not on a control - with `m_controlsTouch` the finger the controls are worked by; with one finger down they are the same touch and this
     // is what it always was.

@@ -36,6 +36,19 @@ inline constexpr std::uint32_t kShadowMapMax = 4096;
 // A perf log line every this many seconds at most: a flag that asks for hours is a typo.
 inline constexpr float kPerfLogMaxSeconds = 3600.0f;
 
+// The scene target's sample cap (GameManifest::sceneSamples, engine/src/core/GameRuntime.hpp; ResolveSceneSamples). 0 is the engine's own (the device's best, at
+// most 4); the table and the flag say 1, 2 or 4 and nothing else (the engine maps 3 to 2 and anything above 4 to 4, which a typo should not do quietly).
+inline constexpr std::uint32_t kSceneSamplesAllowed[] = {1, 2, 4};
+
+// The ranges of the dynamic-resolution block's numbers, from the engine's own mending of a configuration (engine/src/core/DynamicResolution.cpp, Mend): a floor
+// scale is clamped into 0.05 to 1, a target rate is at least 1. The table is refused outside them, so that a typo is not silently mended into something else.
+inline constexpr double kDynamicMinScaleMin = 0.05;
+inline constexpr double kDynamicMinScaleMax = 1.0;
+inline constexpr double kDynamicTargetFpsMin = 1.0;
+inline constexpr double kDynamicTargetFpsMax = 240.0;   // no display this port draws on runs faster; a typo is not a target
+inline constexpr std::uint32_t kDynamicMostPixels = 67108864;      // 64 Mpx: an 8K window; a budget beyond it is not one
+inline constexpr std::uint32_t kDynamicMostTargetHeight = 4320;    // an 8K picture's height
+
 // The Vulkan 1.x minors the engine's device selection takes (GameManifest::minimumVulkanMinor, clamped into 1 to 2 by GameRuntime::ResolveVulkanMinor,
 // engine/src/core/GameRuntime.cpp:117): the table says what it means and is refused outside it, as for the shadow maps.
 inline constexpr std::uint32_t kVulkanMinorMin = 1;
@@ -47,12 +60,30 @@ struct PerRun {
     bool other = true;    // every other run: a capture, a route, a level walk, a script
 };
 
+// The scene target sized by how fast the GPU draws it (engine/src/core/DynamicResolution.hpp), the seven numbers a game declares; the others stay the engine's.
+// The defaults here are the engine's own for these fields, so a block read with all seven present and a default-made one cannot differ by omission.
+struct DynamicResolutionBlock {
+    bool enabled = false;
+    std::uint32_t startMaxPixels = 0;
+    float minScale = 0.3f;
+    float targetFps = 58.0f;
+    bool relaxedRise = false;
+    std::uint32_t minTargetHeight = 0;
+    float emergencyBelowFps = 0.0f;
+};
+
 // The "mobile" block: each member is a key the block may hold, and PRESENT means it replaces the desktop answer for a run under the phone profile.
 // Absent means the phone profile answers as the desktop does.
 struct MobileBlock {
     std::optional<std::uint32_t> minimumVulkanMinor; // minimum_vulkan_minor: 1 or 2. 1 lets a GPU that reports Vulkan 1.1 be used (a phone's stock driver)
     std::optional<std::uint32_t> shadowMapResolution; // shadow_map_resolution: as the top-level key
     std::optional<bool> assetWatching;                // asset_watching: a plain true/false, for both kinds of run (a phone has nobody to hot-reload for)
+    // Planning step 205 (PORT-7). A plain true/false for BOTH kinds of run, like asset_watching:
+    std::optional<bool> spritesOnlyScenePipelines;    // sprites_only_scene_pipelines
+    std::optional<bool> spriteReport;                 // sprite_report
+    // Documented and INERT as shipped (the owner's decision): absent, or enabled false.
+    std::optional<std::uint32_t> sceneSamples;        // scene_samples: 1, 2 or 4; absent is the desktop's answer (the engine's own, 4)
+    std::optional<DynamicResolutionBlock> dynamicResolution; // dynamic_resolution: {enabled, start_max_pixels, min_scale, target_fps, relaxed_rise, min_target_height, emergency_below_fps}
 };
 
 // game/data/engine.json. The defaults are the engine AS IT WAS, and the layer as it was: nothing opted into.
@@ -71,6 +102,10 @@ struct Overrides {
     std::optional<bool> assetWatching;                // --asset-watching <on|off>
     std::optional<bool> spriteReport;                 // --sprite-report <on|off>
     float perfLogSeconds = 0.0f;                      // --perf-log <seconds>: the engine's frame statistics every so often (0: none)
+    // Planning step 205 (PORT-7): what a run COSTS, never what it does, so a developer can measure the owner's open decisions without editing the file.
+    std::optional<std::uint32_t> sceneSamples;        // --scene-samples <1|2|4>: the scene target's sample cap (4 is the engine's own)
+    std::optional<bool> dynamicResolution;            // --dynamic-res <on|off>: with the mobile block's numbers when on (inert for a capture or --fixed-step, as the engine has it)
+    std::optional<bool> perfOverlay;                  // --perf-overlay <on|off>: the engine's frame readout over the picture
 };
 
 struct Resolved {
@@ -80,6 +115,9 @@ struct Resolved {
     bool spriteReport = true;
     float perfLogSeconds = 0.0f;
     std::uint32_t minimumVulkanMinor = 0; // 0: not asked, the engine's own (Vulkan 1.2); 1 or 2: set on the manifest
+    std::uint32_t sceneSamples = 0;       // 0: not asked, the engine's own (the device's best, at most 4); 1, 2 or 4: set on the manifest
+    DynamicResolutionBlock dynamicResolution; // enabled false: not asked, the engine as it was (the scene target is the window's size)
+    bool perfOverlay = false;
 };
 
 // Reads engine.json strictly: every key present and of its type, the resolution 0 or 16 to 4096, and a "mobile" object that holds only the keys of
@@ -96,8 +134,17 @@ bool ParseSwitch(const std::string& text, bool& out);                      // "o
 bool ParseShadowMaps(const std::string& text, std::uint32_t& out);         // a whole number, 0 or kShadowMapMin..kShadowMapMax
 bool ParsePerfLog(const std::string& text, float& out);                    // seconds, above 0 and at most kPerfLogMaxSeconds
 bool ParseProfile(const std::string& text, bool& mobile);                  // --profile: "desktop" (false) or "mobile" (true), exactly
+bool ParseSceneSamples(const std::string& text, std::uint32_t& out);       // --scene-samples: exactly "1", "2" or "4"
 
-// One line for the log, so a log says what the run asked for: "shadow maps 16, sprites-only on, asset watching off, ...".
+// What a perf-diagnostic build asks of the engine (planning step 205, BuildProfile.hpp kPerfDiag): the readout over the picture and a statistics line in the
+// game's log every kPerfDiagLogSeconds, unless a flag already said otherwise (an explicit flag still wins). Nothing else changes: a diagnostic build must
+// measure the game as it plays, not play another one.
+inline constexpr float kPerfDiagLogSeconds = 5.0f;
+void ApplyPerfDiag(Overrides& overrides);
+
+// One line for the log, so a log says what the run asked for: "shadow maps 16, sprites-only on, asset watching off, ...", the dynamic resolution (with its
+// numbers when on) and the perf readout. The scene-sample cap is NOT in it: main reads that back from the manifest, as it does the Vulkan minimum, so the line
+// says what the engine will really take ("4" for the engine's own) and not what the table asked.
 std::string Describe(const Resolved& resolved);
 
 } // namespace MagicPortals::EngineTuning

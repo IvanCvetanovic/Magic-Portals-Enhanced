@@ -61,10 +61,11 @@ Verdict CheckVulkanLoader(const TryLoad& tryLoad, std::uint32_t minimumVulkanMin
 
 // The flags MAGICPORTALS_DEV_TOOLS=OFF takes out of the program, spelled as the command line spells them. The flags a player needs are not
 // here: --level, --root, --no-baked-paths, the per-path flags, --saves, --controls, --profile and the engine's own.
-inline constexpr std::array<std::string_view, 16> kDeveloperFlags = {
+inline constexpr std::array<std::string_view, 19> kDeveloperFlags = {
     "--route",        "--route-trace", "--tap",           "--hold",        "--drag",         "--press",
     "--place",        "--burn-dragon", "--visit-levels",  "--visit-passes", "--light-masks-off",
     "--shadow-maps",  "--sprites-only", "--asset-watching", "--sprite-report", "--perf-log",
+    "--scene-samples", "--dynamic-res", "--perf-overlay",  // planning step 205: what a run COSTS, for the owner's open decisions (sim/EngineTuning.hpp)
 };
 
 // Whether `arg` is one of kDeveloperFlags (an exact match: "--routes" is not "--route").
