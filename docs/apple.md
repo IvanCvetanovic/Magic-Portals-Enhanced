@@ -152,7 +152,7 @@ not an Apple GPU, so nothing below says how the game looks or runs on a Mac's. T
 * **Two things failed, and are fixed in the commit that wrote this section.** (1) Both iOS jobs built and linked, then `make_app.sh` stopped with "No executable at build-ios-device/game/MagicPortals": CMake leaves an iOS program
   inside a bundle of its own, `game/MagicPortals.app/MagicPortals`; the script now looks there for iOS. So **no iOS shell has been assembled yet and nothing iOS has run anywhere.**
   (2) `Check the picture` asked for exactly 1280x720 and the window was 1024x653: the check now asks for at least 640x360 (`check_png.py --min-size`).
-  The fixed workflow has not run: the next dispatch is what shows it.
+  **The second run (run 40238093331, 22:00 UTC, all three jobs green) showed the fixes hold:** both iOS jobs assembled their shells (the device `.ipa`: arm64, `MinimumOSVersion` 16.3, ad hoc signed, `codesign --verify` "valid on disk" and "satisfies its Designated Requirement"; the simulator `.app` in a zip, the same checks) and the macOS job's two picture checks passed on the 1024x653 pictures (five pixel values each, 27,002 bytes each). The `macos` job took 3 min 51 s and the iOS jobs about 30 s each on a warm cache: about 6 minutes rounded up per job, about 60 billed at ten times. The three downloaded shells hold the program, the engine's shaders, the icons, the licences and a plist: no game data (no name with GameData, level, port-data, .esc, .ent or .mp3 in any of them). **Still not shown:** that an iOS program starts (no device or simulator ran one), that anything looks right, and everything of section 12.
 
 ## 5. The fixture level
 
