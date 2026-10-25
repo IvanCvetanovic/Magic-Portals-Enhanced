@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Whether a capture the game wrote is a picture of something (planning step 206, PORT-8): a PNG of the size asked for that is not one flat colour.
 
-    python tools/apple/check_png.py FILE [--size WxH] [--min-colours N]
+    python tools/apple/check_png.py FILE [--size WxH] [--min-size WxH] [--min-colours N]
 
 Why: a run of the fixture level on a runner that nobody watches ends with an exit code and a file, and a file's existing says little: a swapchain that drew
 nothing writes a black picture as readily as a level. This decodes the PNG (8-bit grey, grey with alpha, RGB or RGBA, not interlaced, all five row filters: what
 the engine's writer produces) and says how many distinct pixel values it holds. Exit 0: it is the size asked for and holds at least --min-colours (default 2)
 distinct values; exit 1 says which part failed. It cannot say the picture is RIGHT: only that something was drawn.
+--min-size is for a window the system may make smaller than asked (macOS keeps a window on the screen: the first run on GitHub's macOS runner asked for 1280x720 and drew 1024x653).
 
 Standard library only; reads the one file it is given.
 """
@@ -105,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check that a capture is a picture of the size asked for and not one flat colour.")
     parser.add_argument("file", type=Path)
     parser.add_argument("--size", help="WxH the picture must be")
+    parser.add_argument("--min-size", help="WxH the picture must be at least as wide and as high as")
     parser.add_argument("--min-colours", type=int, default=2, help="the fewest distinct pixel values it may hold (default 2)")
     args = parser.parse_args(argv)
     try:
@@ -125,6 +127,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.size and args.size != f"{width}x{height}":
         print(f"the size is {width}x{height}, not {args.size}")
         return 1
+    if args.min_size:
+        try:
+            least_width, least_height = (int(part) for part in args.min_size.split("x"))
+        except ValueError:
+            parser.error(f"--min-size wants WxH, not {args.min_size!r}")
+        if width < least_width or height < least_height:
+            print(f"the size is {width}x{height}, smaller than the {args.min_size} asked for")
+            return 1
     if colours < args.min_colours:
         print(f"the picture holds {colours} distinct value(s), fewer than the {args.min_colours} asked for: nothing was drawn")
         return 1

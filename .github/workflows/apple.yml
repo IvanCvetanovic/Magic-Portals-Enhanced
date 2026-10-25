@@ -22,7 +22,8 @@ name: Apple
 #               first draw.
 #
 # MoltenVK is linked into the program (SUPERSONIC_MOLTENVK_LIBRARY) from the KhronosGroup/MoltenVK release's static xcframework: no Vulkan loader, no SDK. The download is cached by version.
-# Its sha256 is PRINTED in the log (neither the sibling's file nor the release gives one to check against), so that the owner can pin it after the first run.
+# Its sha256 is CHECKED against the hash the first run printed (run 40236827494, the same in all three jobs; Khronos publishes none to compare with, so this is trust on first use over
+# HTTPS): a different tarball under the same version fails the job before anything is unpacked.
 #
 # GLSL_COMPILER=GLSL_COMPILER-NOTFOUND in every configure: the engine writes compiled SPIR-V into its SOURCE tree when it finds a compiler, and a blob from any compiler but
 # the Windows Vulkan SDK's glslc differs byte for byte (the sibling's record). The runners have none today and the flag holds for the one configure a run makes. A step at the
@@ -54,6 +55,7 @@ defaults:
 
 env:
   MOLTENVK_VERSION: v1.4.2
+  MOLTENVK_SHA256: 562a15a29bc358446a56a4091c5f7e08f604184187c1d34f712148b61ef17276
   HOMEBREW_NO_AUTO_UPDATE: "1"
   HOMEBREW_NO_INSTALL_CLEANUP: "1"
   HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
@@ -106,7 +108,7 @@ jobs:
           mkdir -p ~/moltenvk-macos
           curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
             "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar"
-          echo "sha256 of the download (not pinned: nothing to check it against yet): $(shasum -a 256 "$RUNNER_TEMP/mvk.tar" | cut -d' ' -f1)"
+          echo "$MOLTENVK_SHA256  $RUNNER_TEMP/mvk.tar" | shasum -a 256 -c -
           tar -xf "$RUNNER_TEMP/mvk.tar" -C ~/moltenvk-macos \
             MoltenVK/MoltenVK/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a MoltenVK/LICENSE
           rm "$RUNNER_TEMP/mvk.tar"
@@ -213,7 +215,7 @@ jobs:
 
       - name: Check the picture (arm64)
         if: ${{ !cancelled() }}
-        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --size 1280x720
+        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --min-size 640x360
 
       # The start with no game data and no --root: it must say so in words and exit 1. The flags only make it unattended (no alert is opened on a machine nobody watches).
       - name: Run with no game data (must fail in words)
@@ -252,7 +254,7 @@ jobs:
 
       - name: Check the picture (x86_64)
         if: ${{ !cancelled() && steps.rosetta.outcome == 'success' }}
-        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --size 1280x720
+        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --min-size 640x360
 
       # Nothing the build wrote may be a change of a tracked file (the engine's shaders above all).
       - name: Source tree untouched
@@ -332,7 +334,7 @@ jobs:
           mkdir -p ~/moltenvk-ios-device
           curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
             "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar"
-          echo "sha256 of the download (not pinned: nothing to check it against yet): $(shasum -a 256 "$RUNNER_TEMP/mvk.tar" | cut -d' ' -f1)"
+          echo "$MOLTENVK_SHA256  $RUNNER_TEMP/mvk.tar" | shasum -a 256 -c -
           tar -xf "$RUNNER_TEMP/mvk.tar" -C ~/moltenvk-ios-device \
             MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a MoltenVK/LICENSE
           rm "$RUNNER_TEMP/mvk.tar"
@@ -434,7 +436,7 @@ jobs:
           mkdir -p ~/moltenvk-ios-sim
           curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
             "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar"
-          echo "sha256 of the download (not pinned: nothing to check it against yet): $(shasum -a 256 "$RUNNER_TEMP/mvk.tar" | cut -d' ' -f1)"
+          echo "$MOLTENVK_SHA256  $RUNNER_TEMP/mvk.tar" | shasum -a 256 -c -
           tar -xf "$RUNNER_TEMP/mvk.tar" -C ~/moltenvk-ios-sim \
             MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64_x86_64-simulator/libMoltenVK.a MoltenVK/LICENSE
           rm "$RUNNER_TEMP/mvk.tar"

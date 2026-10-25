@@ -282,7 +282,7 @@ choice (the original's portals are blue and red; the orange is for legibility on
 
 ## 7. The Apple layouts, and what adding the data to a macOS bundle costs
 
-Planning step 206 (PORT-8). Written and never run on an Apple machine: [`apple.md`](apple.md) says what was checked and by which tool, and lists what nobody knows.
+Planning step 206 (PORT-8). Written, run once on GitHub's macOS runner (the macOS shell started and drew the fixture level; nothing iOS has run) and never on a person's Apple machine: [`apple.md`](apple.md) says what was checked and by which tool, and lists what nobody knows.
 
 The game's data (the shape `package.py content` writes, section 2's packaged shape; the packager's own folder is `content`, and the folder is named `GameData` inside an APK, as `android_package.py` has it, and inside a bundle) goes **inside** the bundle, and the entries (`game/macos/MacMain.mm`, `game/ios/IOSMain.mm`) look for it
 with the pure rule in `game/sim/AppleLayout.hpp` (pinned by `test_mp_applelayout`) and hand what they find to the game through `--root`:

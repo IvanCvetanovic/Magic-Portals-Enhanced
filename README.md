@@ -85,7 +85,7 @@ A phone's build takes the phone profile (sprites-only pipelines on, the sprite r
 (planning step 205, `docs/android.md` section 10); `tools/build_android.sh --perf-diag` builds the tester's variant that writes the engine's frame statistics to the game's log every 5 seconds, for the
 questions only a phone can answer. The sample cap, `edge_cover` and dynamic resolution on a phone are the owner's decision and were measured, not decided.
 
-**macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written and have never run on an Apple machine** (planning step 206): what was checked here is syntax and the pure decisions on Windows and Linux, and nothing about a Mac, an iPhone or an iPad is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
+**macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written, and have run once on GitHub's macOS runner** (planning step 206: the macOS shell started, drew the hand-written fixture level and exited clean on arm64 and, under Rosetta, x86_64, on a paravirtual GPU; the iOS programs compiled and linked and nothing iOS has run) and **never on a person's Mac, an iPhone or an iPad**: nothing about how the game looks or plays there is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
 
 ## How it fits together
 

@@ -141,6 +141,8 @@ note() { echo "$*"; }
 
 # ---- the inputs ---------------------------------------------------------------------------------------------------------------------------------------
 EXE="$BUILD/game/MagicPortals"
+# CMake builds an iOS program as a bundle of its own, game/MagicPortals.app/MagicPortals (seen on GitHub's runner, run 40236827494), and a macOS one as a plain file.
+if [ "$PLATFORM" = ios ] && [ ! -f "$EXE" ] && [ -f "$EXE.app/MagicPortals" ]; then EXE="$EXE.app/MagicPortals"; fi
 PLIST_SRC="$BUILD/game/$PLATFORM/Info.plist"
 SHADERS="$REPO/engine/assets/shaders"
 if [ "$DRY" != 1 ]; then

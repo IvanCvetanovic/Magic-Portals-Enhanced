@@ -646,6 +646,42 @@ class MakeAppTest(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, "MUTATION 'no check of %s' still refused: %s" % (name, proc.stdout + proc.stderr))
             self.assertNotIn(words, proc.stdout + proc.stderr)
 
+    def move_exe_into_a_cmake_bundle(self, box):
+        """Where CMake leaves an iOS program (seen on GitHub's runner): build/game/MagicPortals.app/MagicPortals, with nothing at build/game/MagicPortals."""
+        plain = os.path.join(box.build, 'game', 'MagicPortals')
+        inside = os.path.join(box.build, 'game', 'MagicPortals.app', 'MagicPortals')
+        os.makedirs(os.path.dirname(inside))
+        shutil.move(plain, inside)
+        return inside
+
+    def test_an_ios_program_inside_the_bundle_cmake_made_is_found(self):
+        for sdk, pinned in (('iphoneos', IOS_DEVICE_LIST), ('iphonesimulator', IOS_SIM_LIST)):
+            box = self.box()
+            inside = self.move_exe_into_a_cmake_bundle(box)
+            proc, lines = box.run(['ios', box.build, box.out, '--sdk', sdk], {'STUB_ARCHS': 'arm64'})
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertEqual(lines, pinned, sdk)
+            with open(inside, 'rb') as built, open(os.path.join(box.out, 'MagicPortals.app', 'MagicPortals'), 'rb') as copied:
+                self.assertEqual(built.read(), copied.read(), sdk)
+
+    def test_a_macos_program_is_not_looked_for_inside_a_bundle(self):
+        box = self.box()
+        self.move_exe_into_a_cmake_bundle(box)
+        proc, lines = box.run(['macos', box.build, box.out])
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('No executable at', proc.stderr)
+
+    def test_mutation_the_ios_bundle_lookup_removed_is_refused(self):
+        with open(SCRIPT, encoding='utf-8') as f:
+            text = f.read()
+        line = 'if [ "$PLATFORM" = ios ] && [ ! -f "$EXE" ] && [ -f "$EXE.app/MagicPortals" ]; then EXE="$EXE.app/MagicPortals"; fi\n'
+        self.assertEqual(text.count(line), 1, 'the mutation applies once')
+        box = self.box(text.replace(line, ''))
+        self.move_exe_into_a_cmake_bundle(box)
+        proc, lines = box.run(['ios', box.build, box.out, '--sdk', 'iphoneos'], {'STUB_ARCHS': 'arm64'})
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('No executable at', proc.stderr)
+
     def test_a_missing_executable_or_plist_is_said_in_words(self):
         box = self.box()
         os.remove(os.path.join(box.build, 'game', 'MagicPortals'))

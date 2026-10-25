@@ -84,6 +84,22 @@ class CheckPng(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('not 1280x720', text)
 
+    def test_the_minimum_size_is_checked_and_a_larger_picture_passes(self):
+        rows = [[0, 0, 0, 255, 9, 9, 9, 255]] * 2
+        code, text = self.check(png(2, 2, 6, rows), '--min-size', '2x2')
+        self.assertEqual(code, 0, text)
+        code, text = self.check(png(2, 2, 6, rows), '--min-size', '3x2')
+        self.assertEqual(code, 1)
+        self.assertIn('smaller than the 3x2 asked for', text)
+        code, text = self.check(png(2, 2, 6, rows), '--min-size', '2x3')
+        self.assertEqual(code, 1)
+        self.assertIn('smaller than the 2x3 asked for', text)
+
+    def test_a_minimum_size_that_is_not_two_numbers_is_refused(self):
+        rows = [[0, 0, 0, 255, 9, 9, 9, 255]] * 2
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.check(png(2, 2, 6, rows), '--min-size', 'big')
+
     def test_every_row_filter_is_undone(self):
         width, height = 5, 5
         rows = [[(x * 37 + y * 11 + c * 3) & 255 for x in range(width) for c in range(3)] for y in range(height)]

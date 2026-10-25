@@ -1,14 +1,12 @@
 # Magic Portals Enhanced on macOS and iOS: what is written, what was checked, what nobody knows
 
-Planning step 206 (PORT-8), the eighth step of the platform program. The owner has no Mac and no iPhone or iPad within reach, so **nothing here has ever
-run on an Apple machine.** Every claim in this page is one of three kinds, and says which:
+Planning step 206 (PORT-8), the eighth step of the platform program. The owner has no Mac and no iPhone or iPad within reach, so **until one run on GitHub's macOS runner (section 4b) nothing here had ever run on an Apple machine, and nothing has yet run on a person's Mac, an iPhone or an iPad, or on a real Apple GPU.** Every claim in this page is one of three kinds, and says which:
 
 * **WRITTEN**: the file exists. Nothing is said about what it does.
-* **CHECKED**: a tool on a Windows PC or in WSL (Ubuntu) printed a result, and the tool is named. A check against a stand-in is said to be one.
+* **CHECKED**: a tool on a Windows PC, in WSL (Ubuntu) or on GitHub's macOS runner (section 4b) printed a result, and the tool is named. A check against a stand-in is said to be one.
 * **NOT KNOWN**: nobody has run it. Each of these is a row of `docs/parity-backlog.md` (APPLE-1 and following).
 
-No sentence in this repository calls the game a working build for a Mac, an iPhone or an iPad, and none can until the workflow below has been dispatched and a person has played
-the result.
+No sentence in this repository calls the game a working build for a Mac, an iPhone or an iPad, and none can until a person has played the result on a Mac or an iPhone (the one run so far, section 4b, started the macOS shell and drew the fixture level: that is not playing it).
 
 ## 1. What exists
 
@@ -100,8 +98,7 @@ The deployment targets (macOS 13.3, iOS 16.3) are the sibling's, and `out/parity
 
 `.github/workflows/apple.yml`: **dispatch only** (the repository is private; a macOS minute is billed at a multiple of a Linux one: `out/parity/program/PLAT/platforms.md`
 section 5 gives both readings of the rules, neither confirmed for this account). Nothing runs on a push or a pull request. It needs **nothing but the repository**: no secret, no
-key, no game data, no token beyond the default read-only one, **and the engine submodule is fetched over https from `engine/`'s URL (`.gitmodules`), whose repository being public is NOT KNOWN here**: the sibling's workflow
-says so of the same URL, nobody here could check it (no network by this step's rules), and if it is private the checkout, the first step of all three jobs, fails with nothing else to say. Making it readable to the workflow (or giving the workflow a credential, which this file deliberately has none of) is the owner's decision; APPLE-25.
+key, no game data, no token beyond the default read-only one, **and the engine submodule is fetched over https from `engine/`'s URL (`.gitmodules`)**: that repository is public, and the first dispatch's checkout fetched it with no credential (section 4b; APPLE-25, answered).
 
 **To run it:** the owner opens Actions, Apple, *Run workflow*, picks `job` (`all` by default, or `macos`, `ios-device`, `ios-sim`) and starts it. **Dispatching it is the owner's decision and
 nothing here dispatched it.** The first run measures the minutes. For scale only, the sibling's runs: its release workflow's macOS job (one universal build, the zip, both runs) took 5.0 to 6.7 billed minutes, its push workflow's macOS job (one native build and the suites, ccache warm) 1.9 to 3.4 (`out/parity/program/PLAT/platforms.md` section 5.2); this game's `macos` job makes two builds, the first cold, and its layer is one very large translation unit, so expect more.
@@ -123,13 +120,39 @@ The jobs have no `needs:` and no matrix, so a failure in one never hides the nex
   `test_mp_sprites` (one case reads an entity file of the original with no skip guard, `tests/test_mp_sprites.cpp:4089`). Measured on Linux with the data hidden: 75 tests (74 suites and the parity check), 40 passed, 33 skipped, 2 failed. The step names the two,
   prints them as failures (they are never counted as passes), lets them through, and fails on any other failed test or on a ctest that dies without naming one (the step's script is run against recorded outputs by `test_workflow.py`).
   A later change that makes either skip or pass shortens the list in the workflow by hand (APPLE-22).
-* `Run the fixture (arm64)` and `Run the fixture (x86_64 under Rosetta)` must exit 0 and write a 1280x720 picture; `Check the picture` then decodes it and fails if it holds one flat colour
+* `Run the fixture (arm64)` and `Run the fixture (x86_64 under Rosetta)` must exit 0 and write a picture (1280x720 is asked for; macOS keeps a window on the screen and the first run drew 1024x653, so `Check the picture` requires at least 640x360); `Check the picture` then decodes it and fails if it holds one flat colour
   (a black capture of a swapchain that drew nothing would otherwise pass an existence test).
 * `Run with no game data (must fail in words)` must exit 1 and print the sentence that begins "Magic Portals cannot start".
-* `MoltenVK (download)` prints the sha256 of the tarball it fetched. Nothing checks it (neither the sibling nor the release publishes one); the owner can pin it after a first run.
+* `MoltenVK (download)` checks the tarball's sha256 against `MOLTENVK_SHA256` (the hash the first run printed, the same in all three jobs; Khronos publishes none, so this is trust on first use): a different file under the same version fails the job before anything is unpacked.
 * `Source tree untouched` fails if the build changed a tracked file or anything in `engine/`.
 
 Artifacts (7 days): `macos-shell` (the zip), `ios-device-shell` (the ipa), `ios-sim-shell`, and one `*-logs` each. They hold no game data.
+
+## 4b. What the first run showed (run 40236827494, 2026-10-25, 21:43 UTC)
+
+One dispatch of this workflow (`job` = all) on GitHub's `macos-15` runners: macOS 15.7.9, Xcode 26.3 (build 17C529), five CPUs, 14 GB, and a Metal device called **"Apple Paravirtual device"**:
+not an Apple GPU, so nothing below says how the game looks or runs on a Mac's. The jobs took 6 min 42 s (`macos`: the suites' tree 191 s, the universal shell 149 s, the fixture 8 s on arm64 and 12 s under Rosetta),
+1 min 41 s and 1 min 43 s (the iOS jobs, started together); a cold ccache (205 of 205 misses). That is 7 + 2 + 2 = 11 minutes rounded up per job; at the usual ten times for macOS about **110 billed minutes**
+(the account's own rule is not read here). All of the following is **CHECKED by that run** and nothing else:
+
+* The engine repository is public: the checkout with submodules fetched it with the default token. (APPLE-25, answered.)
+* MoltenVK v1.4.2's tarball has the same sha256 in all three jobs, `562a15a29bc358446a56a4091c5f7e08f604184187c1d34f712148b61ef17276`; the workflow now checks it.
+* **The two entries compile and link with Apple's real SDK.** `MacMain.mm` (macOS, universal arm64 and x86_64, deployment target 13.3) and `IOSMain.mm` (iOS device and iOS simulator, arm64, 16.3) built with no error;
+  `main.cpp` with the force-included rename (APPLE-15) linked in all three. (APPLE-13 and APPLE-18, answered in that direction: the compile accepted `NSAlert`, the library calls and the C++ library at those targets.
+  Which branch of the floating-point `from_chars` guard the compiler took is not recorded.)
+* Warnings: 16 in the iOS device build, 16 in the macOS suites' build and 32 in the universal shell build (two architectures); **all in `engine/`** (entt's `-Wmissing-field-initializers` at `storage.hpp:665` and
+  `registry.hpp:639` for the engine's `meshKey` and `parameters` fields, and `-Wunused-but-set-variable` at the engine's `MeshRegistry.cpp:54`), none in `game/` or `tests/` (APPLE-26).
+* macOS: the 74 suites built and `ctest` gave 40 passed, 32 skipped and 2 failed (`test_mp_shoot`, `test_mp_sprites`, the two the data-less run is known to fail: APPLE-22): the same numbers as on Linux.
+  The universal shell was assembled, signed ad hoc, `codesign --verify` said "valid on disk" and "satisfies its Designated Requirement" for the app unpacked from the zip, and the minimum system is 13.3.
+* **The macOS shell ran.** From the unpacked zip, on arm64: `--root tests/fixtures/ci --port-data game/data --level ci_level --window 1280x720 --fixed-step --frames 300` exited 0 and the log ends "finished: clean", with
+  MoltenVK reporting the paravirtual device; it wrote a **1024x653** picture of five distinct pixel values (a black clear and one rectangle): macOS kept the window on the screen, which is why the size check was loosened.
+  The x86_64 half, run under Rosetta 2 (the step installed it), exited 0 and wrote a picture of the same size and the same byte count (27,002). A run with no game data exited 1 and printed the "cannot start" sentence with its two places.
+  **Not** shown: that the pictures are right (nobody compared them with the Windows one, which is another size), the look of the picture, audio (the log says CoreAudio pulled frames from a device that may have been virtual),
+  Gatekeeper (the files never had a quarantine flag), a real GPU, a person's Mac.
+* **Two things failed, and are fixed in the commit that wrote this section.** (1) Both iOS jobs built and linked, then `make_app.sh` stopped with "No executable at build-ios-device/game/MagicPortals": CMake leaves an iOS program
+  inside a bundle of its own, `game/MagicPortals.app/MagicPortals`; the script now looks there for iOS. So **no iOS shell has been assembled yet and nothing iOS has run anywhere.**
+  (2) `Check the picture` asked for exactly 1280x720 and the window was 1024x653: the check now asks for at least 640x360 (`check_png.py --min-size`).
+  The fixed workflow has not run: the next dispatch is what shows it.
 
 ## 5. The fixture level
 

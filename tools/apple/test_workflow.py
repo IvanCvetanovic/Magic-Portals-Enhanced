@@ -56,7 +56,7 @@ WALL_LIMIT = "perl -e 'alarm shift; exec @ARGV'"
 # `arch `. A rule that picked nothing would pass for want of a step to look at, so the count is pinned too.
 INTEL_STEP = re.compile(r'\barch(?:\s|\\)+(?:-x86_64|-arch(?:\s|\\)+x86_64)|x86_64\.png')
 ROSETTA_GATE = {'!cancelled()', "steps.rosetta.outcome=='success'"}
-PICTURE_CHECK = 'python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-%s.png" --size 1280x720'
+PICTURE_CHECK = 'python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-%s.png" --min-size 640x360'
 
 
 def read_text(path):
@@ -171,7 +171,8 @@ def check_workflow(text):
         caches = [s for s in steps_of(workflow, name) if s.get('uses', '').startswith('actions/cache@')]
         assert len(caches) == 1 and 'env.MOLTENVK_VERSION' in caches[0]['with']['key'], name + ' caches MoltenVK by its version'
     assert 'releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar' in text, 'the download is the release of that version'
-    assert 'shasum -a 256' in text, 'the download\'s checksum is printed'
+    assert re.search(r'^  MOLTENVK_SHA256: [0-9a-f]{64}$', text, re.M), 'the MoltenVK tarball has a pinned sha256 (64 hex digits)'
+    assert text.count('curl -fsSL') == text.count('echo "$MOLTENVK_SHA256  $RUNNER_TEMP/mvk.tar" | shasum -a 256 -c -') == 3, 'every download of the tarball is checked against it'
     # The suites, the skip count and the fixture.
     ctest = [s for s in steps_of(workflow, 'macos') if s.get('name') == 'Test (ctest, data-less)'][0]['run']
     assert 'ctest --test-dir build' in ctest and "grep -c '(Skipped)'" in ctest and 'never counted as passed' in ctest, 'the skip count is printed and never counted as a pass'
@@ -368,6 +369,19 @@ class AppleWorkflow(unittest.TestCase):
         self.assertIn(expect, str(caught.exception), 'MUTATION "%s" was refused by another rule' % why)
 
     TRIGGER = 'on:\n  workflow_dispatch:\n'
+
+    @requires_yaml
+    def test_mutation_the_moltenvk_hash_not_a_hash(self):
+        self.refused('  MOLTENVK_SHA256: 562a15a29bc358446a56a4091c5f7e08f604184187c1d34f712148b61ef17276\n', '  MOLTENVK_SHA256: 562a15a2\n', 'a short hash', 'pinned sha256')
+
+    @requires_yaml
+    def test_mutation_one_download_not_checked(self):
+        check = '          echo "$MOLTENVK_SHA256  $RUNNER_TEMP/mvk.tar" | shasum -a 256 -c -\n'
+        self.assertEqual(self.text.count(check), 3)
+        check_workflow(self.text)
+        with self.assertRaises(AssertionError, msg='MUTATION "one download unchecked" was not refused') as caught:
+            check_workflow(self.text.replace(check, '', 1))
+        self.assertIn('every download of the tarball is checked', str(caught.exception))
 
     @requires_yaml
     def test_mutation_a_push_trigger(self):
@@ -568,23 +582,23 @@ class AppleWorkflow(unittest.TestCase):
 
     @requires_yaml
     def test_mutation_the_arm64_picture_check_is_replaced_by_true(self):
-        self.refused('        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --size 1280x720\n', '        run: "true"\n',
+        self.refused('        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --min-size 640x360\n', '        run: "true"\n',
                      'the arm64 picture check replaced by true', 'only runs the picture check')
 
     @requires_yaml
     def test_mutation_the_arm64_picture_check_is_forgiven(self):
-        self.refused('        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --size 1280x720\n',
-                     '        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --size 1280x720 || true\n',
+        self.refused('        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --min-size 640x360\n',
+                     '        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --min-size 640x360 || true\n',
                      'the arm64 picture check forgiven', 'only runs the picture check')
 
     @requires_yaml
     def test_mutation_the_arm64_picture_check_loses_its_size(self):
-        self.refused('ci_level-macos-arm64.png" --size 1280x720\n', 'ci_level-macos-arm64.png"\n', 'the arm64 picture check without its size', 'only runs the picture check')
+        self.refused('ci_level-macos-arm64.png" --min-size 640x360\n', 'ci_level-macos-arm64.png"\n', 'the arm64 picture check without its size', 'only runs the picture check')
 
     @requires_yaml
     def test_mutation_the_x86_64_picture_check_is_forgiven(self):
-        self.refused('        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --size 1280x720\n',
-                     '        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --size 1280x720 || true\n',
+        self.refused('        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --min-size 640x360\n',
+                     '        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --min-size 640x360 || true\n',
                      'the x86_64 picture check forgiven', 'only runs the picture check')
 
     @requires_yaml
