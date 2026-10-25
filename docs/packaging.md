@@ -112,7 +112,7 @@ memory and never opens them (planning step 196), which the 128-level sweep run f
 `scenes/` (the converter's input), `.pvr`, `.pkm`, `.par`, the framework folder, the Android bundle, `.enml` files, the APK, the engine
 checkout, build folders, the converter's other output. A table that named one would be an error.
 
-The Android build and the APK packager (`tools/package/android_package.py`, which takes this packager's output folder) are described in [`android.md`](android.md) (planning steps 203 and 204; built, statically checked and run on an x86_64 emulator, never on a device). **Not yet:** the iOS and macOS entry points, release archives and licence texts. They are later steps of the platform program. (The
+The Android build and the APK packager (`tools/package/android_package.py`, which takes this packager's output folder) are described in [`android.md`](android.md) (planning steps 203 and 204; built, statically checked and run on an x86_64 emulator, never on a device). The macOS and iOS entry points, their bundle layouts and the shell a CI runner makes are in [`apple.md`](apple.md) (planning step 206: **written, never run on an Apple machine**; section 7 below). **Not yet:** release archives and the licence and notice texts. They are later steps of the platform program. (The
 Windows release program and its icon are section 6. The original's 46 MP3 sounds decode off Windows since the engine pin of planning step 202,
 through the engine's vendored dr_mp3: that was checked on the real files, with no sound device, so it proves the decoding and not the playback;
 a clip starts about 12 ms apart from the same clip on Windows, which comes out as if its first 528 samples were cut (the engine's
@@ -279,3 +279,23 @@ arithmetic alone: nothing is read, no file of the original is opened, and the ou
 by default: `icon_<1024 512 256 192 128 64 48 32 16>.png`, `magic_portals.ico` (16 to 256, PNG-compressed entries), `android/mipmap-*/ic_launcher.png`
 (48 72 96 144 192), `android/play_store_512.png` and `SHA256SUMS.txt`. It refuses to write inside the tracked tree. The colours are its own
 choice (the original's portals are blue and red; the orange is for legibility on a dark disc): the owner may want another.
+
+## 7. The Apple layouts, and what adding the data to a macOS bundle costs
+
+Planning step 206 (PORT-8). Written and never run on an Apple machine: [`apple.md`](apple.md) says what was checked and by which tool, and lists what nobody knows.
+
+The game's data (the shape `package.py content` writes, section 2's packaged shape; the packager's own folder is `content`, and the folder is named `GameData` inside an APK, as `android_package.py` has it, and inside a bundle) goes **inside** the bundle, and the entries (`game/macos/MacMain.mm`, `game/ios/IOSMain.mm`) look for it
+with the pure rule in `game/sim/AppleLayout.hpp` (pinned by `test_mp_applelayout`) and hand what they find to the game through `--root`:
+
+| Platform | Looked at, in this order | Notes |
+|---|---|---|
+| macOS | `<MagicPortals.app>/Contents/Resources/GameData`, then `~/Library/Application Support/Magic Portals/GameData` | the second is a fallback a player may fill by hand; it is only looked at, never made. A folder beside the app is not looked at (App Translocation, NOT KNOWN) |
+| iOS | `<MagicPortals.app>/GameData` | iOS has no "beside" |
+
+A `--root` already on the command line is used as it is and nothing is looked up. The engine's shaders are in `Resources/engine/assets/shaders` (iOS: `engine/assets/shaders` at the bundle's root) and are copied at every launch into the app's caches
+folder, which becomes the working directory, because a sealed bundle is read-only and the engine writes where it runs (`apple.md` section 2).
+
+**A data-bearing macOS bundle needs a re-seal.** `tools/apple/make_app.sh` signs the app ad hoc as its last step, and the signature covers every file in the bundle: a `GameData` folder put into `Contents/Resources` afterwards breaks it
+(a Mac then says the app "is damaged and can't be opened"). The seal has to be made again after the data is in, by a Mac or by a signer run on another machine. **How, and whether the data may travel to whatever does it, is the owner's decision (D1 and D2 of the platform
+plan) and nothing here decides it.** The three routes are in `apple.md` section 7; none has been run. On iOS the sideloading tool re-signs the whole bundle, so adding `GameData` to the shell's `.ipa` and zipping it again is expected to be harmless (inferred, never run).
+The package tool of section 3 does not yet write either layout: a later step.

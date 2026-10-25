@@ -110,6 +110,23 @@ add_mp_test(test_mp_platform)
 # on a real scratch directory, and the developer's flags file. Pure: invented lists, an in-memory APK and disk, no original file.
 add_mp_test(test_mp_unpack)
 
+# Where the game's data is in a macOS or iOS bundle and what the two Apple entries do with the command line (planning step 206, PORT-8): sim/AppleLayout's two layouts and
+# the order they are looked in, what holds the game (tied to the packaged shape), the arguments the game is handed (--root, absolute path flags), whether a run may open
+# a dialog, and the words of a start that found no data. The entries themselves (game/macos, game/ios) are Objective-C++ that no host here can compile: this suite is the only
+# thing that runs their decisions, and the three ties it makes read the entries' text. Pure; it reads three source files through this one source's MAGICPORTALS_SOURCE_DIR
+# and nothing else, so it never skips.
+add_mp_test(test_mp_applelayout)
+set_property(SOURCE test_mp_applelayout.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+
+# The CI fixture level, tests/fixtures/ci (planning step 206, PORT-8): a level written from scratch, hand-written .tscn and .json only, that a runner with none of the game's
+# data starts with `MagicPortals --root tests/fixtures/ci --port-data game/data --level ci_level ...`. The suite pins what the folder may hold (no picture, no sound, no name of the original's), that
+# the two tables of Enhanced's copied into it are the repository's byte for byte (tools/ci/sync_fixture_tables.py refreshes them), and that the level reads through the game's readers,
+# starts, and its gate opens when its plate is pressed. Pure, no window, no converted level: it never skips.
+add_mp_test(test_mp_cifixture)
+set_property(SOURCE test_mp_cifixture.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+
 # How a level is started on a phone (planning step 205, PORT-7): sim/LevelStart's state machine, the cover that is drawn before the load and the rule that
 # ignores a finger that went down before the new level's first frame, until it lifts. Scripts of the machine's five inputs and the traces they must give; pure.
 add_mp_test(test_mp_levelstart)

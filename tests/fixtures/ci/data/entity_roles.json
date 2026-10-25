@@ -1,0 +1,14 @@
+{
+  "_about": [
+    "The role table of the CI fixture level (tests/fixtures/ci): the names its nodes carry, mapped onto the roles the game knows.",
+    "Hand-written for the fixture, with names invented for it; it shares nothing with data/entity_roles.json but the role words."
+  ],
+  "roles": {
+    "player_spawn": { "names": ["ci_start"] },
+    "camera_start": { "names": ["ci_camera"] },
+    "level_bounds": { "names": ["ci_bounds"] },
+    "exit_door": { "names": ["ci_exit"] },
+    "switch": { "names": ["ci_plate"] },
+    "switched_door": { "names": ["ci_gate"] }
+  }
+}

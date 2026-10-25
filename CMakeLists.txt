@@ -21,6 +21,22 @@ cmake_minimum_required(VERSION 3.20)
 # pre-release's placeholder, not a decision: what the first release is called is the owner's.
 project(MagicPortals VERSION 0.1.0 LANGUAGES C CXX)
 
+# Objective-C++ on Apple platforms only (planning step 206, PORT-8; the sibling port's top-level file, whose Apple build ran on GitHub's macOS runners, is the
+# model): the entries in game/macos and game/ios ask the system for its folders and the engine's iOS backend is UIKit. Objective-C as well, for GLFW's Cocoa
+# backend (.m), which would otherwise be compiled as Objective-C++. Enabled here, the directory above everything that compiles or links them (the engine
+# enables them too, for its own build). NOTHING in this block is reached when APPLE is false: the generated build files of Windows and Linux are the same.
+if (APPLE)
+    enable_language(OBJC OBJCXX)
+
+    # Apple's linker (Xcode 15 and later) warns about every library named twice on a link line, which CMake writes whenever a target links SupersonicCore
+    # both itself and through MagicPortalsGame, as the suites do: a warning per target, about nothing. Silenced where the linker has the option.
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "LINKER:-no_warn_duplicate_libraries" MAGICPORTALS_LD_NO_WARN_DUPLICATES)
+    if (MAGICPORTALS_LD_NO_WARN_DUPLICATES)
+        add_link_options("LINKER:-no_warn_duplicate_libraries")
+    endif()
+endif()
+
 # The engine's headers are C++20, and SupersonicCore says so on its interface;
 # the port's own code is held to the same standard here, where the engine's
 # directory settings do not reach.
@@ -36,15 +52,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # baked paths, so they are not built by default when this is OFF. Use a build folder of its own: the cache of the other kind keeps its
 # paths.
 # An Android program is a release build by nature (planning step 203, PORT-5): there is no repository on a phone, so the default there is OFF, and a
-# configure that asks for ON is refused below rather than baking an account name and a checkout path into a program for a phone.
+# configure that asks for ON is refused below rather than baking an account name and a checkout path into a program for a phone. An iOS program is the
+# same (planning step 206, PORT-8).
 set(_magicPortalsBakedDefault ON)
-if (ANDROID)
+if (ANDROID OR IOS)
     set(_magicPortalsBakedDefault OFF)
 endif()
 option(MAGICPORTALS_BAKED_PATHS "Bake this machine's data paths into the build (ON: a developer's build; OFF: a release build that finds its data at run time)" ${_magicPortalsBakedDefault})
 if (ANDROID AND MAGICPORTALS_BAKED_PATHS)
     message(FATAL_ERROR "MAGICPORTALS_BAKED_PATHS is ON for an Android configure. There is no repository on a phone: the program finds its data in the folder the app unpacks it to "
                         "(game/android/AndroidMain.cpp). Leave it OFF (tools/build_android.sh does).")
+endif()
+if (IOS AND MAGICPORTALS_BAKED_PATHS)
+    message(FATAL_ERROR "MAGICPORTALS_BAKED_PATHS is ON for an iOS configure. There is no repository on a phone: the program finds its data in the app bundle "
+                        "(game/ios/IOSMain.mm). Leave it OFF, which is its default there.")
 endif()
 if (NOT MAGICPORTALS_BAKED_PATHS)
     # The engine bakes the absolute path of its own checkout as the last place to look for its shaders, unless the variable is already
@@ -64,8 +85,9 @@ endif()
 #
 # MAGICPORTALS_MOBILE: a phone's build. ON by itself when the target is Android or iOS, OFF otherwise. It makes the run start under the phone
 # profile (game/data/engine.json "mobile": a lowest Vulkan version of 1.1 among it) unless --profile says otherwise, and takes the developer
-# tools and the measurement tool out of the program. Its Android entry point is game/android/AndroidMain.cpp (planning step 203); an iOS shell is a later
-# step. It may be turned ON on a desktop to build what a phone's build compiles, which is how the compilers are asked about it without a phone.
+# tools and the measurement tool out of the program. Its Android entry point is game/android/AndroidMain.cpp (planning step 203) and its iOS one
+# game/ios/IOSMain.mm (planning step 206, written and never run). It may be turned ON on a desktop to build what a phone's build compiles, which is how the
+# compilers are asked about it without a phone.
 set(_magicPortalsMobileDefault OFF)
 if (ANDROID OR IOS)
     set(_magicPortalsMobileDefault ON)
@@ -142,11 +164,14 @@ add_subdirectory(engine)
 option(SUPERSONIC_BUILD_MAGICPORTALS "Build MagicPortals and the MagicPortalsSpike measurement tool" ON)
 add_subdirectory(game)
 
-# Off in a release configure (MAGICPORTALS_BAKED_PATHS=OFF): the suites read the baked paths. Never for Android: they are executables that read the
-# repository, and a phone has neither (planning step 203).
+# Off in a release configure (MAGICPORTALS_BAKED_PATHS=OFF): the suites read the baked paths. Never for Android or iOS: they are executables that read the
+# repository, and a phone has neither (planning steps 203 and 206).
 option(MAGICPORTALS_BUILD_TESTS "Build the port's test_mp_* suites" ${MAGICPORTALS_BAKED_PATHS})
 if (ANDROID AND MAGICPORTALS_BUILD_TESTS)
     message(FATAL_ERROR "MAGICPORTALS_BUILD_TESTS is ON for an Android configure. The suites are not built for Android: they run on the machine that builds them.")
+endif()
+if (IOS AND MAGICPORTALS_BUILD_TESTS)
+    message(FATAL_ERROR "MAGICPORTALS_BUILD_TESTS is ON for an iOS configure. The suites are not built for iOS: an app cannot start the process a suite is, and they run on the machine that builds them.")
 endif()
 if (MAGICPORTALS_BUILD_TESTS)
     # The engine enables testing only for its own suites, which are off here.

@@ -50,6 +50,15 @@ if (ANDROID)
     # desktop. The TARGET keeps its name, so that the two definitions below (MAGICPORTALS_MOBILE and MAGICPORTALS_DEV_TOOLS) reach AndroidMain.cpp by the very
     # line that gives them to main.cpp (planning steps 201 to 203).
     add_library(MagicPortals SHARED ${_magicPortalsSources} android/AndroidMain.cpp)
+elseif (IOS)
+    # The engine's main() (engine/src/platform/ios/IOSApp.mm, in SupersonicCore) starts UIKit and enters the game through SupersonicMain, which ios/IOSMain.mm
+    # defines: it points the game at the data in the app bundle and calls main.cpp's MagicPortalsMain. A plain executable: tools/apple/make_app.sh puts it, Info.plist
+    # and the files into MagicPortals.app (planning step 206, PORT-8; written, never run).
+    add_executable(MagicPortals ${_magicPortalsSources} ios/IOSMain.mm)
+elseif (APPLE)
+    # main() is macos/MacMain.mm's: inside a MagicPortals.app (tools/apple/make_app.sh) it finds the data in Contents/Resources and puts the engine's shaders
+    # where it may write, then calls MagicPortalsMain as everywhere else (planning step 206, PORT-8; written, never run).
+    add_executable(MagicPortals ${_magicPortalsSources} macos/MacMain.mm)
 else()
     add_executable(MagicPortals ${_magicPortalsSources})
 endif()
@@ -63,6 +72,32 @@ if (WIN32)
 endif()
 
 target_link_libraries(MagicPortals PRIVATE MagicPortalsGame)
+
+# THE APPLE PROGRAMS (planning step 206, PORT-8): everything in this block is behind APPLE, so with it false the generated build files are the same.
+if (APPLE)
+    # ARC manages the entries' Objective-C objects, as the engine's iOS file's (the sibling port's own line).
+    set_source_files_properties(macos/MacMain.mm ios/IOSMain.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(MagicPortals PRIVATE "-framework Foundation")
+    if (NOT IOS)
+        # NSAlert, the macOS entry's words to a player that has no game data. Named here, not left to the frameworks MoltenVK's link line happens to carry.
+        target_link_libraries(MagicPortals PRIVATE "-framework AppKit")
+    endif()
+    # main.cpp defines main() everywhere but on Android (its last lines), and an Apple program already has one: macOS's is macos/MacMain.mm's, iOS's is in the
+    # engine's SupersonicCore (IOSApp.mm). A second `_main` is a duplicate symbol in both links. main.cpp is a source of the Windows program and stays as it
+    # is; its one `main(` is renamed away for Apple targets here, per source, by a header that is force-included into it alone (apple/RenameDesktopMain.hpp says why it
+    # is a file and not a -D: CMake drops a function-like one), so that MagicPortalsMain (the whole game) is the only thing it defines that anyone calls. The one-line
+    # source guard that would replace this (#if !defined(__ANDROID__) && !defined(__APPLE__)) waits for a step that may relink the Windows program (docs/apple.md,
+    # planning step 206, Left For Later).
+    set_property(SOURCE main.cpp APPEND PROPERTY COMPILE_OPTIONS "-include;${CMAKE_CURRENT_SOURCE_DIR}/apple/RenameDesktopMain.hpp")
+    # The bundle's Info.plist, from the template of the target, with the program's ONE version (project(MagicPortals VERSION ...) at the top) in it: written
+    # to this directory of the build tree, where tools/apple/make_app.sh reads it.
+    set(MAGICPORTALS_BUNDLE_VERSION "${MagicPortals_VERSION}")
+    if (IOS)
+        configure_file(ios/Info.plist.in "${CMAKE_CURRENT_BINARY_DIR}/ios/Info.plist" @ONLY)
+    else()
+        configure_file(macos/Info.plist.in "${CMAKE_CURRENT_BINARY_DIR}/macos/Info.plist" @ONLY)
+    endif()
+endif()
 
 # Where the modern controls look for Magic Rampage's pictures (planning step 184, docs/magic-rampage-controls.md): a
 # gitignored folder of this repository, made by tools/art/make_mr_controls.py and READ at run time. The default is

@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "worlds": [
+    {
+      "index": 0,
+      "levels": [
+        {
+          "index": 0,
+          "name": "ci_level",
+          "scene": "res://assets/levels/ci_level.tscn",
+          "golden_score": 0
+        }
+      ]
+    }
+  ]
+}

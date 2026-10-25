@@ -1,0 +1,92 @@
+[gd_scene load_steps=6 format=3]
+
+[sub_resource type="RectangleShape2D" id="shape_floor"]
+size = Vector2(640, 32)
+
+[sub_resource type="RectangleShape2D" id="shape_wall"]
+size = Vector2(32, 288)
+
+[sub_resource type="RectangleShape2D" id="shape_ledge"]
+size = Vector2(128, 16)
+
+[sub_resource type="RectangleShape2D" id="shape_plate"]
+size = Vector2(24, 12)
+
+[sub_resource type="RectangleShape2D" id="shape_gate"]
+size = Vector2(24, 120)
+
+[node name="ci_level" type="Node2D"]
+metadata/eth_ambient = "0.7 0.7 0.7"
+metadata/eth_light_intensity = "1"
+
+[node name="ci_bounds_1" type="Node2D" parent="."]
+position = Vector2(640, 256)
+metadata/entity_name = "ci_bounds"
+
+[node name="ci_camera_1" type="Node2D" parent="."]
+position = Vector2(320, 0)
+metadata/entity_name = "ci_camera"
+
+[node name="ci_start_1" type="Node2D" parent="."]
+position = Vector2(96, 200)
+metadata/entity_name = "ci_start"
+
+[node name="ci_floor" type="Node2D" parent="."]
+position = Vector2(320, 240)
+
+[node name="Body" type="StaticBody2D" parent="ci_floor"]
+
+[node name="Shape" type="CollisionShape2D" parent="ci_floor/Body"]
+shape = SubResource("shape_floor")
+
+[node name="ci_wall_left" type="Node2D" parent="."]
+position = Vector2(-16, 112)
+
+[node name="Body" type="StaticBody2D" parent="ci_wall_left"]
+
+[node name="Shape" type="CollisionShape2D" parent="ci_wall_left/Body"]
+shape = SubResource("shape_wall")
+
+[node name="ci_wall_right" type="Node2D" parent="."]
+position = Vector2(656, 112)
+
+[node name="Body" type="StaticBody2D" parent="ci_wall_right"]
+
+[node name="Shape" type="CollisionShape2D" parent="ci_wall_right/Body"]
+shape = SubResource("shape_wall")
+
+[node name="ci_ledge" type="Node2D" parent="."]
+position = Vector2(448, 176)
+
+[node name="Body" type="StaticBody2D" parent="ci_ledge"]
+
+[node name="Shape" type="CollisionShape2D" parent="ci_ledge/Body"]
+shape = SubResource("shape_ledge")
+
+[node name="ci_plate_1" type="Node2D" parent="."]
+position = Vector2(240, 218)
+metadata/entity_name = "ci_plate"
+metadata/idx = "0"
+metadata/stride = "200"
+
+[node name="Body" type="Area2D" parent="ci_plate_1"]
+
+[node name="Shape" type="CollisionShape2D" parent="ci_plate_1/Body"]
+shape = SubResource("shape_plate")
+
+[node name="ci_gate_1" type="Node2D" parent="."]
+position = Vector2(520, 164)
+metadata/entity_name = "ci_gate"
+metadata/stride = "1000"
+metadata/switchIdx = "0"
+
+[node name="Body" type="StaticBody2D" parent="ci_gate_1"]
+
+[node name="Shape" type="CollisionShape2D" parent="ci_gate_1/Body"]
+shape = SubResource("shape_gate")
+
+[node name="ci_exit_1" type="Node2D" parent="."]
+position = Vector2(600, 200)
+metadata/entity_name = "ci_exit"
+metadata/trigger_size = Vector2(16, 32)
+metadata/trigger_offset = Vector2(0, 0)

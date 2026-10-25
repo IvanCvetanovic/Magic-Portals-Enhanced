@@ -1,0 +1,502 @@
+name: Apple
+
+# The game's macOS and iOS builds, built where Apple's SDKs are: a GitHub macOS runner. WRITTEN, NEVER RUN (planning step 206, PORT-8): the first dispatch of this file
+# is the first time any of it meets an Apple machine. It is the sibling port's apple.yml and release.yml (whose Apple jobs ran on these runners) changed only where this
+# game differs; docs/apple.md has the table of what changed and why.
+#
+# DISPATCH ONLY. The repository is private and a macOS minute is billed at a multiple of a Linux one, so nothing here runs on a push or a pull request. It is started
+# by hand (Actions -> Apple -> Run workflow) and needs nothing but this repository: no secret, no key, no game data.
+#
+# NO GAME DATA, EVER. The levels, art and sound are the owner's and never in this repository, so what is built here is a SHELL: the program without the game. What it
+# proves is that the program builds, links, starts and draws one level written for the purpose (tests/fixtures/ci), and says so in words when it has no game. It cannot
+# prove that the game plays, and nothing here says it does.
+#
+# The input `job` chooses what runs: all (the default), or one of macos, ios-device, ios-sim. The three jobs do not wait for one another (no needs:) and no step of one
+# cancels another, so one failure never hides the next job's result. Every job ends by uploading its configure, build and test logs, whatever happened.
+#
+#   macos       a native build with every suite (the ones that need the owner's data exit 77 and ctest reports them SKIPPED: counted and printed, never counted as passed),
+#               then a universal (arm64 and x86_64) release-style build, assembled into MagicPortals.app and zipped (tools/apple/make_app.sh), the zip unpacked as a player's
+#               Mac would unpack it, the fixture level run from it on the runner's own architecture and, where Rosetta installs, as x86_64, and the start with no game data.
+#   ios-device  the device build (iphoneos, arm64) as a shell .ipa, signed ad hoc only. Nothing runs it.
+#   ios-sim     the simulator build (iphonesimulator, arm64) as a shell .app in a zip. Nothing runs it: the sibling port's own record is that the simulator's GPU stops at the
+#               first draw.
+#
+# MoltenVK is linked into the program (SUPERSONIC_MOLTENVK_LIBRARY) from the KhronosGroup/MoltenVK release's static xcframework: no Vulkan loader, no SDK. The download is cached by version.
+# Its sha256 is PRINTED in the log (neither the sibling's file nor the release gives one to check against), so that the owner can pin it after the first run.
+#
+# GLSL_COMPILER=GLSL_COMPILER-NOTFOUND in every configure: the engine writes compiled SPIR-V into its SOURCE tree when it finds a compiler, and a blob from any compiler but
+# the Windows Vulkan SDK's glslc differs byte for byte (the sibling's record). The runners have none today and the flag holds for the one configure a run makes. A step at the
+# end of the macos job checks that no tracked file changed.
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run (all runs the three)
+        type: choice
+        options:
+          - macos
+          - ios-device
+          - ios-sim
+          - all
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # bash -eo pipefail: without pipefail, `build | tee log` passes whatever the build did.
+    shell: bash
+
+env:
+  MOLTENVK_VERSION: v1.4.2
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+  CCACHE_MAXSIZE: 600M
+
+jobs:
+  macos:
+    name: macOS - build, test, shell, fixture
+    if: ${{ inputs.job == 'all' || inputs.job == 'macos' }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      # The engine submodule with it, over https. Whether the engine's repository is public is NOT KNOWN here (the sibling's workflow says so of the same address,
+      # and nothing in this step could check it): if it is private, this step fails in all three jobs, and what to do about it is the owner's (docs/apple.md, APPLE-25).
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/apple-logs" "$RUNNER_TEMP/apple-shells"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+      # The newest release Xcode the image has: MoltenVK's release is built with a recent one, and its static library names Metal symbols an older SDK may not have.
+      - name: Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          # shellcheck disable=SC2010
+          XCODE="$(ls -d /Applications/Xcode_[0-9]*.app | grep -v -i -e beta -e release_candidate | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Runner
+        run: |
+          sw_vers
+          echo "cpus $(sysctl -n hw.ncpu), memory $(( $(sysctl -n hw.memsize) / 1073741824 )) GB"
+          system_profiler SPDisplaysDataType || true
+          printf 'import Metal\nprint("Metal device: \\(MTLCreateSystemDefaultDevice()?.name ?? "none")")\n' > "$RUNNER_TEMP/metal.swift"
+          xcrun swiftc -o "$RUNNER_TEMP/metal" "$RUNNER_TEMP/metal.swift" && "$RUNNER_TEMP/metal" || true
+
+      - name: MoltenVK (cached)
+        id: moltenvk
+        uses: actions/cache@v4
+        with:
+          path: ~/moltenvk-macos
+          key: moltenvk-${{ env.MOLTENVK_VERSION }}-macos
+      - name: MoltenVK (download)
+        if: steps.moltenvk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/moltenvk-macos
+          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
+            "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar"
+          echo "sha256 of the download (not pinned: nothing to check it against yet): $(shasum -a 256 "$RUNNER_TEMP/mvk.tar" | cut -d' ' -f1)"
+          tar -xf "$RUNNER_TEMP/mvk.tar" -C ~/moltenvk-macos \
+            MoltenVK/MoltenVK/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a MoltenVK/LICENSE
+          rm "$RUNNER_TEMP/mvk.tar"
+          lipo -archs ~/moltenvk-macos/MoltenVK/MoltenVK/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a
+
+      - name: Tools
+        run: brew install ninja ccache
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-macos-${{ github.sha }}
+          restore-keys: ccache-macos-
+
+      # The suites need a build whose paths point at this checkout (their data is not here, so most of them skip): the developer's configure, native architecture.
+      - name: Configure (tests)
+        run: |
+          set -o pipefail
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND \
+            -DSUPERSONIC_MOLTENVK_LIBRARY="$HOME/moltenvk-macos/MoltenVK/MoltenVK/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache 2>&1 | tee "$RUNNER_TEMP/apple-logs/configure-macos-tests.log"
+
+      # -k 0: one run reports every file that does not compile, not the first.
+      - name: Build (tests)
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 5 -- -k 0 2>&1 | tee "$RUNNER_TEMP/apple-logs/build-macos-tests.log"
+          echo "warnings: $(grep -c 'warning:' "$RUNNER_TEMP/apple-logs/build-macos-tests.log" || true)"
+          grep 'warning:' "$RUNNER_TEMP/apple-logs/build-macos-tests.log" | grep -v '/third_party/' | sort | uniq -c | sort -rn | head -40 || true
+          ccache -s || true
+
+      # Every suite once. A suite that needs the owner's data exits 77 and ctest reports it Skipped: the count is printed, and a skip is never a pass.
+      # Two suites are not marked to skip and FAIL when the data is not there (measured on Linux with the data hidden, planning step 206: tests/test_mp_shoot.cpp runs fewer checks than its
+      # floor, and tests/test_mp_sprites.cpp:4089 reads an entity file of the original with no skip guard). They are named below, printed as failures and never counted as passes, and
+      # they do not stop the job; any OTHER failed test does. If a later change makes either skip or pass, the list is shortened by hand.
+      - name: Test (ctest, data-less)
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/apple-logs/ctest-macos.log"
+          status=0
+          ctest --test-dir build --output-on-failure 2>&1 | tee "$log" || status=$?
+          skipped="$(grep -c '(Skipped)' "$log" || true)"
+          marked="$(grep -c -E '^add_mp_test\(.* SKIPS_WITH_77\)' tests/CMakeLists.txt || true)"
+          echo "skipped: $skipped (never counted as passed); suites marked as needing data in tests/CMakeLists.txt: $marked"
+          if [ "$skipped" != "$marked" ]; then echo "::warning::$skipped suites skipped, $marked are marked as needing data"; fi
+          failed="$(sed -n '/^The following tests FAILED:/,$p' "$log" | grep -oE 'test_mp_[a-z0-9_]+' | sort -u | tr '\n' ' ' || true)"
+          known="test_mp_shoot test_mp_sprites"
+          unexpected=""
+          for name in $failed; do
+            case " $known " in *" $name "*) ;; *) unexpected="$unexpected $name" ;; esac
+          done
+          echo "failed: ${failed:-none} (the two named in the comment above fail for want of the data and are NOT passes)"
+          if [ -n "$unexpected" ]; then echo "::error::unexpected failures:$unexpected"; exit 1; fi
+          if [ "$status" != 0 ] && [ -z "$failed" ]; then echo "::error::ctest exited $status with no failed test named"; exit 1; fi
+
+      # The release-style build the shell is made from: both architectures in one program, no baked path, no developer's flag.
+      - name: Configure (shell)
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cmake -S . -B "$RUNNER_TEMP/build-shell" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 \
+            -DMAGICPORTALS_BAKED_PATHS=OFF -DMAGICPORTALS_DEV_TOOLS=OFF -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND \
+            -DSUPERSONIC_MOLTENVK_LIBRARY="$HOME/moltenvk-macos/MoltenVK/MoltenVK/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a" 2>&1 \
+            | tee "$RUNNER_TEMP/apple-logs/configure-macos-shell.log"
+
+      - name: Build (shell)
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cmake --build "$RUNNER_TEMP/build-shell" --target MagicPortals --parallel 5 -- -k 0 2>&1 | tee "$RUNNER_TEMP/apple-logs/build-macos-shell.log"
+          archs="$(lipo -archs "$RUNNER_TEMP/build-shell/game/MagicPortals")"
+          echo "architectures: $archs"
+          case " $archs " in *" arm64 "*) ;; *) echo "no arm64"; exit 1 ;; esac
+          case " $archs " in *" x86_64 "*) ;; *) echo "no x86_64"; exit 1 ;; esac
+
+      - name: Assemble the shell
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          bash tools/apple/make_app.sh macos "$RUNNER_TEMP/build-shell" "$RUNNER_TEMP/apple-shells/macos" \
+            --moltenvk-license "$HOME/moltenvk-macos/MoltenVK/LICENSE" 2>&1 | tee "$RUNNER_TEMP/apple-logs/assemble-macos.log"
+          ls -la "$RUNNER_TEMP/apple-shells/macos"
+
+      # From the zip, unpacked as a player's Finder would unpack it, and started from an unrelated folder; 300 fixed ticks of the fixture level and one picture. The
+      # runner starts it without Gatekeeper's first-open prompt. A wall limit on every launch: the minutes are paid.
+      - name: Run the fixture (arm64)
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/player" "$RUNNER_TEMP/apple-logs/shots"
+          ditto -x -k "$RUNNER_TEMP/apple-shells/macos/MagicPortals-macOS-shell.zip" "$RUNNER_TEMP/player"
+          cd "$RUNNER_TEMP"
+          rc=0
+          perl -e 'alarm shift; exec @ARGV' 300 \
+            "$RUNNER_TEMP/player/MagicPortals/MagicPortals.app/Contents/MacOS/MagicPortals" --root "$GITHUB_WORKSPACE/tests/fixtures/ci" --port-data "$GITHUB_WORKSPACE/game/data" --level ci_level \
+            --window 1280x720 --fixed-step --frames 300 --screenshot "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" \
+            > "$RUNNER_TEMP/apple-logs/run-macos-arm64.log" 2>&1 || rc=$?
+          tail -15 "$RUNNER_TEMP/apple-logs/run-macos-arm64.log"
+          echo "exit code: $rc"
+          test "$rc" = 0
+
+      - name: Check the picture (arm64)
+        if: ${{ !cancelled() }}
+        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-arm64.png" --size 1280x720
+
+      # The start with no game data and no --root: it must say so in words and exit 1. The flags only make it unattended (no alert is opened on a machine nobody watches).
+      - name: Run with no game data (must fail in words)
+        if: ${{ !cancelled() }}
+        run: |
+          cd "$RUNNER_TEMP"
+          rc=0
+          perl -e 'alarm shift; exec @ARGV' 60 \
+            "$RUNNER_TEMP/player/MagicPortals/MagicPortals.app/Contents/MacOS/MagicPortals" --fixed-step --frames 1 \
+            > "$RUNNER_TEMP/apple-logs/run-macos-nodata.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/apple-logs/run-macos-nodata.log"
+          echo "exit code: $rc"
+          test "$rc" = 1
+          grep -q "did not find the game's data" "$RUNNER_TEMP/apple-logs/run-macos-nodata.log"
+
+      # The Intel half, through Rosetta, on the runner's Apple GPU: evidence that it runs, not that an Intel Mac's GPU does. Not every image can install Rosetta, and
+      # only that may fail: once it is there, the x86_64 run gates the job like the arm64 one.
+      - name: Rosetta
+        id: rosetta
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: sudo softwareupdate --install-rosetta --agree-to-license
+
+      - name: Run the fixture (x86_64 under Rosetta)
+        if: ${{ !cancelled() && steps.rosetta.outcome == 'success' }}
+        run: |
+          cd "$RUNNER_TEMP"
+          rc=0
+          perl -e 'alarm shift; exec @ARGV' 300 \
+            arch -x86_64 "$RUNNER_TEMP/player/MagicPortals/MagicPortals.app/Contents/MacOS/MagicPortals" --root "$GITHUB_WORKSPACE/tests/fixtures/ci" --port-data "$GITHUB_WORKSPACE/game/data" --level ci_level \
+            --window 1280x720 --fixed-step --frames 300 --screenshot "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" \
+            > "$RUNNER_TEMP/apple-logs/run-macos-x86_64.log" 2>&1 || rc=$?
+          tail -15 "$RUNNER_TEMP/apple-logs/run-macos-x86_64.log"
+          echo "exit code: $rc"
+          test "$rc" = 0
+
+      - name: Check the picture (x86_64)
+        if: ${{ !cancelled() && steps.rosetta.outcome == 'success' }}
+        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/apple-logs/shots/ci_level-macos-x86_64.png" --size 1280x720
+
+      # Nothing the build wrote may be a change of a tracked file (the engine's shaders above all).
+      - name: Source tree untouched
+        if: ${{ !cancelled() }}
+        run: |
+          git status --short --untracked-files=no
+          git -C engine status --short
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test -z "$(git -C engine status --porcelain)"
+
+      - name: Collect
+        if: always()
+        run: |
+          for report in "$HOME"/Library/Logs/DiagnosticReports/MagicPortals*; do
+            if [ -f "$report" ]; then cp "$report" "$RUNNER_TEMP/apple-logs/"; fi
+          done
+          cp "$HOME/Library/Application Support/Magic Portals/scratch/magicportals.log" "$RUNNER_TEMP/apple-logs/magicportals-last.log" 2>/dev/null || true
+          ls -la "$RUNNER_TEMP/apple-logs" "$RUNNER_TEMP/apple-logs/shots" || true
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-macos-${{ github.sha }}
+
+      - name: Upload the shell
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-shell
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apple-shells/macos/MagicPortals-macOS-shell.zip
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apple-logs
+
+  ios-device:
+    name: iOS device - build, shell ipa
+    if: ${{ inputs.job == 'all' || inputs.job == 'ios-device' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/apple-logs" "$RUNNER_TEMP/apple-shells"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+      - name: Xcode
+        run: |
+          # shellcheck disable=SC2010
+          XCODE="$(ls -d /Applications/Xcode_[0-9]*.app | grep -v -i -e beta -e release_candidate | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: MoltenVK (cached)
+        id: moltenvk
+        uses: actions/cache@v4
+        with:
+          path: ~/moltenvk-ios-device
+          key: moltenvk-${{ env.MOLTENVK_VERSION }}-ios-device
+      - name: MoltenVK (download)
+        if: steps.moltenvk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/moltenvk-ios-device
+          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
+            "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar"
+          echo "sha256 of the download (not pinned: nothing to check it against yet): $(shasum -a 256 "$RUNNER_TEMP/mvk.tar" | cut -d' ' -f1)"
+          tar -xf "$RUNNER_TEMP/mvk.tar" -C ~/moltenvk-ios-device \
+            MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a MoltenVK/LICENSE
+          rm "$RUNNER_TEMP/mvk.tar"
+          lipo -archs ~/moltenvk-ios-device/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a
+
+      - name: Tools
+        run: brew install ninja ccache
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-ios-device-${{ github.sha }}
+          restore-keys: ccache-ios-device-
+
+      # No suites: an iOS app cannot start the processes a suite is, and the macOS job runs them against the same sources (the configure refuses them for iOS).
+      - name: Configure
+        run: |
+          set -o pipefail
+          cmake -S . -B build-ios-device -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND \
+            -DSUPERSONIC_MOLTENVK_LIBRARY="$HOME/moltenvk-ios-device/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache 2>&1 | tee "$RUNNER_TEMP/apple-logs/configure-ios-device.log"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cmake --build build-ios-device --target MagicPortals --parallel 5 -- -k 0 2>&1 | tee "$RUNNER_TEMP/apple-logs/build-ios-device.log"
+          echo "warnings: $(grep -c 'warning:' "$RUNNER_TEMP/apple-logs/build-ios-device.log" || true)"
+          ccache -s || true
+          ls -la build-ios-device/game
+
+      - name: Assemble the shell ipa
+        run: |
+          set -o pipefail
+          bash tools/apple/make_app.sh ios build-ios-device "$RUNNER_TEMP/apple-shells/ios-device" --sdk iphoneos \
+            --moltenvk-license "$HOME/moltenvk-ios-device/MoltenVK/LICENSE" 2>&1 | tee "$RUNNER_TEMP/apple-logs/assemble-ios-device.log"
+          ls -la "$RUNNER_TEMP/apple-shells/ios-device"
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-ios-device-${{ github.sha }}
+
+      - name: Upload the shell
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-shell
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apple-shells/ios-device/MagicPortals-iOS-shell.ipa
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apple-logs
+
+  ios-sim:
+    name: iOS simulator - build, shell app
+    if: ${{ inputs.job == 'all' || inputs.job == 'ios-sim' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/apple-logs" "$RUNNER_TEMP/apple-shells"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+      - name: Xcode
+        run: |
+          # shellcheck disable=SC2010
+          XCODE="$(ls -d /Applications/Xcode_[0-9]*.app | grep -v -i -e beta -e release_candidate | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+
+      - name: MoltenVK (cached)
+        id: moltenvk
+        uses: actions/cache@v4
+        with:
+          path: ~/moltenvk-ios-sim
+          key: moltenvk-${{ env.MOLTENVK_VERSION }}-ios-sim
+      - name: MoltenVK (download)
+        if: steps.moltenvk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/moltenvk-ios-sim
+          curl -fsSL -o "$RUNNER_TEMP/mvk.tar" \
+            "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_VERSION/MoltenVK-all.tar"
+          echo "sha256 of the download (not pinned: nothing to check it against yet): $(shasum -a 256 "$RUNNER_TEMP/mvk.tar" | cut -d' ' -f1)"
+          tar -xf "$RUNNER_TEMP/mvk.tar" -C ~/moltenvk-ios-sim \
+            MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64_x86_64-simulator/libMoltenVK.a MoltenVK/LICENSE
+          rm "$RUNNER_TEMP/mvk.tar"
+          lipo -archs ~/moltenvk-ios-sim/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64_x86_64-simulator/libMoltenVK.a
+
+      - name: Tools
+        run: brew install ninja ccache
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-ios-sim-${{ github.sha }}
+          restore-keys: ccache-ios-sim-
+
+      # The simulator, arm64, the SDK's own sysroot. No suites (see the device job).
+      - name: Configure
+        run: |
+          set -o pipefail
+          cmake -S . -B build-ios-sim -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=16.3 -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND \
+            -DSUPERSONIC_MOLTENVK_LIBRARY="$HOME/moltenvk-ios-sim/MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64_x86_64-simulator/libMoltenVK.a" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache 2>&1 | tee "$RUNNER_TEMP/apple-logs/configure-ios-sim.log"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          cmake --build build-ios-sim --target MagicPortals --parallel 5 -- -k 0 2>&1 | tee "$RUNNER_TEMP/apple-logs/build-ios-sim.log"
+          echo "warnings: $(grep -c 'warning:' "$RUNNER_TEMP/apple-logs/build-ios-sim.log" || true)"
+          ccache -s || true
+          ls -la build-ios-sim/game
+
+      - name: Assemble the shell app
+        run: |
+          set -o pipefail
+          bash tools/apple/make_app.sh ios build-ios-sim "$RUNNER_TEMP/apple-shells/ios-sim" --sdk iphonesimulator \
+            --moltenvk-license "$HOME/moltenvk-ios-sim/MoltenVK/LICENSE" 2>&1 | tee "$RUNNER_TEMP/apple-logs/assemble-ios-sim.log"
+          ls -la "$RUNNER_TEMP/apple-shells/ios-sim"
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-ios-sim-${{ github.sha }}
+
+      - name: Upload the shell
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sim-shell
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apple-shells/ios-sim/MagicPortals-iOS-simulator-shell.zip
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sim-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apple-logs

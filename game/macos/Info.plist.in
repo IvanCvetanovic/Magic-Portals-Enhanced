@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MagicPortals.app on macOS. WRITTEN, NEVER RUN (planning step 206): no Mac was available.
+     game/CMakeLists.txt makes Info.plist of this template at configure time, with the one version of the program
+     (project(MagicPortals VERSION ...) in the top-level CMakeLists.txt: no second place to say it), and tools/apple/make_app.sh
+     copies the result into Contents/ and sets LSMinimumSystemVersion to what the build targeted.
+     The bundle identifier is a PLACEHOLDER chosen to match the Android package; what the app is called and what identifies it
+     is the owner's. No export-compliance key (ITSAppUsesNonExemptEncryption) is claimed: whether the app uses encryption is a
+     statement the owner makes. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Magic Portals</string>
+    <key>CFBundleName</key>
+    <string>Magic Portals</string>
+    <key>CFBundleExecutable</key>
+    <string>MagicPortals</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.ivancvetanovic.magicportals</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@MAGICPORTALS_BUNDLE_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@MAGICPORTALS_BUNDLE_VERSION@</string>
+    <key>CFBundleIconFile</key>
+    <string>MagicPortals</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.puzzle-games</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.3</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+</dict>
+</plist>

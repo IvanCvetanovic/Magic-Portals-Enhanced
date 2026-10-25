@@ -66,8 +66,8 @@ ctest --test-dir build
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
 compiles from a fresh clone, but it plays nothing until the original's levels are converted
-locally, and 31 of the 70 suites skip without them (measured on Linux with `out/levels` and `out/data` hidden; a 32nd, `test_mp_shoot`, then runs fewer
-checks than its floor and fails): *Local setup* below, steps 5-8.
+locally, and 32 of the 74 suites skip without them (measured on Linux with `out/` and `reference/` hidden; two more, `test_mp_shoot` and `test_mp_sprites`, then
+fail: `docs/parity-backlog.md` APPLE-22): *Local setup* below, steps 5-8.
 
 **Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
 with g++ 13 or clang 18, from a clone with its submodule; `--assets-from <folder>` (or the five `SUPERSONIC_MAGICPORTALS_*`
@@ -84,6 +84,8 @@ recorded winning routes on the same ticks as Windows (the implementer's on the f
 A phone's build takes the phone profile (sprites-only pipelines on, the sprite report off) and starts a level behind a plain black cover that a press draws first, with a contact rule for touches made during the load
 (planning step 205, `docs/android.md` section 10); `tools/build_android.sh --perf-diag` builds the tester's variant that writes the engine's frame statistics to the game's log every 5 seconds, for the
 questions only a phone can answer. The sample cap, `edge_cover` and dynamic resolution on a phone are the owner's decision and were measured, not decided.
+
+**macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written and have never run on an Apple machine** (planning step 206): what was checked here is syntax and the pure decisions on Windows and Linux, and nothing about a Mac, an iPhone or an iPad is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
 
 ## How it fits together
 
