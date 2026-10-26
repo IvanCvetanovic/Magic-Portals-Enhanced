@@ -17,6 +17,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import struct
 import sys
@@ -385,6 +386,317 @@ class TheManifest(TempCase):
         # The title goes through the engine's allow-list (a space stays, a dot or a slash does not).
         self.assertEqual(ap.sanitise_title('Magic Portals'), 'Magic Portals')
         self.assertEqual(ap.sanitise_title('  ..Game/Name..  '), 'Game_Name')
+
+
+def find_aapt2():
+    """The newest aapt2 of an Android SDK this machine has with its platform android.jar, or None (then the test that needs it is skipped, and says so)."""
+    roots = [os.environ.get('ANDROID_HOME'), os.environ.get('ANDROID_SDK_ROOT'), os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Android', 'Sdk')]
+    for root in roots:
+        build_tools = os.path.join(root or '', 'build-tools')
+        if os.path.isdir(build_tools):
+            for version in sorted(os.listdir(build_tools), reverse=True):
+                for exe in ('aapt2.exe', 'aapt2'):
+                    candidate = os.path.join(build_tools, version, exe)
+                    jar = os.path.join(root, 'platforms', 'android-35', 'android.jar')
+                    if os.path.isfile(candidate) and os.path.isfile(jar):
+                        return candidate, jar
+    return None
+
+
+class ManifestVariants(TempCase):
+    """The committed manifest with one thing changed, written to a temporary folder (no test of its own)."""
+    MANIFEST = os.path.join(REPO, 'game', 'android', 'AndroidManifest.xml')
+    ENGINE = os.path.join(REPO, 'engine')
+    KEY_LINE = '            <meta-data android:name="supersonic.reportTitle" android:value="%s" />\n'
+    APP_LABEL = '        android:label="Magic Portals Enhanced"\n        android:icon'
+    ACTIVITY_LABEL = '            android:name="com.ivancvetanovic.supersonic.SupersonicActivity"\n            android:label="Magic Portals Enhanced"'
+
+    def manifest_with(self, key_value=None, old=None, new=None):
+        """The committed manifest, optionally with the key added to the activity and one literal replaced; the path of the copy."""
+        with open(self.MANIFEST, encoding='utf-8') as f:
+            text = f.read()
+        if key_value is not None:
+            anchor = '            <meta-data android:name="android.app.lib_name" android:value="MagicPortals" />\n'
+            self.assertEqual(text.count(anchor), 1)
+            quoted = key_value.replace('&', '&amp;').replace('"', '&quot;').replace('<', '&lt;')
+            text = text.replace(anchor, anchor + self.KEY_LINE % quoted)
+        if old is not None:
+            self.assertEqual(text.count(old), 1, old)
+            text = text.replace(old, new)
+        path = self.path('AndroidManifest.xml')
+        put(path, text)
+        return path
+
+
+class TheReportTitle(ManifestVariants):
+    """Planning step 207 (PORT-9): the name the engine's crash report calls the game by. The engine's rule (ReportText.chooseName) is copied into the packager, so that
+    inspect can say what the dialog will call the game, and the packager's check refuses a key the engine would read as absent. These pin the copy, hold it to the
+    engine's own source and README where the engine is checked out, and hold the typing rule to the real aapt2 where an SDK is present."""
+    # ---- the engine's rule, copied -------------------------------------------------------------------------------------------------------------
+
+    def test_the_committed_manifest_names_the_game_by_its_label(self):
+        facts = ap.read_manifest(self.MANIFEST)
+        self.assertIsNone(facts['report_title'], 'the shipped manifest sets no key: its label already is the name')
+        self.assertEqual(facts['label'], 'Magic Portals Enhanced')
+        self.assertEqual(ap.report_title_choice(facts), ('Magic Portals Enhanced', "from the application's android:label"))
+        self.assertEqual(ap.report_title_line(facts), "the crash report will call the game: Magic Portals Enhanced (from the application's android:label)")
+
+    def test_a_key_wins_over_the_label(self):
+        facts = ap.read_manifest(self.manifest_with('Portals Deluxe'))
+        self.assertEqual(facts['report_title'], 'Portals Deluxe')
+        name, how = ap.report_title_choice(facts)
+        self.assertEqual(name, 'Portals Deluxe')
+        self.assertIn(ap.REPORT_TITLE_KEY, how)
+        self.assertIn('Portals Deluxe', ap.report_title_line(facts))
+
+    def test_names_that_are_plain_strings_pass_the_check_and_are_kept_verbatim(self):
+        for name in ('100% "Real" {Game}', '7 Wonders', '3D Pinball', 'Zelda: 2', '2 Fast 2 Furious', '1,5', '5dp', 'yes', 'null', 'tRue', '1.5.', '12abc', "It's",
+                     'Ünïcode ✓', ' padded ', '#ab', '#abcde', '0xZZ'):
+            facts = ap.read_manifest(self.manifest_with(name))
+            self.assertEqual(facts['report_title'], name, name)
+            self.assertEqual(ap.report_title_choice(facts)[0], ap.java_trim(name), name)
+
+    def test_the_pure_choice_is_the_engines_chooseName(self):
+        c = ap.choose_report_name
+        self.assertEqual(c('Key', 'Label'), 'Key')
+        self.assertEqual(c(None, 'Label'), 'Label')
+        self.assertEqual(c('', 'Label'), 'Label', 'a blank key falls back to the label')
+        self.assertEqual(c('   \t', 'Label'), 'Label')
+        self.assertEqual(c('\x01\x1f', 'Label'), 'Label', 'Java trim removes every character up to U+0020')
+        self.assertEqual(c('  Key  ', 'Label'), 'Key', 'both are trimmed')
+        self.assertEqual(c(None, '  Label  '), 'Label')
+        self.assertEqual(c(None, None), '', 'nothing names the game: the engine answers with its neutral word')
+        self.assertEqual(c('', ''), '')
+        self.assertEqual(c(None, '   '), '')
+        self.assertEqual(c('  ', None), '')
+        self.assertEqual(c(' A  B ', None), 'A  B', 'the inner spacing is kept')
+
+    def test_java_trim_is_not_pythons_strip(self):
+        # Python's strip() removes a no-break space and U+3000; Java's trim() does not: a key of those alone is a NAME to the engine (not blank).
+        self.assertEqual(ap.java_trim(' '), ' ')
+        self.assertEqual(ap.java_trim('　x　'), '　x　')
+        self.assertEqual(ap.choose_report_name(' ', 'Label'), ' ')
+        self.assertEqual(ap.java_trim(' \x00x\x20'), 'x')
+        self.assertEqual(ap.java_trim(None), '')
+
+    def test_the_application_label_is_the_one_asked_not_the_activitys(self):
+        path = self.manifest_with(old=self.ACTIVITY_LABEL, new=self.ACTIVITY_LABEL.replace('android:label="Magic Portals Enhanced"', 'android:label="The Activity Label"'))
+        self.assertEqual(ap.report_title_choice(ap.read_manifest(path))[0], 'Magic Portals Enhanced', "ApplicationInfo.loadLabel answers the application element's label")
+        path = self.manifest_with(old=self.APP_LABEL, new=self.APP_LABEL.replace('Magic Portals Enhanced', 'Application Label'))
+        self.assertEqual(ap.report_title_choice(ap.read_manifest(path))[0], 'Application Label')
+
+    def test_a_missing_or_unreadable_label_is_said_and_names_nothing(self):
+        facts = ap.read_manifest(self.manifest_with(old=self.APP_LABEL, new='        android:icon'))
+        self.assertIsNone(facts['label'])
+        name, how = ap.report_title_choice(facts)
+        self.assertEqual(name, '')
+        self.assertIn('class or package name', how)
+        self.assertIn('(no name)', ap.report_title_line(facts))
+        for label in ('@string/app_name', '?attr/label'):
+            name, how = ap.report_title_choice(ap.read_manifest(self.manifest_with(old=self.APP_LABEL, new=self.APP_LABEL.replace('Magic Portals Enhanced', label))))
+            self.assertEqual(name, '', label)
+            self.assertIn('resource reference', how, 'a reference is not printed as if it were the name')
+        name, how = ap.report_title_choice(ap.read_manifest(self.manifest_with(old=self.APP_LABEL, new=self.APP_LABEL.replace('Magic Portals Enhanced', '   '))))
+        self.assertEqual(name, '')
+        self.assertIn('blank', how)
+        # A blank KEY does not name the game either: the pure rule falls back to the label (the build refuses such a key before it gets here, below).
+        self.assertEqual(ap.report_title_choice({'report_title': '  ', 'label': 'L'})[0], 'L')
+
+    # ---- the check -----------------------------------------------------------------------------------------------------------------------------
+
+    def test_each_value_the_compiler_would_store_as_another_type_is_refused_with_the_way_out(self):
+        cases = {'12345': 'an integer', '0': 'an integer', '-3': 'an integer', '+7': 'an integer', '0x1F': 'an integer', '0X1f': 'an integer', ' 42 ': 'an integer',
+                 'true': 'a boolean', 'false': 'a boolean', 'TRUE': 'a boolean', 'True': 'a boolean', 'FALSE': 'a boolean', ' true ': 'a boolean',
+                 '1.5': 'a floating-point number', '.5': 'a floating-point number', '1e3': 'a floating-point number', '1.': 'a floating-point number',
+                 '-1.5e-3': 'a floating-point number', '0x1.8p1': 'a floating-point number',
+                 '#abc': 'a colour', '#aabbccdd': 'a colour', '#abcdef': 'a colour', '#ABCD': 'a colour',
+                 '@null': 'a resource reference', '@string/title': 'a resource reference', '?attr/x': 'a resource reference', '@android:string/ok': 'a resource reference',
+                 '99999999999': 'an integer'}  # the last: aapt2 keeps it a string; the rule is deliberately wider (digits only, any length)
+        for value, kind in cases.items():
+            self.assertEqual(ap.manifest_value_type(value), kind, value)
+            with self.assertRaises(ap.PackError, msg=value) as ctx:
+                ap.read_manifest(self.manifest_with(value))
+            message = str(ctx.exception)
+            self.assertIn(ap.REPORT_TITLE_KEY, message)
+            self.assertIn(kind, message, 'the message says what the value is read as')
+            self.assertIn('ABSENT', message)
+            self.assertIn('@string/name', message, 'the string resource is named as a way out')
+            self.assertIn('Rename', message, 'and so is a new name')
+            self.assertIn('README', message, 'and the engine document that states the rule')
+
+    def test_a_blank_value_is_refused(self):
+        for value in ('', ' ', '   ', '\t'):  # a control character below U+0020 other than tab is not well-formed XML, so it cannot reach the packager
+            with self.assertRaises(ap.PackError, msg=repr(value)) as ctx:
+                ap.read_manifest(self.manifest_with(value))
+            self.assertIn('blank', str(ctx.exception))
+            self.assertIn(ap.REPORT_TITLE_KEY, str(ctx.exception))
+
+    def test_a_no_break_space_alone_is_a_name_not_a_blank(self):
+        # The engine's trim() keeps it, so the engine would show it as the name; the packager does not call it blank.
+        self.assertEqual(ap.read_manifest(self.manifest_with(' '))['report_title'], ' ')
+
+    # ---- the built file ------------------------------------------------------------------------------------------------------------------------
+
+    XML_HEAD = 'N: android=http://schemas.android.com/apk/res/android\n  E: manifest (line=2)\n    E: application (line=5)\n      E: activity (line=9)\n'
+
+    def xml(self, *attrs):
+        return self.XML_HEAD + '        E: meta-data (line=14)\n' + ''.join('          A: http://schemas.android.com/apk/res/android:%s\n' % a for a in attrs)
+
+    def test_the_built_manifest_is_held_to_the_source(self):
+        key = ap.REPORT_TITLE_KEY
+        name = 'name(0x01010003)="%s" (Raw: "%s")' % (key, key)
+
+        def string(v):
+            return 'value(0x01010024)="%s" (Raw: "%s")' % (v, v)
+        absent = {'report_title': None}
+        line, problems = ap.check_built_report_title(self.xml('name(0x01010003)="android.app.lib_name" (Raw: "x")', string('MagicPortals')), absent)
+        self.assertEqual(problems, [])
+        self.assertIn('not set in the APK', line)
+        line, problems = ap.check_built_report_title(self.xml(name, string('My Game')), {'report_title': 'My Game'})
+        self.assertEqual(problems, [])
+        self.assertIn("a string in the APK, 'My Game'", line)
+        # The compiler stored it as a number: the engine would read it as absent.
+        for stored in ('value(0x01010024)=12345', 'value(0x01010024)=true', 'value(0x01010024)=1.5', 'value(0x01010024)=#ffaabbcc'):
+            line, problems = ap.check_built_report_title(self.xml(name, stored), {'report_title': '12345'})
+            self.assertEqual(len(problems), 1, stored)
+            self.assertIn('not as a string', problems[0])
+            self.assertIn('absent', problems[0])
+        # The attributes may come in either order.
+        self.assertEqual(ap.check_built_report_title(self.xml(string('My Game'), name), {'report_title': 'My Game'})[1], [])
+        # The APK holds another name than the source, or one the source does not set, or lacks the one it sets.
+        self.assertEqual(len(ap.check_built_report_title(self.xml(name, string('Other')), {'report_title': 'My Game'})[1]), 1)
+        self.assertEqual(len(ap.check_built_report_title(self.xml(name, string('Other')), absent)[1]), 1)
+        self.assertEqual(len(ap.check_built_report_title(self.xml('name(0x01010003)="x" (Raw: "x")', string('y')), {'report_title': 'My Game'})[1]), 1)
+        # A name with quotes, a percent sign and braces is read back whole.
+        hard = '100% "Real" {Game}'
+        self.assertEqual(ap.check_built_report_title(self.xml(name, string(hard)), {'report_title': hard})[1], [])
+        # The value of ANOTHER meta-data is not the key's.
+        other = self.xml('name(0x01010003)="android.app.lib_name" (Raw: "x")', 'value(0x01010024)=12345')
+        self.assertEqual(ap.check_built_report_title(other, absent)[1], [])
+
+    # ---- the ties to the engine's own words ----------------------------------------------------------------------------------------------------
+
+    def test_the_key_is_the_one_the_engines_activity_reads_and_its_readme_states_the_rule(self):
+        folder = os.path.join(self.ENGINE, 'src', 'platform', 'android', 'java', 'com', 'ivancvetanovic', 'supersonic')
+        readme = os.path.join(self.ENGINE, 'README.md')
+        if not (os.path.isfile(os.path.join(folder, 'ReportText.java')) and os.path.isfile(readme)):
+            self.skipTest('the engine submodule is not checked out here, or is at a commit before ReportText')
+        with open(os.path.join(folder, 'SupersonicActivity.java'), encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('info.metaData.getString("%s")' % ap.REPORT_TITLE_KEY, source, 'the engine reads the key with getString, as a STRING (the check is written for that)')
+        with open(os.path.join(folder, 'ReportText.java'), encoding='utf-8') as f:
+            rule = f.read()
+        self.assertIn('String fromManifest = trimmed(declared);', rule)
+        self.assertIn('return trimmed(label);', rule, 'the engine falls back to the label')
+        self.assertIn('text == null ? "" : text.trim()', rule, 'and trims with String.trim, as java_trim does')
+        with open(readme, encoding='utf-8') as f:
+            doc = ' '.join(f.read().split())
+        for phrase in ('**The title names the game**', 'manifest meta-data `%s`' % ap.REPORT_TITLE_KEY, 'The key is read as a string',
+                       'a value the manifest compiler stores as another type - digits, `true`, `1.5`, a colour such as `#abc` - reads as absent',
+                       'android:value="@string/title"'):
+            self.assertIn(phrase, doc, 'the engine README no longer says: %s' % phrase)
+
+    def test_the_packagers_copy_names_the_readme_it_copies(self):
+        with open(os.path.join(HERE, 'android_package.py'), encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('engine/README.md', source)
+        self.assertIn('The title names the game', source)
+        self.assertIn("THIS PACKAGER'S OWN COPY", source)
+
+    def test_the_typing_rule_is_held_to_the_real_aapt2(self):
+        found = find_aapt2()
+        if found is None:
+            self.skipTest('no Android SDK with aapt2 and platform android-35 here: the typing rule was NOT compared with the real compiler')
+        import subprocess
+        aapt2, jar = found
+        # One manifest with one meta-data per value: each value goes in, and what aapt2 stored is read back out of the one dump.
+        values = ['Magic Portals Enhanced', '100% "Real" {Game}', '7 Wonders', '3D Pinball', 'Zelda: 2', 'yes', '1,5', '5dp', '10%', 'null', '1_000', '0x', '0xZZ', '-', '+', '12abc',
+                  '1f', '1.0f', '1.5.', '#ab', '#abcde', '# abc', 'tRue', 'fALSE', '0b101', '  padded name  ', ' 42', '42 ', '　42', 'Ünïcode ✓',
+                  '12345', '0', '007', '-3', '+7', '0x1F', '0X1f', '-0x1F', ' 123 ', '\t42', 'true', 'TRUE', 'True', 'false', 'False', 'FALSE', ' true ', '1.5', '.5', '1e3', '1.',
+                  '1E-3', '-.5', '1.5e-3', '0x1p3', '0x1.8p1', '#abc', '#ABCD', '#aabbccdd', '#abcdef', '@null']
+        elements = ''.join('<meta-data android:name="k%d" android:value="%s" />\n' % (i, v.replace('&', '&amp;').replace('"', '&quot;')) for i, v in enumerate(values))
+        manifest = self.path('probe.xml')
+        put(manifest, '<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.probe">\n'
+                      '<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" /><application android:label="P"><activity android:name=".A" android:exported="true">\n'
+                      + elements + '</activity></application></manifest>\n')
+        apk = self.path('probe.apk')
+        done = subprocess.run([aapt2, 'link', '-o', apk, '-I', jar, '--manifest', manifest], capture_output=True, text=True, errors='replace')
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        tree = subprocess.run([aapt2, 'dump', 'xmltree', '--file', 'AndroidManifest.xml', apk], capture_output=True, text=True, encoding='utf-8', errors='replace').stdout
+        stored = {}
+        name = None
+        for line in tree.split('\n'):
+            m = re.search(r'android:name\(0x01010003\)="(k\d+)"', line)
+            if m:
+                name = m.group(1)
+            if name and 'android:value(0x01010024)=' in line:
+                stored[name] = line.split('android:value(0x01010024)=', 1)[1].strip()
+                name = None
+        self.assertEqual(len(stored), len(values))
+        for i, value in enumerate(values):
+            aapt_string = ' (Raw: "' in stored['k%d' % i]
+            ours = ap.manifest_value_type(value) == 'a string'
+            self.assertEqual(ours, aapt_string, '%r: aapt2 stored %s, the packager says %s' % (value, stored['k%d' % i], ap.manifest_value_type(value)))
+
+
+class TheInspectLine(ManifestVariants):
+    """Planning step 207: `inspect` says what the crash report will call the game and holds the built manifest to it. inspect_apk is run on a synthetic APK with the
+    SDK's tools stubbed (the real run on the real APKs is the Step's gate), so the line, the built-key check and the label check are pinned where inspect calls them."""
+    BADGING = ("package: name='com.ivancvetanovic.magicportals' versionCode='1' versionName='%s'\nsdkVersion:'26'\ntargetSdkVersion:'35'\n"
+               "uses-feature: name='android.hardware.vulkan.version' version='4198400'\nuses-feature-not-required: name='android.hardware.touchscreen'\n"
+               "uses-feature-not-required: name='android.hardware.gamepad'\nuses-feature: name='android.hardware.screen.landscape'\napplication-debuggable\n"
+               "native-code: 'x86_64'\napplication-label:'%s'\n")
+
+    def inspect(self, label='Magic Portals Enhanced', tree_extra='', repo_manifest=None):
+        apk = self.path('MagicPortals-0.1.0-debug.apk')
+        with zipfile.ZipFile(apk, 'w') as z:
+            z.writestr('lib/x86_64/libMagicPortals.so', make_elf())
+            z.writestr('assets/gamedata.list', ap.make_list([])[1])
+        mask = 0
+        for bit in range(32):
+            mask |= 1 << bit
+        tree = 'E: manifest\n  A: screenOrientation(0x0101001e)=0\n  A: configChanges(0x0101001f)=0x%x\n%s' % (mask, tree_extra)
+        answers = {'aapt2 dump badging': self.BADGING % (ap.read_version(REPO), label), 'aapt2 dump xmltree': tree, 'zipalign -c': 'Verification successful\n',
+                   'apksigner verify': 'Verifies\nVerified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate DN: CN=Android Debug\n'}
+        repo = self.path('repo')
+        os.makedirs(os.path.join(repo, 'game', 'android'))
+        shutil.copyfile(repo_manifest or self.MANIFEST, os.path.join(repo, 'game', 'android', 'AndroidManifest.xml'))
+        shutil.copyfile(os.path.join(REPO, 'CMakeLists.txt'), os.path.join(repo, 'CMakeLists.txt'))
+
+        class FakeTools:
+            sdk = self.path('no-sdk')
+            aapt2, zipalign, java, apksigner_jar = 'aapt2', 'zipalign', 'java', 'apksigner.jar'
+        original = ap.run
+        ap.run = lambda cmd, what: answers[what]
+        try:
+            return ap.inspect_apk(apk, FakeTools(), repo, False)
+        finally:
+            ap.run = original
+
+    def test_the_line_names_the_game_by_its_label(self):
+        lines, problems = self.inspect()
+        self.assertIn("the crash report will call the game: Magic Portals Enhanced (from the application's android:label)", lines)
+        self.assertEqual(problems, [])
+
+    def test_a_key_is_the_name_and_a_string_in_the_apk_passes(self):
+        manifest = self.manifest_with('Portals Deluxe')
+        tree = ('E: meta-data\n  A: http://schemas.android.com/apk/res/android:name(0x01010003)="supersonic.reportTitle" (Raw: "supersonic.reportTitle")\n'
+                '  A: http://schemas.android.com/apk/res/android:value(0x01010024)="Portals Deluxe" (Raw: "Portals Deluxe")\n')
+        lines, problems = self.inspect(tree_extra=tree, repo_manifest=manifest)
+        self.assertEqual(problems, [])
+        self.assertTrue(any(l.startswith('the crash report will call the game: Portals Deluxe (from the manifest meta-data supersonic.reportTitle)') for l in lines), lines)
+        self.assertIn("supersonic.reportTitle: a string in the APK, 'Portals Deluxe'", lines)
+
+    def test_an_apk_that_stores_the_key_as_a_number_is_a_problem(self):
+        manifest = self.manifest_with('Portals Deluxe')
+        tree = ('E: meta-data\n  A: http://schemas.android.com/apk/res/android:name(0x01010003)="supersonic.reportTitle" (Raw: "supersonic.reportTitle")\n'
+                '  A: http://schemas.android.com/apk/res/android:value(0x01010024)=12345\n')
+        lines, problems = self.inspect(tree_extra=tree, repo_manifest=manifest)
+        self.assertEqual(len([p for p in problems if 'not as a string' in p]), 1, problems)
+
+    def test_an_apk_whose_label_is_not_the_manifests_is_a_problem(self):
+        lines, problems = self.inspect(label='Penumbra')
+        self.assertEqual(len([p for p in problems if 'application-label' in p]), 1, problems)
 
 
 class TheSigning(unittest.TestCase):

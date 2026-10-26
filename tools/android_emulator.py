@@ -26,7 +26,8 @@ numbers a run takes here are "SwiftShader x86_64 emulator on this PC" and nothin
 Commands (`tools/android_emulator.py [--slot impl|verify] [--log FILE] <command> ...`; Git Bash rewrites an argument that begins with / unless
 MSYS_NO_PATHCONV=1 is set, so set it when a device path is an argument):
     create                      the AVD of the slot with avdmanager WITHOUT --force (stops if the name exists), configured like the sibling's API 33 AVD
-    start [--timeout S]         refuses below 6 GB of free memory ("NOT RUN" with the numbers), starts the AVD headless and waits for sys.boot_completed
+    start [--timeout S]         refuses below 6 GB of free memory ("NOT RUN" with the numbers: an emulator takes about 3.9 GB, measured 2026-10-26, and the machine needs
+                                about 2 GB of its own beyond that), starts the AVD headless, waits for sys.boot_completed and logs the free memory and the emulator's size
     stop                        `adb -s <serial> emu kill`, then checks that the process is gone
     status                      the state of the slot, the free memory and the emulator-related processes (all of them, untouched)
     install APK [--fresh]       adb install -r (--fresh: uninstall first)           uninstall
@@ -52,7 +53,16 @@ import time
 PACKAGE = 'com.ivancvetanovic.magicportals'
 ACTIVITY = 'com.ivancvetanovic.supersonic.SupersonicActivity'
 SYSTEM_IMAGE = 'system-images;android-33;google_apis;x86_64'
+# THE FLOOR IS 6 GiB, AND SINCE 2026-10-26 A MEASUREMENT STANDS BEHIND IT (planning step 207, PORT-9; step 204 pinned the number before anything was measured).
+# ONE start of the impl slot with the guard lowered to 4 GiB in that one process only (a probe that imported this file and set the constant; nothing in the
+# repository changed), on this PC (16 GB installed, 13.67 GB visible), found: available memory 4.49 GB before; the emulator booted in 46 s; the
+# qemu-system-x86_64-headless process held a working set of 2.77 GB (private bytes 3.22 GB) idle after the boot, 3.06 / 3.49 GB 30 s later, 3.29 / 3.81 GB 30 s after the
+# game was launched and 3.35 / 3.84 GB 60 s after; the machine's available memory fell to 1.57 GB; then the memory-pressure reaper of the owner's Claude Code ended the probe
+# ("the system was critically low on memory") and the emulator went with it. So: an emulator needs about 3.9 GB, the machine about 2 GB of its own beyond that, and a start
+# at 4.5 GB available is NOT SAFE for the owner's session. The floor stays 6 GiB; nothing here lowers it, and tests/test_android_emulator.py pins it (a named mutation sets it
+# to 4 GiB and must turn them red). What can legitimately make room is the caller's to do and is named in the refusal; this file closes nothing of the owner's.
 MIN_FREE_MEMORY_BYTES = 6 * 1024 ** 3
+EMULATOR_FOOTPRINT_GB = 3.9  # the private bytes of the emulator's qemu process 60 s after the game started (3.84 GB), rounded up; for the message only
 
 # How the emulator is started (Windows creation flags). NOT DETACHED_PROCESS: a process with no console that starts a console program (emulator.exe starts
 # qemu-system-x86_64-headless.exe) gives that program a console of its own, which the default terminal (Windows Terminal) shows as a tab titled with the
@@ -319,6 +329,42 @@ def cmd_create(args):
     return 0
 
 
+def not_run_message(free):
+    """What `start` says when it refuses: the numbers, why the floor is where it is, and what can legitimately free memory (the caller's to do: this file closes nothing)."""
+    return ('NOT RUN: free memory is under %d GB (%.2f GB). An emulator takes about %.1f GB (the qemu process, measured 2026-10-26: 3.35 GB working set, 3.84 GB private) and the '
+            'machine needs about 2 GB of its own beyond that, so a start below the floor can take the owner\'s session down with it. What can legitimately make room: close programs '
+            'you own; an idle WSL VM holds 0.5 to 1 GB (`wsl --shutdown`, when nothing in it is running). This script closes nothing and does not lower the floor.'
+            % (MIN_FREE_MEMORY_BYTES // 1024 ** 3, free / 1024 ** 3, EMULATOR_FOOTPRINT_GB))
+
+
+def process_memory(pid):
+    """(working set, private bytes) of a process by its pid, or None when it cannot be read (read only, PowerShell like processes())."""
+    script = "Get-Process -Id %d -ErrorAction Stop | ForEach-Object { '{0}|{1}' -f $_.WorkingSet64, $_.PrivateMemorySize64 }" % pid
+    try:
+        p = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    parts = p.stdout.strip().split('|')
+    if p.returncode != 0 or len(parts) != 2 or not all(x.isdigit() for x in parts):
+        return None
+    return int(parts[0]), int(parts[1])
+
+
+def footprint_line(when):
+    """One line for the log and the console: the machine's available memory and the working set and private bytes of THIS slot's emulator processes, so that every run leaves
+    a number for the next reader. A failure to read is said in the line and never fails the start."""
+    try:
+        free, total = free_memory_bytes()
+        rows = []
+        for name, pid, _ in our_processes():
+            if name.lower().startswith('qemu'):
+                memory = process_memory(pid)
+                rows.append('%s pid %d %s' % (name, pid, 'working set %.2f GB, private %.2f GB' % (memory[0] / 1024 ** 3, memory[1] / 1024 ** 3) if memory else 'size not readable'))
+        return '%s: available memory %.2f GB of %.2f GB; emulator %s' % (when, free / 1024 ** 3, total / 1024 ** 3, '; '.join(rows) or 'no qemu process of this slot found')
+    except Exception as e:  # a number for the log is a courtesy
+        return '%s: memory not readable (%s)' % (when, e)
+
+
 def cmd_start(args):
     name = slot()['avd']
     if not avd_exists():
@@ -332,7 +378,9 @@ def cmd_start(args):
     print('free memory %.2f GB of %.2f GB' % (free / 1024 ** 3, total / 1024 ** 3))
     note('free memory before start: %d bytes of %d' % (free, total))
     if free < MIN_FREE_MEMORY_BYTES:
-        print('NOT RUN: free memory is under 6 GB (%.2f GB)' % (free / 1024 ** 3))
+        message = not_run_message(free)
+        print(message)
+        note(message)
         return 3
     others = [(n, pid) for n, pid, cmd in processes() if n.lower().startswith(('emulator', 'qemu')) and name not in (cmd or '')]
     if others:
@@ -362,6 +410,9 @@ def wait_boot(timeout, started=None):
             if rc == 0 and 'package:' in out:
                 print('%s booted in %.1f s' % (serial(), time.time() - started))
                 note('boot completed after %.1f s' % (time.time() - started))
+                line = footprint_line('after boot')
+                print(line)
+                note(line)
                 return True
         time.sleep(3)
     print('%s did not finish booting within %.0f s' % (serial(), timeout))

@@ -34,6 +34,9 @@ WHAT IT REFUSES, each with a message that names the cause and a non-zero exit:
   build; a missing or unreadable library, or one that is not an ELF shared object of its ABI with only the allowed NEEDED libraries, 16 KB LOAD
   alignment, no executable-and-writable segment and no text relocation; --release with the verification variant, with no key or with the debug key;
   an output folder inside the repository other than under out/.
+  a manifest that sets supersonic.reportTitle (the name the engine's crash report calls the game by, planning step 207) to a blank value or to a value aapt2 stores as a
+  number, true/false, a colour or a reference (the engine reads the key as a string and would take it as absent), and an APK whose built manifest stores it so. `inspect`
+  prints 'the crash report will call the game: ...' (the key, else the application's android:label: the engine's rule, copied here).
 
 DETERMINISTIC: the same inputs give a byte-identical APK (sorted entries, a fixed date and attributes, no clock, the debug key's signature is
 deterministic RSA). The bytes the tools make are those of the Python zlib and the JDK's javac/d8 of the machine; two runs on one machine are equal.
@@ -97,6 +100,17 @@ MOST_UINT64 = 2 ** 64 - 1
 REQUIRED_CONFIG_CHANGES = frozenset({
     'mcc', 'mnc', 'locale', 'touchscreen', 'keyboard', 'keyboardHidden', 'navigation', 'orientation', 'screenLayout', 'uiMode', 'screenSize',
     'smallestScreenSize', 'density', 'layoutDirection', 'colorMode', 'grammaticalGender', 'fontScale', 'fontWeightAdjustment'})
+
+# THE NAME THE CRASH REPORT CALLS THE GAME (planning step 207, PORT-9). The engine's report of an unexpected exit (PostMortem.java) titles its dialog "<name> closed
+# unexpectedly last time"; <name> is chosen by the engine's ReportText.chooseName: the manifest meta-data supersonic.reportTitle when it is present and not blank,
+# else the application's label (ApplicationInfo.loadLabel: the application's android:label, or its class or package name when it declares none), else a neutral
+# word. Both are trimmed with Java's String.trim (every character up to U+0020, and nothing else: not a no-break space). THIS IS THIS PACKAGER'S OWN COPY of the
+# engine's rule, which the engine documents in engine/README.md (the paragraph "The title names the game"), so that inspect can say what the dialog will call the
+# game and the build can refuse a key that would read as absent; test_android_package.py (TheReportTitle) ties the key's spelling to engine's SupersonicActivity.java
+# and the sentence of the README, so that the two cannot drift unseen.
+REPORT_TITLE_KEY = 'supersonic.reportTitle'
+JAVA_TRIM_CHARS = ''.join(chr(c) for c in range(0x21))  # String.trim removes every character up to and including U+0020
+AAPT2_TRIM_CHARS = ' \t\n\r\f\v'  # what aapt2 trims before it types a value (measured: a tab is trimmed, a no-break space or U+3000 is not)
 
 # Paths that must never be taken as the package or as a source: the original's APK and the engine of the original (CLAUDE.md, the hard rule).
 FORBIDDEN_INPUT_PAIRS = (('reference', 'apk'), ('reference', 'ethanon'), ('reference', 'apk_work'))
@@ -230,7 +244,119 @@ def read_manifest(path):
     facts['report_enabled'] = meta.get('supersonic.reportUnexpectedExit')
     if facts['lib_name'] is None or 'lib%s.so' % facts['lib_name'] != LIB_NAME:
         raise PackError('android.app.lib_name must name the library %s' % LIB_NAME)
+    # The key (None when the manifest does not set it) and the APPLICATION's label, which is the one the engine asks the system for: not the activity's.
+    facts['report_title'] = meta.get(REPORT_TITLE_KEY)
+    facts['label'] = app.get(ANDROID_NS + 'label')
+    if facts['report_title'] is not None:
+        check_report_title(facts['report_title'])
     return facts
+
+
+def java_trim(text):
+    """Java's String.trim: every character up to and including U+0020 is removed from both ends, and no other (a no-break space stays)."""
+    return text.strip(JAVA_TRIM_CHARS) if text is not None else ''
+
+
+def choose_report_name(declared, label):
+    """The engine's ReportText.chooseName, copied: `declared` (the key) when it is present and not blank, else `label` when present and not blank, else the empty
+    string, which the engine reads as "no name" and answers with its neutral word ("The game", Portuguese "O jogo"). Both are trimmed; nothing else is touched."""
+    from_manifest = java_trim(declared)
+    if from_manifest:
+        return from_manifest
+    return java_trim(label)
+
+
+def manifest_value_type(value):
+    """What aapt2 stores a meta-data's android:value as, by its word: 'a string', or the kind of thing it is read as instead. A SUPERSET of aapt2's own typing on
+    purpose: a value of digits only is refused whatever its length (aapt2 keeps an 11-digit one a string and types 2147483648 as a number; the rule does not follow
+    that), and a value that begins with @ or ? is a resource reference. Measured with aapt2 35.0.0 on about 150 values (out/parity/program/PORT/PORT9/impl/aapt2probe) and
+    held to the real aapt2 by TheReportTitle in test_android_package.py wherever an SDK is present."""
+    text = value.strip(AAPT2_TRIM_CHARS)
+    flags = re.ASCII
+    if text[:1] in ('@', '?'):
+        return 'a resource reference'
+    if re.fullmatch(r'(true|TRUE|True|false|FALSE|False)', text, flags):
+        return 'a boolean'
+    if re.fullmatch(r'#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})', text, flags):
+        return 'a colour'
+    if re.fullmatch(r'[+-]?[0-9]+', text, flags) or re.fullmatch(r'[+-]?0[xX][0-9a-fA-F]+', text, flags):
+        return 'an integer'
+    decimal = r'[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?'
+    hexadecimal = r'[+-]?0[xX]([0-9a-fA-F]+\.?[0-9a-fA-F]*|\.[0-9a-fA-F]+)[pP][+-]?[0-9]+'
+    if re.fullmatch(decimal, text, flags) or re.fullmatch(hexadecimal, text, flags):
+        return 'a floating-point number'
+    return 'a string'
+
+
+def check_report_title(value):
+    """A manifest that sets supersonic.reportTitle sets it to a name the engine can read. The engine reads the key with Bundle.getString, like supersonic.reportLog,
+    and a value the manifest compiler stores as another type reads as ABSENT on the device (the engine README says so, in "The title names the game"): the dialog would
+    silently call the game by its label instead. So a value that would be stored as another type is refused here, at build time, and so is a blank one (which the
+    engine would skip for the label too: a key that names nothing is a mistake)."""
+    if not java_trim(value):
+        raise PackError('the manifest sets %s to a blank value: give the game\'s name, or leave the key out (the dialog then uses the application\'s label)' % REPORT_TITLE_KEY)
+    kind = manifest_value_type(value)
+    if kind != 'a string':
+        raise PackError(
+            '%s is %r, which the manifest compiler (aapt2) stores as %s and not as a string. The engine reads the key as a string (getString), so on a phone it would read as ABSENT '
+            'and the crash report would call the game by its label, silently (engine/README.md, "The title names the game"). Rename it so it is not read as a number, true/false or a '
+            'colour (add a word to it), or give it as a string resource (android:value="@string/name"; this packager compiles no string resources today, so that route needs one added '
+            'first and aapt2 cannot link a reference to none)' % (REPORT_TITLE_KEY, value, kind))
+
+
+def report_title_choice(facts):
+    """(name, how): what the crash report will call the game, from the manifest's facts alone with the engine's rule, and where the name came from. An empty name
+    means the engine's neutral word, which `how` explains."""
+    declared = facts.get('report_title')
+    label = facts.get('label')
+    name = choose_report_name(declared, label)
+    if java_trim(declared):
+        return name, 'from the manifest meta-data %s' % REPORT_TITLE_KEY
+    if label is None:
+        return '', 'the application declares no android:label: the system answers its class or package name'
+    if not name:
+        return '', 'the application\'s android:label is blank: the engine uses its neutral word "The game" (Portuguese "O jogo")'
+    if name.startswith(('@', '?')):
+        return '', 'the application\'s android:label is a resource reference (%s) that the phone resolves, in the phone\'s language: not known from the manifest' % name
+    return name, 'from the application\'s android:label'
+
+
+def report_title_line(facts):
+    """The one line `inspect` prints about the dialog's name."""
+    name, how = report_title_choice(facts)
+    return 'the crash report will call the game: %s (%s)' % (name if name else '(no name)', how)
+
+
+def check_built_report_title(xmltree, facts):
+    """(line, problems) about the key as the BUILT manifest stores it, read out of `aapt2 dump xmltree` text: the value the engine would read with getString must be a
+    string in the APK, as it is in the source. Pure. A string attribute prints as value(0x01010024)="..." (Raw: "..."); any other type prints without the Raw part."""
+    declared = facts.get('report_title')
+    found = None
+    name = value = None
+    for raw in xmltree.split('\n') + ['E: end']:
+        line = raw.strip()
+        if line.startswith('E:'):
+            if name == REPORT_TITLE_KEY and value is not None:
+                found = value
+            name = value = None
+            continue
+        m = re.search(r'android:name\(0x01010003\)="([^"]*)"', line)
+        if m:
+            name = m.group(1)
+        if 'android:value(0x01010024)=' in line:
+            value = line.split('android:value(0x01010024)=', 1)[1]
+    if declared is None:
+        if found is not None:
+            return 'the built manifest sets %s' % REPORT_TITLE_KEY, ['the APK sets %s and the source manifest does not' % REPORT_TITLE_KEY]
+        return '%s: not set in the APK (the application\'s label names the game)' % REPORT_TITLE_KEY, []
+    if found is None:
+        return '%s: missing from the APK' % REPORT_TITLE_KEY, ['the source manifest sets %s and the APK does not carry it' % REPORT_TITLE_KEY]
+    m = re.fullmatch(r'"(.*)" \(Raw: "(.*)"\)', found, re.S)
+    if not m:
+        return '%s: stored as %s' % (REPORT_TITLE_KEY, found), ['the APK stores %s as %s, not as a string: the engine would read it as absent' % (REPORT_TITLE_KEY, found)]
+    if m.group(2) != declared:
+        return '%s: a string, %r' % (REPORT_TITLE_KEY, m.group(2)), ['the APK holds %r for %s and the source manifest says %r' % (m.group(2), REPORT_TITLE_KEY, declared)]
+    return '%s: a string in the APK, %r' % (REPORT_TITLE_KEY, m.group(2)), []
 
 
 def platform_config_changes(sdk, target_sdk):
@@ -826,6 +952,15 @@ def inspect_apk(apk, tools, repo, release, keystore=None, pass_file=None, key_al
     if not re.search(r"uses-feature: name='android\.hardware\.screen\.landscape'", badging):
         problems.append('badging does not say the APK needs a landscape screen')
     lines.append('--- manifest (aapt2 dump xmltree): ' + ' '.join(l.strip() for l in xml.split('\n') if 'screenOrientation' in l))
+    # What the engine's crash report will call the game: a PREDICTION from the source manifest and the engine's rule (nothing in the APK says what a phone shows), with
+    # the two facts it rests on read back out of the BUILT file: the key (if any) is a string there, and the application's label is the manifest's.
+    lines.append(report_title_line(facts))
+    built_title_line, built_title_problems = check_built_report_title(xml, facts)
+    lines.append(built_title_line)
+    problems.extend(built_title_problems)
+    built_label = re.search(r"^application-label:'([^']*)'", badging, re.M)
+    if facts['label'] is not None and not facts['label'].startswith(('@', '?')) and (built_label is None or built_label.group(1) != facts['label']):
+        problems.append('the APK\'s application-label is %r and the manifest says %r' % (built_label.group(1) if built_label else None, facts['label']))
     # The activity's configChanges as the APK stores it: every kind the platform defines (the manifest's words are checked above; this is the built file).
     kinds = check_config_changes(facts, tools.sdk)
     mask_match = re.search(r'configChanges\(0x[0-9a-fA-F]+\)=0x([0-9a-fA-F]+)', xml)
