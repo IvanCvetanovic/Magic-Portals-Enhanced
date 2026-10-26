@@ -85,7 +85,8 @@ class Tree:
             for n in sorted(fs):
                 p = rel + '/' + n if rel else n
                 full = os.path.join(d, n)
-                self.files[p] = os.path.getsize(full)
+                # lstat: a dangling link has a name and no target to measure (PORT2-2); Python's own getsize would end the run in a traceback
+                self.files[p] = os.lstat(full).st_size
                 self.lower[p.lower()].add(p)
                 if os.path.islink(full):
                     self.symlinks.append(p)

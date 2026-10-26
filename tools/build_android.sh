@@ -30,8 +30,9 @@
 #     --keystore-pass-file <file>   a file whose first line is the keystore's password (also the key's)
 #     --key-alias <alias>           the key's alias in the keystore (required)
 #   Without --release the APK is a DEBUG APK: debuggable, signed with the machine's standard debug keystore (~/.android/debug.keystore).
-#   --version-code <n>   the APK's versionCode (default 1): a whole number that goes UP BY ONE with every release, or Android refuses the update.
-#                        versionName is the project VERSION in the top-level CMakeLists.txt, the one place it is written.
+#   --version-code <n>   the APK's versionCode: a whole number that must go UP with every release, or Android refuses the update. Without it the packager
+#                        derives it from the version (major*10000 + minor*100 + patch; `python tools/package/version.py code` prints it), so that the number and the
+#                        version cannot disagree; give one to override it. versionName is the project VERSION in the top-level CMakeLists.txt, the one place it is written.
 #   --config Release     the native build type (only Release is packaged)
 #   --jobs <n>           compile jobs per ABI (default 6; fewer when memory is short)
 #   --out <folder>       where the APK, SHA256SUMS.txt and the work folder go (default out/android, under the repository)
@@ -86,7 +87,7 @@ ALLOW_DATALESS_RELEASE=0
 KEYSTORE=""
 PASS_FILE=""
 KEY_ALIAS=""
-VERSION_CODE=1
+VERSION_CODE=""
 JOBS=6
 OUT_ARG=""
 BUILD_ONLY=0
@@ -128,7 +129,7 @@ case "$ABI_ARG" in
     *) die "--abi wants arm64-v8a, x86_64 or all, got '$ABI_ARG'" ;;
 esac
 [ "$CONFIG" = Release ] || die "only --config Release is packaged (got '$CONFIG')"
-case "$VERSION_CODE" in ''|*[!0-9]*|0) die "--version-code wants a whole number of at least 1, got '$VERSION_CODE'" ;; esac
+if [ -n "$VERSION_CODE" ]; then case "$VERSION_CODE" in *[!0-9]*|0) die "--version-code wants a whole number of at least 1, got '$VERSION_CODE'" ;; esac; fi
 case "$JOBS" in ''|*[!0-9]*|0) die "--jobs wants a whole number of at least 1, got '$JOBS'" ;; esac
 if [ "$PACKAGE_ONLY" -eq 1 ] && [ "$BUILD_ONLY" -eq 1 ]; then die "--build-only and --package-only together build nothing"; fi
 if [ "$BUILD_ONLY" -eq 0 ]; then
@@ -279,9 +280,9 @@ done
 if [ "$BUILD_ONLY" -eq 1 ]; then note "built (--build-only)"; exit 0; fi
 
 # ---- Package ----------------------------------------------------------------------------------------------------------------------------
-args=(build --repo "$(native "$REPO")" --sdk "$(native "$SDK")" --ndk "$(native "$NDK")" --build-tools "$BUILD_TOOLS_VERSION" --out "$(native "$OUT")"
-      --version-code "$VERSION_CODE")
+args=(build --repo "$(native "$REPO")" --sdk "$(native "$SDK")" --ndk "$(native "$NDK")" --build-tools "$BUILD_TOOLS_VERSION" --out "$(native "$OUT")")
 if [ "$NO_DATA" -eq 1 ]; then args+=(--no-data); else args+=(--package "$(native "$(posixp "$DATA")")"); fi
+[ -z "$VERSION_CODE" ] || args+=(--version-code "$VERSION_CODE")
 [ "$VERIFICATION" -eq 0 ] || args+=(--verification)
 [ "$PERF_DIAG" -eq 0 ] || args+=(--perf-diag)
 if [ "$RELEASE" -eq 1 ]; then

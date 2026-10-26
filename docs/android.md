@@ -81,8 +81,7 @@ that is ignored), strips them, and calls the packager, which writes `out/android
   (ON stops: there is no repository on a phone), no suites, no measurement tool. The script also passes Vulkan validation OFF, the committed
   shaders as they are (`GLSL_COMPILER=OFF`), `ANDROID_STL=c++_static` and `ANDROID_PLATFORM=android-<minSdk>`, where minSdk is read out of the manifest.
 * **The version** is `project(MagicPortals VERSION ...)` in the top-level `CMakeLists.txt`, the one definition; the packager reads it and
-  aapt2 writes it in as `versionName`. **`versionCode`** is `--version-code` (default 1): a whole number that goes **up by one with every
-  release**, or Android refuses the update. Neither is written in the manifest.
+  aapt2 writes it in as `versionName`. **`versionCode`** is `--version-code`, and since planning step 208 its default follows the version (`major*10000 + minor*100 + patch`, so the placeholder version is 100; `python tools/package/version.py code`): a whole number that must go **up with every release**, or Android refuses the update. Neither is written in the manifest. `release.py android` (`docs/packaging.md` section 8) requires a release APK to carry the rule's number, or the number it is told.
 * **The manifest** (`game/android/AndroidManifest.xml`): application id `com.ivancvetanovic.magicportals` (a **placeholder** the owner
   confirms, section 6), label "Magic Portals Enhanced", minSdk 26 (AAudio), targetSdk 35, `uses-feature` Vulkan 1.1 required, touchscreen and
   gamepad not required, landscape locked, **all 18 configuration-change kinds that the android-35 platform defines handled in place** (a recreated
@@ -198,7 +197,7 @@ If that file cannot be read, a phone's run stops with a message that says so ins
    `--release --keystore <file> --keystore-pass-file <file> --key-alias <alias>`. The script and the packager take no key from anywhere else and refuse the debug
    key for a release. A release APK is *not* debuggable, has no `.idsig`, and its certificate is checked against the keystore's. A release cannot be installed over a
    debug build (another signer): uninstall first. Losing the key means no update can ever be installed over the app.
-3. **Each release's `--version-code`** (+1).
+3. **Each release's version code**: it follows the version (section 3 above); give `--version-code` only to number it differently, and tell `release.py android` the same.
 4. **The icon's look**, the store listing, the rights question. `docs/permission.md` governs what may be shipped; it was not changed.
 5. **Whether the 16 KB-aligned libraries and `targetSdk` 35 suit the store you publish to**; the store's rules change yearly.
 6. **Whether the post-mortem report should stay on.** It used to say "Penumbra closed unexpectedly last time" in this game too; since the engine commit of step 207 it is titled with the game's own name (section 11), so the reason to switch it off should be gone once a device shows the new title. The manifest's `supersonic.reportUnexpectedExit` still turns the report off, and with it the words of a failed start at the next start; **the owner's call**, now a question about whether a tester should see a dialog at all, and one to answer after the dialog has been seen on a device (not done: section 11.5).

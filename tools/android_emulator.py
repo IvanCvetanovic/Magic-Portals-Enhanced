@@ -43,7 +43,6 @@ MSYS_NO_PATHCONV=1 is set, so set it when a device path is an argument):
 import argparse
 import ctypes
 import datetime
-import hashlib
 import os
 import re
 import subprocess

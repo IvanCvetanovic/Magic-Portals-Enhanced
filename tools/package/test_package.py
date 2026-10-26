@@ -413,6 +413,56 @@ class TheRefusals(World):
         self.assertEqual(code, 2)
         self.assertIn('symbolic link', err)
 
+    def symlink_or_say_so(self, target, link, directory=False):
+        """Makes a symbolic link, or skips the test and SAYS SO on standard error where a CI log shows it (this system will not make one: PORT2-2's refusals are then NOT checked)."""
+        try:
+            os.symlink(target, link, target_is_directory=directory)
+        except (OSError, NotImplementedError) as e:
+            reason = 'this system will not make a symbolic link (%s): the refusal of a link in a source tree is NOT checked on it' % e
+            print('\nSKIPPED %s: %s' % (self.id(), reason), file=sys.stderr)
+            self.skipTest(reason)
+
+    def test_a_link_to_a_sub_folder_of_a_source_tree_is_refused(self):
+        # PORT2-2: `sprites/hd` replaced by a link used to give exit 0 and a package without its files (the 1x pictures used silently)
+        hd = os.path.join(self.ref, 'extracted', 'assets', 'sprites', 'hd')
+        elsewhere = os.path.join(self._tmp, 'hd_elsewhere')
+        shutil.move(hd, elsewhere)
+        self.symlink_or_say_so(elsewhere, hd, directory=True)
+        code, out, err = self.content()
+        self.assertEqual(code, 2, err)
+        self.assertIn('symbolic link', err)
+        self.assertIn('original:sprites/hd', err)
+        self.assertFalse(os.path.exists(os.path.join(self.out, pk.MANIFEST)))
+        self.assertFalse(os.path.isdir(os.path.dirname(self.out)) and [n for n in os.listdir(os.path.dirname(self.out)) if '.staging-' in n])
+
+    def test_a_broken_link_is_refused_and_is_not_a_traceback(self):
+        # PORT2-2: a dangling link ended in an uncaught FileNotFoundError at closure.py's getsize
+        link = os.path.join(self.ref, 'extracted', 'assets', 'sprites', 'dangling_a.png')
+        self.symlink_or_say_so(os.path.join(self._tmp, 'no_such_target.png'), link)
+        code, out, err = self.content()
+        self.assertEqual(code, 2, err)
+        self.assertIn('symbolic link', err)
+        self.assertIn('dangling_a.png', err)
+        # and a link nothing names is refused too: the rule is about the tree, not about the plan
+        os.remove(link)
+        self.symlink_or_say_so(os.path.join(self._tmp, 'no_such_target.png'), os.path.join(self.repo, 'out', 'levels', 'extra.tscn'))
+        self.assertEqual(self.content()[0], 2)
+
+    def test_a_broken_link_inside_a_package_is_a_problem_of_verify_and_not_a_traceback(self):
+        self.assertEqual(self.content()[0], 0)
+        self.symlink_or_say_so(os.path.join(self._tmp, 'no_such_target.png'), os.path.join(self.out, 'original', 'sprites', 'dangling_b.png'))
+        report = pk.verify_content(self.out)
+        text = '\n'.join(report['problems'])
+        self.assertIn('dangling_b.png', text)
+        self.assertEqual(self.run_main('verify', self.out)[0], 1)
+
+    def test_the_packager_runs_in_python_isolated_mode(self):
+        # PORT2-6 (c): `python -I tools/package/package.py` failed with ModuleNotFoundError: closure (isolated mode does not put the script's folder on the path)
+        import subprocess
+        done = subprocess.run([sys.executable, '-I', os.path.join(HERE, 'package.py'), '--help'], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('content', done.stdout)
+
     def test_a_reference_that_matches_only_ignoring_case_is_an_error(self):
         # The table says tile_a.png; the file on disk is Tile_A.png. Windows and macOS would open it, Linux and Android would not.
         base = os.path.join(self.ref, 'extracted', 'assets', 'sprites')

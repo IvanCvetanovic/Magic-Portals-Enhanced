@@ -1,0 +1,1589 @@
+"""Tests of the release packager (tools/package/release.py, planning step 208, PORT-10), on SYNTHETIC programs, packages and bundles the tests build themselves.
+
+Run:   python -m unittest discover -s tools/package -p "test_*.py" -v        (standard library only; no SDK, no compiler, no Apple tool, no Windows program is started)
+
+Every byte and name is invented: a PE file is a header, one section and a few strings; an ELF or Mach-O file is a header and a payload; a content package is the miniature
+world of test_package.py (invented names, no file of the original); the notices are three invented lines. No program of the game is read, copied or started by any test here.
+What is pinned: the facts check-program reads out of a built program and the way each makes it refuse (one named mutation per forbidden string, per sentinel, per machine
+type, per version field), the ties of its strings to the C++ that prints them, the archives (layout, modes, determinism, refusals that leave nothing behind), the Apple
+layouts, the Android release check, and the sums.
+"""
+import contextlib
+import hashlib
+import io
+import os
+import re
+import shutil
+import struct
+import sys
+import tarfile
+import tempfile
+import unittest
+import zipfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import android_package as ap  # noqa: E402
+import package as pk  # noqa: E402
+import release as rl  # noqa: E402
+import version as vs  # noqa: E402
+
+REPO = os.path.dirname(os.path.dirname(HERE))
+VERSION = vs.read_version(REPO)
+WINDOWS_VERSION = vs.windows_version(VERSION)
+
+
+# ---- synthetic programs ---------------------------------------------------------------------------------------------------------------------
+
+def game_payload(dev=False, perf=False, extra=()):
+    """The strings every build of the game carries, and the ones that only some builds carry. Nothing else of a program is needed by the reader."""
+    parts = list(rl.GAME_MARKERS) + [b'--route', b'--tap', b'is a developer\'s flag, and this build was made without the developer tools', b'DEV: keep the medals']
+    if dev:
+        parts += list(rl.DEV_TOOLS_SENTINELS)
+    if perf:
+        parts.append(rl.PERF_DIAG_MARKER + b': a player\'s run of it has the engine\'s frame readout')
+    parts += list(extra)
+    return b'\0'.join(parts) + b'\0'
+
+
+def version_block(product=WINDOWS_VERSION, file=WINDOWS_VERSION, quad=None, fixed=True):
+    """The pieces of a VERSIONINFO the reader scans for: the fixed block (signature 0xFEEF04BD) and the UTF-16 key/value pairs, padded as Windows pads them."""
+    quad = quad if quad is not None else tuple(int(x) for x in WINDOWS_VERSION.split('.'))
+    out = b''
+    if fixed:
+        ms, ls = (quad[0] << 16) | quad[1], (quad[2] << 16) | quad[3]
+        out += struct.pack('<IIIIIIII', 0xFEEF04BD, 0x10000, ms, ls, ms, ls, 0x3F, 0)
+    for key, value in (('FileVersion', file), ('ProductVersion', product)):
+        if value is None:
+            continue
+        item = (key + '\0').encode('utf-16-le')
+        item += b'\0' * (-len(item) % 4)
+        out += item + (value + '\0').encode('utf-16-le') + b'\0\0'
+    return out
+
+
+def make_pe(machine=0x8664, subsystem=2, imports=('KERNEL32.dll', 'USER32.dll'), delay=('vulkan-1.dll',), plus=True, dll=False, payload=None, version=True):
+    """A minimal PE: DOS header, PE header, one section holding the import tables and the payload. Enough for read_pe, and for nothing else (it cannot be started)."""
+    payload = game_payload() if payload is None else payload
+    section_at, rva_base = 0x200, 0x1000
+    names = b''
+    name_off = {}
+    for n in list(imports) + list(delay):
+        name_off[n] = len(names)
+        names += n.encode() + b'\0'
+    imp_size = 20 * (len(imports) + 1)
+    del_size = 32 * (len(delay) + 1)
+    names_at = imp_size + del_size
+    rva = lambda off: rva_base + off  # noqa: E731
+    imp = b''.join(struct.pack('<IIIII', 0, 0, 0, rva(names_at + name_off[n]), 0) for n in imports) + b'\0' * 20
+    dly = b''.join(struct.pack('<IIIIIIII', 1, rva(names_at + name_off[n]), 0, 0, 0, 0, 0, 0) for n in delay) + b'\0' * 32
+    body = imp + dly + names
+    body += b'\0' * (-len(body) % 16) + payload + (version_block() if version is True else (version or b''))
+    optsize = 240 if plus else 224
+    header = bytearray(0x200)
+    header[0:2] = b'MZ'
+    struct.pack_into('<I', header, 0x3C, 0x80)
+    header[0x80:0x84] = b'PE\0\0'
+    struct.pack_into('<HHIIIHH', header, 0x84, machine, 1, 0, 0, 0, optsize, 0x22 | (0x2000 if dll else 0))
+    opt = 0x98
+    struct.pack_into('<H', header, opt, 0x20B if plus else 0x10B)
+    struct.pack_into('<H', header, opt + 68, subsystem)
+    count_at, dirs_at = (opt + 108, opt + 112) if plus else (opt + 92, opt + 96)
+    struct.pack_into('<I', header, count_at, 16)
+    struct.pack_into('<II', header, dirs_at + 8 * 1, rva(0), imp_size)
+    struct.pack_into('<II', header, dirs_at + 8 * 13, rva(imp_size), del_size)
+    table = opt + optsize
+    struct.pack_into('<8sIIII', header, table, b'.rdata', len(body), rva_base, len(body), section_at)
+    return bytes(header) + body
+
+
+def make_elf_program(machine=62, etype=3, cls=2, little=1, payload=None, glibc=('2.34', '2.38'), glibcxx=('3.4.29', '3.4.32')):
+    payload = game_payload() if payload is None else payload
+    head = b'\x7fELF' + bytes([cls, little, 1, 0]) + b'\0' * 8
+    head += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, 64, 0, 0, 64, 56, 0, 0, 0, 0)
+    names = b''.join(b'GLIBC_%s\0' % v.encode() for v in glibc) + b''.join(b'GLIBCXX_%s\0' % v.encode() for v in glibcxx)
+    return head + b'\0' * 64 + names + payload
+
+
+def make_macho(cputype=0x0100000C, filetype=2, payload=None):
+    payload = game_payload() if payload is None else payload
+    return MACHO_MAGIC + struct.pack('<IIIIIII', cputype, 0, filetype, 0, 0, 0, 0) + payload
+
+
+MACHO_MAGIC = rl.MACHO_LE_MAGIC
+
+
+def make_fat(cputypes=(0x01000007, 0x0100000C), payload=None, magic=rl.MACHO_FAT_MAGIC, count=None):
+    payload = game_payload() if payload is None else payload
+    count = len(cputypes) if count is None else count
+    out = magic + struct.pack('>I', count)
+    for c in cputypes:
+        out += struct.pack('>IIIII', c, 0, 4096, len(payload), 12)
+    return out.ljust(4096, b'\0') + payload
+
+
+def put(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(data if isinstance(data, bytes) else data.encode('utf-8'))
+
+
+def run_cli(*argv):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            code = rl.main(list(argv))
+        except SystemExit as e:  # argparse's own exit
+            code = e.code
+    return code, out.getvalue(), err.getvalue()
+
+
+def checked(data, platform, **kw):
+    kw.setdefault('version', VERSION)
+    kw.setdefault('repo', REPO)
+    return rl.check_program_bytes(data, platform, **kw)
+
+
+class Temp(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.mkdtemp(prefix='mp-release-test-')
+        self.addCleanup(shutil.rmtree, self._tmp, True)
+
+    def path(self, *parts):
+        return os.path.join(self._tmp, *parts)
+
+
+# ---- the ties to the C++ -------------------------------------------------------------------------------------------------------------------
+
+def guarded_regions(lines, macro):
+    """The line numbers (1-based) that lie inside `#if <macro>` (positive, up to its #else or #endif) of a C++ file, nesting understood."""
+    inside, stack = set(), []
+    for n, line in enumerate(lines, 1):
+        s = line.strip()
+        if re.match(r'#\s*(if|ifdef|ifndef)\b', s):
+            stack.append(bool(re.fullmatch(r'#\s*if\s+%s(\s*//.*)?' % re.escape(macro), s)))
+        elif re.match(r'#\s*else\b', s) and stack:
+            stack[-1] = False
+        elif re.match(r'#\s*endif\b', s) and stack:
+            stack.pop()
+        elif any(stack):
+            inside.add(n)
+    return inside
+
+
+class TheTiesToTheCpp(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(REPO, 'game', 'main.cpp'), encoding='utf-8') as f:
+            cls.lines = f.read().split('\n')
+        cls.dev = guarded_regions(cls.lines, 'MAGICPORTALS_DEV_TOOLS')
+        cls.perf = guarded_regions(cls.lines, 'MAGICPORTALS_PERF_DIAG')
+
+    def lines_with(self, text):
+        return [n for n, line in enumerate(self.lines, 1) if text in line]
+
+    def test_the_region_finder_is_not_vacuous(self):
+        self.assertGreater(len(self.dev), 100, 'main.cpp has hundreds of lines under #if MAGICPORTALS_DEV_TOOLS')
+        self.assertEqual(guarded_regions(['#if A', 'x', '#else', 'y', '#endif', 'z'], 'A'), {2})
+        self.assertEqual(guarded_regions(['#if !A', 'x', '#endif'], 'A'), set())
+        self.assertEqual(guarded_regions(['#if A', '#ifdef B', 'x', '#endif', 'y', '#endif // A', 'z'], 'A'), {3, 5})
+
+    def test_every_sentinel_is_a_help_line_inside_the_developer_tools_region_and_nowhere_else(self):
+        self.assertGreaterEqual(len(rl.DEV_TOOLS_SENTINELS), 4, 'the check reads the tools from several of their help lines, not from one')
+        self.assertEqual(len(set(rl.DEV_TOOLS_SENTINELS)), len(rl.DEV_TOOLS_SENTINELS))
+        for sentinel in rl.DEV_TOOLS_SENTINELS:
+            text = sentinel.decode('utf-8')
+            where = self.lines_with(text)
+            self.assertEqual(len(where), 1, '%r must be one line of game/main.cpp (it is on %s)' % (text, where))
+            self.assertIn(where[0], self.dev, '%r is not inside #if MAGICPORTALS_DEV_TOOLS: a program made without the tools could carry it' % text)
+            self.assertIn('<<', self.lines[where[0] - 1], 'it must be a line of --help')
+            # and no other source of the game spells it (a program made with the tools OFF links every one of them)
+            for folder, _, files in os.walk(os.path.join(REPO, 'game')):
+                for name in files:
+                    if name.endswith(('.cpp', '.hpp', '.mm', '.in', '.json')) and not (folder == os.path.join(REPO, 'game') and name == 'main.cpp'):
+                        with open(os.path.join(folder, name), encoding='utf-8', errors='replace') as f:
+                            self.assertNotIn(text, f.read(), '%s also spells %r' % (os.path.join(folder, name), text))
+
+    def test_the_sentinels_are_not_the_refusal_sentence_nor_the_saves_entry(self):
+        for sentinel in rl.DEV_TOOLS_SENTINELS:
+            self.assertNotIn(b'developer\'s flag', sentinel)
+            self.assertNotIn(b'keep the medals', sentinel)
+        # --saves keeps its DEV: wording in a program with the tools OFF (docs/packaging.md section 6): its line is outside the region
+        saves = self.lines_with('DEV: keep the medals')
+        self.assertEqual(len(saves), 1)
+        self.assertNotIn(saves[0], self.dev)
+
+    def test_the_performance_marker_is_a_log_line_inside_the_diagnostic_region(self):
+        where = self.lines_with(rl.PERF_DIAG_MARKER.decode())
+        self.assertEqual(len(where), 1, where)
+        self.assertIn(where[0], self.perf)
+        self.assertIs(rl.PERF_DIAG_MARKER, ap.PERF_DIAG_MARKER, 'one definition, the Android packager\'s')
+
+    def test_the_game_markers_are_in_every_build_of_the_program(self):
+        with open(os.path.join(REPO, 'game', 'sim', 'Scratch.hpp'), encoding='utf-8') as f:
+            self.assertIn('kLogFileName = "%s"' % rl.GAME_MARKERS[0].decode(), f.read())
+        text = '\n'.join(self.lines)
+        self.assertIn(rl.GAME_MARKERS[1].decode(), text)
+        self.assertNotIn(self.lines[self.lines_with(rl.GAME_MARKERS[1].decode())[0] - 1].strip()[:1], ('#',))
+        self.assertNotIn(self.lines_with(rl.GAME_MARKERS[1].decode())[0], self.dev, 'the second marker must not be a developer-tools-only line')
+
+    def test_the_list_of_forbidden_strings_is_the_one_the_documentation_names(self):
+        # the list is a decision, and the loops below run over it: this is what pins its contents (docs/packaging.md section 8 names the same seven; the checkout's own path is added at run time)
+        self.assertEqual([b for b, _ in rl.FORBIDDEN_STRINGS], [b'icvet', b'Magic-Portals-Enhanced', b'Magic-Portals-Remake', b'/mnt/', b'/home/', b'/Users/', b'\\Users\\'])
+        with open(os.path.join(REPO, 'docs', 'packaging.md'), encoding='utf-8') as f:
+            doc = f.read()
+        for word in ('`icvet`', '`/mnt/`', '`/home/`', '`/Users/`', '`\\Users\\`', "the checkout's two folder names", "this checkout's own path"):
+            self.assertIn(word, doc)
+
+    def test_every_forbidden_string_says_why_and_the_list_has_no_duplicate(self):
+        names = [b for b, _ in rl.FORBIDDEN_STRINGS]
+        self.assertEqual(len(names), len(set(n.lower() for n in names)))
+        for b, why in rl.FORBIDDEN_STRINGS:
+            self.assertGreater(len(why), 20, b)
+
+    def test_the_windows_form_of_the_version_is_what_the_resource_template_makes(self):
+        self.assertEqual(WINDOWS_VERSION, VERSION + '.0')
+        with open(os.path.join(REPO, 'game', 'windows', 'MagicPortalsWindows.cmake'), encoding='utf-8') as f:
+            self.assertIn('set(MAGICPORTALS_RC_VERSION "${_major}.${_minor}.${_patch}.${_build}")', f.read())
+
+
+# ---- check-program --------------------------------------------------------------------------------------------------------------------------
+
+class TheFormatsAndMachines(Temp):
+    def test_a_clean_windows_program_passes_with_every_fact_said(self):
+        r = checked(make_pe(), rl.WINDOWS)
+        self.assertEqual(r.problems, [])
+        text = '\n'.join(t for _, t in r.facts)
+        for word in ('PE, machine 0x8664 (x64), subsystem 2 (GUI)', 'no baked path', 'developer tools OFF', 'no performance readout', 'it is the game',
+                     'ProductVersion %s' % WINDOWS_VERSION, 'FileVersion %s' % WINDOWS_VERSION):
+            self.assertIn(word, text)
+        self.assertEqual(r.arch, 'x64')
+
+    def test_the_machine_types_each_platform_accepts(self):
+        self.assertEqual(checked(make_pe(), rl.WINDOWS).arch, 'x64')
+        self.assertEqual(checked(make_elf_program(), rl.LINUX).arch, 'x86_64')
+        self.assertEqual(checked(make_macho(0x01000007), rl.MACOS).arch, 'x86_64')
+        self.assertEqual(checked(make_macho(0x0100000C), rl.MACOS).arch, 'arm64')
+        self.assertEqual(checked(make_fat(), rl.MACOS).arch, 'universal')
+        self.assertEqual(checked(make_macho(0x0100000C), rl.IOS).arch, 'arm64')
+        self.assertEqual(checked(make_elf_program(machine=183), rl.ANDROID_LIB).arch, 'arm64')
+        self.assertEqual(checked(make_elf_program(machine=62), rl.ANDROID_LIB).arch, 'x86_64')
+        for platform, data in ((rl.WINDOWS, make_pe()), (rl.LINUX, make_elf_program()), (rl.MACOS, make_fat()), (rl.IOS, make_macho()), (rl.ANDROID_LIB, make_elf_program())):
+            self.assertEqual(checked(data, platform).problems, [], platform)
+
+    def test_a_wrong_machine_is_refused_and_never_allowed_through(self):
+        cases = ((rl.WINDOWS, make_pe(machine=0x14C, plus=False)), (rl.WINDOWS, make_pe(machine=0xAA64)), (rl.WINDOWS, make_pe(plus=False)),
+                 (rl.LINUX, make_elf_program(machine=183)), (rl.LINUX, make_elf_program(machine=3)), (rl.LINUX, make_elf_program(cls=1)),
+                 (rl.LINUX, make_elf_program(little=2)), (rl.LINUX, make_elf_program(etype=1)),
+                 (rl.MACOS, make_macho(cputype=7)), (rl.MACOS, make_macho(filetype=1)), (rl.IOS, make_fat()), (rl.IOS, make_macho(0x01000007)),
+                 (rl.ANDROID_LIB, make_elf_program(etype=2)), (rl.ANDROID_LIB, make_elf_program(machine=3)))
+        for platform, data in cases:
+            r = checked(data, platform)
+            self.assertTrue([t for k, t in r.problems if k == rl.STRUCTURE], (platform, r.problems))
+            self.assertTrue(r.blocking(allow_dev=True), 'a wrong machine or format is never allowed through (%s)' % platform)
+
+    def test_a_file_of_another_format_is_not_the_program(self):
+        for platform in rl.CHECKED_PLATFORMS:
+            for data in (b'', b'plain text', make_elf_program() if platform in (rl.WINDOWS, rl.MACOS, rl.IOS) else make_pe()):
+                r = checked(data, platform)
+                self.assertTrue(r.blocking(allow_dev=True), (platform, data[:8]))
+
+    def test_a_dll_is_not_a_program(self):
+        r = checked(make_pe(dll=True), rl.WINDOWS)
+        self.assertTrue(any('DLL' in t for _, t in r.problems))
+
+    def test_a_java_class_file_is_not_a_fat_mach_o_file(self):
+        data = rl.MACHO_FAT_MAGIC + struct.pack('>I', 52) + b'\0' * 64 + game_payload()
+        r = checked(data, rl.MACOS)
+        self.assertTrue(any('Java class file' in t for _, t in r.problems), r.problems)
+
+    def test_a_truncated_pe_is_a_fact_and_not_a_traceback(self):
+        whole = make_pe()
+        for cut in (0, 1, 0x3E, 0x7F, 0x90, 0x150):
+            r = checked(whole[:cut], rl.WINDOWS)
+            self.assertTrue(r.blocking(True), cut)
+
+    def test_the_pe_reader_finds_the_imports_and_the_delay_loaded_library(self):
+        pe = rl.read_pe(make_pe(imports=('KERNEL32.dll', 'VCRUNTIME140.dll', 'MSVCP140.dll'), delay=('vulkan-1.dll',)))
+        self.assertEqual(pe['imports'], ['KERNEL32.dll', 'VCRUNTIME140.dll', 'MSVCP140.dll'])
+        self.assertEqual(pe['delay_imports'], ['vulkan-1.dll'])
+        self.assertEqual((pe['subsystem'], pe['machine'], pe['plus']), (2, 0x8664, True))
+        self.assertEqual(rl.read_pe(make_pe(subsystem=3))['subsystem'], 3)
+
+    def test_the_gnu_version_names_an_elf_program_asks_for_are_read(self):
+        needs = rl.glibc_needs(make_elf_program(glibc=('2.2.5', '2.34', '2.38'), glibcxx=('3.4', '3.4.32')))
+        self.assertEqual(needs['GLIBC'], (2, 38))
+        self.assertEqual(needs['GLIBCXX'], (3, 4, 32))
+        r = checked(make_elf_program(), rl.LINUX)
+        self.assertTrue(any('GLIBC 2.38' in t for s, t in r.facts if s == 'info'))
+        self.assertEqual(rl.glibc_needs(b'nothing here'), {})
+
+
+class TheForbiddenStrings(Temp):
+    def mutated(self, needle, form='ascii'):
+        piece = needle if form == 'ascii' else needle.decode('latin-1').encode('utf-16-le')
+        return make_pe(payload=game_payload(extra=[b'before ' + piece + b' after']))
+
+    def test_each_forbidden_string_turns_a_clean_program_red_and_is_named(self):
+        for needle, why in rl.FORBIDDEN_STRINGS:
+            for form in ('ascii', 'utf-16'):
+                r = checked(self.mutated(needle, form), rl.WINDOWS)
+                bad = [t for k, t in r.problems if k == rl.DEVELOPER and repr(needle.decode()) in t]
+                self.assertEqual(len(bad), 1, (needle, form, r.problems))
+                self.assertIn(form, bad[0])
+
+    def test_the_search_ignores_case(self):
+        for needle, _ in rl.FORBIDDEN_STRINGS:
+            r = checked(self.mutated(needle.upper()), rl.WINDOWS)
+            self.assertTrue([t for _, t in r.problems if repr(needle.decode()) in t], needle)
+
+    def test_a_program_made_with_baked_paths_is_refused_whatever_the_platform(self):
+        baked = game_payload(extra=[b'/home/someone/Magic-Portals-Enhanced/out/levels', b'C:/Users/someone/Magic-Portals-Enhanced/data'])
+        for platform, data in ((rl.LINUX, make_elf_program(payload=baked)), (rl.ANDROID_LIB, make_elf_program(payload=baked)), (rl.MACOS, make_macho(payload=baked)),
+                               (rl.WINDOWS, make_pe(payload=baked))):
+            r = checked(data, platform)
+            names = ' '.join(t for _, t in r.problems)
+            for word in ("'/home/'", "'Magic-Portals-Enhanced'", "'/Users/'"):
+                self.assertIn(word, names, (platform, word))
+
+    def test_the_checkouts_own_path_and_an_extra_text_are_forbidden_too(self):
+        repo = self.path('somewhere', 'a-long-checkout-name')
+        os.makedirs(repo)
+        data = make_pe(payload=game_payload(extra=[repo.replace('\\', '/').encode()]))
+        r = checked(data, rl.WINDOWS, repo=repo)
+        self.assertTrue(any("this checkout's own path" in t for _, t in r.problems), r.problems)
+        r = checked(make_pe(payload=game_payload(extra=[b'/srv/ci/work/mp'])), rl.WINDOWS, also_forbid=('/srv/ci/work',))
+        self.assertTrue(any('--also-forbid' in t for _, t in r.problems), r.problems)
+        self.assertEqual(checked(make_pe(), rl.WINDOWS, also_forbid=('/srv/ci/work',)).problems, [])
+
+    def test_a_short_repo_path_is_not_a_forbidden_string(self):
+        self.assertEqual(rl.checkout_forbidden('/'), [])
+        self.assertEqual(rl.checkout_forbidden(None), [])
+
+    def test_a_refusal_lists_every_failed_fact_not_the_first(self):
+        data = make_pe(payload=game_payload(dev=True, perf=True, extra=[b'C:\\Users\\someone\\x']), version=version_block(product='9.9.9.9', file='9.9.9.9'))
+        r = checked(data, rl.WINDOWS)
+        kinds = ' | '.join(t for _, t in r.problems)
+        for word in (repr('\\Users\\'), 'developer tools are compiled in', 'PERFORMANCE-DIAGNOSTIC', 'ProductVersion is', 'FileVersion is'):
+            self.assertIn(word, kinds)
+        self.assertGreaterEqual(len(r.problems), 5)
+
+
+class TheDeveloperToolsAndTheReadout(Temp):
+    def test_each_sentinel_alone_is_enough_to_refuse(self):
+        for sentinel in rl.DEV_TOOLS_SENTINELS:
+            r = checked(make_pe(payload=game_payload(extra=[sentinel])), rl.WINDOWS)
+            self.assertEqual(len([t for k, t in r.problems if 'developer tools are compiled in' in t]), 1, sentinel)
+            self.assertIn('1 of the %d' % len(rl.DEV_TOOLS_SENTINELS), '\n'.join(t for _, t in r.problems))
+
+    def test_the_flag_names_and_the_refusal_sentence_do_not_make_a_program_a_developers(self):
+        # a program with the tools OFF holds all of these (to refuse them by name): the check must not read them as the tools
+        r = checked(make_pe(payload=game_payload(extra=[b'--visit-levels', b'--route-trace', b'--burn-dragon', b'--tap', b'--hold'])), rl.WINDOWS)
+        self.assertEqual(r.problems, [])
+
+    def test_the_performance_readout_is_refused_and_its_absence_is_said(self):
+        r = checked(make_elf_program(payload=game_payload(perf=True)), rl.LINUX)
+        self.assertTrue(any('PERFORMANCE-DIAGNOSTIC build' in t for _, t in r.problems))
+        r = checked(make_elf_program(payload=game_payload()), rl.LINUX)
+        self.assertTrue(any('no performance readout' in t for _, t in r.facts))
+
+    def test_a_file_that_is_nothing_at_all_does_not_pass_the_absences(self):
+        r = checked(make_pe(payload=b'nothing of the game'), rl.WINDOWS)
+        self.assertTrue([t for k, t in r.problems if k == rl.STRUCTURE and 'not this game' in t], r.problems)
+        self.assertTrue(r.blocking(allow_dev=True))
+
+
+class TheVulkanLoader(Temp):
+    def test_the_loader_name_is_the_one_the_program_asks_for(self):
+        with open(os.path.join(REPO, 'game', 'sim', 'StartChecks.hpp'), encoding='utf-8') as f:
+            self.assertIn('inline constexpr const char* kVulkanLoaderName = "%s";' % rl.VULKAN_LOADER, f.read())
+
+    def test_a_delay_loaded_loader_passes_and_is_said(self):
+        r = checked(make_pe(delay=('vulkan-1.dll',)), rl.WINDOWS)
+        self.assertEqual(r.problems, [])
+        self.assertTrue(any('delay-loaded' in t for _, t in r.facts))
+
+    def test_a_loader_imported_at_start_is_refused_for_the_dialog_a_player_would_get(self):
+        for name in ('vulkan-1.dll', 'VULKAN-1.DLL'):
+            r = checked(make_pe(imports=('KERNEL32.dll', name), delay=()), rl.WINDOWS)
+            self.assertTrue(any('is loaded when the program starts' in t and 'MAGICPORTALS_WIN_GUI=ON' in t for _, t in r.problems), (name, r.problems))
+            self.assertTrue(r.blocking(False))
+            self.assertFalse([t for k, t in r.problems if k != rl.DEVELOPER], 'a kind-of-build fact: --allow-dev may print it')
+
+    def test_a_program_that_delay_loads_no_loader_is_refused(self):
+        r = checked(make_pe(delay=('something_else.dll',)), rl.WINDOWS)
+        self.assertTrue(any('delay-loads no vulkan-1.dll' in t for _, t in r.problems), r.problems)
+
+
+class TheVersionInformation(Temp):
+    def test_a_program_with_the_one_version_passes(self):
+        self.assertEqual(checked(make_pe(), rl.WINDOWS).problems, [])
+
+    def test_each_field_that_differs_is_red(self):
+        cases = {'ProductVersion': dict(product='0.0.9.0'), 'FileVersion': dict(file='0.0.9.0'),
+                 'the binary version block': dict(quad=(9, 9, 9, 9)), 'ProductVersion is': dict(product=VERSION)}
+        for word, kw in cases.items():
+            r = checked(make_pe(version=version_block(**kw)), rl.WINDOWS)
+            self.assertTrue(any(word in t for _, t in r.problems), (word, r.problems))
+
+    def test_a_program_with_no_version_information_is_refused_for_it(self):
+        r = checked(make_pe(version=b''), rl.WINDOWS)
+        self.assertTrue(any('no version information' in t and 'MAGICPORTALS_WIN_GUI=ON' in t for _, t in r.problems), r.problems)
+
+    def test_a_key_without_a_value_is_a_fact(self):
+        r = checked(make_pe(version=version_block(product=None, fixed=False)), rl.WINDOWS)
+        self.assertTrue(any('has no ProductVersion' in t for _, t in r.problems), r.problems)
+
+    def test_the_scan_reads_the_padding_windows_writes(self):
+        for pad in (0, 2):  # a block is padded to a 32-bit boundary and every field is a whole number of 16-bit units, so the padding is 0 or 2 bytes
+            block = ('FileVersion\0'.encode('utf-16-le') + b'\0' * pad + (WINDOWS_VERSION + '\0').encode('utf-16-le')
+                     + 'ProductVersion\0'.encode('utf-16-le') + b'\0' * pad + (WINDOWS_VERSION + '\0').encode('utf-16-le'))
+            strings, _ = rl.pe_version_strings(b'xx' + block)
+            self.assertEqual(strings, {'ProductVersion': WINDOWS_VERSION, 'FileVersion': WINDOWS_VERSION}, pad)
+
+    def test_a_version_checks_against_the_repository_it_is_given(self):
+        r = checked(make_pe(), rl.WINDOWS, version='1.2.3')
+        self.assertTrue(any('ProductVersion is' in t and '1.2.3' in t for _, t in r.problems))
+        self.assertEqual(checked(make_pe(version=version_block(product='1.2.3.0', file='1.2.3.0', quad=(1, 2, 3, 0))), rl.WINDOWS, version='1.2.3').problems, [])
+
+
+class TheCommandLine(Temp):
+    def test_a_clean_program_exits_0_and_a_developers_exits_1_with_every_reason(self):
+        clean = self.path('clean.exe')
+        put(clean, make_pe())
+        code, out, err = run_cli('check-program', clean, '--platform', 'windows')
+        self.assertEqual(code, 0, err)
+        self.assertIn("a player's build", out)
+        dev = self.path('dev.exe')
+        put(dev, make_pe(payload=game_payload(dev=True, extra=[b'C:/Users/icvet/Desktop/Magic-Portals-Enhanced/out/levels']), version=b''))
+        code, out, err = run_cli('check-program', dev, '--platform', 'windows')
+        self.assertEqual(code, 1)
+        self.assertIn('REFUSED', err)
+        for word in ("'icvet'", "'Magic-Portals-Enhanced'", 'developer tools are compiled in', 'no version information'):
+            self.assertIn(word, err)
+
+    def test_allow_dev_turns_the_refusals_into_warnings_and_not_a_wrong_machine(self):
+        dev = self.path('dev.exe')
+        put(dev, make_pe(payload=game_payload(dev=True), version=b''))
+        code, out, err = run_cli('check-program', dev, '--platform', 'windows', '--allow-dev')
+        self.assertEqual(code, 0, err)
+        self.assertIn('WARNING (--allow-dev)', out)
+        self.assertIn('DEVELOPER BUILD', out)
+        wrong = self.path('wrong.exe')
+        put(wrong, make_pe(machine=0xAA64, payload=game_payload(dev=True)))
+        code, out, err = run_cli('check-program', wrong, '--platform', 'windows', '--allow-dev')
+        self.assertEqual(code, 1)
+
+    def test_help_says_what_each_subcommand_refuses(self):
+        for argv, words in ((['check-program'], ('forbidden string', 'developer tools', 'machine')), (['sums'], ('developer', '-dev')), (['assemble'], ('refuses',)),
+                            (['android'], ('refuses', 'debug'))):
+            code, out, err = run_cli(*(argv + ['--help']))
+            self.assertEqual(code, 0)
+            for w in words:
+                self.assertIn(w, out, (argv, w))
+
+    def test_not_a_file_and_an_unknown_platform_are_refused(self):
+        self.assertEqual(run_cli('check-program', self.path('missing.exe'), '--platform', 'windows')[0], 2)
+        code, out, err = run_cli('check-program', self.path('x'), '--platform', 'beos')
+        self.assertEqual(code, 2)
+
+
+# ---- the archives of Windows and Linux ------------------------------------------------------------------------------------------------------
+
+import test_package as tp  # noqa: E402  (the miniature world and its content package: invented names, no file of the original)
+
+NOTICES = {'LICENSE': b'An invented licence text, for a test.\nLine two.\n', 'NOTICE.md': b'# An invented notice\n\nNothing of anyone.\n'}
+OTHER_VERSION = '3.4.5'  # the archive follows the repository it is given, not this one
+
+
+def other_version_block():
+    return version_block(product=OTHER_VERSION + '.0', file=OTHER_VERSION + '.0', quad=(3, 4, 5, 0))
+
+
+def staging_leftovers():
+    return sorted(n for n in os.listdir(tempfile.gettempdir()) if n.startswith(('mp-release-stage-', 'mp-release-verify-')))
+
+
+class ArchiveCase(Temp):
+    """A synthetic repository (the miniature world, a CMakeLists.txt that states another version, the engine's shaders), its content package and invented notices."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.world = tempfile.mkdtemp(prefix='mp-release-world-')
+        cls.repo, cls.ref = tp.build_world(cls.world)
+        put(os.path.join(cls.repo, 'CMakeLists.txt'), 'project(MagicPortals VERSION %s LANGUAGES C CXX)\n' % OTHER_VERSION)
+        cls.content = os.path.join(cls.repo, 'out', 'dist', 'content')
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = pk.main(['content', '--repo', cls.repo, '--reference', cls.ref, '--out', cls.content])
+        assert code == 0
+        cls.notices = os.path.join(cls.world, 'notices')
+        for n, d in NOTICES.items():
+            put(os.path.join(cls.notices, n), d)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.world, True)
+
+    def setUp(self):
+        super().setUp()
+        self.out = self.path('release')
+        self.before = staging_leftovers()
+
+    def program(self, name, data):
+        path = self.path('programs', name)
+        put(path, data)
+        return path
+
+    def assemble(self, platform, program, *extra, content=True, out=None):
+        argv = ['assemble', '--platform', platform, '--program', program, '--out', out or self.out, '--repo', self.repo, '--notices', self.notices]
+        argv += ['--content', self.content] if content else ['--no-data']
+        return run_cli(*(argv + list(extra)))
+
+    def windows_program(self, **kw):
+        kw.setdefault('version', other_version_block())
+        return self.program('MagicPortals.exe', make_pe(**kw))
+
+    def linux_program(self, **kw):
+        return self.program('MagicPortals', make_elf_program(**kw))
+
+    def assert_nothing_left(self):
+        self.assertFalse(os.path.exists(self.out) and [n for n in os.listdir(self.out) if n != 'SHA256SUMS.txt'], 'no archive and no .part where the refusal happened')
+        self.assertEqual(staging_leftovers(), self.before, 'no staging folder is left in the temporary folder')
+
+    def tree_bytes(self, folder):
+        got = {}
+        for d, _, files in os.walk(folder):
+            for n in files:
+                with open(os.path.join(d, n), 'rb') as f:
+                    got[os.path.relpath(os.path.join(d, n), folder)] = f.read()
+        return got
+
+
+class TheWindowsArchive(ArchiveCase):
+    def test_the_layout_the_names_and_the_modes(self):
+        program = self.windows_program()
+        code, out, err = self.assemble('windows', program)
+        self.assertEqual(code, 0, err)
+        name = 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION
+        archive = os.path.join(self.out, name)
+        self.assertTrue(os.path.isfile(archive), os.listdir(self.out))
+        files = rl.read_archive(archive)
+        top = name[:-len('.zip')] + '/'
+        self.assertTrue(all(n.startswith(top) for n in files))
+        rel = sorted(n[len(top):] for n in files)
+        self.assertIn('MagicPortals.exe', rel)
+        self.assertEqual([n for n in rel if n.startswith('assets/')], ['assets/shaders/one.spv', 'assets/shaders/two.spv'])
+        for n in ('PLAYING.txt', 'LICENSE', 'NOTICE.md', 'content/manifest.json', 'content/SHA256SUMS.txt', 'content/levels/lvl_a.tscn'):
+            self.assertIn(n, rel)
+        self.assertNotIn('shell.json', rel, 'the layout proof of package.py shell is not part of an archive')
+        self.assertFalse([n for n in rel if n.endswith(('.vert', '.frag', '.part'))])
+        modes = {n[len(top):]: m for n, (_, _, m) in files.items()}
+        self.assertEqual(modes['MagicPortals.exe'], 0o755)
+        self.assertEqual({m for n, m in modes.items() if n != 'MagicPortals.exe'}, {0o644}, 'every other file is 0644, by rule')
+        # the notices are the ones given, byte for byte
+        with zipfile.ZipFile(archive) as z:
+            self.assertEqual(z.namelist(), sorted(z.namelist()), 'sorted entries')
+            for n, d in NOTICES.items():
+                self.assertEqual(z.read(top + n), d)
+            self.assertEqual({i.date_time for i in z.infolist()}, {ap.ZIP_DATE})
+            self.assertEqual({i.create_system for i in z.infolist()}, {3})
+        self.assertIn('archive: ' + archive, out)
+        self.assertIn("a player's build", out)
+        self.assertEqual(rl.verify_sums(self.out), [])
+        with open(os.path.join(self.out, 'SHA256SUMS.txt'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), '%s  %s\n' % (pk.sha256_of(archive), name))
+
+    def test_the_program_keeps_the_name_the_archive_gives_it_whatever_the_input_was_called(self):
+        program = self.program('MagicPortals-built-on-a-friday.exe', make_pe(version=other_version_block()))
+        self.assertEqual(self.assemble('windows', program)[0], 0)
+        files = rl.read_archive(os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION))
+        self.assertTrue([n for n in files if n.endswith('/MagicPortals.exe')])
+        self.assertFalse([n for n in files if 'friday' in n])
+
+    def test_the_content_inside_is_the_package_and_passes_package_verify(self):
+        self.assertEqual(self.assemble('windows', self.windows_program())[0], 0)
+        archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION)
+        scratch = self.path('unpacked')
+        top = 'MagicPortals-%s-windows-x64/' % OTHER_VERSION
+        self.assertGreater(rl.extract_prefix(archive, top + 'content/', scratch), 10)
+        self.assertEqual(pk.verify_content(scratch)['problems'], [])
+        self.assertEqual(self.tree_bytes(scratch), self.tree_bytes(self.content), 'the package inside is the package given, byte for byte')
+
+    def test_the_inputs_are_not_changed(self):
+        program = self.windows_program()
+        with open(program, 'rb') as f:
+            program_before = f.read()
+        content_before = self.tree_bytes(self.content)
+        self.assertEqual(self.assemble('windows', program)[0], 0)
+        self.assertEqual(self.tree_bytes(self.content), content_before)
+        with open(program, 'rb') as f:
+            self.assertEqual(f.read(), program_before)
+
+    def test_the_same_inputs_give_the_same_bytes_from_other_folders_at_other_times(self):
+        program = self.windows_program()
+        self.assertEqual(self.assemble('windows', program, out=self.path('first'))[0], 0)
+        # touch every source: a time or a path that leaked into the archive would show
+        for folder in (self.content, os.path.dirname(program), self.notices):
+            for d, _, files in os.walk(folder):
+                for n in files:
+                    os.utime(os.path.join(d, n), (1_700_000_000, 1_700_000_000))
+        self.assertEqual(self.assemble('windows', program, out=self.path('second', 'deeper', 'folder'))[0], 0)
+        name = 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION
+        a, b = os.path.join(self.path('first'), name), os.path.join(self.path('second', 'deeper', 'folder'), name)
+        self.assertEqual(pk.sha256_of(a), pk.sha256_of(b))
+        with open(a, 'rb') as fa, open(b, 'rb') as fb:
+            self.assertEqual(fa.read(), fb.read())
+        self.assertEqual(self.read_text(os.path.join(self.path('first'), 'SHA256SUMS.txt')), self.read_text(os.path.join(self.path('second', 'deeper', 'folder'), 'SHA256SUMS.txt')))
+
+    def read_text(self, path):
+        with open(path, encoding='utf-8') as f:
+            return f.read()
+
+    def test_the_version_in_the_name_is_the_repositorys(self):
+        put(os.path.join(self.repo, 'CMakeLists.txt'), 'project(MagicPortals VERSION 5.6.7 LANGUAGES C CXX)\n')
+        try:
+            program = self.windows_program(version=version_block(product='5.6.7.0', file='5.6.7.0', quad=(5, 6, 7, 0)))
+            self.assertEqual(self.assemble('windows', program)[0], 0)
+            self.assertTrue(os.path.isfile(os.path.join(self.out, 'MagicPortals-5.6.7-windows-x64.zip')))
+            # and a program that carries the other version is refused for it
+            self.assertEqual(self.assemble('windows', self.windows_program(), out=self.path('again'))[0], 2)
+        finally:
+            put(os.path.join(self.repo, 'CMakeLists.txt'), 'project(MagicPortals VERSION %s LANGUAGES C CXX)\n' % OTHER_VERSION)
+
+    def test_a_release_beside_a_developers_smoke_archive_has_sums_without_it(self):
+        dev = self.windows_program(payload=game_payload(dev=True), version=b'')
+        self.assertEqual(self.assemble('windows', dev, '--allow-dev')[0], 0)
+        code, out, err = self.assemble('windows', self.windows_program())
+        self.assertEqual(code, 0, err)
+        with open(os.path.join(self.out, 'SHA256SUMS.txt'), encoding='utf-8') as f:
+            text = f.read()
+        self.assertIn('MagicPortals-%s-windows-x64.zip' % OTHER_VERSION, text)
+        self.assertNotIn('-dev', text)
+        self.assertEqual(rl.verify_sums(self.out), [])
+
+    def test_no_data_makes_an_archive_without_the_game_and_says_so(self):
+        code, out, err = self.assemble('windows', self.windows_program(), content=False)
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64-nodata.zip' % OTHER_VERSION)
+        files = rl.read_archive(archive)
+        self.assertFalse([n for n in files if '/content/' in n])
+        with zipfile.ZipFile(archive) as z:
+            text = z.read([n for n in files if n.endswith('PLAYING.txt')][0]).decode('utf-8')
+        self.assertIn('NO GAME DATA', text)
+        self.assertIn('none (--no-data)', out)
+
+    def test_exactly_one_of_content_and_no_data(self):
+        program = self.windows_program()
+        self.assertEqual(run_cli('assemble', '--platform', 'windows', '--program', program, '--out', self.out, '--repo', self.repo, '--notices', self.notices)[0], 2)
+        code, out, err = run_cli('assemble', '--platform', 'windows', '--program', program, '--content', self.content, '--no-data', '--out', self.out, '--repo', self.repo,
+                                 '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('exactly one', err)
+        self.assert_nothing_left()
+
+    def test_playing_text_says_what_to_run_the_driver_the_saves_and_the_runtime(self):
+        self.assertEqual(self.assemble('windows', self.windows_program())[0], 0)
+        archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION)
+        with zipfile.ZipFile(archive) as z:
+            text = z.read('MagicPortals-%s-windows-x64/PLAYING.txt' % OTHER_VERSION).decode('utf-8')
+        for word in ('Start MagicPortals.exe', 'Vulkan 1.2', 'No Vulkan graphics driver was found', 'vulkan-1.dll', '%APPDATA%\\Magic Portals', '%TEMP%\\magicportals.log',
+                     'magicportals.prev.log', 'does NOT carry it', 'VCRUNTIME140.dll', 'Media Feature Pack', 'has not been seen on a PC without a driver',
+                     'were not seen on a PC that lacked', 'LICENSE and NOTICE.md', OTHER_VERSION):
+            self.assertIn(word, text)
+
+    def test_the_text_never_says_why_the_original_may_be_shipped(self):
+        # the packager and its texts say what an archive holds, not why one may hold it (the owner's line)
+        texts = [rl.playing_windows('1.0.0', 'x64', [], True, False), rl.playing_windows('1.0.0', 'x64', ['MSVCP140.dll'], False, True),
+                 rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38)}, True, False), rl.playing_linux('1.0.0', 'x86_64', {}, False, False),
+                 rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True),
+                 rl.intro_text(rl.MACOS, '1.0.0', 'universal', False), rl.intro_text(rl.IOS, '1.0.0', 'arm64', True), rl.developer_note(rl.Report('windows'))]
+        for text in texts:
+            # 'may leave' and 'may travel': a doubt about the right to ship is not written into a file a player downloads either (docs/apple.md section 7 is where that question is kept)
+            for word in ('permission', 'permitted', 'grant', 'rights holder', 'allowed to ship', 'may be shipped', 'may ship', 'asantee', 'original game', 'may leave',
+                         'may travel', 'whether the data'):
+                self.assertNotIn(word, text.lower(), word)
+        # the tool's own source says what an archive holds, never why one may hold it ("permissions" there is a file's mode)
+        with open(os.path.join(HERE, 'release.py'), encoding='utf-8') as f:
+            source = f.read().lower()
+        for phrase in ('permission to', 'permission from', 'permitted to', 'granted', 'rights holder', 'allowed to ship', 'may be shipped', 'may ship', 'asantee', 'original game',
+                       'may leave', 'may travel'):
+            self.assertNotIn(phrase, source, phrase)
+        # what the Apple texts DO say of the owner's decision: the route, and nothing about a right
+        for text in (rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True)):
+            self.assertIn("Which route", text)
+            self.assertIn("is the owner's decision", text)
+
+    def test_the_texts_say_only_what_is_read_from_the_program_or_a_history_of_runs(self):
+        # an archive's text must be true of ANY program it is made for: how a build was made (its distribution, its compiler) is not read from the program, so it is not said
+        texts = [rl.playing_windows('1.0.0', 'x64', [], True, False), rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38), 'GLIBCXX': (3, 4, 32)}, True, False),
+                 rl.playing_linux('1.0.0', 'x86_64', {}, True, False), rl.intro_text(rl.MACOS, '1.0.0', 'universal', False), rl.intro_text(rl.IOS, '1.0.0', 'arm64', False),
+                 rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True)]
+        for text in texts:
+            for phrase in ('Ubuntu 24.04', 'g++', 'GCC', 'built on', 'was built', 'were built', 'built with', 'notarised and not signed'):
+                self.assertNotIn(phrase, text)
+        self.assertIn('read from the program', texts[1])
+        self.assertIn('has been run on Windows 11', texts[0])
+
+    def test_a_dll_beside_the_program_is_named_in_the_text_and_checked(self):
+        redist = self.path('redist')
+        for n in ('MSVCP140.dll', 'VCRUNTIME140.dll', 'vcruntime140_1.dll'):
+            put(os.path.join(redist, n), make_pe(dll=True, imports=('KERNEL32.dll',), delay=(), payload=b'a runtime'))
+        program = self.windows_program(imports=('KERNEL32.dll', 'MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION)
+        top = 'MagicPortals-%s-windows-x64/' % OTHER_VERSION
+        files = rl.read_archive(archive)
+        for n in ('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll'):
+            self.assertIn(top + n, files, 'copied under the name the program imports')
+        with zipfile.ZipFile(archive) as z:
+            text = z.read(top + 'PLAYING.txt').decode('utf-8')
+        self.assertIn('this folder carries the runtime DLLs', text)
+        self.assertNotIn('does NOT carry it', text)
+        self.assertIn('VCRUNTIME140_1.dll', out)
+
+    def test_the_runtime_folder_is_refused_when_a_dll_is_missing_or_wrong(self):
+        program = self.windows_program(imports=('KERNEL32.dll', 'MSVCP140.dll', 'VCRUNTIME140.dll'))
+        redist = self.path('redist')
+        put(os.path.join(redist, 'MSVCP140.dll'), make_pe(dll=True, imports=(), delay=(), payload=b'x'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 2)
+        self.assertIn('VCRUNTIME140.dll is imported by the program and is not in', err)
+        self.assert_nothing_left()
+        put(os.path.join(redist, 'VCRUNTIME140.dll'), make_pe(machine=0xAA64, dll=True, imports=(), delay=(), payload=b'x'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 2)
+        self.assertIn('VCRUNTIME140.dll is for machine 0xaa64', err)
+        put(os.path.join(redist, 'VCRUNTIME140.dll'), make_pe(dll=False, imports=(), delay=(), payload=b'x'))
+        self.assertIn('is a program, not a DLL', self.assemble('windows', program, '--vc-redist', redist)[2])
+        put(os.path.join(redist, 'VCRUNTIME140.dll'), b'not a PE file at all')
+        self.assertIn('is not a PE file', self.assemble('windows', program, '--vc-redist', redist)[2])
+        self.assert_nothing_left()
+
+    def test_a_runtime_folder_for_a_program_with_a_static_runtime_or_for_linux_is_refused(self):
+        redist = self.path('redist')
+        os.makedirs(redist)
+        code, out, err = self.assemble('windows', self.windows_program(imports=('KERNEL32.dll',)), '--vc-redist', redist)
+        self.assertEqual(code, 2)
+        self.assertIn('imports no Visual C++ runtime DLL', err)
+        code, out, err = self.assemble('linux', self.linux_program(), '--vc-redist', redist)
+        self.assertEqual(code, 2)
+        self.assertIn('Windows matter', err)
+
+    def test_the_runtime_dll_names(self):
+        for good in ('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'vcruntime140.DLL', 'MSVCP140_1.dll', 'CONCRT140.dll', 'VCOMP140.DLL',
+                     # the members of the redistributable that carry a word after the number (a C++20 program may import them)
+                     'msvcp140_atomic_wait.dll', 'MSVCP140_CODECVT_IDS.dll', 'msvcp140_2.dll', 'vcruntime140_threads.dll', 'VCRUNTIME140_1.dll'):
+            self.assertTrue(rl.RUNTIME_DLL.match(good), good)
+        for bad in ('KERNEL32.dll', 'api-ms-win-crt-runtime-l1-1-0.dll', 'vulkan-1.dll', 'MFPlat.DLL', 'MSVCRT.dll', 'UCRTBASE.dll', 'msvcp_win.dll', 'MSVCP.dll', 'msvcp140_atomic_wait.exe',
+                    'msvcp140.dll.bak', 'my_msvcp140.dll'):
+            self.assertFalse(rl.RUNTIME_DLL.match(bad), bad)
+
+    def test_a_runtime_dll_with_a_word_after_its_number_is_copied_named_and_checked(self):
+        # msvcp140_atomic_wait.dll is in Microsoft's redistributable and a program that uses std::atomic::wait imports it: packaged without it, PLAYING.txt would say
+        # that the folder carries the runtime the program loads and the player's PC would show Windows' own message
+        redist = self.path('redist')
+        names = ('MSVCP140.dll', 'msvcp140_atomic_wait.dll', 'VCRUNTIME140.dll')
+        program = self.windows_program(imports=('KERNEL32.dll', 'msvcp140_atomic_wait.dll', 'MSVCP140.dll', 'VCRUNTIME140.dll'))
+        for n in names[:2]:
+            put(os.path.join(redist, n), make_pe(dll=True, imports=('KERNEL32.dll',), delay=(), payload=b'a runtime ' + n.encode()))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 2, 'a runtime DLL the program imports and the folder lacks is refused')
+        self.assertIn('VCRUNTIME140.dll is imported by the program and is not in', err)
+        self.assert_nothing_left()
+        put(os.path.join(redist, 'VCRUNTIME140.dll'), make_pe(dll=True, imports=('KERNEL32.dll',), delay=(), payload=b'a runtime'))
+        os.remove(os.path.join(redist, 'msvcp140_atomic_wait.dll'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 2)
+        self.assertIn('msvcp140_atomic_wait.dll is imported by the program and is not in', err, 'the new name is looked for, and named when missing')
+        self.assert_nothing_left()
+        put(os.path.join(redist, 'msvcp140_atomic_wait.dll'), make_pe(dll=True, imports=('KERNEL32.dll',), delay=(), payload=b'an atomic wait'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION)
+        top = 'MagicPortals-%s-windows-x64/' % OTHER_VERSION
+        files = rl.read_archive(archive)
+        for n in names:
+            self.assertIn(top + n, files, '%s is in the archive' % n)
+        with zipfile.ZipFile(archive) as z:
+            text = z.read(top + 'PLAYING.txt').decode('utf-8')
+        self.assertIn('msvcp140_atomic_wait.dll', text, 'and PLAYING.txt names it')
+
+
+class TheLinuxArchive(ArchiveCase):
+    def archive(self):
+        return os.path.join(self.out, 'MagicPortals-%s-linux-x86_64.tar.gz' % OTHER_VERSION)
+
+    def test_the_layout_the_modes_and_no_owner(self):
+        code, out, err = self.assemble('linux', self.linux_program())
+        self.assertEqual(code, 0, err)
+        top = 'MagicPortals-%s-linux-x86_64/' % OTHER_VERSION
+        with tarfile.open(self.archive(), 'r:gz') as tf:
+            members = tf.getmembers()
+            names = [m.name for m in members]
+            self.assertEqual(names[0], top.rstrip('/'), 'the top folder comes first')
+            self.assertEqual([m.name for m in members if m.isdir()], sorted(m.name for m in members if m.isdir()))
+            for m in members:
+                self.assertEqual((m.uid, m.gid, m.uname, m.gname, m.mtime), (0, 0, '', '', pk.FIXED_TIME), m.name)
+                self.assertEqual(m.mode, 0o755 if (m.isdir() or m.name == top + 'MagicPortals') else 0o644, m.name)
+            self.assertIn(top + 'MagicPortals', names)
+            self.assertIn(top + 'assets/shaders/one.spv', names)
+            self.assertIn(top + 'content/manifest.json', names)
+            self.assertIn(top + 'LICENSE', names)
+            self.assertFalse([n for n in names if n.endswith('shell.json')])
+        with open(self.archive(), 'rb') as f:
+            header = f.read(10)
+        self.assertEqual(header[:4], b'\x1f\x8b\x08\x00', 'gzip, with no file-name flag')
+        self.assertEqual(header[4:8], b'\0\0\0\0', 'and no time in the gzip header')
+
+    def test_the_same_bytes_from_other_folders_at_other_times(self):
+        program = self.linux_program()
+        self.assertEqual(self.assemble('linux', program, out=self.path('first'))[0], 0)
+        for d, _, files in os.walk(self.content):
+            for n in files:
+                os.utime(os.path.join(d, n), (1_650_000_000, 1_650_000_000))
+        os.utime(program, (1_650_000_000, 1_650_000_000))
+        self.assertEqual(self.assemble('linux', program, out=self.path('x', 'y'))[0], 0)
+        name = 'MagicPortals-%s-linux-x86_64.tar.gz' % OTHER_VERSION
+        with open(os.path.join(self.path('first'), name), 'rb') as fa, open(os.path.join(self.path('x', 'y'), name), 'rb') as fb:
+            self.assertEqual(fa.read(), fb.read())
+
+    def test_playing_text_names_the_glibc_the_program_asks_for_and_the_executable_bit(self):
+        self.assertEqual(self.assemble('linux', self.linux_program(glibc=('2.34', '2.38'), glibcxx=('3.4.32',)))[0], 0)
+        with tarfile.open(self.archive(), 'r:gz') as tf:
+            text = tf.extractfile('MagicPortals-%s-linux-x86_64/PLAYING.txt' % OTHER_VERSION).read().decode('utf-8')
+        for word in ('tar xzf', 'chmod +x MagicPortals', 'glibc 2.38 or newer', 'GLIBCXX 3.4.32', 'libvulkan.so.1', 'libasound.so.2', '~/.local/share/Magic Portals',
+                     '$XDG_DATA_HOME', 'magicportals.log', 'GLFW could not report the required Vulkan instance extensions', 'VK_DRIVER_FILES', 'not on a PC without one', 'X11'):
+            self.assertIn(word, text)
+
+    def test_a_windows_program_is_not_a_linux_archive(self):
+        code, out, err = self.assemble('linux', self.windows_program())
+        self.assertEqual(code, 2)
+        self.assertIn('not the program of this platform (linux)', err)
+        self.assert_nothing_left()
+
+
+class TheRefusalsOfAnArchive(ArchiveCase):
+    def test_a_developers_program_is_refused_with_every_reason_and_nothing_is_written(self):
+        program = self.windows_program(payload=game_payload(dev=True, extra=[b'C:/Users/icvet/Desktop/Magic-Portals-Enhanced/out/levels']), version=b'')
+        code, out, err = self.assemble('windows', program)
+        self.assertEqual(code, 2)
+        for word in ('check-program refuses', "'icvet'", 'developer tools are compiled in', 'no version information'):
+            self.assertIn(word, err)
+        self.assert_nothing_left()
+
+    def test_allow_dev_makes_a_dev_archive_that_says_so_everywhere(self):
+        program = self.windows_program(payload=game_payload(dev=True), version=b'')
+        code, out, err = self.assemble('windows', program, '--allow-dev')
+        self.assertEqual(code, 0, err)
+        name = 'MagicPortals-%s-windows-x64-dev.zip' % OTHER_VERSION
+        archive = os.path.join(self.out, name)
+        self.assertTrue(os.path.isfile(archive))
+        top = name[:-4] + '/'
+        files = rl.read_archive(archive)
+        self.assertIn(top + 'DEVELOPER BUILD.txt', files)
+        with zipfile.ZipFile(archive) as z:
+            self.assertIn('DEVELOPER BUILD', z.read(top + 'DEVELOPER BUILD.txt').decode())
+            self.assertIn('developer tools are compiled in', z.read(top + 'DEVELOPER BUILD.txt').decode())
+            self.assertTrue(z.read(top + 'PLAYING.txt').decode().startswith('*** THIS IS A DEVELOPER BUILD'))
+        self.assertIn('DEVELOPER BUILD', out)
+        self.assertFalse(os.path.exists(os.path.join(self.out, 'SHA256SUMS.txt')), 'a developer\'s archive is not in a release folder\'s sums')
+
+    def test_a_wrong_machine_is_refused_even_with_allow_dev(self):
+        code, out, err = self.assemble('windows', self.windows_program(machine=0xAA64), '--allow-dev')
+        self.assertEqual(code, 2)
+        self.assert_nothing_left()
+
+    def test_content_that_fails_verify_is_refused(self):
+        copy = self.path('content-copy')
+        shutil.copytree(self.content, copy)
+        with open(os.path.join(copy, 'levels', 'lvl_b.tscn'), 'ab') as f:
+            f.write(b'tampered')
+        code, out, err = run_cli('assemble', '--platform', 'windows', '--program', self.windows_program(), '--content', copy, '--out', self.out, '--repo', self.repo,
+                                 '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('fails package.py verify', err)
+        self.assertIn('size differs: levels/lvl_b.tscn', err)
+        self.assert_nothing_left()
+
+    def test_a_content_package_with_a_file_outside_its_manifest_is_refused(self):
+        copy = self.path('content-copy')
+        shutil.copytree(self.content, copy)
+        put(os.path.join(copy, 'original', 'sprites', 'stray_a.png'), b'a stray file')
+        code, out, err = run_cli('assemble', '--platform', 'linux', '--program', self.linux_program(), '--content', copy, '--out', self.out, '--repo', self.repo,
+                                 '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('on disk but not in the manifest: original/sprites/stray_a.png', err)
+        self.assert_nothing_left()
+
+    def test_a_missing_or_empty_notice_is_refused_naming_it(self):
+        for missing in NOTICES:
+            folder = self.path('notices-' + missing)
+            for n, d in NOTICES.items():
+                if n != missing:
+                    put(os.path.join(folder, n), d)
+            code, out, err = run_cli('assemble', '--platform', 'windows', '--program', self.windows_program(), '--content', self.content, '--out', self.out, '--repo', self.repo,
+                                     '--notices', folder)
+            self.assertEqual(code, 2)
+            self.assertIn('no ' + missing, err)
+            self.assertIn('planning step 210', err)
+        empty = self.path('notices-empty')
+        put(os.path.join(empty, 'LICENSE'), b'  \n')
+        put(os.path.join(empty, 'NOTICE.md'), NOTICES['NOTICE.md'])
+        code, out, err = run_cli('assemble', '--platform', 'windows', '--program', self.windows_program(), '--content', self.content, '--out', self.out, '--repo', self.repo,
+                                 '--notices', empty)
+        self.assertEqual(code, 2)
+        self.assertIn('LICENSE (it is empty)', err)
+        self.assert_nothing_left()
+
+    def test_the_repository_root_is_where_the_notices_are_looked_for_by_default(self):
+        code, out, err = run_cli('assemble', '--platform', 'windows', '--program', self.windows_program(), '--content', self.content, '--out', self.out, '--repo', self.repo)
+        self.assertEqual(code, 2)
+        self.assertIn('has no LICENSE and no NOTICE.md', err)
+        self.assertIn(self.repo, err)
+        for n, d in NOTICES.items():
+            put(os.path.join(self.repo, n), d)
+        try:
+            code, out, err = run_cli('assemble', '--platform', 'windows', '--program', self.windows_program(), '--content', self.content, '--out', self.out, '--repo', self.repo)
+            self.assertEqual(code, 0, err)
+        finally:
+            for n in NOTICES:
+                os.remove(os.path.join(self.repo, n))
+
+    def test_an_output_in_the_tracked_tree_or_in_a_folder_it_reads_is_refused(self):
+        program = self.windows_program()
+        for bad in (os.path.join(self.repo, 'tools', 'release'), os.path.join(self.repo, 'data'), self.repo, os.path.join(self.content, 'inside'), self.content):
+            code, out, err = self.assemble('windows', program, out=bad)
+            self.assertEqual(code, 2, bad)
+            self.assertFalse([n for d, _, files in os.walk(bad) for n in files if n.startswith('MagicPortals-')], bad)
+        self.assertFalse([n for n in os.listdir(os.path.join(self.repo, 'tools')) if n.startswith('MagicPortals')])
+        under_out = os.path.join(self.repo, 'out', 'release')
+        try:
+            self.assertEqual(self.assemble('windows', program, out=under_out)[0], 0, 'under the gitignored out/ is fine')
+        finally:
+            shutil.rmtree(under_out, True)
+
+    def test_an_archive_that_exists_is_never_written_over(self):
+        program = self.windows_program()
+        self.assertEqual(self.assemble('windows', program)[0], 0)
+        archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION)
+        before = pk.sha256_of(archive)
+        code, out, err = self.assemble('windows', program)
+        self.assertEqual(code, 2)
+        self.assertIn('already exists', err)
+        self.assertEqual(pk.sha256_of(archive), before)
+        self.assertEqual(sorted(os.listdir(self.out)), ['MagicPortals-%s-windows-x64.zip' % OTHER_VERSION, 'SHA256SUMS.txt'])
+
+    def test_a_linked_program_is_refused(self):
+        program = self.windows_program()
+        link = self.path('programs', 'linked.exe')
+        try:
+            os.symlink(program, link)
+        except (OSError, NotImplementedError):
+            self.skipTest('this system will not make a symbolic link for the test: the refusal of a linked program is NOT checked on it')
+        code, out, err = self.assemble('windows', link)
+        self.assertEqual(code, 2)
+        self.assertIn('not a plain file', err)
+
+    def test_platform_and_input_mismatches_are_refused_by_name(self):
+        code, out, err = run_cli('assemble', '--platform', 'windows', '--shell', self.path('x.zip'), '--out', self.out, '--repo', self.repo, '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('--shell is for macos and ios', err)
+        code, out, err = run_cli('assemble', '--platform', 'windows', '--content', self.content, '--out', self.out, '--repo', self.repo, '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('--program', err)
+        code, out, err = run_cli('assemble', '--platform', 'macos', '--program', self.windows_program(), '--out', self.out, '--repo', self.repo)
+        self.assertEqual(code, 2)
+        self.assertIn('windows and linux', err)
+
+    def test_the_release_is_refused_when_the_shaders_are_missing(self):
+        code, out, err = self.assemble('windows', self.windows_program(), '--shaders', self.path('no-shaders'))
+        self.assertEqual(code, 2)
+        self.assert_nothing_left()
+
+    def test_the_reread_catches_an_archive_that_is_not_what_was_meant(self):
+        original = rl.write_zip
+
+        def short(path, entries, **kw):
+            original(path, entries[:-1], **kw)  # the last entry is lost on the way to the disk
+        rl.write_zip = short
+        try:
+            code, out, err = self.assemble('windows', self.windows_program())
+        finally:
+            rl.write_zip = original
+        self.assertEqual(code, 2)
+        self.assertIn('fails its own re-read', err)
+        self.assertIn('missing from the archive', err)
+        self.assert_nothing_left()
+
+    def test_a_failure_after_staging_leaves_no_staging_folder_and_no_part_file(self):
+        original = rl.write_zip
+
+        def broken(path, entries, **kw):
+            original(path, entries, **kw)
+            raise ReleaseErrorForTest('the disk filled up')
+        rl.write_zip = broken
+        try:
+            with self.assertRaises(ReleaseErrorForTest):
+                rl.assemble_desktop(rl.build_parser().parse_args(['assemble', '--platform', 'windows', '--program', self.windows_program(), '--content', self.content,
+                                                                  '--out', self.out, '--repo', self.repo, '--notices', self.notices]))
+        finally:
+            rl.write_zip = original
+        self.assertEqual(staging_leftovers(), self.before)
+        self.assertEqual(os.listdir(self.out), [], 'neither the .part file nor a finished archive')
+
+
+class ReleaseErrorForTest(Exception):
+    pass
+
+
+class TheNamesAndTheSums(Temp):
+    def test_archive_names(self):
+        self.assertEqual(rl.archive_name('1.2.3', 'windows', 'x64'), 'MagicPortals-1.2.3-windows-x64.zip')
+        self.assertEqual(rl.archive_name('1.2.3', 'linux', 'x86_64', ext='.tar.gz'), 'MagicPortals-1.2.3-linux-x86_64.tar.gz')
+        self.assertEqual(rl.archive_name('1.2.3', 'linux', 'x86_64', 'nodata', True, '.tar.gz'), 'MagicPortals-1.2.3-linux-x86_64-nodata-dev.tar.gz')
+        self.assertEqual(rl.archive_name('1.2.3', 'android', None, ext='.apk'), 'MagicPortals-1.2.3-android.apk')
+        for name in ('MagicPortals-1.2.3-windows-x64.zip', 'MagicPortals-1.2.3-linux-x86_64.tar.gz', 'MagicPortals-1.2.3-ios-arm64.ipa', 'MagicPortals-1.2.3-android.apk',
+                     'MagicPortals-1.2.3-ios-arm64-simulator-shell.zip'):
+            self.assertTrue(rl.ARTIFACT.match(name), name)
+        for name in ('MagicPortals-1.2-windows-x64.zip', 'readme.txt', 'MagicPortals-1.2.3-windows-x64.exe', 'SHA256SUMS.txt'):
+            self.assertFalse(rl.ARTIFACT.match(name), name)
+
+    def fill(self, *names):
+        for n in names:
+            put(self.path(n), ('bytes of ' + n).encode())
+
+    def test_sums_are_written_in_sha256sum_form_and_verified(self):
+        self.fill('MagicPortals-1.2.3-windows-x64.zip', 'MagicPortals-1.2.3-linux-x86_64.tar.gz', 'LICENSE', 'notes.txt')
+        code, out, err = run_cli('sums', self._tmp)
+        self.assertEqual(code, 0, err)
+        with open(self.path('SHA256SUMS.txt'), encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        self.assertEqual([l.split('  ')[1] for l in lines], ['LICENSE', 'MagicPortals-1.2.3-linux-x86_64.tar.gz', 'MagicPortals-1.2.3-windows-x64.zip'], 'sorted, and notes.txt is no release file')
+        for l in lines:
+            digest, name = l.split('  ')
+            self.assertEqual(digest, hashlib.sha256(('bytes of ' + name).encode()).hexdigest())
+        self.assertEqual(run_cli('sums', self._tmp, '--check')[0], 0)
+
+    def test_check_finds_a_changed_a_missing_and_an_unlisted_file(self):
+        self.fill('MagicPortals-1.2.3-windows-x64.zip', 'MagicPortals-1.2.3-linux-x86_64.tar.gz')
+        run_cli('sums', self._tmp)
+        put(self.path('MagicPortals-1.2.3-windows-x64.zip'), b'changed')
+        os.remove(self.path('MagicPortals-1.2.3-linux-x86_64.tar.gz'))
+        self.fill('MagicPortals-1.2.3-android.apk')
+        problems = rl.verify_sums(self._tmp)
+        text = '\n'.join(problems)
+        self.assertIn('the sha256 of MagicPortals-1.2.3-windows-x64.zip differs', text)
+        self.assertIn('MagicPortals-1.2.3-linux-x86_64.tar.gz is listed and is not a file', text)
+        self.assertIn('MagicPortals-1.2.3-android.apk is in the folder and not in SHA256SUMS.txt', text)
+        code, out, err = run_cli('sums', self._tmp, '--check')
+        self.assertEqual(code, 1)
+        self.assertIn('FAILED, 3 problem(s)', out)
+
+    def test_a_developers_archive_is_not_in_a_release_folders_sums(self):
+        self.fill('MagicPortals-1.2.3-windows-x64-dev.zip')
+        code, out, err = run_cli('sums', self._tmp)
+        self.assertEqual(code, 2)
+        self.assertIn('developer', err)
+        self.assertFalse(os.path.exists(self.path('SHA256SUMS.txt')))
+        self.assertEqual(run_cli('sums', self._tmp, '--allow-dev')[0], 0)
+
+    def test_a_shell_is_not_a_release_either_and_an_assembly_leaves_both_out_of_its_sums(self):
+        self.fill('MagicPortals-1.2.3-macos-universal-shell.zip')
+        self.assertEqual(run_cli('sums', self._tmp)[0], 2)
+        self.fill('MagicPortals-1.2.3-linux-x86_64-dev.tar.gz', 'MagicPortals-1.2.3-linux-x86_64.tar.gz')
+        self.assertEqual(rl.write_sums(self._tmp, skip_dev=True), ['MagicPortals-1.2.3-linux-x86_64.tar.gz'])
+        self.assertEqual(rl.verify_sums(self._tmp), [], 'and the check does not ask for the ones that are not releases')
+
+    def test_an_empty_folder_and_a_missing_one_are_refused(self):
+        self.assertEqual(run_cli('sums', self._tmp)[0], 2)
+        self.assertEqual(run_cli('sums', self.path('nowhere'))[0], 2)
+        self.assertEqual(run_cli('sums', self._tmp, '--check')[0], 1)
+
+    def test_a_listed_name_with_a_path_is_not_followed(self):
+        self.fill('MagicPortals-1.2.3-windows-x64.zip')
+        put(self.path('SHA256SUMS.txt'), '%s  ../outside.txt\nnot a line\n' % ('0' * 64))
+        text = '\n'.join(rl.verify_sums(self._tmp))
+        self.assertIn('../outside.txt is listed and is not a file of this folder', text)
+        self.assertIn('a line that is not', text)
+
+
+# ---- the Apple layouts ------------------------------------------------------------------------------------------------------------------------
+
+import plistlib  # noqa: E402
+
+
+def bundle_plist(executable='MagicPortals', platforms=None):
+    doc = {'CFBundleExecutable': executable, 'CFBundleIdentifier': 'com.example.invented', 'CFBundleShortVersionString': OTHER_VERSION}
+    if platforms:
+        doc['CFBundleSupportedPlatforms'] = platforms
+    return plistlib.dumps(doc)
+
+
+def shell_files(kind, program=None, readme=True):
+    """The files of a shell as make_app.sh's zips hold them (invented bytes, a real plist, a header-only executable): {name: (bytes, mode)}."""
+    if kind == 'macos':
+        base = 'MagicPortals/MagicPortals.app/'
+        files = {base + 'Contents/Info.plist': (bundle_plist(), 0o644), base + 'Contents/MacOS/MagicPortals': (program or make_fat(), 0o755),
+                 base + 'Contents/Resources/engine/assets/shaders/a.spv': (b'spv-a', 0o644), base + 'Contents/Resources/licenses/README.txt': (b'the shell\'s own note', 0o644)}
+        if readme:
+            files['MagicPortals/READ ME FIRST.txt'] = (b'This is the Magic Portals program WITHOUT the game: no levels.\n', 0o644)
+        return files
+    base = 'Payload/MagicPortals.app/' if kind == 'ios' else 'MagicPortals.app/'
+    return {base + 'Info.plist': (bundle_plist(platforms=['iPhoneOS'] if kind == 'ios' else ['iPhoneSimulator']), 0o644),
+            base + 'MagicPortals': (program or make_macho(0x0100000C), 0o755), base + 'engine/assets/shaders/a.spv': (b'spv-a', 0o644)}
+
+
+def write_shell_zip(path, files):
+    """A zip the way ditto and zip -r write one: folder entries first, the mode word with the file type, the executable bit kept."""
+    folders = sorted({'/'.join(n.split('/')[:i]) + '/' for n in files for i in range(1, len(n.split('/')))})
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with zipfile.ZipFile(path, 'w') as z:
+        for f in folders:
+            info = zipfile.ZipInfo(f, date_time=(2026, 10, 25, 22, 0, 0))
+            info.create_system, info.external_attr = 3, (0o040755 << 16) | 0x10
+            z.writestr(info, b'')
+        for name in sorted(files):
+            data, mode = files[name]
+            info = zipfile.ZipInfo(name, date_time=(2026, 10, 25, 22, 0, 0))
+            info.create_system, info.external_attr = 3, (0o100000 | mode) << 16
+            z.writestr(info, data)
+    return path
+
+
+class TheAppleLayouts(ArchiveCase):
+    def shell(self, kind, **kw):
+        return write_shell_zip(self.path('shells', kind + '.zip'), shell_files(kind, **kw))
+
+    def apple(self, platform, shell, *extra, content=True, out=None):
+        argv = ['assemble', '--platform', platform, '--shell', shell, '--out', out or self.out, '--repo', self.repo, '--notices', self.notices]
+        argv += ['--content', self.content] if content else []
+        return run_cli(*(argv + list(extra)))
+
+    def test_the_data_goes_into_the_folder_the_game_looks_in_on_a_mac(self):
+        code, out, err = self.apple('macos', self.shell('macos'))
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION)
+        files = rl.read_archive(archive)
+        base = 'MagicPortals/MagicPortals.app/Contents/Resources/GameData/'
+        for n in ('manifest.json', 'levels/lvl_a.tscn', 'tables/chapters.json', 'original/soundfx/boom_a.mp3', 'data/items.json', 'port-data/engine.json' if False else 'port-data/ui.json'):
+            self.assertIn(base + n, files, n)
+        self.assertEqual({n for n in files if '/GameData/' in n}, {base + n[len('content/'):] for n in
+                                                                    ['content/' + p for p, _ in pk.listing(self.content)]}, 'exactly the package, nothing else, nothing left out')
+        # the shell is otherwise what it was: the program with its exec bit, the plist, the shaders, the licences folder
+        modes = {n: m for n, (_, _, m) in files.items()}
+        self.assertEqual(modes['MagicPortals/MagicPortals.app/Contents/MacOS/MagicPortals'], 0o755)
+        self.assertEqual(modes[base + 'levels/lvl_a.tscn'], 0o644)
+        for n in ('MagicPortals/MagicPortals.app/Contents/Info.plist', 'MagicPortals/MagicPortals.app/Contents/Resources/engine/assets/shaders/a.spv',
+                  'MagicPortals/MagicPortals.app/Contents/Resources/licenses/README.txt'):
+            self.assertIn(n, files)
+        # the notices are beside the app, not inside it
+        self.assertIn('MagicPortals/LICENSE', files)
+        self.assertIn('MagicPortals/NOTICE.md', files)
+        self.assertFalse([n for n in files if n.startswith('MagicPortals/MagicPortals.app/') and n.endswith(('LICENSE', 'NOTICE.md')) and 'licenses/' not in n])
+        self.assertEqual(rl.verify_sums(self.out), [])
+
+    def test_the_seal_is_said_in_the_archive_and_in_the_output_and_names_only_what_section_7_names(self):
+        code, out, err = self.apple('macos', self.shell('macos'))
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION)
+        with zipfile.ZipFile(archive) as z:
+            text = z.read('MagicPortals/READ ME FIRST.txt').decode('utf-8')
+        for word in ('SEAL IS NO LONGER VALID', 'INVALID', 'must be made again', 'CANNOT sign', 'has ever been run on a Mac', 'docs/apple.md section 7', 'rcodesign',
+                     'Application Support/Magic Portals/GameData', "the owner's decision", 'Contents/Resources/GameData', 'is damaged'):
+            self.assertIn(word, text, word)
+            self.assertIn(word.split('\n')[0], out, 'the same words are printed: ' + word) if word in ('INVALID', 'rcodesign', 'CANNOT sign') else None
+        self.assertNotIn('WITHOUT the game', text, 'the shell\'s own READ ME is replaced: it says there is no game')
+        self.assertIn('with the game inside the app', text.lower())
+        for invented in ('notarytool', 'productsign', 'altool', 'stapler', 'spctl', 'xattr', 'Developer ID', 'fastlane'):
+            self.assertNotIn(invented, text, 'only the routes docs/apple.md section 7 names')
+        self.assertIn('This text is also in the archive', out)
+
+    def test_the_ios_data_goes_to_the_root_of_the_bundle_and_the_ipa_starts_with_payload(self):
+        code, out, err = self.apple('ios', self.shell('ios'))
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-ios-arm64.ipa' % OTHER_VERSION)
+        with zipfile.ZipFile(archive) as z:
+            names = z.namelist()
+            self.assertEqual(names[0], 'Payload/', 'the first entry, as make_app.sh checks of its own ipa')
+            self.assertIn('Payload/MagicPortals.app/', names)
+            text = z.read('READ ME FIRST.txt').decode('utf-8')
+        files = rl.read_archive(archive)
+        base = 'Payload/MagicPortals.app/GameData/'
+        self.assertIn(base + 'levels/lvl_a.tscn', files)
+        self.assertIn(base + 'manifest.json', files)
+        self.assertEqual(files['Payload/MagicPortals.app/MagicPortals'][2], 0o755)
+        self.assertIn('LICENSE', files)
+        self.assertIn('NOTICE.md', files)
+        self.assertIn('signs the whole', text)
+        self.assertIn('never run', text)
+        self.assertIn('inferred', text)
+        self.assertNotIn('seal is', text.lower().replace('ad-hoc signature', ''), 'iOS has no seal to break: a sideloading tool signs the whole bundle')
+
+    def test_a_simulator_bundle_is_named_for_it(self):
+        code, out, err = self.apple('ios', self.shell('sim'))
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-ios-arm64-simulator.zip' % OTHER_VERSION)
+        files = rl.read_archive(archive)
+        self.assertIn('MagicPortals.app/GameData/levels/lvl_a.tscn', files)
+
+    def test_the_apple_archives_are_the_same_bytes_twice(self):
+        for kind, platform, name in (('macos', 'macos', 'MagicPortals-%s-macos-universal.zip'), ('ios', 'ios', 'MagicPortals-%s-ios-arm64.ipa')):
+            shell = self.shell(kind)
+            self.assertEqual(self.apple(platform, shell, out=self.path('a', kind))[0], 0)
+            for d, _, files in os.walk(self.content):
+                for n in files:
+                    os.utime(os.path.join(d, n), (1_600_000_000, 1_600_000_000))
+            os.utime(shell, (1_600_000_000, 1_600_000_000))
+            self.assertEqual(self.apple(platform, shell, out=self.path('b', 'deeper', kind))[0], 0)
+            with open(os.path.join(self.path('a', kind), name % OTHER_VERSION), 'rb') as fa, open(os.path.join(self.path('b', 'deeper', kind), name % OTHER_VERSION), 'rb') as fb:
+                self.assertEqual(fa.read(), fb.read(), kind)
+
+    def test_the_content_inside_the_apple_archive_is_the_package_and_verifies(self):
+        self.assertEqual(self.apple('macos', self.shell('macos'))[0], 0)
+        archive = os.path.join(self.out, 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION)
+        scratch = self.path('unpacked')
+        self.assertGreater(rl.extract_prefix(archive, 'MagicPortals/MagicPortals.app/Contents/Resources/GameData/', scratch), 10)
+        self.assertEqual(pk.verify_content(scratch)['problems'], [])
+        self.assertEqual(self.tree_bytes(scratch), self.tree_bytes(self.content))
+
+    def test_without_content_the_shell_passes_through_byte_for_byte_under_its_new_name(self):
+        shell = self.shell('macos')
+        with open(shell, 'rb') as f:
+            original = f.read()
+        code, out, err = self.apple('macos', shell, content=False, out=self.out)
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-macos-universal-shell.zip' % OTHER_VERSION)
+        with open(archive, 'rb') as f:
+            self.assertEqual(f.read(), original)
+        self.assertIn('NO game data', out)
+        self.assertIn('byte for byte', out)
+        # no notices are asked for, and none is added: a shell is not a release
+        code, out, err = run_cli('assemble', '--platform', 'ios', '--shell', self.shell('ios'), '--out', self.out, '--repo', self.repo)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.isfile(os.path.join(self.out, 'MagicPortals-%s-ios-arm64-shell.ipa' % OTHER_VERSION)))
+
+    def test_a_shell_whose_program_is_a_developers_build_is_refused(self):
+        shell = write_shell_zip(self.path('shells', 'dev.zip'), shell_files('macos', program=make_fat(payload=game_payload(dev=True, extra=[b'/Users/someone/work/x']))))
+        code, out, err = self.apple('macos', shell)
+        self.assertEqual(code, 2)
+        self.assertIn('developer tools are compiled in', err)
+        self.assertIn("'/Users/'", err)
+        self.assert_nothing_left()
+        code, out, err = self.apple('macos', shell, '--allow-dev')
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.isfile(os.path.join(self.out, 'MagicPortals-%s-macos-universal-dev.zip' % OTHER_VERSION)))
+
+    def test_a_shell_entry_that_is_a_link_is_refused_and_not_written_as_a_file_holding_its_target(self):
+        # a symbolic link in a zip is an entry of mode 0120777 whose bytes are the target's path: read as a plain file it would be written into the archive as 0644 text
+        for platform in ('macos', 'ios'):
+            link = write_shell_zip(self.path('shells', 'link-%s.zip' % platform), shell_files(platform))
+            with zipfile.ZipFile(link, 'a') as z:
+                info = zipfile.ZipInfo('MagicPortals/MagicPortals.app/Contents/Resources/escape' if platform == 'macos' else 'Payload/MagicPortals.app/escape',
+                                       date_time=(2026, 10, 25, 22, 0, 0))
+                info.create_system, info.external_attr = 3, 0o120777 << 16
+                z.writestr(info, '../../../../etc/passwd')
+            for content in (True, False):
+                code, out, err = self.apple(platform, link, content=content)
+                self.assertEqual(code, 2, (platform, content))
+                self.assertIn('is not a plain file', err)
+                self.assertIn('escape (type bits 120000)', err, 'named, with what it is')
+                self.assert_nothing_left()
+
+    def test_a_zip_with_no_unix_mode_word_is_still_a_shell(self):
+        # zips written on Windows carry no mode word (the upper 16 bits of the attributes are 0): the type is then unknown, and an entry is a plain file
+        files = shell_files('ios')
+        path = self.path('shells', 'nomode.zip')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with zipfile.ZipFile(path, 'w') as z:
+            for name in sorted(files):
+                info = zipfile.ZipInfo(name, date_time=(2026, 10, 25, 22, 0, 0))
+                info.create_system, info.external_attr = 0, 0
+                z.writestr(info, files[name][0])
+        self.assertEqual(sorted(rl.shell_files_from_zip(path)), sorted(files))
+        code, out, err = self.apple('ios', path)
+        self.assertEqual(code, 0, err)
+
+    def test_a_bundle_folder_with_a_link_in_it_is_refused(self):
+        folder = self.path('bundle')
+        for name, (data, _) in shell_files('sim').items():
+            put(os.path.join(folder, *name.split('/')), data)
+        try:
+            os.symlink(self.path('bundle', 'MagicPortals.app', 'MagicPortals'), os.path.join(folder, 'MagicPortals.app', 'link'))
+        except (OSError, NotImplementedError):
+            self.skipTest('this system will not make a symbolic link for the test: the refusal of a link in a bundle folder is NOT checked on it')
+        code, out, err = self.apple('ios', folder)
+        self.assertEqual(code, 2)
+        self.assertIn('symbolic link', err)
+        self.assertIn('(link)', err, 'named relative to the bundle')
+        self.assert_nothing_left()
+
+    def test_a_program_of_the_wrong_machine_is_refused(self):
+        shell = write_shell_zip(self.path('shells', 'wrong.zip'), shell_files('ios', program=make_macho(0x01000007)))
+        code, out, err = self.apple('ios', shell)
+        self.assertEqual(code, 2)
+        self.assertIn('not one for ios', err)
+
+    def test_a_shell_of_the_other_platform_or_no_bundle_is_refused_by_name(self):
+        code, out, err = self.apple('macos', self.shell('ios'))
+        self.assertEqual(code, 2)
+        self.assertIn('an iOS bundle', err)
+        code, out, err = self.apple('ios', self.shell('macos'))
+        self.assertEqual(code, 2)
+        self.assertIn('a macOS bundle', err)
+        empty = write_shell_zip(self.path('shells', 'empty.zip'), {'readme.txt': (b'nothing', 0o644)})
+        code, out, err = self.apple('macos', empty)
+        self.assertEqual(code, 2)
+        self.assertIn('0 application bundles', err)
+        code, out, err = self.apple('macos', self.path('shells', 'missing.zip'))
+        self.assertEqual(code, 2)
+
+    def test_notices_content_and_output_are_checked_before_anything_is_written(self):
+        shell = self.shell('macos')
+        code, out, err = run_cli('assemble', '--platform', 'macos', '--shell', shell, '--content', self.content, '--out', self.out, '--repo', self.repo)
+        self.assertEqual(code, 2)
+        self.assertIn('no LICENSE', err)
+        copy = self.path('content-copy')
+        shutil.copytree(self.content, copy)
+        os.remove(os.path.join(copy, 'levels', 'lvl_b.tscn'))
+        code, out, err = run_cli('assemble', '--platform', 'macos', '--shell', shell, '--content', copy, '--out', self.out, '--repo', self.repo, '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('fails package.py verify', err)
+        code, out, err = self.apple('macos', shell, out=os.path.join(self.repo, 'tools', 'x'))
+        self.assertEqual(code, 2)
+        self.assert_nothing_left()
+        self.assertEqual(self.apple('macos', shell)[0], 0)
+        code, out, err = self.apple('macos', shell)
+        self.assertEqual(code, 2)
+        self.assertIn('already exists', err)
+
+    def test_a_folder_the_script_wrote_is_a_shell_too(self):
+        folder = self.path('make_app_out')
+        for name, (data, mode) in shell_files('macos').items():
+            if name.startswith('MagicPortals/MagicPortals.app/'):
+                put(os.path.join(folder, 'MagicPortals.app', *name[len('MagicPortals/MagicPortals.app/'):].split('/')), data)
+        self.assertEqual(self.apple('macos', folder)[0], 0)
+        files = rl.read_archive(os.path.join(self.out, 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION))
+        self.assertIn('MagicPortals/MagicPortals.app/Contents/Resources/GameData/levels/lvl_a.tscn', files)
+        self.assertEqual(files['MagicPortals/MagicPortals.app/Contents/MacOS/MagicPortals'][2], 0o755, 'the program is the one the plist names, executable by rule')
+        # a folder with one shell zip in it passes that zip through
+        folder2 = self.path('make_app_out2')
+        os.makedirs(folder2)
+        shutil.copyfile(self.shell('ios'), os.path.join(folder2, 'MagicPortals-iOS-shell.ipa'))
+        self.assertEqual(self.apple('ios', folder2, content=False, out=self.path('r2'))[0], 0)
+        os.makedirs(self.path('empty-folder'))
+        self.assertEqual(self.apple('ios', self.path('empty-folder'), content=False, out=self.path('r3'))[0], 2)
+
+    def test_a_bundle_folder_with_no_content_makes_a_shell_zip_named_for_it(self):
+        folder = self.path('make_app_out3')
+        for name, (data, mode) in shell_files('macos').items():
+            if name.startswith('MagicPortals/MagicPortals.app/'):
+                put(os.path.join(folder, 'MagicPortals.app', *name[len('MagicPortals/MagicPortals.app/'):].split('/')), data)
+        code, out, err = self.apple('macos', folder, content=False)
+        self.assertEqual(code, 0, err)
+        files = rl.read_archive(os.path.join(self.out, 'MagicPortals-%s-macos-universal-shell.zip' % OTHER_VERSION))
+        self.assertTrue(files)
+        self.assertFalse([n for n in files if 'GameData' in n])
+        self.assertIn('a shell: it has NO game data', out)
+        self.assertFalse(os.path.exists(os.path.join(self.out, 'SHA256SUMS.txt')), 'a shell is not a release: no sums')
+
+    def test_the_names_are_the_ones_the_game_looks_for(self):
+        with open(os.path.join(REPO, 'game', 'sim', 'AppleLayout.hpp'), encoding='utf-8') as f:
+            text = f.read()
+        self.assertIn('kGameDataFolder = "GameData"', text)
+        self.assertIn('<bundle>/Contents/Resources/GameData', text)
+        self.assertIn('<bundle>/GameData', text)
+        self.assertEqual(rl.GAME_DATA_IN_BUNDLE, {rl.MACOS: 'Contents/Resources/GameData', rl.IOS: 'GameData'})
+        with open(os.path.join(REPO, 'docs', 'packaging.md'), encoding='utf-8') as f:
+            doc = f.read()
+        self.assertIn('`<MagicPortals.app>/Contents/Resources/GameData`', doc)
+        self.assertIn('`<MagicPortals.app>/GameData`', doc)
+        with open(os.path.join(REPO, 'game', 'macos', 'MacMain.mm'), encoding='utf-8') as f:
+            self.assertIn('Resources', f.read(), 'the Mac entry hands the Resources folder to the lookup')
+
+    def test_every_command_the_text_names_is_one_the_docs_name(self):
+        with open(os.path.join(REPO, 'docs', 'apple.md'), encoding='utf-8') as f:
+            doc = f.read()
+        section7 = doc[doc.index('## 7.'):doc.index('## 8.')]
+        text = rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True)
+        self.assertIn('rcodesign', section7)
+        self.assertIn('rcodesign', text)
+        self.assertIn('~/Library/Application Support/Magic Portals/GameData', section7)
+        self.assertIn('Application Support/Magic Portals/GameData', text)
+        with open(os.path.join(REPO, 'tools', 'apple', 'make_app.sh'), encoding='utf-8') as f:
+            self.assertIn('codesign --force --sign - --timestamp=none', f.read())
+        self.assertIn('codesign --force --sign - --timestamp=none', text)
+
+
+# ---- the Android release check --------------------------------------------------------------------------------------------------------------
+
+class FakeTools:
+    aapt2, zipalign, java, apksigner_jar = 'aapt2', 'zipalign', 'java', 'apksigner.jar'
+
+    def __init__(self, sdk, build_tools):
+        self.sdk, self.build_tools = sdk, build_tools
+
+
+GOOD_LINES = ["the crash report will call the game: Magic Portals Enhanced (from the application's android:label)", 'supersonic.reportTitle: not set in the APK (the application\'s label names the game)',
+              'native-code ABIs: arm64-v8a x86_64']
+
+
+class TheAndroidRelease(ArchiveCase):
+    def apk(self, name='MagicPortals-%s-release.apk' % OTHER_VERSION, libs=None):
+        libs = libs if libs is not None else {'arm64-v8a': make_elf_program(machine=183), 'x86_64': make_elf_program(machine=62)}
+        path = self.path('apks', name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with zipfile.ZipFile(path, 'w') as z:
+            for abi, data in sorted(libs.items()):
+                z.writestr('lib/%s/libMagicPortals.so' % abi, data)
+            z.writestr('assets/gamedata.list', b'stamp\n')
+        return path
+
+    def release(self, apk, lines=None, problems=None, package=None, extra=(), raises=None):
+        calls = []
+
+        def inspect(path, tools, repo, release, **kw):
+            calls.append((path, release, kw))
+            if raises:
+                raise raises
+            return list(GOOD_LINES if lines is None else lines), list(problems or [])
+        args = rl.build_parser().parse_args(['android', '--apk', apk, '--sdk', self.path('sdk'), '--build-tools', '35.0.0', '--out', self.out, '--repo', self.repo,
+                                             '--notices', self.notices] + list(extra))
+        try:
+            return rl.android_release(args, make_tools=FakeTools, inspect=inspect, package_line=lambda t, a: package or (OTHER_VERSION, vs.version_code(OTHER_VERSION))), calls
+        except rl.ReleaseError as e:
+            return str(e), calls
+
+    def test_a_signed_release_of_the_one_version_is_placed_with_its_notices_and_sums(self):
+        apk = self.apk()
+        lines, calls = self.release(apk)
+        self.assertIsInstance(lines, list, lines)
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0][1], 'inspect is asked as a RELEASE')
+        self.assertTrue(calls[0][2].get('expect_data'), 'and for a build that has the game in it')
+        name = 'MagicPortals-%s-android.apk' % OTHER_VERSION
+        self.assertEqual(sorted(os.listdir(self.out)), sorted(['LICENSE', 'NOTICE.md', 'SHA256SUMS.txt', name]))
+        with open(apk, 'rb') as fa, open(os.path.join(self.out, name), 'rb') as fb:
+            self.assertEqual(fa.read(), fb.read(), 'the APK is copied unchanged: it is signed')
+        for n, d in NOTICES.items():
+            with open(os.path.join(self.out, n), 'rb') as f:
+                self.assertEqual(f.read(), d)
+        self.assertEqual(rl.verify_sums(self.out), [])
+        text = '\n'.join(lines)
+        for word in ('a signed release of version ' + OTHER_VERSION, 'versionCode %d' % vs.version_code(OTHER_VERSION), 'not inside', 'no key was read or made'):
+            self.assertIn(word, text)
+
+    def test_the_version_code_rule_and_its_override(self):
+        wrong, _ = self.release(self.apk(), package=(OTHER_VERSION, 1))
+        self.assertIn('versionCode is 1 and the rule of version.py gives %d' % vs.version_code(OTHER_VERSION), wrong)
+        again, _ = self.release(self.apk(), package=(OTHER_VERSION, 77), extra=['--version-code', '77'])
+        self.assertIsInstance(again, list, again)
+        self.assertEqual(vs.version_code('3.4.5'), 30405, 'the rule, pinned for the version these tests use')
+
+    def test_a_debug_apk_is_refused_with_every_reason(self):
+        debug = self.apk('MagicPortals-%s-debug.apk' % OTHER_VERSION)
+        text, _ = self.release(debug, problems=['a release APK is debuggable', 'a release APK is signed with the debug key'], package=(OTHER_VERSION, 1))
+        for word in ('is named MagicPortals-%s-debug.apk' % OTHER_VERSION, 'a debug APK', 'a release APK is debuggable', 'signed with the debug key', 'versionCode is 1'):
+            self.assertIn(word, text)
+        self.assertEqual(os.listdir(self.out) if os.path.isdir(self.out) else [], [], 'nothing is placed')
+
+    def test_the_variants_are_refused_by_name_and_by_what_their_libraries_hold(self):
+        for tag in ('-VERIFICATION', '-PERFDIAG', '-nodata'):
+            text, _ = self.release(self.apk('MagicPortals-%s%s-release.apk' % (OTHER_VERSION, tag)))
+            self.assertIn('is never a release', text, tag)
+        # a file renamed to look like a release is still caught by what is inside
+        dev = self.apk(libs={'x86_64': make_elf_program(payload=game_payload(dev=True))})
+        text, _ = self.release(dev)
+        self.assertIn('lib/x86_64/libMagicPortals.so: the developer tools are compiled in', text)
+        diag = self.apk(libs={'arm64-v8a': make_elf_program(machine=183, payload=game_payload(perf=True))})
+        text, _ = self.release(diag)
+        self.assertIn('PERFORMANCE-DIAGNOSTIC build', text)
+        baked = self.apk(libs={'x86_64': make_elf_program(payload=game_payload(extra=[b'/home/someone/x']))})
+        text, _ = self.release(baked)
+        self.assertIn("'/home/'", text)
+        wrong = self.apk(libs={'x86_64': make_elf_program(etype=2)})
+        text, _ = self.release(wrong)
+        self.assertIn('ELF type 2', text)
+        none, _ = self.release(self.apk(libs={}))
+        self.assertIn('has no lib/<abi>/libMagicPortals.so', none)
+
+    def test_the_report_fact_and_the_built_manifest_read_back_are_required(self):
+        text, _ = self.release(self.apk(), lines=['native-code ABIs: x86_64'])
+        self.assertIn('the report fact is missing', text)
+        self.assertIn('supersonic.reportTitle line', text)
+        text, _ = self.release(self.apk(), lines=['the crash report will call the game: (no name) (the application declares no android:label)', GOOD_LINES[1]])
+        self.assertIn('by no name', text)
+
+    def test_a_version_name_that_is_not_the_one_version_is_refused(self):
+        text, _ = self.release(self.apk(), package=('9.9.9', vs.version_code(OTHER_VERSION)))
+        self.assertIn("versionName is '9.9.9' and the one version is %s" % OTHER_VERSION, text)
+
+    def test_an_apk_apksigner_cannot_verify_is_refused_with_the_tools_words(self):
+        text, _ = self.release(self.apk(), raises=ap.PackError('apksigner verify failed (exit 1): DOES NOT VERIFY'))
+        self.assertIn('an unsigned APK', text)
+        self.assertIn('DOES NOT VERIFY', text)
+
+    def test_the_notices_are_required_and_the_output_and_the_name_are_checked(self):
+        args = rl.build_parser().parse_args(['android', '--apk', self.apk(), '--sdk', self.path('sdk'), '--build-tools', 'x', '--out', self.out, '--repo', self.repo])
+        with self.assertRaises(rl.ReleaseError) as caught:
+            rl.android_release(args, make_tools=FakeTools, inspect=lambda *a, **k: (GOOD_LINES, []), package_line=lambda t, a: (OTHER_VERSION, 30405))
+        self.assertIn('no LICENSE', str(caught.exception))
+        bad = rl.build_parser().parse_args(['android', '--apk', self.apk(), '--sdk', self.path('sdk'), '--build-tools', 'x', '--out', os.path.join(self.repo, 'tools', 'rel'),
+                                            '--repo', self.repo, '--notices', self.notices])
+        with self.assertRaises(rl.ReleaseError):
+            rl.android_release(bad, make_tools=FakeTools, inspect=lambda *a, **k: (GOOD_LINES, []), package_line=lambda t, a: (OTHER_VERSION, 30405))
+        first, _ = self.release(self.apk())
+        self.assertIsInstance(first, list)
+        again, _ = self.release(self.apk())
+        self.assertIn('already exists', again)
+
+    def test_notices_beside_an_apk_must_be_the_ones_already_there(self):
+        os.makedirs(self.out)
+        put(os.path.join(self.out, 'LICENSE'), b'another licence')
+        text, _ = self.release(self.apk())
+        self.assertIn('a release folder holds one set of notices', text)
+        # the refusal comes BEFORE anything is placed (as assemble's does): no APK, no NOTICE.md, no sums, the licence there untouched
+        self.assertEqual(os.listdir(self.out), ['LICENSE'])
+        with open(os.path.join(self.out, 'LICENSE'), 'rb') as f:
+            self.assertEqual(f.read(), b'another licence')
+        # so the owner can put the right notice there and run it again: the name is not taken by a half-made release
+        os.remove(os.path.join(self.out, 'LICENSE'))
+        again, _ = self.release(self.apk())
+        self.assertIsInstance(again, list, again)
+        self.assertEqual(sorted(os.listdir(self.out)), sorted(['LICENSE', 'NOTICE.md', 'SHA256SUMS.txt', 'MagicPortals-%s-android.apk' % OTHER_VERSION]))
+
+    def test_notices_beside_an_apk_that_are_a_link_or_a_folder_are_refused_before_anything_is_placed(self):
+        os.makedirs(os.path.join(self.out, 'NOTICE.md'))
+        text, _ = self.release(self.apk())
+        self.assertIn('is not a plain file', text)
+        self.assertEqual(os.listdir(self.out), ['NOTICE.md'], 'only the folder that was already there')
+
+    def test_the_packager_never_asks_for_or_reads_a_key(self):
+        code, out, err = run_cli('android', '--apk', 'x', '--sdk', 'y', '--out', 'z', '--keystore', 'k')
+        self.assertEqual(code, 2, 'argparse refuses an option the tool does not have')
+        with open(os.path.join(HERE, 'release.py'), encoding='utf-8') as f:
+            source = f.read()
+        self.assertNotIn("add_argument('--keystore", source)
+        self.assertNotIn('keytool', source)
+        self.assertNotIn("'sign'", source)
+
+    def test_a_missing_apk_and_a_plain_file_that_is_no_apk_are_refused(self):
+        code, out, err = run_cli('android', '--apk', self.path('nowhere.apk'), '--sdk', self.path('sdk'), '--build-tools', 'x', '--out', self.out, '--repo', self.repo,
+                                 '--notices', self.notices)
+        self.assertEqual(code, 2)
+        self.assertIn('not a plain file', err)
+
+
+class TheVersionCheckThroughTheRelease(Temp):
+    def test_the_subcommand_is_the_check_and_passes_on_the_real_tree(self):
+        code, out, err = run_cli('check-version')
+        self.assertEqual(code, 0, out + err)
+        self.assertIn('check_version: ok', out)
+        code, out, err = run_cli('check-version', '--repo', self._tmp)
+        self.assertEqual(code, 1)
+        self.assertIn('VERSION:', out)
+
+
+if __name__ == '__main__':
+    unittest.main()

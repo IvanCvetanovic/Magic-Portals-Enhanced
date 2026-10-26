@@ -117,7 +117,7 @@ The jobs have no `needs:` and no matrix, so a failure in one never hides the nex
 
 * `Test (ctest, data-less)` prints `skipped: N (never counted as passed)` and the number of suites `tests/CMakeLists.txt` marks as needing the owner's data. A skip is not a pass; the two
   numbers should be equal, and the step warns when they are not. **Two suites FAIL without the owner's data and are not marked to skip**: `test_mp_shoot` (it runs fewer checks than its floor) and
-  `test_mp_sprites` (one case reads an entity file of the original with no skip guard, `tests/test_mp_sprites.cpp:4089`). Measured on Linux with the data hidden: 75 tests (74 suites and the parity check), 40 passed, 33 skipped, 2 failed. The step names the two,
+  `test_mp_sprites` (one case reads an entity file of the original with no skip guard, `tests/test_mp_sprites.cpp:4089`). Measured on Linux with the data hidden at step 206: 75 tests (74 suites and the parity check), 40 passed, 33 skipped, 2 failed. (Planning step 208 registered two more tests next to the parity check, `test_mp_build_dev_tools_option` and `test_mp_build_profile_header`, where a Python is given to the configure: in the Linux subsystem the same run lists 77 tests and the two pass, so 42 would pass (inferred from the registration and the two passes: the data-less run itself was not retaken); the workflow's configure gives no such Python (`apple.yml` has no `SUPERSONIC_MAGICPORTALS_PARITY_PYTHON`; `parity_reachability`, registered under the same condition, is absent from the macOS run's 32 skipped, which are 33 on Linux), so the macOS job's list is unchanged.) The step names the two,
   prints them as failures (they are never counted as passes), lets them through, and fails on any other failed test or on a ctest that dies without naming one (the step's script is run against recorded outputs by `test_workflow.py`).
   A later change that makes either skip or pass shortens the list in the workflow by hand (APPLE-22).
 * `Run the fixture (arm64)` and `Run the fixture (x86_64 under Rosetta)` must exit 0 and write a picture (1280x720 is asked for; macOS keeps a window on the screen and the first run drew 1024x653, so `Check the picture` requires at least 640x360); `Check the picture` then decodes it and fails if it holds one flat colour
@@ -194,8 +194,7 @@ his machine at all, which is a question of `docs/permission.md`):
 3. **The shell plus a folder the player drops into `~/Library/Application Support/Magic Portals/GameData`.** Needs no signer; clumsy; untested. (A folder *beside* the `.app` is rejected: an app run in place from a
    quarantined download is run from a randomised read-only path by App Translocation, where a sibling folder is expected to be invisible: NOT KNOWN, never tested.)
 
-On iOS the data goes **inside** the bundle (`GameData` at its root): the packager unzips the CI's `.ipa`, adds the folder and zips it again, and the sideloading tool re-signs the whole bundle, so the ad-hoc
-seal not covering the new files is harmless: inferred, never run.
+On iOS the data goes **inside** the bundle (`GameData` at its root): the packager unzips the CI's `.ipa`, adds the folder and zips it again, and the sideloading tool re-signs the whole bundle, so the ad-hoc seal not covering the new files is harmless: inferred, never run. Since planning step 208 `tools/package/release.py assemble --platform macos|ios` (`docs/packaging.md` section 8) does the adding for both platforms, deterministically, and says in the archive that the macOS seal is invalid and must be made again; it was run on synthetic bundles only (the real shell zips were not on the PC) and has never been run on a Mac.
 
 ## 8. What was checked, by which tool
 

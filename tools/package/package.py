@@ -49,7 +49,8 @@ import subprocess
 import sys
 import uuid
 
-import closure as cl
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # `python -I package.py` does not put the script's folder on the path (PORT2-6 (c))
+import closure as cl  # noqa: E402
 
 MANIFEST = 'manifest.json'
 SUMS = 'SHA256SUMS.txt'
@@ -185,7 +186,7 @@ def listing(root):
     for d, ds, fs in os.walk(root):
         for n in fs:
             full = os.path.join(d, n)
-            out.append((os.path.relpath(full, root).replace(os.sep, '/'), os.path.getsize(full)))
+            out.append((os.path.relpath(full, root).replace(os.sep, '/'), os.lstat(full).st_size))
     return sorted(out)
 
 
@@ -193,6 +194,15 @@ def listing(root):
 
 def plan_content(repo, reference, with_pad_art):
     src = cl.Sources.from_disk(repo, reference)
+    # A package is built only from plain files. Any link anywhere in a tree the plan reads is refused, at its own name, whatever it points to: a linked sub-folder is not
+    # walked (its files would be missing from the package and a tier twin in it would fall back to the 1x file without a word), and a broken link would otherwise
+    # be a traceback (PORT2-2). A link is not something the converter or the extraction makes.
+    for tname in sorted(src.trees):
+        if src[tname].symlinks:
+            first = src[tname].symlinks[0]
+            raise PackageError('%s:%s is a symbolic link%s: a package is built only from plain files (%s)' %
+                               (tname, first, ' (and %d more)' % (len(src[tname].symlinks) - 1) if len(src[tname].symlinks) > 1 else '',
+                                src[tname].abspath(first) if first != '.' else src[tname].root))
     missing = [name for name in REQUIRED_TREES if not src[name].present]
     if missing:
         raise PackageError('these source folders are not there: %s (the converter writes <repo>/out; the original is extracted into '
@@ -380,6 +390,19 @@ def cmd_verify(args):
 
 # ---- shell -----------------------------------------------------------------------------------------------------------------------
 
+def shader_files(shaders):
+    """The sorted names of the compiled shaders (*.spv) in a folder; none, or a link among them, is an error. (The release packager lays its program out the same way.)"""
+    if not os.path.isdir(shaders):
+        raise PackageError('no shader folder at %s' % shaders)
+    spv = sorted(n for n in os.listdir(shaders) if n.endswith('.spv'))
+    if not spv:
+        raise PackageError('no .spv in %s' % shaders)
+    for n in spv:
+        if os.path.islink(os.path.join(shaders, n)):
+            raise PackageError('%s is a symbolic link' % os.path.join(shaders, n))
+    return spv
+
+
 def cmd_shell(args):
     content = os.path.abspath(args.content)
     exe = os.path.abspath(args.exe)
@@ -390,12 +413,7 @@ def cmd_shell(args):
         raise PackageError('give --shaders <folder of .spv> or --repo <repo> (engine/assets/shaders)')
     if not os.path.isfile(exe) or os.path.islink(exe):
         raise PackageError('--exe %s is not a plain file' % exe)
-    spv = sorted(n for n in os.listdir(shaders) if n.endswith('.spv'))
-    if not spv:
-        raise PackageError('no .spv in %s' % shaders)
-    for n in spv:
-        if os.path.islink(os.path.join(shaders, n)):
-            raise PackageError('%s is a symbolic link' % os.path.join(shaders, n))
+    spv = shader_files(shaders)
     if repo:
         # the shell is a runnable copy for testing: outside the repository, or under its gitignored out/
         reference = os.path.join(repo, 'reference')

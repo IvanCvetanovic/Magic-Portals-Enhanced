@@ -407,4 +407,23 @@ if (EXISTS "${SUPERSONIC_MAGICPORTALS_PARITY_PYTHON}")
                      --check --levels-dir "${SUPERSONIC_MAGICPORTALS_LEVELS}"
                      --chapters "${SUPERSONIC_MAGICPORTALS_CHAPTERS}")
     set_tests_properties(parity_reachability PROPERTIES SKIP_RETURN_CODE 77)
+
+    # The two regression pins the build lacked (planning step 208, PORT-10). Python, like the check above, so they are registered where it is: they are not suites of
+    # test_mp, they run the build's own tools on scratch copies of two files and are never linked into anything.
+    #   test_mp_build_dev_tools_option  a configure with MAGICPORTALS_DEV_TOOLS set to anything but AUTO, ON or OFF fails with the FATAL_ERROR of the top-level
+    #                                   CMakeLists.txt, and the three words get past that line (CMake, a C and a C++ compiler)
+    #   test_mp_build_profile_header    a translation unit that includes game/BuildProfile.hpp without the build constants fails to compile with the header's #error,
+    #                                   and compiles with them (-fsyntax-only: no object, no link)
+    # Each asserts on the exact message read out of the source, carries positive controls and runs its named mutations on temporary copies; each exits 77 (SKIPPED, never
+    # a pass) where it cannot run: on Windows (a configure there builds a compiler-identification program, and no Windows link is made for a pin), with no cmake or
+    # compiler, or with MSVC. They are run in the Linux tree.
+    function(add_build_pin name script)
+        add_test(NAME ${name}
+                 COMMAND "${SUPERSONIC_MAGICPORTALS_PARITY_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/build_pins/${script}"
+                         --repo "${CMAKE_SOURCE_DIR}" --cmake "${CMAKE_COMMAND}"
+                         --c-compiler "${CMAKE_C_COMPILER}" --cxx-compiler "${CMAKE_CXX_COMPILER}" --cxx-id "${CMAKE_CXX_COMPILER_ID}")
+        set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+    endfunction()
+    add_build_pin(test_mp_build_dev_tools_option dev_tools_option.py)
+    add_build_pin(test_mp_build_profile_header build_profile_header.py)
 endif()

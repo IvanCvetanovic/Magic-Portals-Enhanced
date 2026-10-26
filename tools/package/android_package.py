@@ -4,7 +4,7 @@
 Built and statically checked in step 203; the APK it makes was run on an x86_64 emulator in step 204 (docs/android.md section 0). NOT RUN ON ANY PHONE.
 
     android_package.py build   --repo <repo> --sdk <sdk> --ndk <ndk> --lib <abi>=<libMagicPortals.so> [--lib ...]
-                               (--package <content folder> | --no-data) [--out <dir>] [--build-tools <ver>] [--version-code N]
+                               (--package <content folder> | --no-data) [--out <dir>] [--build-tools <ver>] [--version-code N (default: the rule of version.py)]
                                [--verification | --perf-diag] [--release --keystore F --keystore-pass-file F --key-alias A [--allow-data-less-release]]
                                [--build-tree <dir>]... [--shaders <dir>] [--java-src <dir>] [--icons <dir>]
     android_package.py inspect <apk> --sdk <sdk> [--build-tools <ver>] [--repo <repo>] [--release --keystore F --keystore-pass-file F --key-alias A]
@@ -16,7 +16,8 @@ tools/build_android.sh is the front door: it finds the SDK and NDK, builds the l
 WHAT THE APK HOLDS, and where each part comes from (nothing is read from outside these):
   AndroidManifest.xml, resources     game/android/AndroidManifest.xml and the launcher icon set (tools/art/make_app_icon.py draws it at package
                                      time into the work folder; nothing of the kind is committed), linked by aapt2. versionName is the project VERSION in the
-                                     top-level CMakeLists.txt (the one definition) and versionCode is --version-code: aapt2 writes both in.
+                                     top-level CMakeLists.txt (the one definition) and versionCode is --version-code, else the rule of version.py
+                                     (major*10000 + minor*100 + patch; planning step 208): aapt2 writes both in.
   classes.dex                        the engine's Java activity (engine/src/platform/android/java), javac then d8.
   lib/<abi>/libMagicPortals.so       the libraries tools/build_android.sh built, each checked as an ELF file (machine, NEEDED, 16 KB alignment...).
   assets/gamedata.list               the list the first-run unpack reads (game/sim/Unpack.hpp): a stamp, then `size TAB path` per file.
@@ -55,6 +56,7 @@ import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import package as pk  # noqa: E402  (the content packager: never_reason, sha256_of, check_output)
+import version as vs  # noqa: E402  (the one reader of the project's version, and the versionCode rule)
 
 # ---- Names that game/android/AndroidMain.cpp spells too (test_android_package.py reads that file and ties them) -----------------------------
 LIST_ASSET = 'gamedata.list'
@@ -184,13 +186,19 @@ def check_out(out, repo):
 # ---- the project's facts, each read from its one definition ---------------------------------------------------------------------------
 
 def read_version(repo):
-    """versionName: the project VERSION of the top-level CMakeLists.txt, exactly one definition."""
-    with open(os.path.join(repo, 'CMakeLists.txt'), encoding='utf-8') as f:
-        text = f.read()
-    found = re.findall(r'^\s*project\s*\(\s*MagicPortals\s+VERSION\s+(\d+\.\d+\.\d+)\b', text, re.M)
-    if len(found) != 1:
-        raise PackError('CMakeLists.txt must state project(MagicPortals VERSION x.y.z ...) exactly once (found %d)' % len(found))
-    return found[0]
+    """versionName: the project VERSION of the top-level CMakeLists.txt, exactly one definition (tools/package/version.py reads it; planning step 208)."""
+    try:
+        return vs.read_version(repo)
+    except vs.VersionError as e:
+        raise PackError(str(e))
+
+
+def default_version_code(version):
+    """The versionCode a build gets when none is asked for: the rule of version.py (major*10000 + minor*100 + patch), so the number follows the version."""
+    try:
+        return vs.version_code(version)
+    except vs.VersionError as e:
+        raise PackError(str(e))
 
 
 ANDROID_NS = '{http://schemas.android.com/apk/res/android}'
@@ -266,42 +274,58 @@ def choose_report_name(declared, label):
     return java_trim(label)
 
 
+# What aapt2 may store a meta-data's android:value as. The kinds are constants; the words are for messages only (PORT9-7 (c): a message's prose is not a tag to compare).
+KIND_STRING, KIND_REFERENCE, KIND_BOOLEAN, KIND_COLOUR, KIND_INTEGER, KIND_FLOAT = 'string', 'reference', 'boolean', 'colour', 'integer', 'float'
+KIND_WORDS = {KIND_STRING: 'a string', KIND_REFERENCE: 'a resource reference', KIND_BOOLEAN: 'a boolean', KIND_COLOUR: 'a colour', KIND_INTEGER: 'an integer',
+              KIND_FLOAT: 'a floating-point number'}
+
+
 def manifest_value_type(value):
-    """What aapt2 stores a meta-data's android:value as, by its word: 'a string', or the kind of thing it is read as instead. A SUPERSET of aapt2's own typing on
+    """What aapt2 stores a meta-data's android:value as: KIND_STRING, or the KIND_* of the thing it is read as instead. A SUPERSET of aapt2's own typing on
     purpose: a value of digits only is refused whatever its length (aapt2 keeps an 11-digit one a string and types 2147483648 as a number; the rule does not follow
     that), and a value that begins with @ or ? is a resource reference. Measured with aapt2 35.0.0 on about 150 values (out/parity/program/PORT/PORT9/impl/aapt2probe) and
     held to the real aapt2 by TheReportTitle in test_android_package.py wherever an SDK is present."""
     text = value.strip(AAPT2_TRIM_CHARS)
     flags = re.ASCII
     if text[:1] in ('@', '?'):
-        return 'a resource reference'
+        return KIND_REFERENCE
     if re.fullmatch(r'(true|TRUE|True|false|FALSE|False)', text, flags):
-        return 'a boolean'
+        return KIND_BOOLEAN
     if re.fullmatch(r'#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})', text, flags):
-        return 'a colour'
+        return KIND_COLOUR
     if re.fullmatch(r'[+-]?[0-9]+', text, flags) or re.fullmatch(r'[+-]?0[xX][0-9a-fA-F]+', text, flags):
-        return 'an integer'
+        return KIND_INTEGER
     decimal = r'[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?'
     hexadecimal = r'[+-]?0[xX]([0-9a-fA-F]+\.?[0-9a-fA-F]*|\.[0-9a-fA-F]+)[pP][+-]?[0-9]+'
     if re.fullmatch(decimal, text, flags) or re.fullmatch(hexadecimal, text, flags):
-        return 'a floating-point number'
-    return 'a string'
+        return KIND_FLOAT
+    return KIND_STRING
 
 
 def check_report_title(value):
     """A manifest that sets supersonic.reportTitle sets it to a name the engine can read. The engine reads the key with Bundle.getString, like supersonic.reportLog,
     and a value the manifest compiler stores as another type reads as ABSENT on the device (the engine README says so, in "The title names the game"): the dialog would
     silently call the game by its label instead. So a value that would be stored as another type is refused here, at build time, and so is a blank one (which the
-    engine would skip for the label too: a key that names nothing is a mistake)."""
+    engine would skip for the label too: a key that names nothing is a mistake).
+
+    A REFERENCE (@string/title) is refused for another reason, and the message says that one (planning step 208, PORT9-7 (a)): the engine README gives a reference to a string
+    resource as the way to KEEP a name a string, so a reference does not read as absent; but this packager compiles no string resources (PORT9-2), aapt2 cannot link a reference
+    to none, and what a reference answers on a phone is the resource manager's to say and not known from the manifest. If a string resource is ever compiled, this is the place
+    that lets a reference to it through (check_built_report_title, which reads the built manifest back, stays as the backstop)."""
     if not java_trim(value):
         raise PackError('the manifest sets %s to a blank value: give the game\'s name, or leave the key out (the dialog then uses the application\'s label)' % REPORT_TITLE_KEY)
     kind = manifest_value_type(value)
-    if kind != 'a string':
+    if kind == KIND_REFERENCE:
+        raise PackError(
+            '%s is %r, %s. The engine README ("The title names the game", engine/README.md) gives a reference to a string resource as the way to keep a name a string, but this '
+            'packager compiles no string resources today (PORT9-2), so aapt2 cannot link a reference to none, and what a reference answers on a phone is not known from the manifest. '
+            'Give the name as plain text, or add a values/strings.xml to the packager first' % (REPORT_TITLE_KEY, value, KIND_WORDS[kind]))
+    if kind != KIND_STRING:
         raise PackError(
             '%s is %r, which the manifest compiler (aapt2) stores as %s and not as a string. The engine reads the key as a string (getString), so on a phone it would read as ABSENT '
             'and the crash report would call the game by its label, silently (engine/README.md, "The title names the game"). Rename it so it is not read as a number, true/false or a '
             'colour (add a word to it), or give it as a string resource (android:value="@string/name"; this packager compiles no string resources today, so that route needs one added '
-            'first and aapt2 cannot link a reference to none)' % (REPORT_TITLE_KEY, value, kind))
+            'first and aapt2 cannot link a reference to none)' % (REPORT_TITLE_KEY, value, KIND_WORDS[kind]))
 
 
 def report_title_choice(facts):
@@ -1132,6 +1156,9 @@ def cmd_build(args):
     check_ties(repo, facts)
     check_config_changes(facts, os.path.abspath(args.sdk))
     version = read_version(repo)
+    version_code = args.version_code if args.version_code is not None else default_version_code(version)
+    if version_code < 1:
+        raise PackError('--version-code wants a whole number of at least 1, got %d' % version_code)
     libs = {}
     for spec in args.lib or []:
         abi, sep, path = spec.partition('=')
@@ -1169,7 +1196,7 @@ def cmd_build(args):
     icons, store = make_icons(repo, work, args.icons)
     if store:
         shutil.copyfile(store, os.path.join(out, 'play_store_512.png'))
-    base = link_base(tools, manifest_path, icons, facts, version, args.version_code, not args.release, work)
+    base = link_base(tools, manifest_path, icons, facts, version, version_code, not args.release, work)
     assembled = os.path.join(work, 'assembled.apk')
     assemble(base, dex, libs, list_text, content, shaders, os.path.abspath(args.package) if args.package else None, assembled)
     aligned = os.path.join(work, 'aligned.apk')
@@ -1191,7 +1218,7 @@ def cmd_build(args):
         print('PROBLEMS:\n  ' + '\n  '.join(problems), file=sys.stderr)
         raise PackError('%s failed its checks (%d problem(s)); it is left at %s' % (name, len(problems), final))
     names = write_sums(out)
-    print('APK: %s (%d bytes, versionName %s, versionCode %d, stamp %s)' % (final, os.path.getsize(final), version, args.version_code, stamp))
+    print('APK: %s (%d bytes, versionName %s, versionCode %d, stamp %s)' % (final, os.path.getsize(final), version, version_code, stamp))
     print('SHA256SUMS.txt: %s' % ', '.join(names))
     return 0
 
@@ -1249,7 +1276,8 @@ def main(argv=None):
     b.add_argument('--lib', action='append')
     b.add_argument('--package')
     b.add_argument('--no-data', action='store_true')
-    b.add_argument('--version-code', type=int, default=1)
+    b.add_argument('--version-code', type=int, default=None,
+                   help='the APK versionCode (default: the rule of tools/package/version.py, major*10000 + minor*100 + patch)')
     b.add_argument('--verification', action='store_true')
     b.add_argument('--perf-diag', action='store_true')
     b.add_argument('--release', action='store_true')

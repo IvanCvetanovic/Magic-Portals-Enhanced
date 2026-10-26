@@ -97,6 +97,13 @@ def make_elf(machine=62, etype=3, aligns=(0x4000, 0x4000), flags=(5, 6), needed=
     return data
 
 
+def skip_loudly(case, reason):
+    """Skips the test AND says so on standard error, where a CI log shows it (unittest's own summary says only "skipped=1"): a check that did not run must not look like one that did
+    (PORT9-6 (b)). Not a fake pass: the test is reported skipped."""
+    print('\nSKIPPED %s: %s' % (case.id(), reason), file=sys.stderr)
+    case.skipTest(reason)
+
+
 class TempCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix='mp-android-pack-')
@@ -505,24 +512,47 @@ class TheReportTitle(ManifestVariants):
     # ---- the check -----------------------------------------------------------------------------------------------------------------------------
 
     def test_each_value_the_compiler_would_store_as_another_type_is_refused_with_the_way_out(self):
-        cases = {'12345': 'an integer', '0': 'an integer', '-3': 'an integer', '+7': 'an integer', '0x1F': 'an integer', '0X1f': 'an integer', ' 42 ': 'an integer',
-                 'true': 'a boolean', 'false': 'a boolean', 'TRUE': 'a boolean', 'True': 'a boolean', 'FALSE': 'a boolean', ' true ': 'a boolean',
-                 '1.5': 'a floating-point number', '.5': 'a floating-point number', '1e3': 'a floating-point number', '1.': 'a floating-point number',
-                 '-1.5e-3': 'a floating-point number', '0x1.8p1': 'a floating-point number',
-                 '#abc': 'a colour', '#aabbccdd': 'a colour', '#abcdef': 'a colour', '#ABCD': 'a colour',
-                 '@null': 'a resource reference', '@string/title': 'a resource reference', '?attr/x': 'a resource reference', '@android:string/ok': 'a resource reference',
-                 '99999999999': 'an integer'}  # the last: aapt2 keeps it a string; the rule is deliberately wider (digits only, any length)
+        I, B, F, C, R = ap.KIND_INTEGER, ap.KIND_BOOLEAN, ap.KIND_FLOAT, ap.KIND_COLOUR, ap.KIND_REFERENCE
+        cases = {'12345': I, '0': I, '-3': I, '+7': I, '0x1F': I, '0X1f': I, ' 42 ': I,
+                 'true': B, 'false': B, 'TRUE': B, 'True': B, 'FALSE': B, ' true ': B,
+                 '1.5': F, '.5': F, '1e3': F, '1.': F, '-1.5e-3': F, '0x1.8p1': F,
+                 '#abc': C, '#aabbccdd': C, '#abcdef': C, '#ABCD': C,
+                 '@null': R, '@string/title': R, '?attr/x': R, '@android:string/ok': R,
+                 '99999999999': I}  # the last: aapt2 keeps it a string; the rule is deliberately wider (digits only, any length)
         for value, kind in cases.items():
             self.assertEqual(ap.manifest_value_type(value), kind, value)
             with self.assertRaises(ap.PackError, msg=value) as ctx:
                 ap.read_manifest(self.manifest_with(value))
             message = str(ctx.exception)
             self.assertIn(ap.REPORT_TITLE_KEY, message)
-            self.assertIn(kind, message, 'the message says what the value is read as')
+            self.assertIn(ap.KIND_WORDS[kind], message, 'the message says what the value is read as')
+            self.assertIn('README', message, 'and the engine document that states the rule')
+            if kind == R:
+                continue  # a reference has its own message (below)
             self.assertIn('ABSENT', message)
             self.assertIn('@string/name', message, 'the string resource is named as a way out')
             self.assertIn('Rename', message, 'and so is a new name')
-            self.assertIn('README', message, 'and the engine document that states the rule')
+
+    def test_a_reference_is_refused_for_the_reason_that_is_true_of_it(self):
+        # PORT9-7 (a): the engine README gives a reference to a string resource as the way to KEEP a name a string, so a reference does not "read as absent"; it is refused
+        # because this packager compiles no string resources (PORT9-2), and the message says that.
+        for value in ('@string/title', '@android:string/ok', '@null', '?attr/x', ' @string/x '):
+            with self.assertRaises(ap.PackError, msg=value) as ctx:
+                ap.check_report_title(value)
+            message = str(ctx.exception)
+            self.assertNotIn('ABSENT', message, 'a reference is not said to read as absent')
+            self.assertNotIn('read as absent', message.lower())
+            self.assertNotIn('Rename', message, 'a name that is already a reference is not asked to be renamed')
+            for word in ('a resource reference', 'compiles no string resources', 'PORT9-2', 'plain text', 'engine/README.md', 'is not known from the manifest'):
+                self.assertIn(word, message, value)
+        # the other kinds keep their message, which does say absent
+        with self.assertRaises(ap.PackError) as ctx:
+            ap.check_report_title('12345')
+        self.assertIn('ABSENT', str(ctx.exception))
+        # the kinds are constants and the words are for messages only
+        self.assertEqual(ap.manifest_value_type('Portals Deluxe'), ap.KIND_STRING)
+        self.assertEqual(sorted(ap.KIND_WORDS), sorted([ap.KIND_STRING, ap.KIND_REFERENCE, ap.KIND_BOOLEAN, ap.KIND_COLOUR, ap.KIND_INTEGER, ap.KIND_FLOAT]))
+        self.assertNotIn(ap.manifest_value_type('Portals Deluxe'), ap.KIND_WORDS.values(), 'the tag is not the prose')
 
     def test_a_blank_value_is_refused(self):
         for value in ('', ' ', '   ', '\t'):  # a control character below U+0020 other than tab is not well-formed XML, so it cannot reach the packager
@@ -580,7 +610,7 @@ class TheReportTitle(ManifestVariants):
         folder = os.path.join(self.ENGINE, 'src', 'platform', 'android', 'java', 'com', 'ivancvetanovic', 'supersonic')
         readme = os.path.join(self.ENGINE, 'README.md')
         if not (os.path.isfile(os.path.join(folder, 'ReportText.java')) and os.path.isfile(readme)):
-            self.skipTest('the engine submodule is not checked out here, or is at a commit before ReportText')
+            skip_loudly(self, 'the engine submodule is not checked out here, or is at a commit before ReportText: the ties to the engine\'s own words were NOT checked')
         with open(os.path.join(folder, 'SupersonicActivity.java'), encoding='utf-8') as f:
             source = f.read()
         self.assertIn('info.metaData.getString("%s")' % ap.REPORT_TITLE_KEY, source, 'the engine reads the key with getString, as a STRING (the check is written for that)')
@@ -596,6 +626,16 @@ class TheReportTitle(ManifestVariants):
                        'android:value="@string/title"'):
             self.assertIn(phrase, doc, 'the engine README no longer says: %s' % phrase)
 
+    def test_the_comment_above_the_key_cites_the_readme_paragraph_it_copies(self):
+        # PORT9-7 (b): the citation must be in the comment ABOVE `REPORT_TITLE_KEY =`; the words anywhere in the file (the refusal message has them) do not pin it.
+        with open(os.path.join(HERE, 'android_package.py'), encoding='utf-8') as f:
+            source = f.read()
+        comment = source[:source.index('REPORT_TITLE_KEY = ')]
+        comment = comment[comment.rindex('# THE NAME THE CRASH REPORT CALLS THE GAME'):]
+        flat = ' '.join(line.lstrip('# ').strip() for line in comment.split('\n'))
+        self.assertIn('engine/README.md (the paragraph "The title names the game")', flat)
+        self.assertIn("THIS PACKAGER'S OWN COPY", flat)
+
     def test_the_packagers_copy_names_the_readme_it_copies(self):
         with open(os.path.join(HERE, 'android_package.py'), encoding='utf-8') as f:
             source = f.read()
@@ -606,7 +646,7 @@ class TheReportTitle(ManifestVariants):
     def test_the_typing_rule_is_held_to_the_real_aapt2(self):
         found = find_aapt2()
         if found is None:
-            self.skipTest('no Android SDK with aapt2 and platform android-35 here: the typing rule was NOT compared with the real compiler')
+            skip_loudly(self, 'no Android SDK with aapt2 and platform android-35 here: the typing rule was NOT compared with the real compiler')
         import subprocess
         aapt2, jar = found
         # One manifest with one meta-data per value: each value goes in, and what aapt2 stored is read back out of the one dump.
@@ -635,7 +675,7 @@ class TheReportTitle(ManifestVariants):
         self.assertEqual(len(stored), len(values))
         for i, value in enumerate(values):
             aapt_string = ' (Raw: "' in stored['k%d' % i]
-            ours = ap.manifest_value_type(value) == 'a string'
+            ours = ap.manifest_value_type(value) == ap.KIND_STRING
             self.assertEqual(ours, aapt_string, '%r: aapt2 stored %s, the packager says %s' % (value, stored['k%d' % i], ap.manifest_value_type(value)))
 
 
