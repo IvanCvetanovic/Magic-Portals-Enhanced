@@ -28,6 +28,11 @@ name: Apple
 # GLSL_COMPILER=GLSL_COMPILER-NOTFOUND in every configure: the engine writes compiled SPIR-V into its SOURCE tree when it finds a compiler, and a blob from any compiler but
 # the Windows Vulkan SDK's glslc differs byte for byte (the sibling's record). The runners have none today and the flag holds for the one configure a run makes. A step at the
 # end of the macos job checks that no tracked file changed.
+#
+# CALLED BY release.yml (planning step 209): the same file builds the Apple shells the release programs workflow collects, so the macOS and iOS recipes are written once. The call passes
+# `job` (macos or ios-device) and nothing else; a called workflow cannot be started by anything but its caller, so the trigger is still a person's dispatch. Its actions are pinned to
+# commit shas (resolved on 2026-10-27 with a read-only git ls-remote, docs/ci.md). The two runs of 2026-10-25 used the floating v4 tags; the shas are the commits those tags named on the 27th
+# (what they named on the 25th is not known). This edited file has not run.
 on:
   workflow_dispatch:
     inputs:
@@ -40,12 +45,18 @@ on:
           - ios-sim
           - all
         default: all
+  workflow_call:
+    inputs:
+      job:
+        description: Which job to run (macos, ios-device, ios-sim or all)
+        type: string
+        default: all
 
 permissions:
   contents: read
 
 concurrency:
-  group: apple-${{ github.ref }}
+  group: apple-${{ github.ref }}-${{ inputs.job }}
   cancel-in-progress: false
 
 defaults:
@@ -70,7 +81,7 @@ jobs:
     steps:
       # The engine submodule with it, over https. Whether the engine's repository is public is NOT KNOWN here (the sibling's workflow says so of the same address,
       # and nothing in this step could check it): if it is private, this step fails in all three jobs, and what to do about it is the owner's (docs/apple.md, APPLE-25).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
       - name: Engine submodule
@@ -98,7 +109,7 @@ jobs:
 
       - name: MoltenVK (cached)
         id: moltenvk
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/moltenvk-macos
           key: moltenvk-${{ env.MOLTENVK_VERSION }}-macos
@@ -118,7 +129,7 @@ jobs:
         run: brew install ninja ccache
 
       - name: ccache (restore)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-macos-${{ github.sha }}
@@ -143,29 +154,23 @@ jobs:
           grep 'warning:' "$RUNNER_TEMP/apple-logs/build-macos-tests.log" | grep -v '/third_party/' | sort | uniq -c | sort -rn | head -40 || true
           ccache -s || true
 
-      # Every suite once. A suite that needs the owner's data exits 77 and ctest reports it Skipped: the count is printed, and a skip is never a pass.
-      # Two suites are not marked to skip and FAIL when the data is not there (measured on Linux with the data hidden, planning step 206: tests/test_mp_shoot.cpp runs fewer checks than its
-      # floor, and tests/test_mp_sprites.cpp:4089 reads an entity file of the original with no skip guard). They are named below, printed as failures and never counted as passes, and
-      # they do not stop the job; any OTHER failed test does. If a later change makes either skip or pass, the list is shortened by hand.
+      # Every suite once. A suite that needs the owner's data exits 77 and ctest reports it Skipped: the count is printed, and a skip is never a pass. Until planning step 209 two suites
+      # (test_mp_shoot, test_mp_sprites) failed without the data and this step let those two through by name; each is now a suite that runs what needs no data and a suite of its own
+      # that exits 77 for what does, so ANY failed test fails the step.
       - name: Test (ctest, data-less)
         run: |
           set -o pipefail
           log="$RUNNER_TEMP/apple-logs/ctest-macos.log"
           status=0
-          ctest --test-dir build --output-on-failure 2>&1 | tee "$log" || status=$?
+          ctest --test-dir build --output-on-failure --timeout 900 2>&1 | tee "$log" || status=$?
           skipped="$(grep -c '(Skipped)' "$log" || true)"
           marked="$(grep -c -E '^add_mp_test\(.* SKIPS_WITH_77\)' tests/CMakeLists.txt || true)"
           echo "skipped: $skipped (never counted as passed); suites marked as needing data in tests/CMakeLists.txt: $marked"
           if [ "$skipped" != "$marked" ]; then echo "::warning::$skipped suites skipped, $marked are marked as needing data"; fi
           failed="$(sed -n '/^The following tests FAILED:/,$p' "$log" | grep -oE 'test_mp_[a-z0-9_]+' | sort -u | tr '\n' ' ' || true)"
-          known="test_mp_shoot test_mp_sprites"
-          unexpected=""
-          for name in $failed; do
-            case " $known " in *" $name "*) ;; *) unexpected="$unexpected $name" ;; esac
-          done
-          echo "failed: ${failed:-none} (the two named in the comment above fail for want of the data and are NOT passes)"
-          if [ -n "$unexpected" ]; then echo "::error::unexpected failures:$unexpected"; exit 1; fi
-          if [ "$status" != 0 ] && [ -z "$failed" ]; then echo "::error::ctest exited $status with no failed test named"; exit 1; fi
+          echo "failed: ${failed:-none}"
+          if [ -n "$failed" ]; then echo "::error::failed tests: $failed"; exit 1; fi
+          if [ "$status" != 0 ]; then echo "::error::ctest exited $status with no failed test named"; exit 1; fi
 
       # The release-style build the shell is made from: both architectures in one program, no baked path, no developer's flag.
       - name: Configure (shell)
@@ -276,14 +281,14 @@ jobs:
 
       - name: ccache (save)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-macos-${{ github.sha }}
 
       - name: Upload the shell
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-shell
           retention-days: 7
@@ -292,7 +297,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-logs
           retention-days: 7
@@ -305,7 +310,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
       - name: Engine submodule
@@ -324,7 +329,7 @@ jobs:
 
       - name: MoltenVK (cached)
         id: moltenvk
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/moltenvk-ios-device
           key: moltenvk-${{ env.MOLTENVK_VERSION }}-ios-device
@@ -344,7 +349,7 @@ jobs:
         run: brew install ninja ccache
 
       - name: ccache (restore)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-ios-device-${{ github.sha }}
@@ -378,14 +383,14 @@ jobs:
 
       - name: ccache (save)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-ios-device-${{ github.sha }}
 
       - name: Upload the shell
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-device-shell
           retention-days: 7
@@ -394,7 +399,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-device-logs
           retention-days: 7
@@ -407,7 +412,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
       - name: Engine submodule
@@ -426,7 +431,7 @@ jobs:
 
       - name: MoltenVK (cached)
         id: moltenvk
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/moltenvk-ios-sim
           key: moltenvk-${{ env.MOLTENVK_VERSION }}-ios-sim
@@ -446,7 +451,7 @@ jobs:
         run: brew install ninja ccache
 
       - name: ccache (restore)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-ios-sim-${{ github.sha }}
@@ -480,14 +485,14 @@ jobs:
 
       - name: ccache (save)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/ccache
           key: ccache-ios-sim-${{ github.sha }}
 
       - name: Upload the shell
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-sim-shell
           retention-days: 7
@@ -496,7 +501,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ios-sim-logs
           retention-days: 7

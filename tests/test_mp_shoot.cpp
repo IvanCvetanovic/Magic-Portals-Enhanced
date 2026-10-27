@@ -15,8 +15,8 @@
 //   the cap     min(holdTime, 1000) on the begin of a contact with the player's body, not while it lasts, minion.ent alone
 //   the deaths  a stone's crush above hitIntensity 1.23, and a barrel's blast through the same one-tick-later burn a flame has
 //
-// Its rig cases need no data; its level cases read the converted levels and Enhanced's data from outside this repository and
-// skip, saying so, when either is absent.
+// Its rig cases need no data and are the suite test_mp_shoot; its level cases read the converted levels and Enhanced's data from outside this repository and are the
+// suite test_mp_shoot_levels, which exits 77 (skipped) when either is absent (the end of this file says why there are two).
 
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
@@ -510,7 +510,12 @@ void AKnightKillsThePortalItSees() {
     CHECK_MSG(portals.placed.empty(), "and it has left the pair");
 }
 
-void runTests() {
+// This file holds TWO suites (planning step 209, PORT-11; the rows PORT5-7 and APPLE-22). It was one suite, test_mp_shoot, whose level cases skipped themselves without the converted
+// levels and still returned its summary: with the owner's data absent it ran 72 of its 100 checks, fell under its floor of 90 and FAILED, where a suite that cannot run says so.
+// The nine rig cases need no data and stay in test_mp_shoot (72 checks); the five level cases are test_mp_shoot_levels (28 checks), which returns 77 before its first check when
+// the levels are absent, and ctest reports it SKIPPED, never passed (SKIPS_WITH_77 in tests/CMakeLists.txt). With the data present the two run 72 + 28 = 100 checks, as the
+// one suite did. Each floor is its own: no floor was lowered to let a skip pass, and a suite that runs fewer checks than its floor still fails.
+void runRigCases() {
     TheShotIsTheDecodedNumbersAndTheGhostsToo();
     AKnightsShotStartsNudgedTowardWhereThePlayerStood();
     TheShotFliesOnTheScriptClockAndKillsThePlayerItIsAimedAt();
@@ -520,11 +525,9 @@ void runTests() {
     EveryShotIsCountedAndNamed();
     TheContactCapsAKnightsHoldOnItsBeginOnly();
     TheTargetIsTheFirstInTheBucketsOrder();
-    if (!LevelsPresent()) {
-        std::printf("  the level cases SKIPPED - need the converted levels at %s and Enhanced's data at %s\n",
-                    kLevels.c_str(), kData.c_str());
-        return;
-    }
+}
+
+void runLevelCases() {
     AStonesCrushTakesTheKnight();
     ABlastKillsAKnightInItsReach();
     ThePlayersTouchReleasesAKnightFromItsLongHold();
@@ -532,6 +535,26 @@ void runTests() {
     AKnightKillsThePortalItSees();
 }
 
-} // namespace
+// The floors: about 90 % of each suite's own count (72 and 28), as the harness asks ("well below the real count, so a handful of checks added or removed does not trip it").
+constexpr int kRigChecksAtLeast = 65;
+constexpr int kLevelChecksAtLeast = 25;
+constexpr int kSkipped = 77; // the suites' own code for "skipped": SKIPS_WITH_77, ctest's SKIP_RETURN_CODE (tests/test_mp.cpp)
 
-MP_TEST_MAIN("test_mp_shoot", 90)
+int rigEntry(int, char**) {
+    runRigCases();
+    return ::test::summary("test_mp_shoot", kRigChecksAtLeast);
+}
+
+int levelEntry(int, char**) {
+    if (!LevelsPresent()) {
+        std::printf("test_mp_shoot_levels: SKIPPED - needs the converted levels at %s and Enhanced's data at %s (no check was run)\n", kLevels.c_str(), kData.c_str());
+        return kSkipped;
+    }
+    runLevelCases();
+    return ::test::summary("test_mp_shoot_levels", kLevelChecksAtLeast);
+}
+
+const ::MpSuite::Registration rigRegistration("test_mp_shoot", &rigEntry);
+const ::MpSuite::Registration levelRegistration("test_mp_shoot_levels", &levelEntry);
+
+} // namespace

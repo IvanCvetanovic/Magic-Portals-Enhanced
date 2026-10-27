@@ -1,0 +1,180 @@
+name: Android emulator
+
+# WRITTEN FOR A RUNNER, NEVER DISPATCHED (planning step 209, PORT-11). Nothing in this file has run: no emulator has shown the game's crash-report dialog, because the maker's PC has too little
+# memory for an emulator (tools/android_emulator.py refuses to start one below 6 GiB available) and a runner has not been asked yet. The FIRST REAL RUN of tools/ci/android_smoke.py is a
+# dispatch of this file; docs/ci.md says what its flows are and what each would show. A flow that cannot be run says NOT RUN with its reason, and this job is then red: it is never
+# green for a flow that did not pass.
+#
+# WHAT IT DOES. It builds the game's APK for the x86_64 emulator with the CI fixture level in it (a synthetic content package made by tools/ci/make_fixture_world.py: the hand-written
+# level and tables, the port's own tables and two invented stubs; nothing of the owner's), starts a headless emulator on the runner's KVM, and runs the smoke flows: the install and the
+# first-run unpack, the menu, an unexpected end of the game and the dialog that the engine's glue shows at the next start (its title read from the UI hierarchy, the Share and OK buttons,
+# OK closing it), a second start with none, a user's Home, Back and force-stop with none, the title in Portuguese, and a level started from the menu by taps. The menu's taps are the full game's
+# (step 205) and may not fit the fixture's menu: F6 says so when it fails. The logs, the logcat and the UI dumps are uploaded whatever happened.
+#
+# DISPATCH ONLY, while the repository is private. A runner's emulator is slow (software Vulkan); the job has a timeout, the smoke script puts a bound on every wait and its whole run has
+# a wall limit. No secret, no token and no key but the throwaway debug key the packager makes in its work folder.
+#
+# KVM: the emulator needs hardware acceleration. The step below enables /dev/kvm for every user with the udev rule that GitHub's runner announcements and the Android emulator runner's
+# README give for Linux runners; if the runner has no /dev/kvm the step fails in words (an unaccelerated emulator would take far longer than the job's timeout).
+on:
+  workflow_dispatch:
+    inputs:
+      api_level:
+        description: The Android API level of the emulator's system image (33 is the level of the maker's own emulator; the crash report needs 30 or later)
+        type: string
+        default: "33"
+      abi:
+        description: The system image's ABI
+        type: choice
+        options:
+          - x86_64
+        default: x86_64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-emulator-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  ANDROID_NDK_VERSION: 28.2.13676358
+  ANDROID_BUILD_TOOLS_VERSION: 35.0.0
+  ANDROID_PLATFORM: android-35
+  CCACHE_MAXSIZE: 600M
+
+jobs:
+  smoke:
+    name: Emulator - install, report dialog, level
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      API_LEVEL: ${{ inputs.api_level }}
+      ABI: ${{ inputs.abi }}
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule and the inputs
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/smoke"
+          # The application id and the game's log are read from the manifest, as the smoke script reads them: the id is a placeholder the owner confirms, and a change of it is one edit.
+          {
+            echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+            echo "PACKAGE=$(python3 -c 'import sys; sys.path.insert(0, "tools/ci"); import android_smoke as s; print(s.parse_manifest(open("game/android/AndroidManifest.xml", encoding="utf-8").read()).package)')" >> "$GITHUB_ENV"
+            echo "GAME_LOG=$(python3 -c 'import sys; sys.path.insert(0, "tools/ci"); import android_smoke as s; print(s.parse_manifest(open("game/android/AndroidManifest.xml", encoding="utf-8").read()).log_path)')" >> "$GITHUB_ENV"
+          } >> "$GITHUB_ENV"
+          case "$API_LEVEL" in ''|*[!0-9]*) echo "::error::api_level must be a whole number, not '$API_LEVEL'"; exit 1 ;; esac
+          if [ "$API_LEVEL" -lt 30 ]; then echo "::warning::API $API_LEVEL has no crash report (it needs 30): every flow after the first will say NOT RUN"; fi
+
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache ninja-build
+
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm || { echo "::error::this runner has no /dev/kvm: an emulator without hardware acceleration is not usable in this job's time"; exit 1; }
+
+      - name: Android SDK parts
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > "$RUNNER_TEMP/logs/sdk-licenses.log" 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "emulator" "system-images;android-$API_LEVEL;google_apis;$ABI" \
+            "ndk;$ANDROID_NDK_VERSION" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "platforms;$ANDROID_PLATFORM" 2>&1 | tail -8
+          "$ANDROID_HOME/platform-tools/adb" version | sed -n 1p
+          "$ANDROID_HOME/emulator/emulator" -version | sed -n 1,3p
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-emulator-${{ github.sha }}
+          restore-keys: ccache-emulator-
+
+      # The fixture content: the packager accepts it and its own verify passes (tools/ci/test_make_fixture_world.py). The APK is the shipped debug build for the emulator's ABI alone.
+      - name: Content package of the fixture
+        run: |
+          python3 tools/ci/make_fixture_world.py "$RUNNER_TEMP/world"
+          python3 -I tools/package/package.py content --repo "$RUNNER_TEMP/world/repo" --reference "$RUNNER_TEMP/world/ref" --out "$RUNNER_TEMP/content" 2>&1 | tail -3
+          python3 -I tools/package/package.py verify "$RUNNER_TEMP/content" | tail -2
+
+      - name: Build the APK
+        run: |
+          tools/build_android.sh --data "$RUNNER_TEMP/content" --abi "$ABI" --jobs 4 --ndk "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" --out "$RUNNER_TEMP/apk" 2>&1 | tee "$RUNNER_TEMP/logs/build-android.log"
+          echo "APK=$(ls "$RUNNER_TEMP"/apk/MagicPortals-*-debug.apk)" >> "$GITHUB_ENV"
+
+      # The AVD is made like the maker's own (tools/android_emulator.py AVD_CONFIG: 720x1280 at 320 dpi shown in landscape, 2 GB, 2 cores, SwiftShader, no snapshots): the same table, applied
+      # by the same function, so the two cannot drift. --force is for a runner that may hold an AVD of the name; the maker's script never uses it.
+      - name: Create the AVD
+        run: |
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force -n smoke -k "system-images;android-$API_LEVEL;google_apis;$ABI" -d pixel 2>&1 | tail -3
+          python3 -c 'import os, sys; sys.path.insert(0, "tools"); import android_emulator as e; e.apply_config(os.path.expanduser("~/.android/avd/smoke.avd/config.ini"), e.AVD_CONFIG)'
+          grep -E '^(hw.lcd|hw.ramSize|hw.cpu|hw.gpu|hw.initialOrientation|disk.dataPartition|snapshot)' ~/.android/avd/smoke.avd/config.ini
+
+      - name: Start the emulator
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb start-server
+          setsid nohup timeout 7200 "$ANDROID_HOME/emulator/emulator" -avd smoke -port 5554 -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect \
+            > "$RUNNER_TEMP/logs/emulator.log" 2>&1 &
+          adb -s emulator-5554 wait-for-device
+          deadline=$((SECONDS + 420))
+          until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+            if [ "$SECONDS" -gt "$deadline" ]; then echo "::error::the emulator did not finish booting within 420 s"; tail -30 "$RUNNER_TEMP/logs/emulator.log"; exit 1; fi
+            sleep 5
+          done
+          echo "booted after $SECONDS s of this step"
+          adb -s emulator-5554 shell getprop ro.build.version.sdk
+          adb -s emulator-5554 shell settings put global window_animation_scale 0
+          adb -s emulator-5554 shell settings put global transition_animation_scale 0
+          adb -s emulator-5554 shell settings put global animator_duration_scale 0
+
+      # The flows. Exit 0: every flow passed. 1: one failed. 3: none failed and one did not run (never a pass). A wall limit on the whole run: the minutes are paid.
+      - name: Smoke flows
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          timeout 2700 python3 tools/ci/android_smoke.py --apk "$APK" --runner raw --serial emulator-5554 --content fixture --out "$RUNNER_TEMP/smoke" \
+            --json "$RUNNER_TEMP/smoke/results.json" --shots "$RUNNER_TEMP/smoke/shots" 2>&1 | tee "$RUNNER_TEMP/logs/smoke.log"
+
+      - name: Collect the device's log
+        if: always()
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb -s emulator-5554 logcat -d -v threadtime > "$RUNNER_TEMP/logs/logcat.txt" 2>&1 || true
+          adb -s emulator-5554 shell run-as "$PACKAGE" cat "files/$GAME_LOG" > "$RUNNER_TEMP/logs/magicportals-last.log" 2>&1 || true
+          adb -s emulator-5554 emu kill > /dev/null 2>&1 || true
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-emulator-${{ github.sha }}
+
+      - name: Upload the smoke results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-smoke
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/smoke
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-emulator-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs

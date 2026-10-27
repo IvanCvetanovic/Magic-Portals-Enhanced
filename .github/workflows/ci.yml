@@ -1,0 +1,580 @@
+name: CI
+
+# The project built and checked where nobody's PC is: GitHub's Linux and Windows runners, with the Android SDK and NDK the Linux runner brings. WRITTEN, NEVER RUN (planning step 209,
+# PORT-11): the first dispatch of this file is the first time any of it meets a runner. Nothing here says that a step works on GitHub; docs/ci.md says what has run and what has not.
+#
+# DISPATCH ONLY, while the repository is private. Every minute is billed to the owner, so nothing runs on a push or a pull request. To run it: Actions -> CI -> Run workflow. When the
+# repository is public, the triggers to add (push to the main branch, pull_request) are the owner's change; docs/ci.md says which. The file reads the repository and writes no
+# release, no tag and no comment: its permission is reading the contents.
+#
+# NO GAME DATA, EVER, AND NO KEY. Every job runs on the hand-written fixture level (tests/fixtures/ci) or on no data at all, so the suites that need the owner's data are SKIPPED
+# (exit 77, counted and printed, never counted as passed) and the whole run must have no failed test. No step names a path of the owner's data, none reads a secret or a token, and
+# the one key an Android job meets is the throwaway debug key the packager makes in its work folder and the runner discards.
+#
+# The input `job` chooses what runs: all (the default) or one of
+#   linux     two jobs. `Linux - build, test, fixture` (Ubuntu 24.04): the developer's build, every suite, the fixture level under a virtual display on the software Vulkan driver, and
+#             a picture that is checked. `Linux - release program` (Ubuntu 22.04, the oldest image that was meant to build it: see docs/ci.md): the release recipe (no baked paths, no
+#             developer tools, libstdc++ and libgcc linked in, stripped), check-program with the glibc floor, the archive without game data twice (the same bytes), unpacked, and the
+#             fixture level and a start with no game data run from it.
+#   windows   MSVC: the developer's build, every suite, the release program (check-program, the archive without game data). The fixture level is NOT RUN on Windows: the runner has no
+#             Vulkan driver that was checked, and the step that wrote this file downloaded none (it was allowed no download but the linter's: a fact about that step, not about software drivers); the
+#             step says so in the log.
+#   android   the Android SDK and NDK: the shell APK without game data for both ABIs, the packager's inspect, and the release check that must REFUSE a debug APK.
+#   tools     the Python tests (package, ci, apple, converter), the version check, the workflow checker and actionlint.
+# The jobs do not wait for one another (no needs:) and no step of one cancels another, so one failure never hides the next job's result. Every job ends by uploading its logs,
+# whatever happened. A cache (ccache) only makes a build faster: no result depends on it.
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run (all runs every job)
+        type: choice
+        options:
+          - linux
+          - windows
+          - android
+          - tools
+          - all
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # bash -eo pipefail: without pipefail, `build | tee log` passes whatever the build did.
+    shell: bash
+
+env:
+  # The oldest glibc the Linux release program may ask the system for: Ubuntu 22.04's. A program built on a newer system names a newer one, and check-program refuses it in words.
+  LINUX_GLIBC_FLOOR: "2.35"
+  ANDROID_NDK_VERSION: 28.2.13676358
+  ANDROID_BUILD_TOOLS_VERSION: 35.0.0
+  ANDROID_PLATFORM: android-35
+  # The actionlint release the tools job downloads, and the sha256 of its Linux tarball taken from the release's own checksums file (docs/ci.md says how it was checked).
+  ACTIONLINT_VERSION: 1.7.12
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  CCACHE_MAXSIZE: 600M
+
+jobs:
+  linux:
+    name: Linux - build, test, fixture
+    if: ${{ inputs.job == 'all' || inputs.job == 'linux' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots" "$RUNNER_TEMP/saves"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+      # The packages tools/build_linux.sh names in its header, and what the fixture run needs: a virtual display (xvfb) and the software Vulkan driver (mesa-vulkan-drivers).
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libasound2-dev ccache xvfb mesa-vulkan-drivers libvulkan1
+
+      - name: Runner
+        run: |
+          g++ --version | sed -n 1p
+          cmake --version | sed -n 1p
+          ninja --version
+          python3 --version
+          echo "cpus $(nproc), memory $(free -g | awk '/^Mem:/ {print $2}') GB"
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-linux-${{ github.sha }}
+          restore-keys: ccache-linux-
+
+      # The developer's build: baked paths on (they point at this checkout, where the owner's data is not), the programs and every suite. -j: the layer's translation unit needs about 2 GiB.
+      - name: Build (program and suites)
+        run: |
+          tools/build_linux.sh --build-dir "$RUNNER_TEMP/build" --jobs 4 2>&1 | tee "$RUNNER_TEMP/logs/build-linux.log"
+          echo "warnings: $(grep -c 'warning:' "$RUNNER_TEMP/logs/build-linux.log" || true)"
+          ccache -s || true
+
+      # Every suite once, with none of the owner's data. A suite that needs it exits 77 and ctest reports it Skipped: the count is printed and a skip is never a pass. ctest must end with
+      # NO failed test: a failure here is a real one (the two suites that used to fail without the data were made to skip or pass in planning step 209).
+      - name: Test (ctest, data-less)
+        run: |
+          log="$RUNNER_TEMP/logs/ctest-linux.log"
+          status=0
+          ctest --test-dir "$RUNNER_TEMP/build" --output-on-failure --timeout 900 -j 2 2>&1 | tee "$log" || status=$?
+          listed="$(ctest --test-dir "$RUNNER_TEMP/build" -N | grep -c 'Test *#' || true)"
+          skipped="$(grep -c '(Skipped)' "$log" || true)"
+          marked="$(grep -c -E '^add_mp_test\(.* SKIPS_WITH_77\)' tests/CMakeLists.txt || true)"
+          echo "tests listed: $listed"
+          grep -E 'tests passed, [0-9]+ tests failed out of' "$log" || true
+          echo "skipped: $skipped (never counted as passed); suites marked as needing data in tests/CMakeLists.txt: $marked, and the parity check skips with them"
+          if [ "$skipped" != "$((marked + 1))" ]; then echo "::warning::$skipped tests skipped, $((marked + 1)) expected (the marked suites and parity_reachability)"; fi
+          test "$status" = 0
+
+      # The fixture level, from the developer's build, under a virtual display on the software Vulkan driver (lavapipe): 300 fixed ticks at 1280x720 and one picture. A wall limit on
+      # every launch: the minutes are paid.
+      - name: Run the fixture
+        run: |
+          rc=0
+          timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$RUNNER_TEMP/build/game/MagicPortals" --root "$GITHUB_WORKSPACE/tests/fixtures/ci" --port-data "$GITHUB_WORKSPACE/game/data" --level ci_level \
+            --window 1280x720 --fixed-step --frames 300 --saves "$RUNNER_TEMP/saves" --screenshot "$RUNNER_TEMP/shots/ci_level-linux.png" \
+            > "$RUNNER_TEMP/logs/run-linux.log" 2>&1 || rc=$?
+          tail -15 "$RUNNER_TEMP/logs/run-linux.log"
+          echo "exit code: $rc"
+          test "$rc" = 0
+
+      - name: Check the picture
+        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/shots/ci_level-linux.png" --min-size 640x360
+
+      # Nothing the build wrote may be a change of a tracked file (the engine's shaders above all).
+      - name: Source tree untouched
+        run: |
+          git status --short --untracked-files=no
+          git -C engine status --short
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test -z "$(git -C engine status --porcelain)"
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-linux-${{ github.sha }}
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/logs
+            ${{ runner.temp }}/shots
+
+  linux-release:
+    name: Linux - release program
+    if: ${{ inputs.job == 'all' || inputs.job == 'linux' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots" "$RUNNER_TEMP/saves" "$RUNNER_TEMP/notices"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+      # g++-12: the engine asks for GCC 11 or newer, and nothing of this project was ever built with the 11 that this image has by default. Whether 12 builds it is NOT KNOWN until a run.
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++-12 cmake ninja-build pkg-config libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libasound2-dev ccache xvfb mesa-vulkan-drivers libvulkan1
+
+      - name: Runner
+        run: |
+          g++-12 --version | sed -n 1p
+          cmake --version | sed -n 1p
+          ldd --version | sed -n 1p
+          python3 --version
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-linux-release-${{ github.sha }}
+          restore-keys: ccache-linux-release-
+
+      # The release recipe (docs/packaging.md section 6): no data path or checkout path compiled in, no developer tools, libstdc++ and libgcc linked into the program (--portable) and the
+      # symbols stripped at link time (--strip), so that the program, its archive and its hash all see the same bytes. The glibc it asks for is the image's: that is the floor.
+      - name: Build (release program)
+        run: |
+          tools/build_linux.sh --no-baked-paths --dev-tools OFF --portable --strip --cxx g++-12 --build-dir "$RUNNER_TEMP/build-release" --jobs 4 2>&1 | tee "$RUNNER_TEMP/logs/build-linux-release.log"
+          ls -l "$RUNNER_TEMP/build-release/game/MagicPortals"
+          ccache -s || true
+
+      - name: What the program asks of the system
+        run: |
+          readelf -d "$RUNNER_TEMP/build-release/game/MagicPortals" | grep -E 'NEEDED|RPATH|RUNPATH' | tee "$RUNNER_TEMP/logs/needs-linux.txt"
+          ldd "$RUNNER_TEMP/build-release/game/MagicPortals" | tee -a "$RUNNER_TEMP/logs/needs-linux.txt"
+
+      # check-program reads the program as bytes and refuses a developer's build, a baked path, an account name and (here) a glibc newer than the floor, listing every cause.
+      - name: Check the program
+        run: |
+          python3 tools/package/release.py check-version
+          python3 tools/package/release.py check-program "$RUNNER_TEMP/build-release/game/MagicPortals" --platform linux --max-glibc "$LINUX_GLIBC_FLOOR" 2>&1 | tee "$RUNNER_TEMP/logs/check-program-linux.log"
+
+      # An archive with no game data in it (the game is the owner's), made twice from two folders: it must be the same bytes. The notices are a line each that says this is a CI archive.
+      - name: Assemble the archive without game data (twice)
+        run: |
+          printf 'An archive made by a CI run from a program with no game in it. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
+          printf '# A CI archive\n\nNo licence or notice of the project is in it: those are the owner'"'"'s.\n' > "$RUNNER_TEMP/notices/NOTICE.md"
+          for n in 1 2; do
+            python3 tools/package/release.py assemble --platform linux --program "$RUNNER_TEMP/build-release/game/MagicPortals" --no-data --max-glibc "$LINUX_GLIBC_FLOOR" \
+              --notices "$RUNNER_TEMP/notices" --out "$RUNNER_TEMP/archive-$n/deeper" 2>&1 | tee -a "$RUNNER_TEMP/logs/assemble-linux.log"
+          done
+          a="$(ls "$RUNNER_TEMP"/archive-1/deeper/MagicPortals-*-nodata.tar.gz)"
+          b="$(ls "$RUNNER_TEMP"/archive-2/deeper/MagicPortals-*-nodata.tar.gz)"
+          sha256sum "$a" "$b" | tee -a "$RUNNER_TEMP/logs/assemble-linux.log"
+          cmp "$a" "$b"
+          echo "ARCHIVE=$a" >> "$GITHUB_ENV"
+
+      - name: Unpack as a player would
+        run: |
+          mkdir -p "$RUNNER_TEMP/player"
+          tar xzf "$ARCHIVE" -C "$RUNNER_TEMP/player"
+          ls -l "$RUNNER_TEMP"/player/MagicPortals-*/
+          head -30 "$RUNNER_TEMP"/player/MagicPortals-*/PLAYING.txt
+
+      # From the unpacked archive, started from an unrelated folder. The archive has no game, so the fixture level is given with --root. 300 fixed ticks and one picture.
+      - name: Run the fixture from the archive
+        run: |
+          cd "$RUNNER_TEMP"
+          player="$(ls -d "$RUNNER_TEMP"/player/MagicPortals-*)"
+          rc=0
+          timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$player/MagicPortals" --root "$GITHUB_WORKSPACE/tests/fixtures/ci" --port-data "$GITHUB_WORKSPACE/game/data" --level ci_level \
+            --window 1280x720 --fixed-step --frames 300 --saves "$RUNNER_TEMP/saves" --screenshot "$RUNNER_TEMP/shots/ci_level-linux-release.png" \
+            > "$RUNNER_TEMP/logs/run-linux-release.log" 2>&1 || rc=$?
+          tail -15 "$RUNNER_TEMP/logs/run-linux-release.log"
+          echo "exit code: $rc"
+          test "$rc" = 0
+
+      - name: Check the picture
+        run: python3 tools/apple/check_png.py "$RUNNER_TEMP/shots/ci_level-linux-release.png" --min-size 640x360
+
+      # The start with no game data and no --root: it must say so in words and exit 1.
+      - name: Run with no game data (must fail in words)
+        run: |
+          cd "$RUNNER_TEMP"
+          player="$(ls -d "$RUNNER_TEMP"/player/MagicPortals-*)"
+          rc=0
+          timeout 60 xvfb-run -a "$player/MagicPortals" --fixed-step --frames 1 --saves "$RUNNER_TEMP/saves" > "$RUNNER_TEMP/logs/run-linux-nodata.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/logs/run-linux-nodata.log"
+          echo "exit code: $rc"
+          test "$rc" = 1
+          grep -q "the game's data was not found" "$RUNNER_TEMP/logs/run-linux-nodata.log"
+
+      - name: Source tree untouched
+        run: |
+          git status --short --untracked-files=no
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test -z "$(git -C engine status --porcelain)"
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-linux-release-${{ github.sha }}
+
+      - name: Upload the archive
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release-archive
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/archive-1/deeper
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/logs
+            ${{ runner.temp }}/shots
+
+  windows:
+    name: Windows - build, test, release program
+    if: ${{ inputs.job == 'all' || inputs.job == 'windows' }}
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/notices"
+
+      - name: Runner
+        run: |
+          python --version
+          cmake --version | sed -n 1p
+          ninja --version
+          # The Vulkan loader: the program imports vulkan-1.dll. Whether this image has a graphics driver is what the fixture run below depends on.
+          ls -l /c/Windows/System32/vulkan-1.dll 2>&1 || echo "no vulkan-1.dll in System32"
+
+      # The developer's build, configured as tools/parity/port_build.bat does (Ninja, Release, MSVC's cl named outright) with validation off and no shader compiler, so that the
+      # committed shaders are never rewritten. MSVC's environment comes from the newest Visual Studio on the image. The two targets the Linux job builds (build_linux.sh's default), not the
+      # default target: that one also builds MagicPortalsSpike, the stale spike CLAUDE.md says is never built.
+      - name: Build (program and suites)
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          cl 2>&1 | findstr /i "version"
+          cmake -S . -B "%RUNNER_TEMP%\build-tests" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND > "%RUNNER_TEMP%\logs\configure-windows-tests.log" 2>&1 || (type "%RUNNER_TEMP%\logs\configure-windows-tests.log" & exit /b 1)
+          cmake --build "%RUNNER_TEMP%\build-tests" --target MagicPortals test_mp > "%RUNNER_TEMP%\logs\build-windows-tests.log" 2>&1 || (powershell -NoProfile -Command "Get-Content -Tail 80 '%RUNNER_TEMP%\logs\build-windows-tests.log'" & exit /b 1)
+          powershell -NoProfile -Command "Get-Content -Tail 15 '%RUNNER_TEMP%\logs\build-windows-tests.log'"
+
+      - name: Test (ctest, data-less)
+        run: |
+          build="$(cygpath -u "$RUNNER_TEMP")/build-tests"
+          log="$(cygpath -u "$RUNNER_TEMP")/logs/ctest-windows.log"
+          status=0
+          ctest --test-dir "$build" --output-on-failure --timeout 900 2>&1 | tee "$log" || status=$?
+          grep -E 'tests passed, [0-9]+ tests failed out of' "$log" || true
+          echo "skipped: $(grep -c '(Skipped)' "$log" || true) (never counted as passed)"
+          test "$status" = 0
+
+      # The fixture level needs a Vulkan driver. This image has none that was checked, and the step that wrote this file downloaded no software driver (it was allowed no download but the
+      # linter's; that says nothing about the drivers), so the run is NOT RUN, and this step says so. (The Linux job runs the same level on the software driver; docs/ci.md has the table of what ran where.)
+      - name: Run the fixture (NOT RUN on Windows)
+        run: |
+          echo "NOT RUN: the fixture level is not started on the Windows runner. No Vulkan driver is installed on the image that this workflow has checked, and no software driver is downloaded."
+          echo "The Linux job runs the level; the Windows program is built, its suites are run and the release program is checked as bytes."
+
+      - name: Make the icon
+        run: python tools/art/make_app_icon.py --out "$RUNNER_TEMP/icons"
+
+      # The Windows release recipe of docs/packaging.md section 6: no baked path, no developer tools, the GUI program with its file properties and icon, validation off.
+      - name: Build (release program)
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          set "ICON=%RUNNER_TEMP:\=/%/icons/magic_portals.ico"
+          cmake -S . -B "%RUNNER_TEMP%\build-release" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF -DMAGICPORTALS_BAKED_PATHS=OFF -DMAGICPORTALS_DEV_TOOLS=OFF -DMAGICPORTALS_WIN_GUI=ON -DMAGICPORTALS_ICON=%ICON% -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND > "%RUNNER_TEMP%\logs\configure-windows-release.log" 2>&1 || (type "%RUNNER_TEMP%\logs\configure-windows-release.log" & exit /b 1)
+          cmake --build "%RUNNER_TEMP%\build-release" --target MagicPortals > "%RUNNER_TEMP%\logs\build-windows-release.log" 2>&1 || (powershell -NoProfile -Command "Get-Content -Tail 80 '%RUNNER_TEMP%\logs\build-windows-release.log'" & exit /b 1)
+          powershell -NoProfile -Command "Get-Content -Tail 8 '%RUNNER_TEMP%\logs\build-windows-release.log'"
+
+      # check-program reads the program as bytes (it is never started here): the format, no baked path and no builder, no developer tools, the version information and the delay-loaded loader.
+      - name: Check the program
+        run: |
+          python tools/package/release.py check-version
+          python tools/package/release.py check-program "$RUNNER_TEMP/build-release/game/MagicPortals.exe" --platform windows 2>&1 | tee "$RUNNER_TEMP/logs/check-program-windows.log"
+
+      - name: Assemble the archive without game data
+        run: |
+          printf 'An archive made by a CI run from a program with no game in it. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
+          printf '# A CI archive\n\nNo licence or notice of the project is in it: those are the owner'"'"'s.\n' > "$RUNNER_TEMP/notices/NOTICE.md"
+          python tools/package/release.py assemble --platform windows --program "$RUNNER_TEMP/build-release/game/MagicPortals.exe" --no-data \
+            --notices "$RUNNER_TEMP/notices" --out "$RUNNER_TEMP/archive" 2>&1 | tee "$RUNNER_TEMP/logs/assemble-windows.log"
+
+      - name: Source tree untouched
+        run: |
+          git status --short --untracked-files=no
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test -z "$(git -C engine status --porcelain)"
+
+      - name: Upload the archive
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-archive
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/archive
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  android:
+    name: Android - shell APK, inspect, release refusal
+    if: ${{ inputs.job == 'all' || inputs.job == 'android' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/notices"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache ninja-build
+
+      # The exact SDK parts the docs name, installed if the image lacks them (sdkmanager checks what it downloads against the repository's own listing). The licences are accepted
+      # for the Android SDK only, by the standard line.
+      - name: Android SDK parts
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > "$RUNNER_TEMP/logs/sdk-licenses.log" 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ANDROID_NDK_VERSION" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "platforms;$ANDROID_PLATFORM" 2>&1 | tail -5
+          ls "$ANDROID_HOME/ndk" "$ANDROID_HOME/build-tools"
+          java -version 2>&1 | sed -n 1p
+
+      - name: ccache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-${{ github.sha }}
+          restore-keys: ccache-android-
+
+      # The shell: the game's library for both ABIs and the APK around it, with no game data in it (the owner's). Debug-signed with the throwaway key the packager makes in its work folder.
+      - name: Build the shell APK (both ABIs)
+        run: |
+          tools/build_android.sh --no-data --abi all --jobs 4 --ndk "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" --out "$RUNNER_TEMP/apk" 2>&1 | tee "$RUNNER_TEMP/logs/build-android.log"
+          ls -l "$RUNNER_TEMP/apk"
+          echo "APK=$(ls "$RUNNER_TEMP"/apk/MagicPortals-*-nodata-debug.apk)" >> "$GITHUB_ENV"
+
+      - name: Inspect the APK
+        run: |
+          python3 tools/package/android_package.py inspect "$APK" --sdk "$ANDROID_HOME" 2>&1 | tee "$RUNNER_TEMP/logs/inspect-android.log"
+
+      # The game's library of each ABI is read as bytes like any other program (no baked path, no developer tools, no builder's account): it is the program of this platform.
+      - name: Check the libraries
+        run: |
+          for abi in arm64-v8a x86_64; do
+            mkdir -p "$RUNNER_TEMP/libs/$abi"
+            unzip -o -q "$APK" "lib/$abi/libMagicPortals.so" -d "$RUNNER_TEMP/libs/$abi"
+            python3 tools/package/release.py check-program "$RUNNER_TEMP/libs/$abi/lib/$abi/libMagicPortals.so" --platform android-lib 2>&1 | tee -a "$RUNNER_TEMP/logs/check-program-android.log"
+          done
+
+      # The release check must REFUSE this APK: it is a debug APK with no game in it. Exit 2 and the sentence of the refusal are the evidence; any other result fails the step.
+      - name: The release check refuses a debug APK
+        run: |
+          printf 'An archive made by a CI run. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
+          printf '# A CI archive\n' > "$RUNNER_TEMP/notices/NOTICE.md"
+          rc=0
+          python3 tools/package/release.py android --apk "$APK" --sdk "$ANDROID_HOME" --notices "$RUNNER_TEMP/notices" --out "$RUNNER_TEMP/release-folder" \
+            > "$RUNNER_TEMP/logs/release-refusal-android.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/logs/release-refusal-android.log"
+          echo "exit code: $rc"
+          test "$rc" = 2
+          grep -q 'is not a signed release of version' "$RUNNER_TEMP/logs/release-refusal-android.log"
+          test ! -e "$RUNNER_TEMP/release-folder"
+
+      - name: Source tree untouched
+        run: |
+          git status --short --untracked-files=no
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test -z "$(git -C engine status --porcelain)"
+
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-android-${{ github.sha }}
+
+      - name: Upload the APK
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-shell-apk
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/apk/*.apk
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  tools:
+    name: Tools - Python tests, workflow checks
+    if: ${{ inputs.job == 'all' || inputs.job == 'tools' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs"
+
+      # The packages tools/build_linux.sh names in its header. The tests of tools/ci run that script's configure four times (test_build_linux.py: a real CMake configure of the project and of the
+      # engine's GLFW, which stops without the X11 and Vulkan development headers), so this job installs what the Linux jobs install. (The test also skips, loudly, where they are missing.)
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libasound2-dev
+
+      # pytest, ruff and PyYAML are installed with pip on the runner, in a virtual environment of the job's own (Ubuntu 24.04's Python refuses pip outside one), never on the owner's PC.
+      # The checks below that need PyYAML SKIP and say so when it is absent: they never pass without it.
+      - name: Python tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install pytest ruff pyyaml 2>&1 | tail -2
+          "$RUNNER_TEMP/venv/bin/python" -m pip install -e "tools/converter[dev]" 2>&1 | tail -2
+          "$RUNNER_TEMP/venv/bin/python" --version
+
+      - name: Tests of tools/package, tools/ci and tools/apple
+        run: |
+          python -W error -m unittest discover -s tools/package -p "test_*.py" 2>&1 | tee "$RUNNER_TEMP/logs/tests-package.log" | tail -5
+          python -W error -m unittest discover -s tools/ci -p "test_*.py" 2>&1 | tee "$RUNNER_TEMP/logs/tests-ci.log" | tail -5
+          python -W error -m unittest discover -s tools/apple -p "test_*.py" 2>&1 | tee "$RUNNER_TEMP/logs/tests-apple.log" | tail -5
+
+      - name: The converter's tests and lint
+        run: |
+          cd tools/converter
+          python -m pytest -q 2>&1 | tee "$RUNNER_TEMP/logs/tests-converter.log" | tail -5
+          python -m ruff check . 2>&1 | tee "$RUNNER_TEMP/logs/ruff-converter.log" | tail -5
+
+      - name: The version in every place it is written
+        run: python tools/package/check_version.py
+
+      - name: The workflow checker
+        run: python tools/ci/check_workflows.py 2>&1 | tee "$RUNNER_TEMP/logs/check-workflows.log"
+
+      # actionlint's Linux tarball, from the project's release page, checked against the sha256 kept above BEFORE it is unpacked or run.
+      - name: actionlint
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint" -no-color .github/workflows/*.yml 2>&1 | tee "$RUNNER_TEMP/logs/actionlint.log"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tools-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs

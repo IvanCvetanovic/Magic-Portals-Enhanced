@@ -1,0 +1,388 @@
+name: Release programs
+
+# The release PROGRAMS of every platform, built where the owner's PC is not, checked as bytes, and uploaded with a SHA256SUMS.txt and a text file of the versions and the commit. WRITTEN,
+# NEVER RUN (planning step 209, PORT-11): nothing here says that a step works on GitHub; docs/ci.md says what has run and what has not.
+#
+# WHAT IT MAKES AND WHAT IT NEVER HOLDS. The programs are the game WITHOUT the game: no level, no picture, no sound of the owner's is in this repository, so none is here. It creates NO
+# GitHub Release and no tag and writes nothing outside the artifacts. The archive a player downloads, with the whole game in it, is assembled on the OWNER'S PC from one of these
+# programs and his content package (tools/package/release.py assemble, docs/packaging.md section 8) and uploaded by him. docs/ci.md gives the owner's whole path.
+#
+# DISPATCH ONLY, while the repository is private: Actions -> Release programs -> Run workflow, with the version. The version is checked FIRST, against the one definition
+# (project(MagicPortals VERSION ...) in the top-level CMakeLists.txt, tools/package/check_version.py): a different number fails the first job and nothing is built. No secret and no
+# key is read: the Android shell is debug-signed and is a test file, never the release (the owner signs the release APK on his PC with his own key).
+#
+# The jobs and what each waits for (a table the workflow checker holds, tools/ci/check_workflows.py): `version` waits for nothing; linux, windows, android, apple-macos and apple-ios
+# wait for `version` alone; `collect` waits for them all and runs even when one failed, so that what was made is still uploaded and what was not is said in VERSIONS.txt.
+#   linux        Ubuntu 22.04: the release program (no baked paths, no developer tools, libstdc++ and libgcc inside, stripped), check-program with the glibc floor.
+#   windows      MSVC: the release program with its file properties and icon, check-program.
+#   android      the shell APK without game data for both ABIs, debug-signed, inspected.
+#   apple-*      .github/workflows/apple.yml, called (its own jobs build the macOS universal shell and the iOS device shell); `collect` runs the release packager's check on both.
+#   collect      downloads them all, checks the two Apple shells, writes SHA256SUMS.txt and VERSIONS.txt, verifies the sums and uploads the folder.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The release version, three numbers such as 1.2.3 (it must be the one project(MagicPortals VERSION ...) defines)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LINUX_GLIBC_FLOOR: "2.35"
+  ANDROID_NDK_VERSION: 28.2.13676358
+  ANDROID_BUILD_TOOLS_VERSION: 35.0.0
+  ANDROID_PLATFORM: android-35
+  CCACHE_MAXSIZE: 600M
+
+jobs:
+  version:
+    name: The version is the project's
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      REQUESTED: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Compare with the one definition
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          actual="$(python3 tools/package/version.py)"
+          echo "requested: $REQUESTED" | tee "$RUNNER_TEMP/logs/version.log"
+          echo "the project's one definition: $actual" | tee -a "$RUNNER_TEMP/logs/version.log"
+          if [ "$REQUESTED" != "$actual" ]; then echo "::error::the version asked for ($REQUESTED) is not the project's ($actual): change the one definition first (docs/packaging.md section 6)"; exit 1; fi
+          python3 tools/package/check_version.py 2>&1 | tee -a "$RUNNER_TEMP/logs/version.log"
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: version-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  linux:
+    name: Linux program
+    needs: [version]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/programs/linux"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential g++-12 cmake ninja-build pkg-config libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libasound2-dev ccache
+      - name: ccache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-release-linux-${{ github.sha }}
+          restore-keys: ccache-release-linux-
+      - name: Build (release program)
+        run: |
+          tools/build_linux.sh --no-baked-paths --dev-tools OFF --portable --strip --cxx g++-12 --build-dir "$RUNNER_TEMP/build-release" --jobs 4 2>&1 | tee "$RUNNER_TEMP/logs/build-linux-release.log"
+      - name: Check the program
+        run: |
+          python3 tools/package/release.py check-program "$RUNNER_TEMP/build-release/game/MagicPortals" --platform linux --max-glibc "$LINUX_GLIBC_FLOOR" 2>&1 | tee "$RUNNER_TEMP/logs/check-program-linux.log"
+          cp "$RUNNER_TEMP/build-release/game/MagicPortals" "$RUNNER_TEMP/programs/linux/MagicPortals"
+      - name: Versions
+        run: |
+          {
+            echo "linux program"
+            echo "runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            g++-12 --version | sed -n 1p
+            cmake --version | sed -n 1p
+            ldd --version | sed -n 1p
+            readelf -d "$RUNNER_TEMP/programs/linux/MagicPortals" | grep -E 'NEEDED' || true
+          } > "$RUNNER_TEMP/programs/linux/versions-linux.txt"
+          cat "$RUNNER_TEMP/programs/linux/versions-linux.txt"
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-release-linux-${{ github.sha }}
+      - name: Upload the program
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: program-linux
+          retention-days: 14
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/programs/linux
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  windows:
+    name: Windows program
+    needs: [version]
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/programs/windows"
+      - name: Make the icon
+        run: python tools/art/make_app_icon.py --out "$RUNNER_TEMP/icons"
+      - name: Build (release program)
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
+          call "%VSROOT%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          set "ICON=%RUNNER_TEMP:\=/%/icons/magic_portals.ico"
+          cmake -S . -B "%RUNNER_TEMP%\build-release" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF -DMAGICPORTALS_BAKED_PATHS=OFF -DMAGICPORTALS_DEV_TOOLS=OFF -DMAGICPORTALS_WIN_GUI=ON -DMAGICPORTALS_ICON=%ICON% -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND > "%RUNNER_TEMP%\logs\configure-windows-release.log" 2>&1 || (type "%RUNNER_TEMP%\logs\configure-windows-release.log" & exit /b 1)
+          cmake --build "%RUNNER_TEMP%\build-release" --target MagicPortals > "%RUNNER_TEMP%\logs\build-windows-release.log" 2>&1 || (powershell -NoProfile -Command "Get-Content -Tail 80 '%RUNNER_TEMP%\logs\build-windows-release.log'" & exit /b 1)
+          cl 2>&1 | findstr /i "version" > "%RUNNER_TEMP%\logs\cl-version.txt"
+      - name: Check the program
+        run: |
+          python tools/package/release.py check-program "$RUNNER_TEMP/build-release/game/MagicPortals.exe" --platform windows 2>&1 | tee "$RUNNER_TEMP/logs/check-program-windows.log"
+          cp "$RUNNER_TEMP/build-release/game/MagicPortals.exe" "$RUNNER_TEMP/programs/windows/MagicPortals.exe"
+      - name: Versions
+        run: |
+          {
+            echo "windows program"
+            echo "runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            cat "$RUNNER_TEMP/logs/cl-version.txt"
+            cmake --version | sed -n 1p
+          } > "$RUNNER_TEMP/programs/windows/versions-windows.txt"
+          cat "$RUNNER_TEMP/programs/windows/versions-windows.txt"
+      - name: Upload the program
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: program-windows
+          retention-days: 14
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/programs/windows
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  android:
+    name: Android shell APK
+    needs: [version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Engine submodule
+        run: |
+          git -C engine log --oneline -1
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/programs/android"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache ninja-build
+      - name: Android SDK parts
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > "$RUNNER_TEMP/logs/sdk-licenses.log" 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ANDROID_NDK_VERSION" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "platforms;$ANDROID_PLATFORM" 2>&1 | tail -5
+      - name: ccache (restore)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-release-android-${{ github.sha }}
+          restore-keys: ccache-release-android-
+      - name: Build the shell APK (both ABIs)
+        run: |
+          tools/build_android.sh --no-data --abi all --jobs 4 --ndk "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" --out "$RUNNER_TEMP/apk" 2>&1 | tee "$RUNNER_TEMP/logs/build-android.log"
+          cp "$RUNNER_TEMP"/apk/MagicPortals-*-nodata-debug.apk "$RUNNER_TEMP/programs/android/"
+          ls -l "$RUNNER_TEMP/programs/android"
+      - name: Inspect the APK
+        run: |
+          python3 tools/package/android_package.py inspect "$RUNNER_TEMP"/programs/android/MagicPortals-*-nodata-debug.apk --sdk "$ANDROID_HOME" 2>&1 | tee "$RUNNER_TEMP/logs/inspect-android.log"
+      - name: Check the libraries
+        run: |
+          apk="$(ls "$RUNNER_TEMP"/programs/android/MagicPortals-*-nodata-debug.apk)"
+          for abi in arm64-v8a x86_64; do
+            mkdir -p "$RUNNER_TEMP/libs/$abi"
+            unzip -o -q "$apk" "lib/$abi/libMagicPortals.so" -d "$RUNNER_TEMP/libs/$abi"
+            python3 tools/package/release.py check-program "$RUNNER_TEMP/libs/$abi/lib/$abi/libMagicPortals.so" --platform android-lib 2>&1 | tee -a "$RUNNER_TEMP/logs/check-program-android.log"
+          done
+      - name: Versions
+        run: |
+          {
+            echo "android shell APK (debug-signed, no game data: a test file, never the release)"
+            echo "runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            echo "ndk $ANDROID_NDK_VERSION, build-tools $ANDROID_BUILD_TOOLS_VERSION, platform $ANDROID_PLATFORM"
+            java -version 2>&1 | sed -n 1p
+          } > "$RUNNER_TEMP/programs/android/versions-android.txt"
+          cat "$RUNNER_TEMP/programs/android/versions-android.txt"
+      - name: ccache (save)
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-release-android-${{ github.sha }}
+      - name: Upload the program
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: program-android
+          retention-days: 14
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/programs/android
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-release-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  # The Apple shells are apple.yml's jobs, called as they are (one place for the macOS and iOS recipes). A called job's own timeouts apply; the macOS one also runs the suites, so a call
+  # costs what a dispatch of that job costs (docs/ci.md has the numbers). apple.yml uploads macos-shell and ios-device-shell, which `collect` below downloads.
+  apple-macos:
+    name: Apple - macOS shell
+    needs: [version]
+    uses: ./.github/workflows/apple.yml
+    with:
+      job: macos
+
+  apple-ios:
+    name: Apple - iOS device shell
+    needs: [version]
+    uses: ./.github/workflows/apple.yml
+    with:
+      job: ios-device
+
+  collect:
+    name: Collect, check, sum
+    needs: [version, linux, windows, android, apple-macos, apple-ios]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RESULT_VERSION: ${{ needs.version.result }}
+      RESULT_LINUX: ${{ needs.linux.result }}
+      RESULT_WINDOWS: ${{ needs.windows.result }}
+      RESULT_ANDROID: ${{ needs.android.result }}
+      RESULT_APPLE_MACOS: ${{ needs.apple-macos.result }}
+      RESULT_APPLE_IOS: ${{ needs.apple-ios.result }}
+      REQUESTED: ${{ inputs.version }}
+      COMMIT: ${{ github.sha }}
+      RUN_ID: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+      - name: Folders
+        run: mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/notices" "$RUNNER_TEMP/programs"
+      - name: Download what the jobs made
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/in
+      - name: What was downloaded
+        run: find "$RUNNER_TEMP/in" -type f | sort | tee "$RUNNER_TEMP/logs/downloaded.txt"
+
+      # The release packager reads each Apple shell as it would for an archive (a shell that is a developer's build, holds a builder's path or is not the platform's refuses, with every
+      # cause). This is the first time a CI-built Apple program of this game meets check-program: a refusal here is the tool working (docs/parity-backlog.md, PORT10-2 f).
+      - name: Check the two Apple shells
+        if: ${{ !cancelled() }}
+        run: |
+          printf 'An archive made by a CI run. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
+          printf '# A CI archive\n' > "$RUNNER_TEMP/notices/NOTICE.md"
+          status=0
+          python3 tools/package/release.py assemble --platform macos --shell "$RUNNER_TEMP/in/macos-shell/MagicPortals-macOS-shell.zip" --notices "$RUNNER_TEMP/notices" \
+            --out "$RUNNER_TEMP/apple-check/macos" 2>&1 | tee "$RUNNER_TEMP/logs/check-apple-macos.log" || status=1
+          python3 tools/package/release.py assemble --platform ios --shell "$RUNNER_TEMP/in/ios-device-shell/MagicPortals-iOS-shell.ipa" --notices "$RUNNER_TEMP/notices" \
+            --out "$RUNNER_TEMP/apple-check/ios" 2>&1 | tee "$RUNNER_TEMP/logs/check-apple-ios.log" || status=1
+          test "$status" = 0
+
+      - name: Gather, sum and describe
+        if: ${{ !cancelled() }}
+        run: |
+          dest="$RUNNER_TEMP/programs"
+          for platform in linux windows android; do
+            if [ -d "$RUNNER_TEMP/in/program-$platform" ]; then mkdir -p "$dest/$platform"; cp -r "$RUNNER_TEMP/in/program-$platform/." "$dest/$platform/"; fi
+          done
+          for pair in "macos-shell:macos" "ios-device-shell:ios"; do
+            from="${pair%%:*}"; to="${pair##*:}"
+            if [ -d "$RUNNER_TEMP/in/$from" ]; then mkdir -p "$dest/$to"; cp -r "$RUNNER_TEMP/in/$from/." "$dest/$to/"; fi
+          done
+          {
+            echo "Magic Portals Enhanced: release programs, built by a CI run (no game data in any of them)"
+            echo "version asked for: $REQUESTED"
+            echo "project version:   $(python3 tools/package/version.py)"
+            echo "commit:            $COMMIT"
+            echo "engine:            $(git -C engine rev-parse HEAD)"
+            echo "run:               $RUN_ID"
+            echo
+            echo "results: version=$RESULT_VERSION linux=$RESULT_LINUX windows=$RESULT_WINDOWS android=$RESULT_ANDROID apple-macos=$RESULT_APPLE_MACOS apple-ios=$RESULT_APPLE_IOS"
+            echo
+            for f in "$dest"/*/versions-*.txt; do if [ -f "$f" ]; then cat "$f"; echo; fi; done
+          } > "$dest/VERSIONS.txt"
+          cat "$dest/VERSIONS.txt"
+          (cd "$dest" && find . -type f | sort | sed 's|^\./||' | xargs sha256sum > "$RUNNER_TEMP/SHA256SUMS.txt")
+          mv "$RUNNER_TEMP/SHA256SUMS.txt" "$dest/SHA256SUMS.txt"
+          cat "$dest/SHA256SUMS.txt"
+          (cd "$dest" && sha256sum -c SHA256SUMS.txt)
+
+      # Every job must have succeeded for this run to be called complete. What was made is uploaded either way.
+      - name: Every program was made and checked
+        if: ${{ !cancelled() }}
+        run: |
+          bad=""
+          for pair in "version:$RESULT_VERSION" "linux:$RESULT_LINUX" "windows:$RESULT_WINDOWS" "android:$RESULT_ANDROID" "apple-macos:$RESULT_APPLE_MACOS" "apple-ios:$RESULT_APPLE_IOS"; do
+            echo "${pair%%:*}: ${pair##*:}"
+            if [ "${pair##*:}" != "success" ]; then bad="$bad ${pair%%:*}"; fi
+          done
+          if [ -n "$bad" ]; then echo "::error::not successful:$bad"; exit 1; fi
+
+      - name: Upload the programs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-programs
+          retention-days: 30
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/programs
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: collect-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs

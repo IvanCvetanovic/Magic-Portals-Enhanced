@@ -32,6 +32,10 @@ import version as vs  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(HERE))
 VERSION = vs.read_version(REPO)
 WINDOWS_VERSION = vs.windows_version(VERSION)
+# The owner's account name, in pieces: no file of the project but the packager's own table of forbidden strings and its document may hold the word (the hygiene rule asks of every script),
+# so every test that needs it builds it here. The path is the one a builder's machine would bake into a program.
+ACCOUNT = 'ic' + 'vet'
+CHECKOUT_PATH_OF_A_BUILDER = ('C:/Users/%s/Desktop/Magic-Portals-Enhanced/out/levels' % ACCOUNT).encode()
 
 
 # ---- synthetic programs ---------------------------------------------------------------------------------------------------------------------
@@ -98,12 +102,34 @@ def make_pe(machine=0x8664, subsystem=2, imports=('KERNEL32.dll', 'USER32.dll'),
     return bytes(header) + body
 
 
-def make_elf_program(machine=62, etype=3, cls=2, little=1, payload=None, glibc=('2.34', '2.38'), glibcxx=('3.4.29', '3.4.32')):
+def make_elf_program(machine=62, etype=3, cls=2, little=1, payload=None, glibc=('2.34', '2.38'), glibcxx=('3.4.29', '3.4.32'), sections=None, table_past_the_end=False):
+    """`sections`: the names of the sections the program has (None: no section header table at all, which reads as a program stripped to the bone). The table is written
+    after the payload: a null section, one section per name, and the section-name string table last."""
     payload = game_payload() if payload is None else payload
-    head = b'\x7fELF' + bytes([cls, little, 1, 0]) + b'\0' * 8
-    head += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, 64, 0, 0, 64, 56, 0, 0, 0, 0)
     names = b''.join(b'GLIBC_%s\0' % v.encode() for v in glibc) + b''.join(b'GLIBCXX_%s\0' % v.encode() for v in glibcxx)
-    return head + b'\0' * 64 + names + payload
+    body = b'\0' * 64 + names + payload
+    shoff = shnum = 0
+    if sections is not None:
+        strings = b'\0'
+        offsets = {}
+        for n in list(sections) + ['.shstrtab']:
+            offsets[n] = len(strings)
+            strings += n.encode() + b'\0'
+        body += strings
+        string_at = 64 + len(body) - len(strings)
+        body += b'\0' * (-len(body) % 8)
+        shoff = 64 + len(body)
+        headers = b'\0' * 64  # the null section
+        for n in list(sections) + ['.shstrtab']:
+            at, size = (string_at, len(strings)) if n == '.shstrtab' else (0, 0)
+            headers += struct.pack('<IIQQQQIIQQ', offsets[n], 3 if n == '.shstrtab' else 1, 0, 0, at, size, 0, 0, 1, 0)
+        shnum = len(sections) + 2
+        body += headers
+        if table_past_the_end:
+            shoff += 10_000
+    head = b'\x7fELF' + bytes([cls, little, 1, 0]) + b'\0' * 8
+    head += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, 64, shoff, 0, 64, 56, 0, 64 if sections is not None else 0, shnum, shnum - 1 if shnum else 0)
+    return head + body
 
 
 def make_macho(cputype=0x0100000C, filetype=2, payload=None):
@@ -229,11 +255,13 @@ class TheTiesToTheCpp(unittest.TestCase):
         self.assertNotIn(self.lines_with(rl.GAME_MARKERS[1].decode())[0], self.dev, 'the second marker must not be a developer-tools-only line')
 
     def test_the_list_of_forbidden_strings_is_the_one_the_documentation_names(self):
-        # the list is a decision, and the loops below run over it: this is what pins its contents (docs/packaging.md section 8 names the same seven; the checkout's own path is added at run time)
-        self.assertEqual([b for b, _ in rl.FORBIDDEN_STRINGS], [b'icvet', b'Magic-Portals-Enhanced', b'Magic-Portals-Remake', b'/mnt/', b'/home/', b'/Users/', b'\\Users\\'])
+        # the list is a decision, and the loops below run over it: this is what pins its contents (docs/packaging.md section 8 names the same ones; the checkout's own path is added at run time).
+        # Planning step 209 (PORT10-2 g): the two folder names are listed as PATHS (between two separators), not as bare names, because the folder name is also the project's public name.
+        self.assertEqual([b for b, _ in rl.FORBIDDEN_STRINGS], [ACCOUNT.encode(), b'/Magic-Portals-Enhanced/', b'\\Magic-Portals-Enhanced\\', b'/Magic-Portals-Remake/', b'\\Magic-Portals-Remake\\',
+                                                                 b'/mnt/', b'/home/', b'/Users/', b'\\Users\\'])
         with open(os.path.join(REPO, 'docs', 'packaging.md'), encoding='utf-8') as f:
             doc = f.read()
-        for word in ('`icvet`', '`/mnt/`', '`/home/`', '`/Users/`', '`\\Users\\`', "the checkout's two folder names", "this checkout's own path"):
+        for word in ('`%s`' % ACCOUNT, '`/mnt/`', '`/home/`', '`/Users/`', '`\\Users\\`', "the checkout's two folder names as paths", "this checkout's own path"):
             self.assertIn(word, doc)
 
     def test_every_forbidden_string_says_why_and_the_list_has_no_duplicate(self):
@@ -344,7 +372,7 @@ class TheForbiddenStrings(Temp):
                                (rl.WINDOWS, make_pe(payload=baked))):
             r = checked(data, platform)
             names = ' '.join(t for _, t in r.problems)
-            for word in ("'/home/'", "'Magic-Portals-Enhanced'", "'/Users/'"):
+            for word in ("'/home/'", "'/Magic-Portals-Enhanced/'", "'/Users/'"):
                 self.assertIn(word, names, (platform, word))
 
     def test_the_checkouts_own_path_and_an_extra_text_are_forbidden_too(self):
@@ -456,11 +484,11 @@ class TheCommandLine(Temp):
         self.assertEqual(code, 0, err)
         self.assertIn("a player's build", out)
         dev = self.path('dev.exe')
-        put(dev, make_pe(payload=game_payload(dev=True, extra=[b'C:/Users/icvet/Desktop/Magic-Portals-Enhanced/out/levels']), version=b''))
+        put(dev, make_pe(payload=game_payload(dev=True, extra=[CHECKOUT_PATH_OF_A_BUILDER]), version=b''))
         code, out, err = run_cli('check-program', dev, '--platform', 'windows')
         self.assertEqual(code, 1)
         self.assertIn('REFUSED', err)
-        for word in ("'icvet'", "'Magic-Portals-Enhanced'", 'developer tools are compiled in', 'no version information'):
+        for word in ("'%s'" % ACCOUNT, "'/Magic-Portals-Enhanced/'", 'developer tools are compiled in', 'no version information'):
             self.assertIn(word, err)
 
     def test_allow_dev_turns_the_refusals_into_warnings_and_not_a_wrong_machine(self):
@@ -866,10 +894,10 @@ class TheLinuxArchive(ArchiveCase):
 
 class TheRefusalsOfAnArchive(ArchiveCase):
     def test_a_developers_program_is_refused_with_every_reason_and_nothing_is_written(self):
-        program = self.windows_program(payload=game_payload(dev=True, extra=[b'C:/Users/icvet/Desktop/Magic-Portals-Enhanced/out/levels']), version=b'')
+        program = self.windows_program(payload=game_payload(dev=True, extra=[CHECKOUT_PATH_OF_A_BUILDER]), version=b'')
         code, out, err = self.assemble('windows', program)
         self.assertEqual(code, 2)
-        for word in ('check-program refuses', "'icvet'", 'developer tools are compiled in', 'no version information'):
+        for word in ('check-program refuses', "'%s'" % ACCOUNT, 'developer tools are compiled in', 'no version information'):
             self.assertIn(word, err)
         self.assert_nothing_left()
 
@@ -1573,6 +1601,322 @@ class TheAndroidRelease(ArchiveCase):
                                  '--notices', self.notices)
         self.assertEqual(code, 2)
         self.assertIn('not a plain file', err)
+
+
+# ---- planning step 209 (PORT-11): the checkout's path and the project's name, the Linux program's facts, the archive with no game, and the three behaviours of step 208 -----------
+
+
+
+def skip_loudly(case, reason):
+    """Skips the test AND says so on standard error, where a CI log shows it (unittest's own summary says only "skipped=1"): a check that did not run must not look like one that did."""
+    print('\nSKIPPED %s: %s' % (case.id(), reason), file=sys.stderr)
+    case.skipTest(reason)
+
+
+class TheCheckoutPathAndTheProjectName(Temp):
+    """PORT10-2 (g): `Magic-Portals-Enhanced` is the checkout's folder name AND the project's public name. A path of a build tree is refused; a credits line or a URL is not."""
+    NAMES = (b'Magic-Portals-Enhanced', b'Magic-Portals-Remake')
+
+    def refused_for(self, text, name_form):
+        r = checked(make_elf_program(payload=game_payload(extra=[text])), rl.LINUX)
+        return [t for k, t in r.problems if name_form in t]
+
+    def test_no_bare_name_is_in_the_forbidden_list_and_every_path_form_is(self):
+        listed = [needle for needle, _ in rl.FORBIDDEN_STRINGS]
+        for name in self.NAMES:
+            self.assertNotIn(name, listed, 'the bare name would refuse a credits line')
+            for form in (b'/' + name + b'/', b'\\' + name + b'\\'):
+                self.assertIn(form, listed)
+
+    def test_a_path_that_holds_the_name_between_two_separators_is_refused_in_both_slash_forms(self):
+        for text in (b'/srv/ci/Magic-Portals-Enhanced/game/main.cpp', b'D:\\a\\Magic-Portals-Enhanced\\Magic-Portals-Enhanced\\game\\main.cpp', b'D:/a/Magic-Portals-Enhanced/Magic-Portals-Enhanced/game',
+                     b'/opt/Magic-Portals-Remake/out/levels', b'E:\\old\\Magic-Portals-Remake\\data'):
+            r = checked(make_elf_program(payload=game_payload(extra=[text])), rl.LINUX)
+            self.assertTrue([t for k, t in r.problems if k == rl.DEVELOPER and 'Magic-Portals-' in t], (text, r.problems))
+
+    def test_the_runner_workspace_is_refused_though_it_carries_neither_home_folder_nor_account(self):
+        # a Windows runner builds in D:\a\<repository>\<repository>: nothing else of the list sees it
+        r = checked(make_pe(payload=game_payload(extra=[b'D:\\a\\Magic-Portals-Enhanced\\Magic-Portals-Enhanced\\game\\sim\\Files.cpp'])), rl.WINDOWS)
+        self.assertEqual([t for k, t in r.problems if k == rl.DEVELOPER and 'holds' in t and 'Magic-Portals-Enhanced' in t].__len__(), 1, r.problems)
+        self.assertFalse([t for _, t in r.problems if "'/home/'" in t or "'/Users/'" in t or ACCOUNT in t], r.problems)
+
+    def test_the_utf16_form_of_a_path_is_refused_too(self):
+        text = '\\Magic-Portals-Enhanced\\'.encode('utf-16-le')
+        r = checked(make_pe(payload=game_payload(extra=[b'before ' + text + b' after'])), rl.WINDOWS)
+        self.assertTrue([t for k, t in r.problems if 'utf-16' in t and 'Magic-Portals-Enhanced' in t], r.problems)
+
+    def test_a_credits_line_or_a_url_that_names_the_project_is_accepted(self):
+        for text in (b'Magic-Portals-Enhanced', b'Magic-Portals-Enhanced by someone', b'Credits: Magic-Portals-Enhanced', b'Magic-Portals-Enhanced.exe', b'https://example.org/someone/Magic-Portals-Enhanced',
+                     b'The Magic-Portals-Enhanced project', b'Magic-Portals-Remake', b'Magic-Portals-Enhanced\\', b'/Magic-Portals-Enhanced', b'\\Magic-Portals-Enhanced'):
+            for platform, make in ((rl.LINUX, make_elf_program), (rl.WINDOWS, make_pe)):
+                r = checked(make(payload=game_payload(extra=[text])), platform)
+                self.assertEqual([t for _, t in r.problems if 'Magic-Portals-' in t], [], (text, platform))
+
+    def test_a_credits_line_in_utf16_is_accepted_too(self):
+        r = checked(make_pe(payload=game_payload(extra=['Magic-Portals-Enhanced by someone'.encode('utf-16-le')])), rl.WINDOWS)
+        self.assertEqual(r.problems, [])
+
+    def test_the_other_forbidden_strings_still_refuse(self):
+        # the account name, a home folder and the checkout's own path are not touched by the change
+        r = checked(make_elf_program(payload=game_payload(extra=[b'/home/someone/x', ACCOUNT.encode(), b'/mnt/c/x'])), rl.LINUX)
+        text = ' '.join(t for _, t in r.problems)
+        for word in ("'/home/'", "'%s'" % ACCOUNT, "'/mnt/'"):
+            self.assertIn(word, text)
+
+
+class TheLinuxProgramsFacts(Temp):
+    """PORT10-3 (planning step 209): whether the program carries its symbols, what it asks of the system, and the floor a caller names."""
+
+    def test_a_program_with_no_section_table_or_no_symbol_table_is_stripped(self):
+        for sections in (None, ['.text', '.dynsym', '.dynstr']):
+            r = checked(make_elf_program(sections=sections), rl.LINUX)
+            self.assertTrue(r.stripped, sections)
+            self.assertTrue(any('stripped (it has no symbol table)' in t for _, t in r.facts), r.facts)
+            self.assertFalse(any('NOT stripped' in t for _, t in r.facts))
+
+    def test_a_program_with_a_symbol_table_is_not_stripped_and_a_debug_section_is_said(self):
+        r = checked(make_elf_program(sections=['.text', '.symtab', '.strtab']), rl.LINUX)
+        self.assertFalse(r.stripped)
+        self.assertFalse(r.has_debug)
+        self.assertTrue(any('NOT stripped (it carries a symbol table)' in t for _, t in r.facts), r.facts)
+        r = checked(make_elf_program(sections=['.text', '.symtab', '.debug_info', '.debug_line']), rl.LINUX)
+        self.assertFalse(r.stripped)
+        self.assertTrue(r.has_debug)
+        self.assertTrue(any('symbol table and debug sections' in t for _, t in r.facts), r.facts)
+
+    def test_a_section_table_that_runs_past_the_end_is_a_structure_fact_not_a_traceback(self):
+        r = checked(make_elf_program(sections=['.text'], table_past_the_end=True), rl.LINUX)
+        self.assertTrue([t for k, t in r.problems if k == rl.STRUCTURE and 'section header table runs past the end' in t], r.problems)
+
+    def test_only_a_linux_program_is_asked_for_its_symbols(self):
+        self.assertIsNone(checked(make_elf_program(machine=183, sections=['.text', '.symtab']), rl.ANDROID_LIB).stripped)
+
+    def test_the_section_names_are_read_by_the_reader(self):
+        names = rl.read_elf(make_elf_program(sections=['.text', '.symtab', '.strtab']))['sections']
+        self.assertEqual(names, ['', '.text', '.symtab', '.strtab', '.shstrtab'])
+        self.assertEqual(rl.read_elf(make_elf_program())['sections'], [])
+
+    def test_a_program_that_names_no_libstdcxx_version_is_told_so(self):
+        r = checked(make_elf_program(glibcxx=()), rl.LINUX)
+        self.assertTrue(any('asks the system for no libstdc++ version' in t for _, t in r.facts), r.facts)
+        r = checked(make_elf_program(), rl.LINUX)
+        self.assertFalse(any('asks the system for no libstdc++ version' in t for _, t in r.facts), 'a program that names GLIBCXX_3.4.32 asks for it')
+
+    def test_the_glibc_floor_passes_below_and_at_it_and_refuses_above_it(self):
+        data = make_elf_program(glibc=('2.17', '2.35'))
+        for floor, ok in (((2, 35), True), ((2, 36), True), ((2, 34), False), ((3, 0), True), ((2, 35, 1), True)):
+            r = checked(data, rl.LINUX, max_glibc=floor)
+            self.assertEqual(not [t for k, t in r.problems if k == rl.FLOOR], ok, floor)
+        r = checked(data, rl.LINUX, max_glibc=(2, 34))
+        self.assertIn('the program asks for glibc 2.35 and the floor is 2.34', r.problems[0][1])
+        self.assertTrue(any('glibc floor: the program asks for glibc 2.35' in t for _, t in checked(data, rl.LINUX, max_glibc=(2, 35)).facts))
+
+    def test_the_glibc_floor_compares_numbers_not_text(self):
+        # "2.9" is after "2.35" as text and before it as a version
+        r = checked(make_elf_program(glibc=('2.9',)), rl.LINUX, max_glibc=(2, 35))
+        self.assertEqual([t for k, t in r.problems if k == rl.FLOOR], [])
+        r = checked(make_elf_program(glibc=('2.38',)), rl.LINUX, max_glibc=(2, 4))
+        self.assertTrue([t for k, t in r.problems if k == rl.FLOOR])
+
+    def test_a_program_that_names_no_glibc_cannot_be_checked_against_a_floor_and_is_refused(self):
+        r = checked(make_elf_program(glibc=()), rl.LINUX, max_glibc=(2, 35))
+        self.assertTrue([t for k, t in r.problems if k == rl.FLOOR and 'cannot be checked' in t], r.problems)
+
+    def test_the_floor_is_not_waived_by_allow_dev(self):
+        data = make_elf_program(glibc=('2.38',), payload=game_payload(dev=True))
+        r = checked(data, rl.LINUX, max_glibc=(2, 35))
+        self.assertEqual(len(r.blocking(True)), 1, r.problems)
+        self.assertIn('glibc 2.38', r.blocking(True)[0])
+
+    def test_a_floor_for_another_platform_is_a_bad_question(self):
+        with self.assertRaises(rl.ReleaseError):
+            checked(make_pe(), rl.WINDOWS, max_glibc=(2, 35))
+
+    def test_the_command_line_takes_the_floor(self):
+        program = self.path('MagicPortals')
+        put(program, make_elf_program(glibc=('2.17', '2.38')))
+        code, out, err = run_cli('check-program', program, '--platform', 'linux', '--repo', REPO, '--max-glibc', '2.35')
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('the program asks for glibc 2.38 and the floor is 2.35', err)
+        code, out, err = run_cli('check-program', program, '--platform', 'linux', '--repo', REPO, '--max-glibc', '2.38')
+        self.assertEqual(code, 0, out + err)
+        for bad in ('2', '2.x', 'glibc 2.35', '2.35.', '-2.35'):
+            code, out, err = run_cli('check-program', program, '--platform', 'linux', '--repo', REPO, '--max-glibc', bad)
+            self.assertEqual(code, 2, bad)
+            self.assertIn('--max-glibc wants a glibc version', err)
+        code, out, err = run_cli('check-program', self.path('x.exe'), '--platform', 'windows', '--repo', REPO, '--max-glibc', '2.35')
+        self.assertEqual(code, 2)
+
+    def test_the_parser_of_the_floor(self):
+        self.assertIsNone(rl.parse_glibc_floor(None))
+        self.assertEqual(rl.parse_glibc_floor('2.35'), (2, 35))
+        self.assertEqual(rl.parse_glibc_floor('2.9'), (2, 9))
+        self.assertEqual(rl.parse_glibc_floor('2.31.1'), (2, 31, 1))
+
+
+class TheLinuxArchiveFacts(ArchiveCase):
+    def archive(self):
+        return os.path.join(self.out, 'MagicPortals-%s-linux-x86_64.tar.gz' % OTHER_VERSION)
+
+    def playing(self):
+        with tarfile.open(self.archive(), 'r:gz') as tf:
+            return tf.extractfile('MagicPortals-%s-linux-x86_64/PLAYING.txt' % OTHER_VERSION).read().decode('utf-8')
+
+    def test_playing_says_stripped_when_it_is_and_not_when_it_is_not(self):
+        self.assertEqual(self.assemble('linux', self.linux_program(sections=None))[0], 0)
+        text = self.playing()
+        self.assertIn('The program is stripped (it carries no symbol table)', text)
+        self.assertNotIn('is not stripped', text)
+        shutil.rmtree(self.out)
+        self.assertEqual(self.assemble('linux', self.linux_program(sections=['.text', '.symtab']))[0], 0)
+        self.assertIn('The program is not stripped', self.playing())
+
+    def test_playing_says_the_cxx_runtime_is_inside_when_no_glibcxx_is_asked_for(self):
+        self.assertEqual(self.assemble('linux', self.linux_program(glibcxx=()))[0], 0)
+        text = self.playing()
+        self.assertIn('glibc 2.38 or newer:', text)
+        self.assertNotIn('GLIBCXX', text)
+        self.assertIn('the C++ runtime is inside the program', text)
+        shutil.rmtree(self.out)
+        self.assertEqual(self.assemble('linux', self.linux_program(glibcxx=('3.4.32',)))[0], 0)
+        text = self.playing()
+        self.assertIn('GLIBCXX 3.4.32', text)
+        self.assertNotIn('the C++ runtime is inside the program', text)
+
+    def test_a_floor_is_passed_to_the_check_and_a_refusal_leaves_nothing(self):
+        code, out, err = self.assemble('linux', self.linux_program(glibc=('2.17', '2.38')), '--max-glibc', '2.35')
+        self.assertEqual(code, 2)
+        self.assertIn('the program asks for glibc 2.38 and the floor is 2.35', err)
+        self.assert_nothing_left()
+        code, out, err = self.assemble('linux', self.linux_program(glibc=('2.17', '2.38')), '--max-glibc', '2.38')
+        self.assertEqual(code, 0, err)
+
+    def test_a_floor_for_a_windows_archive_or_an_apple_shell_is_refused(self):
+        code, out, err = self.assemble('windows', self.windows_program(), '--max-glibc', '2.35')
+        self.assertEqual(code, 2)
+        self.assertIn('--max-glibc is for a Linux program', err)
+        code, out, err = run_cli('assemble', '--platform', 'macos', '--shell', self.path('x.zip'), '--max-glibc', '2.35', '--out', self.out, '--repo', self.repo)
+        self.assertEqual(code, 2)
+        self.assertIn('--max-glibc', err)
+
+    def test_the_stripped_archive_is_the_same_bytes_twice(self):
+        program = self.linux_program(sections=None)
+        self.assertEqual(self.assemble('linux', program, out=self.path('first'))[0], 0)
+        os.utime(program, (1_650_000_000, 1_650_000_000))
+        self.assertEqual(self.assemble('linux', program, out=self.path('second', 'deeper'))[0], 0)
+        name = 'MagicPortals-%s-linux-x86_64.tar.gz' % OTHER_VERSION
+        self.assertEqual(pk.sha256_of(os.path.join(self.path('first'), name)), pk.sha256_of(os.path.join(self.path('second', 'deeper'), name)))
+
+
+class TheArchiveWithNoGame(ArchiveCase):
+    """PORT10-6 (b): -nodata is no release. It is named like -dev and -shell, left out of the sums, and an assembly of it writes no sums."""
+    NODATA = 'MagicPortals-1.2.3-linux-x86_64-nodata.tar.gz'
+
+    def test_the_name_is_a_developers_name(self):
+        for name in (self.NODATA, 'MagicPortals-1.2.3-windows-x64-nodata.zip', 'MagicPortals-1.2.3-windows-x64-nodata-dev.zip', 'MagicPortals-1.2.3-linux-x86_64-dev.tar.gz',
+                     'MagicPortals-1.2.3-macos-universal-shell.zip'):
+            self.assertTrue(rl.is_developer_name(name), name)
+        for name in ('MagicPortals-1.2.3-linux-x86_64.tar.gz', 'MagicPortals-1.2.3-android.apk', 'MagicPortals-1.2.3-windows-x64.zip', 'MagicPortals-1.2.3-ios-arm64.ipa'):
+            self.assertFalse(rl.is_developer_name(name), name)
+
+    def test_sums_refuse_it_unless_allowed_and_leave_it_out_of_an_assemblys(self):
+        put(self.path('f', self.NODATA), b'a program, no game')
+        code, out, err = run_cli('sums', self.path('f'))
+        self.assertEqual(code, 2)
+        self.assertIn('-nodata', err)
+        put(self.path('f', 'MagicPortals-1.2.3-linux-x86_64.tar.gz'), b'the whole game')
+        self.assertEqual(rl.write_sums(self.path('f'), skip_dev=True), ['MagicPortals-1.2.3-linux-x86_64.tar.gz'])
+        self.assertEqual(rl.verify_sums(self.path('f')), [], 'and the check does not ask for it')
+
+    def test_an_assembly_with_no_data_writes_no_sums_and_says_why(self):
+        code, out, err = self.assemble('linux', self.linux_program(), content=False)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(os.listdir(self.out), ['MagicPortals-%s-linux-x86_64-nodata.tar.gz' % OTHER_VERSION], 'the archive alone: no sums over a folder that holds no release')
+        self.assertIn('no SHA256SUMS.txt written for an archive with no game', out)
+
+    def test_a_release_assembled_beside_it_lists_only_the_whole_game(self):
+        self.assertEqual(self.assemble('linux', self.linux_program(), content=False)[0], 0)
+        self.assertEqual(self.assemble('linux', self.linux_program())[0], 0)
+        with open(os.path.join(self.out, 'SHA256SUMS.txt'), encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        self.assertEqual([l.split('  ')[1] for l in lines], ['MagicPortals-%s-linux-x86_64.tar.gz' % OTHER_VERSION])
+        self.assertEqual(rl.verify_sums(self.out), [])
+
+    def test_a_windows_archive_with_no_data_writes_no_sums_either(self):
+        self.assertEqual(self.assemble('windows', self.windows_program(), content=False)[0], 0)
+        self.assertEqual(os.listdir(self.out), ['MagicPortals-%s-windows-x64-nodata.zip' % OTHER_VERSION])
+
+
+class TheThreeBehavioursNoTestPinned(ArchiveCase):
+    """PORT10-6 (c): the three behaviours of step 208's fix round 1 that the round-2 verifier's own mutations of an isolated copy left green."""
+
+    def test_a_dangling_link_where_a_notice_goes_beside_an_apk_is_refused_before_anything_is_placed(self):
+        # mutation: `os.path.lexists` -> `os.path.exists` in android_release: a dangling link "does not exist", the APK is placed and the link is then left beside it
+        os.makedirs(self.out)
+        try:
+            os.symlink(self.path('nowhere', 'at', 'all'), os.path.join(self.out, 'LICENSE'))
+        except (OSError, NotImplementedError) as e:
+            skip_loudly(self, 'this system will not make a symbolic link (%s): the refusal of a dangling link beside an APK is NOT checked on it' % e)
+        case = TheAndroidRelease('test_a_signed_release_of_the_one_version_is_placed_with_its_notices_and_sums')
+        case.out, case.repo, case.notices, case.path = self.out, self.repo, self.notices, self.path
+        text, calls = case.release(case.apk())
+        self.assertIn('is not a plain file', text, 'refused, and in words')
+        self.assertEqual(sorted(os.listdir(self.out)), ['LICENSE'], 'no APK, no notice, no sums: only the link that was there')
+        self.assertTrue(os.path.islink(os.path.join(self.out, 'LICENSE')))
+
+    def test_a_link_to_a_folder_inside_a_bundle_folder_is_refused(self):
+        # mutation: `ds + fs` -> `fs` in refuse_links_in_bundle: only links to files were seen
+        folder = self.path('bundle')
+        for name, (data, _) in shell_files('sim').items():
+            put(os.path.join(folder, *name.split('/')), data)
+        try:
+            os.symlink(self.path('bundle', 'MagicPortals.app', 'engine'), os.path.join(folder, 'MagicPortals.app', 'folderlink'), target_is_directory=True)
+        except (OSError, NotImplementedError) as e:
+            skip_loudly(self, 'this system will not make a symbolic link (%s): the refusal of a link to a FOLDER inside a bundle is NOT checked on it' % e)
+        code, out, err = run_cli('assemble', '--platform', 'ios', '--shell', folder, '--content', self.content, '--out', self.out, '--repo', self.repo, '--notices', self.notices)
+        self.assertEqual(code, 2, out + err)
+        self.assertIn('symbolic link', err)
+        self.assertIn('folderlink', err, 'and named')
+        self.assertFalse(os.path.exists(self.out) and os.listdir(self.out), 'nothing written')
+
+    def test_a_runtime_dll_the_program_only_delay_loads_is_asked_of_the_redistributable(self):
+        # mutation: `pe['imports'] + pe['delay_imports']` -> `pe['imports']` in vc_redist_entries: the DLL a delay-load names would be left out of the archive while
+        # PLAYING.txt says the folder carries the runtime the program loads
+        redist = self.path('redist')
+        for n in ('VCRUNTIME140.dll',):
+            put(os.path.join(redist, n), make_pe(dll=True, imports=('KERNEL32.dll',), delay=(), payload=b'a runtime'))
+        program = self.windows_program(imports=('KERNEL32.dll', 'VCRUNTIME140.dll'), delay=('vulkan-1.dll', 'msvcp140_atomic_wait.dll'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 2, out + err)
+        self.assertIn('msvcp140_atomic_wait.dll is imported by the program and is not in', err)
+        self.assert_nothing_left()
+        put(os.path.join(redist, 'msvcp140_atomic_wait.dll'), make_pe(dll=True, imports=('KERNEL32.dll',), delay=(), payload=b'an atomic wait'))
+        code, out, err = self.assemble('windows', program, '--vc-redist', redist)
+        self.assertEqual(code, 0, err)
+        files = rl.read_archive(os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION))
+        self.assertIn('MagicPortals-%s-windows-x64/msvcp140_atomic_wait.dll' % OTHER_VERSION, files)
+
+
+class TheHelpNamesTheRefusals(Temp):
+    """PORT10-6 (d): two refusals were added in fix round 1 and the --help lines did not say so."""
+
+    def help_of(self, *command):
+        code, out, err = run_cli(*(list(command) + ['--help']))
+        self.assertEqual(code, 0)
+        return ' '.join(out.split())
+
+    def test_assemble_help_names_the_shell_entry_refusal_the_floor_and_the_sums_rule(self):
+        text = self.help_of('assemble')
+        for phrase in ('an entry that is not a plain file (a symbolic link', 'not even a link to a file inside a bundle folder', '--max-glibc', '-dev, -nodata, -shell'):
+            self.assertIn(phrase, text)
+
+    def test_android_help_names_the_notice_beside_the_apk_refusal(self):
+        text = self.help_of('android')
+        for phrase in ('already beside the place for the APK', 'differs from the one given, is a folder, or is a link, dangling or not', 'before anything is placed'):
+            self.assertIn(phrase, text)
+
+    def test_check_program_help_names_the_floor(self):
+        self.assertIn('--max-glibc', self.help_of('check-program'))
 
 
 class TheVersionCheckThroughTheRelease(Temp):

@@ -11,8 +11,8 @@ python tools/package/package.py verify  <content folder>
 python tools/package/package.py shell   --content <content folder> --exe <the program> --out <folder> [--repo <this repository>]
 python tools/package/package.py same    <folder> <folder>
 
-python tools/package/release.py check-program <program> --platform windows|linux|macos|ios|android-lib [--allow-dev]
-python tools/package/release.py assemble --platform windows|linux --program <program> (--content <content folder> | --no-data) --out <folder> [--vc-redist <folder>]
+python tools/package/release.py check-program <program> --platform windows|linux|macos|ios|android-lib [--allow-dev] [--max-glibc X.Y]
+python tools/package/release.py assemble --platform windows|linux --program <program> (--content <content folder> | --no-data) --out <folder> [--vc-redist <folder>] [--max-glibc X.Y]
 python tools/package/release.py assemble --platform macos|ios --shell <zip|ipa|folder> [--content <content folder>] --out <folder>
 python tools/package/release.py android  --apk <release apk> --sdk <sdk> --out <folder>
 python tools/package/release.py sums <release folder> [--check]       python tools/package/release.py check-version
@@ -89,6 +89,8 @@ content inside it, copies `LICENSE` and `NOTICE.md` unchanged and refuses to wri
 the Apple packages carry the data). `version.py` reads the ONE version (`project(MagicPortals VERSION ...)`) and gives the Android `versionCode` (`major*10000 + minor*100 + patch`) and the Windows four-field
 form (the definition must have exactly three fields: `1.2` and `1.2.3.4` are refused by name, and `0.0.0` has no code, because Android needs at least 1); `check_version.py` compares it with every place it is written (a table of 8 files that are handed it, 4 sentences of the documents and the Android manifest) and fails naming a place that disagrees or a
 new file that spells the number (folders named `build` or `build-<word>`, `venv` or `venv-<word>` are not scanned; `tests/build_pins/` is). Every subcommand's `--help` says what it refuses. Python standard library only, run on Windows (3.14) and in the Linux subsystem (3.12).
+
+**Planning step 209 (PORT-11) added:** the checkout's folder name is forbidden as a PATH (`/Magic-Portals-Enhanced/` and its backslash form, and the former name's two), not as a bare name, because it is also the project's public name (PORT10-2 g); a Linux program is read for whether it carries a symbol table (PLAYING.txt says stripped or not) and `--max-glibc X.Y` refuses a program that asks the system for a newer glibc than the oldest system it should run on (`--allow-dev` does not waive it); an archive made with `--no-data` (`-nodata`) is no release, so it is left out of a release's sums and an assembly of it writes none; and the three behaviours of fix round 1 that no test pinned (a dangling link where a notice goes beside an APK, a link to a folder inside a bundle, a delay-loaded runtime DLL) have tests, each with the mutation that was shown to survive. `tools/ci/` holds what CI needs (`docs/ci.md`): a checker of the rules every workflow keeps, the extraction of a job's scripts for a rehearsal, the Android smoke flows, and a synthetic world to build a content package from when there is no game data.
 
 ## Tests
 

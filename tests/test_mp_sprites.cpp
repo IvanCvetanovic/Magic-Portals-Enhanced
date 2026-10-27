@@ -4082,7 +4082,19 @@ void TheShockRingIsShockAreaEnt() {
               "the factor from 0.993 to 1.007, the draw's two ends");
     CHECK_MSG(ring.SizeUnits(80.0) == 160.0 && ring.SizeUnits(28.0) == 56.0 && ring.SizeUnits(105.0) == 210.0,
               "scaleToSize's diameter: 2 x areaRadius, 56 to 210 over the game's 21 agents");
+}
 
+// The ring's entity file, out of the ORIGINAL's folder (planning step 209, PORT-11; the row APPLE-22): the part of TheShockRingIsShockAreaEnt that reads shock_area.ent. It was
+// in that function with no guard, so a run without the owner's extracted assets failed three of its four checks (and passed the fourth, which a default-made entity satisfies:
+// a pass that checked nothing). It is a case of the suite test_mp_sprites_original now, which exits 77 without the assets.
+void TheShockRingEntityIsShockAreaEnt() {
+    Art::Rules rules;
+    std::string error;
+    if (!Art::LoadRules(kPortData + "/art.json", rules, error)) { // the rules were checked by TheShockRingIsShockAreaEnt: no check of their own here, so the counts add up
+        CHECK_MSG(false, error);
+        return;
+    }
+    const Art::ShockRing& ring = rules.shockRing;
     // The entity itself, out of the original's file: an added, static, unlit
     // horizontal picture of white_ring.png at emissive 1, and nothing else.
     Art::Entity entity;
@@ -4387,7 +4399,15 @@ void FindReadsTheNodesUnroundedDepth() {
     CHECK_MSG(ordered, "Find still numbers the sprites in its own order");
 }
 
-MP_SUITE_MAIN("test_mp_sprites") {
+// THIS FILE HOLDS THREE SUITES (planning step 209, PORT-11; the row APPLE-22). It was one, test_mp_sprites, whose second and third parts skipped
+// themselves without the owner's extracted assets or the converted levels, printed a line and still returned their summary against a floor of 50, so a run with neither
+// passed on 1,027 of its 2,099 checks, and one case read an entity file of the original with no guard and failed. Now:
+//   test_mp_sprites           the cases that need no data (1,023 checks)
+//   test_mp_sprites_original  the cases that read the original's extracted assets (279 checks, 278 when the converted levels are absent); exits 77, SKIPPED, when they are absent
+//   test_mp_sprites_levels    the cases that read the converted levels (797 checks); exits 77, SKIPPED, when they are absent
+// With all the data present the three run 1,023 + 279 + 797 = 2,099 checks, as the one suite did. A suite that is skipped runs no check and says so; one that runs fewer
+// checks than its floor fails. The floors are about 90 % of each suite's own count and were 50 and 70 for the whole.
+static void runFreeCases() {
     AnImageSaysItsSizeInItsHeader();
     AnythingElseIsRefusedByName();
     AJpegSaysItsSizeInItsFrameHeader();
@@ -4447,34 +4467,26 @@ MP_SUITE_MAIN("test_mp_sprites") {
     TheDrawOrderRuleIsTheScenesBucket();
     APositionAHairUnderALineIsOnIt();
     TheSceneHasOneBucketInThreeFiles();
+}
 
-    std::error_code original;
-    if (std::filesystem::is_directory(kOriginal + "/entities", original)) {
-        TheOriginalsImagesAreCutAsTheEntsSay();
-        ThePortsOwnPicturesAreDrawnFromTheirTiers();
-        TheMinionSheetIsCutWhereTheOriginalCutsIt();
-        TheGhostIsGhostEnt();
-        EveryOriginalImageIsSizedAsTheRendererReadsIt();
-        TheOriginalsParticlesAreRead();
-        AnEntityWithoutParticlesSaysSoWithoutFailing();
-        TheEffectsAreTheirEnts();
-        EveryMultiplyTheOriginalShipsIsExact();
-        EveryEntReadsAsAnEntity();
-        TheTypeAndLayerDepthAreTheFilesOwn();
-        EveryAddedBitmapIsWithoutAlpha();
-        TheOriginalsMp3sDecode();
-    } else {
-        std::printf("test_mp_sprites: the original's images SKIPPED - needs its extracted assets at %s.\n",
-                    kOriginal.c_str());
-    }
+static void runOriginalCases() {
+    TheOriginalsImagesAreCutAsTheEntsSay();
+    ThePortsOwnPicturesAreDrawnFromTheirTiers();
+    TheMinionSheetIsCutWhereTheOriginalCutsIt();
+    TheGhostIsGhostEnt();
+    EveryOriginalImageIsSizedAsTheRendererReadsIt();
+    TheOriginalsParticlesAreRead();
+    AnEntityWithoutParticlesSaysSoWithoutFailing();
+    TheEffectsAreTheirEnts();
+    EveryMultiplyTheOriginalShipsIsExact();
+    EveryEntReadsAsAnEntity();
+    TheTypeAndLayerDepthAreTheFilesOwn();
+    EveryAddedBitmapIsWithoutAlpha();
+    TheOriginalsMp3sDecode();
+    TheShockRingEntityIsShockAreaEnt();
+}
 
-    std::error_code ec;
-    if (!std::filesystem::is_directory(kLevels, ec)) {
-        std::printf("test_mp_sprites: the levels' part SKIPPED - needs the converted levels at %s.\n"
-                    "  They live outside this repository; configure with -DSUPERSONIC_MAGICPORTALS_LEVELS=...\n",
-                    kLevels.c_str());
-        return ::test::summary("test_mp_sprites", 50);
-    }
+static void runLevelCases() {
     Level8sArt();
     Level0sStaticPortalsAreAdded();
     AnOffsetAndATurn();
@@ -4484,5 +4496,37 @@ MP_SUITE_MAIN("test_mp_sprites") {
     ThePlacementsCarryTheSystemsTheirLevelsState();
     TheOriginalsObservedPairsAreDealtItsWay();
     FindReadsTheNodesUnroundedDepth();
-    return ::test::summary("test_mp_sprites", 70);
 }
+
+static constexpr int kSkippedExit = 77; // the suites' own code for "skipped": SKIPS_WITH_77, ctest's SKIP_RETURN_CODE (tests/test_mp.cpp)
+
+static int freeEntry(int, char**) {
+    runFreeCases();
+    return ::test::summary("test_mp_sprites", 920);
+}
+
+static int originalEntry(int, char**) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(kOriginal + "/entities", ec)) {
+        std::printf("test_mp_sprites_original: SKIPPED - needs the original's extracted assets at %s (no check was run)\n", kOriginal.c_str());
+        return kSkippedExit;
+    }
+    runOriginalCases();
+    return ::test::summary("test_mp_sprites_original", 250);
+}
+
+static int levelsEntry(int, char**) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(kLevels, ec)) {
+        std::printf("test_mp_sprites_levels: SKIPPED - needs the converted levels at %s (no check was run)\n"
+                    "  They live outside this repository; configure with -DSUPERSONIC_MAGICPORTALS_LEVELS=...\n",
+                    kLevels.c_str());
+        return kSkippedExit;
+    }
+    runLevelCases();
+    return ::test::summary("test_mp_sprites_levels", 720);
+}
+
+static const ::MpSuite::Registration freeRegistration("test_mp_sprites", &freeEntry);
+static const ::MpSuite::Registration originalRegistration("test_mp_sprites_original", &originalEntry);
+static const ::MpSuite::Registration levelsRegistration("test_mp_sprites_levels", &levelsEntry);

@@ -4,8 +4,9 @@ Run:   python -m unittest discover -s tools/apple -p "test_*.py" -v        (need
        SKIPPED and say so, never passed; actionlint, when it is on PATH, is run over the file too)
 
 WHAT THIS PROVES. That the file, as written, holds the rules the project set for a workflow that spends a private repository's macOS minutes: it runs on a dispatch
-and on nothing else (no push, no pull request, no schedule), asks for no permission but reading the contents, uses no secret and no token, names no path of the
-owner's data (no reference folder, no out folder, no GameData), pins every action it uses, bounds every job in time, makes the three jobs independent of one another,
+and on the call that release.yml makes (planning step 209) and on nothing else (no push, no pull request, no schedule), asks for no permission but reading the contents, uses no
+secret and no token, names no path of the owner's data (no reference folder, no out folder, no GameData), pins every action it uses to a commit sha, bounds every job in time,
+makes the three jobs independent of one another, lets NO failed test through by name (the two that used to fail without the data were made to skip, step 209),
 ends each job with an upload of its logs that runs whatever happened, passes the flags that keep a runner from rewriting the committed shaders, and puts a wall limit on
 every launch of the program. The MUTATIONS run the same checks over an edited copy and require each edit to be refused.
 WHAT IT CANNOT PROVE. That GitHub accepts the file or that any step of it does what it says on a macOS runner: NOT KNOWN until it is dispatched (actionlint, where it ran, checks the
@@ -40,7 +41,13 @@ CITED_STEPS = {
     'ios-device': ['Configure', 'Build', 'Assemble the shell ipa', 'Upload the shell', 'Upload logs'],
     'ios-sim': ['Configure', 'Build', 'Assemble the shell app', 'Upload the shell', 'Upload logs'],
 }
-PINNED = re.compile(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@(v[0-9]+(\.[0-9]+){0,2}|[0-9a-f]{40})$')
+# Planning step 209: an action is pinned to a COMMIT SHA of 40 hex digits (a tag is a name that moves; the runs of 2026-10-25 used the floating v4 tags; the shas below are what those tags named on 2026-10-27).
+PINNED = re.compile(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$')
+SHA_CHECKOUT = 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0'
+SHA_CACHE_SAVE = 'actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0'
+SHA_UPLOAD = 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2'
+# The triggers: a person's dispatch, and the call that release.yml makes (a called workflow cannot be started by anything but its caller).
+TRIGGERS = {'workflow_dispatch', 'workflow_call'}
 # The two names are written in pieces, so that this file itself passes the grep for them that the hard rule's pre-commit check makes.
 SIBLING = 'pen' + 'umbra'
 ORIGINAL_MAKER = 'asan' + 'tee'
@@ -102,11 +109,13 @@ def check_workflow(text):
     """Every rule, over the file's text. Raises AssertionError naming the one broken."""
     workflow = yaml.safe_load(text)
     # The trigger.
-    assert trigger_set(workflow) == {'workflow_dispatch'}, 'the only trigger is workflow_dispatch, found %s' % sorted(trigger_set(workflow))
+    assert trigger_set(workflow) == TRIGGERS, 'the triggers are workflow_dispatch and workflow_call (release.yml calls this file) and nothing else, found %s' % sorted(trigger_set(workflow))
     on = workflow.get('on', workflow.get(True))
     job_input = on['workflow_dispatch']['inputs']['job']
     assert job_input['type'] == 'choice' and job_input['options'] == ['macos', 'ios-device', 'ios-sim', 'all'] and job_input['default'] == 'all', 'the job input'
     assert set(on['workflow_dispatch']['inputs']) == {'job'}, 'the dispatch takes one input'
+    call_input = on['workflow_call']['inputs']['job']
+    assert call_input['type'] == 'string' and call_input['default'] == 'all' and set(on['workflow_call']['inputs']) == {'job'}, 'the call takes the same one input, as a string'
     # What it may do.
     assert workflow.get('permissions') == {'contents': 'read'}, 'permissions: contents: read, and nothing more'
     for name, job in workflow['jobs'].items():
@@ -176,7 +185,9 @@ def check_workflow(text):
     # The suites, the skip count and the fixture.
     ctest = [s for s in steps_of(workflow, 'macos') if s.get('name') == 'Test (ctest, data-less)'][0]['run']
     assert 'ctest --test-dir build' in ctest and "grep -c '(Skipped)'" in ctest and 'never counted as passed' in ctest, 'the skip count is printed and never counted as a pass'
-    assert 'known="test_mp_shoot test_mp_sprites"' in ctest and '::error::unexpected failures' in ctest, 'the two suites that fail without the data are named, and any other failure fails the step'
+    assert 'known=' not in ctest and 'unexpected' not in ctest, 'no failure is let through by name any more (planning step 209)'
+    assert '::error::failed tests' in ctest and 'if [ -n "$failed" ]' in ctest, 'any failed test fails the step'
+    assert '--timeout 900' in ctest, 'ctest has a wall limit'
     assert text.count('--root "$GITHUB_WORKSPACE/tests/fixtures/ci" --port-data "$GITHUB_WORKSPACE/game/data" --level ci_level') == 2, 'the fixture is run twice: arm64 and x86_64, with the tables of the port from the checkout'
     assert text.count('--frames 300') == 2 and text.count('--window 1280x720') == 2 and text.count('--fixed-step') >= 3, 'the fixture runs 300 fixed ticks at 1280x720'
     # A wall limit on every launch of the program.
@@ -237,9 +248,11 @@ class AppleWorkflow(unittest.TestCase):
         check_workflow(self.text)
 
     @requires_yaml
-    def test_the_only_trigger_is_a_dispatch(self):
+    def test_the_only_triggers_are_a_dispatch_and_the_call_release_yml_makes(self):
         workflow = yaml.safe_load(self.text)
-        self.assertEqual(trigger_set(workflow), {'workflow_dispatch'})
+        self.assertEqual(trigger_set(workflow), TRIGGERS)
+        release = read_text(os.path.join(REPO, '.github', 'workflows', 'release.yml'))
+        self.assertIn('uses: ./.github/workflows/apple.yml', release, 'the call is what the second trigger is for')
         # PyYAML reads the key `on` as the boolean True; the triggers sit under exactly one of the two spellings, never both.
         self.assertEqual(sum(key in workflow for key in (True, 'on')), 1, 'the triggers are under exactly one of the keys True and "on"')
 
@@ -309,28 +322,38 @@ class AppleWorkflow(unittest.TestCase):
             proc = subprocess.run([bash, '-c', command], capture_output=True, text=True, env=env, timeout=120)
             return proc.returncode, proc.stdout + proc.stderr
 
-    KNOWN_FAILURES = (
+    # What ctest prints when the data is absent and nothing fails: the suites that need it are listed as not run (Skipped), and the exit code is 0.
+    ONLY_SKIPS = (
+        'The following tests did not run:\n'
+        '\t  3 - test_mp_levels (Skipped)\n'
+        '\n'
+        '100% tests passed, 0 tests failed out of 5')
+
+    # The two suites that used to fail without the data (APPLE-22) are failures like any other now: the step lets no failure through by name.
+    SHOOT_FAILS = (
         'The following tests did not run:\n'
         '\t  3 - test_mp_levels (Skipped)\n'
         '\n'
         'The following tests FAILED:\n'
         '\t 38 - test_mp_shoot (Failed)\n'
-        '\t 52 - test_mp_sprites (Failed)\n'
         'Errors while running CTest')
 
     @requires_yaml
-    def test_the_ctest_step_passes_with_exactly_the_two_named_failures_and_says_so(self):
-        code, text = self.run_ctest_step(self.KNOWN_FAILURES, 8)
+    def test_the_ctest_step_passes_when_the_suites_that_need_data_are_skipped_and_says_so(self):
+        code, text = self.run_ctest_step(self.ONLY_SKIPS, 0)
         self.assertEqual(code, 0, text)
         self.assertIn('skipped: 1 (never counted as passed)', text)
-        self.assertIn('failed: test_mp_shoot test_mp_sprites', text)
+        self.assertIn('failed: none', text)
 
     @requires_yaml
-    def test_the_ctest_step_fails_on_any_other_failure(self):
-        other = self.KNOWN_FAILURES.replace('Errors while', '\t 60 - test_mp_tscn (Failed)\nErrors while')
-        code, text = self.run_ctest_step(other, 8)
+    def test_the_ctest_step_fails_on_any_failed_test_the_two_that_used_to_fail_included(self):
+        for output in (self.SHOOT_FAILS, self.SHOOT_FAILS.replace('test_mp_shoot', 'test_mp_sprites'), self.SHOOT_FAILS.replace('test_mp_shoot', 'test_mp_tscn')):
+            code, text = self.run_ctest_step(output, 8)
+            self.assertEqual(code, 1, text)
+            self.assertIn('failed tests: ', text)
+        code, text = self.run_ctest_step(self.SHOOT_FAILS.replace('Errors while', '\t 52 - test_mp_sprites (Failed)\nErrors while'), 8)
         self.assertEqual(code, 1, text)
-        self.assertIn('unexpected failures: test_mp_tscn', text)
+        self.assertIn('failed tests: test_mp_shoot test_mp_sprites', text)
 
     @requires_yaml
     def test_the_ctest_step_fails_when_ctest_dies_without_naming_a_failure(self):
@@ -347,9 +370,21 @@ class AppleWorkflow(unittest.TestCase):
     @requires_yaml
     def test_the_ctest_step_warns_when_the_skip_count_is_not_the_marked_count(self):
         marked_twice = 'add_mp_test(test_mp_a SKIPS_WITH_77)\nadd_mp_test(test_mp_b SKIPS_WITH_77)\n'
-        code, text = self.run_ctest_step(self.KNOWN_FAILURES, 8, tests_cmake=marked_twice)
+        code, text = self.run_ctest_step(self.ONLY_SKIPS, 0, tests_cmake=marked_twice)
         self.assertEqual(code, 0, text)
         self.assertIn('::warning::1 suites skipped, 2 are marked as needing data', text)
+
+    def test_the_count_of_marked_suites_reads_the_form_the_split_suites_are_written_in(self):
+        # the step counts the lines `add_mp_test(<name> ... SKIPS_WITH_77)`; planning step 209 added three in the form `add_mp_test(<name> IN_SOURCE <file> SKIPS_WITH_77)`
+        pattern = re.compile(r'^add_mp_test\(.* SKIPS_WITH_77\)')
+        self.assertTrue(pattern.match('add_mp_test(test_mp_levels SKIPS_WITH_77)'))
+        self.assertTrue(pattern.match('add_mp_test(test_mp_shoot_levels IN_SOURCE test_mp_shoot SKIPS_WITH_77)'))
+        self.assertFalse(pattern.match('add_mp_test(test_mp_shoot)'))
+        text = read_text(os.path.join(REPO, 'tests', 'CMakeLists.txt')).replace('\r\n', '\n')
+        for name in ('test_mp_shoot_levels', 'test_mp_sprites_original', 'test_mp_sprites_levels'):
+            self.assertTrue(re.search(r'^add_mp_test\(%s IN_SOURCE test_mp_\w+ SKIPS_WITH_77\)$' % name, text, re.M), name)
+        self.assertIn('add_mp_test(test_mp_shoot)\n', text)
+        self.assertIn('add_mp_test(test_mp_sprites)\n', text)
 
     # ---- MUTATIONS: each edit of the file is refused, by the rule it breaks ----------------------------------------------------------------------
 
@@ -385,15 +420,26 @@ class AppleWorkflow(unittest.TestCase):
 
     @requires_yaml
     def test_mutation_a_push_trigger(self):
-        self.refused(self.TRIGGER, 'on:\n  push:\n    branches: [main]\n  workflow_dispatch:\n', 'push trigger', 'the only trigger is workflow_dispatch')
+        self.refused(self.TRIGGER, 'on:\n  push:\n    branches: [main]\n  workflow_dispatch:\n', 'push trigger', 'the triggers are workflow_dispatch and workflow_call')
 
     @requires_yaml
     def test_mutation_a_pull_request_trigger(self):
-        self.refused(self.TRIGGER, 'on:\n  pull_request:\n  workflow_dispatch:\n', 'pull_request trigger', 'the only trigger is workflow_dispatch')
+        self.refused(self.TRIGGER, 'on:\n  pull_request:\n  workflow_dispatch:\n', 'pull_request trigger', 'the triggers are workflow_dispatch and workflow_call')
 
     @requires_yaml
     def test_mutation_a_schedule(self):
-        self.refused(self.TRIGGER, 'on:\n  schedule:\n    - cron: "0 3 * * *"\n  workflow_dispatch:\n', 'schedule trigger', 'the only trigger is workflow_dispatch')
+        self.refused(self.TRIGGER, 'on:\n  schedule:\n    - cron: "0 3 * * *"\n  workflow_dispatch:\n', 'schedule trigger', 'the triggers are workflow_dispatch and workflow_call')
+
+    @requires_yaml
+    def test_mutation_the_call_trigger_dropped(self):
+        # release.yml calls this file: without the trigger its call would fail at the first dispatch of the release
+        self.refused('  workflow_call:\n    inputs:\n      job:\n        description: Which job to run (macos, ios-device, ios-sim or all)\n        type: string\n        default: all\n', '',
+                     'no workflow_call trigger', 'the triggers are workflow_dispatch and workflow_call')
+
+    @requires_yaml
+    def test_mutation_the_call_input_is_no_longer_the_one_string(self):
+        self.refused('        description: Which job to run (macos, ios-device, ios-sim or all)\n        type: string\n', '        description: Which job to run (macos, ios-device, ios-sim or all)\n        type: boolean\n',
+                     'a call input that is a boolean', 'the call takes the same one input')
 
     @requires_yaml
     def test_mutation_a_secret(self):
@@ -414,7 +460,7 @@ class AppleWorkflow(unittest.TestCase):
 
     @requires_yaml
     def test_mutation_an_unpinned_action(self):
-        old = 'actions/checkout@v4'
+        old = SHA_CHECKOUT.split(' ')[0]
         self.assertEqual(self.text.count(old), 3)
         self.assertEqual(self.text.replace(old, 'actions/checkout@main', 1).count('actions/checkout@main'), 1)
         check_workflow(self.text)
@@ -423,12 +469,34 @@ class AppleWorkflow(unittest.TestCase):
         self.assertIn('unpinned action', str(caught.exception))
 
     @requires_yaml
+    def test_mutation_an_action_pinned_to_a_tag_and_not_a_sha(self):
+        # planning step 209: the file was pinned to the tag v4 (it ran twice so); a tag moves, so it is refused now
+        old = SHA_CHECKOUT.split(' ')[0]
+        self.refused_everywhere(old, 'actions/checkout@v4', 'a tag where a sha is', 'unpinned action')
+
+    @requires_yaml
+    def test_mutation_a_sha_that_is_not_forty_digits(self):
+        self.refused_everywhere(SHA_UPLOAD.split(' ')[0], 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa0', 'a sha cut short', 'unpinned action')
+
+    @requires_yaml
     def test_mutation_an_action_with_no_version(self):
-        self.refused_everywhere('actions/cache/save@v4', 'actions/cache/save', 'no version at all', 'unpinned action')
+        self.refused_everywhere(SHA_CACHE_SAVE.split(' ')[0], 'actions/cache/save', 'no version at all', 'unpinned action')
 
     @requires_yaml
     def test_mutation_a_branch_instead_of_a_version(self):
-        self.refused_everywhere('actions/upload-artifact@v4', 'actions/upload-artifact@master', 'a branch name', 'unpinned action')
+        self.refused_everywhere(SHA_UPLOAD.split(' ')[0], 'actions/upload-artifact@master', 'a branch name', 'unpinned action')
+
+    @requires_yaml
+    def test_the_pins_are_the_shas_the_other_workflows_use(self):
+        # one sha per action in the whole repository: a second file that pinned another commit of the same action would be two decisions
+        folder = os.path.join(REPO, '.github', 'workflows')
+        pins = {}
+        for name in sorted(os.listdir(folder)):
+            for ref in re.findall(r'uses:\s*(actions/[A-Za-z0-9_./-]+@[0-9a-f]{40})', read_text(os.path.join(folder, name))):
+                action, sha = ref.split('@')
+                pins.setdefault(action.split('/')[1], set()).add(sha)
+        for action, shas in sorted(pins.items()):
+            self.assertEqual(len(shas), 1, 'the action %s is pinned to %d different commits across the workflows' % (action, len(shas)))
 
     @requires_yaml
     def test_mutation_write_permission(self):
@@ -450,8 +518,8 @@ class AppleWorkflow(unittest.TestCase):
 
     @requires_yaml
     def test_mutation_the_logs_upload_stops_running_after_a_failure(self):
-        self.refused('      - name: Upload logs\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: ios-sim-logs\n',
-                     '      - name: Upload logs\n        uses: actions/upload-artifact@v4\n        with:\n          name: ios-sim-logs\n', 'no always() on the last upload',
+        self.refused('      - name: Upload logs\n        if: always()\n        uses: %s\n        with:\n          name: ios-sim-logs\n' % SHA_UPLOAD,
+                     '      - name: Upload logs\n        uses: %s\n        with:\n          name: ios-sim-logs\n' % SHA_UPLOAD, 'no always() on the last upload',
                      'ends with an upload of its logs that always runs')
 
     @requires_yaml
@@ -622,9 +690,18 @@ class AppleWorkflow(unittest.TestCase):
         self.refused("skipped=\"$(grep -c '(Skipped)'", "skipped=\"$(grep -c '(Passed)'", 'the skip count counting passes', 'the skip count is printed')
 
     @requires_yaml
-    def test_mutation_the_ctest_step_forgets_to_fail_on_an_unexpected_failure(self):
-        line = '          if [ -n "$unexpected" ]; then echo "::error::unexpected failures:$unexpected"; exit 1; fi\n'
-        self.refused(line, '', 'no check for an unexpected failure', 'the two suites that fail without the data are named')
+    def test_mutation_the_ctest_step_forgets_to_fail_on_a_failed_test(self):
+        line = '          if [ -n "$failed" ]; then echo "::error::failed tests: $failed"; exit 1; fi\n'
+        self.refused(line, '', 'no check for a failed test', 'any failed test fails the step')
+
+    @requires_yaml
+    def test_mutation_the_two_failures_are_let_through_by_name_again(self):
+        # the list that planning step 209 took out: its return would let test_mp_shoot and test_mp_sprites fail without a red job
+        self.refused('          echo "failed: ${failed:-none}"\n', '          known="test_mp_shoot test_mp_sprites"\n          echo "failed: ${failed:-none}"\n', 'a known list back', 'no failure is let through by name')
+
+    @requires_yaml
+    def test_mutation_ctest_without_a_wall_limit(self):
+        self.refused('ctest --test-dir build --output-on-failure --timeout 900 2>&1', 'ctest --test-dir build --output-on-failure 2>&1', 'no ctest timeout', 'ctest has a wall limit')
 
     @requires_yaml
     def test_mutation_a_step_after_the_suites_that_a_failure_would_skip(self):

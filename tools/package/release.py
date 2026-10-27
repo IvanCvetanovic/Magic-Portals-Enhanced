@@ -84,6 +84,8 @@ ELF_MACHINES = {62: 'x86_64', 183: 'arm64'}
 MACHO_CPUS = {0x01000007: 'x86_64', 0x0100000C: 'arm64'}
 ACCEPTED_ARCHS = {WINDOWS: ('x64',), LINUX: ('x86_64',), MACOS: ('universal', 'arm64', 'x86_64'), IOS: ('arm64',), ANDROID_LIB: ('x86_64', 'arm64')}
 MACHO_LE_MAGIC, MACHO_FAT_MAGIC, MACHO_FAT64_MAGIC = b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf'
+ELF_SECTION_HEADER_BYTES = 64  # sizeof(Elf64_Shdr)
+SYMBOL_TABLE_SECTION = '.symtab'
 MACHO_EXECUTE, MOST_FAT_ARCHS = 2, 30  # a Java class file starts with the fat magic too, and has no 30 architectures
 
 # Two strings every build of this program carries, whatever it was made with: the log file's name (game/sim/Scratch.hpp) and a line of --help (game/main.cpp).
@@ -92,8 +94,13 @@ GAME_MARKERS = (b'magicportals.log', b'ignore the paths this build was configure
 # THE FORBIDDEN BYTE STRINGS, searched in ASCII and in UTF-16LE, in any case. Each says why it is there. A built program that holds one has the builder's machine in it.
 FORBIDDEN_STRINGS = (
     (b'icvet', "the owner's account name (CLAUDE.md, Environment): a baked data path, a checkout path in an assertion or a log text, a program database's path all carry it"),
-    (b'Magic-Portals-Enhanced', "the checkout's folder name: any absolute path of the build tree, whoever's account it was in"),
-    (b'Magic-Portals-Remake', "the checkout's former folder name (until 2026-10-01): a tree configured before the rename"),
+    # THE CHECKOUT'S FOLDER NAME, AS A PATH AND NOT AS A NAME (planning step 209, PORT10-2 g). The folder name is also the project's public name, so a credits line or a URL in a
+    # later program must not be refused with the account-name message: only the name BETWEEN TWO SEPARATORS is a path of a build tree (`D:\a\Magic-Portals-Enhanced\...` on a
+    # Windows runner, which carries neither /home/ nor /Users/). A line that ends at the name, or has spaces or words round it, is not a path.
+    (b'/Magic-Portals-Enhanced/', "the checkout's folder name inside a path written with slashes: any absolute path of the build tree, whoever's account it was in"),
+    (b'\\Magic-Portals-Enhanced\\', "the checkout's folder name inside a path written with backslashes (a Windows runner's workspace is D:\\a\\<repository>\\<repository>)"),
+    (b'/Magic-Portals-Remake/', "the checkout's former folder name (until 2026-10-01) inside a path written with slashes: a tree configured before the rename"),
+    (b'\\Magic-Portals-Remake\\', "the checkout's former folder name (until 2026-10-01) inside a path written with backslashes: a tree configured before the rename"),
     (b'/mnt/', 'a Windows drive mounted into WSL (/mnt/c/...): a build made there baked that drive\'s paths'),
     (b'/home/', "a Linux home folder: the builder's account"),
     (b'/Users/', "a macOS home folder or a Windows one written with slashes (C:/Users/...): the builder's account"),
@@ -114,6 +121,9 @@ VULKAN_LOADER = 'vulkan-1.dll'  # kVulkanLoaderName in game/sim/StartChecks.hpp,
 
 # Facts of a refusal are of two kinds: the file is not the program of this platform (never allowed through), or it is a developer's build (--allow-dev).
 STRUCTURE, DEVELOPER = 'structure', 'developer'
+# A third kind (planning step 209): the program asks the system for more than the floor the caller named (--max-glibc). It is neither a wrong file nor a developer's build, so
+# --allow-dev does not waive it.
+FLOOR = 'floor'
 
 
 class ReleaseError(Exception):
@@ -194,12 +204,36 @@ def read_pe(data):
             'plus': plus, 'imports': imports, 'delay_imports': delay}
 
 
+def elf_section_names(data):
+    """The names of the sections of an ELF64 little-endian file, read from its section header table and the section-name string table; [] for a file with no table (a
+    program stripped to the bone has none). Raises BinaryError for a table that runs past the end of the file."""
+    shoff = struct.unpack_from('<Q', data, 0x28)[0]
+    shentsize, shnum, shstrndx = struct.unpack_from('<HHH', data, 0x3A)
+    if shoff == 0 or shnum == 0 or shentsize < ELF_SECTION_HEADER_BYTES or shstrndx >= shnum:
+        return []
+    if shoff + shentsize * shnum > len(data):
+        raise BinaryError('the section header table runs past the end of the file')
+
+    def header(index):
+        return struct.unpack_from('<IIQQQQ', data, shoff + index * shentsize)  # name, type, flags, address, file offset, size
+
+    _, _, _, _, names_at, names_size = header(shstrndx)
+    table = data[names_at:names_at + names_size]
+    names = []
+    for index in range(shnum):
+        start = header(index)[0]
+        end = table.find(b'\0', start)
+        names.append(table[start:end if end != -1 else len(table)].decode('latin-1'))
+    return names
+
+
 def read_elf(data):
     if len(data) < 64 or data[:4] != b'\x7fELF':
         raise BinaryError('not an ELF file')
     cls, little = data[4], data[5]
     etype, machine = struct.unpack_from('<HH', data, 0x10) if little == 1 else struct.unpack_from('>HH', data, 0x10)
-    return {'format': 'ELF', 'class': cls, 'little': little == 1, 'type': etype, 'machine': machine, 'arch': ELF_MACHINES.get(machine)}
+    sections = elf_section_names(data) if cls == 2 and little == 1 else []
+    return {'format': 'ELF', 'class': cls, 'little': little == 1, 'type': etype, 'machine': machine, 'arch': ELF_MACHINES.get(machine), 'sections': sections}
 
 
 def read_macho(data):
@@ -300,6 +334,8 @@ class Report:
         self.problems = []   # (kind, text)
         self.needs = {}
         self.pe = None
+        self.stripped = None  # a Linux program: whether it carries no symbol table (None when it was not read as one)
+        self.has_debug = False
 
     def ok(self, text):
         self.facts.append(('ok', text))
@@ -332,10 +368,13 @@ def checkout_forbidden(repo):
     return [(item, "this checkout's own path (%s)" % item.decode('utf-8', 'replace')) for item in found]
 
 
-def check_program_bytes(data, platform, version=None, repo=None, also_forbid=()):
-    """Everything check-program asks of a built program given as bytes. Returns a Report; never raises for a bad program (that is a fact), only for a bad question."""
+def check_program_bytes(data, platform, version=None, repo=None, also_forbid=(), max_glibc=None):
+    """Everything check-program asks of a built program given as bytes. Returns a Report; never raises for a bad program (that is a fact), only for a bad question.
+    `max_glibc` (a Linux program only, a tuple such as (2, 35)): the highest glibc the program may ask of the system."""
     if platform not in CHECKED_PLATFORMS:
         raise ReleaseError('unknown platform %r (%s)' % (platform, ', '.join(CHECKED_PLATFORMS)))
+    if max_glibc is not None and platform != LINUX:
+        raise ReleaseError('--max-glibc is for a Linux program: %s has no glibc to name' % platform)
     version = version or vs.read_version(repo or vs.default_repo())
     r = Report(platform)
 
@@ -370,6 +409,9 @@ def check_program_bytes(data, platform, version=None, repo=None, also_forbid=())
                     r.fail(STRUCTURE, p)
             else:
                 r.ok('format: ELF64, little-endian, machine %d (%s), type %d' % (elf['machine'], elf['arch'], elf['type']))
+                if platform == LINUX:
+                    r.stripped = SYMBOL_TABLE_SECTION not in elf['sections']
+                    r.has_debug = any(n.startswith('.debug') for n in elf['sections'])
         else:
             macho = read_macho(data)
             archs = macho['archs']
@@ -456,11 +498,24 @@ def check_program_bytes(data, platform, version=None, repo=None, also_forbid=())
                 if quads != (wanted_quad, wanted_quad):
                     r.fail(DEVELOPER, 'the binary version block says file %s and product %s, not %s' % ('.'.join(map(str, quads[0])), '.'.join(map(str, quads[1])), want))
 
-    # 7. what a Linux program asks of the system (information, for PLAYING.txt)
+    # 7. what a Linux program asks of the system (information, for PLAYING.txt) and whether it carries its symbols
     if platform == LINUX and not structure_failed:
         r.needs = glibc_needs(data)
         if r.needs:
             r.info('the system must provide ' + ', '.join('%s %s' % (k, '.'.join(map(str, v))) for k, v in sorted(r.needs.items())) + ' or newer (the highest names the program asks for)')
+        if 'GLIBCXX' not in r.needs and 'CXXABI' not in r.needs:
+            r.info('the program asks the system for no libstdc++ version (no GLIBCXX or CXXABI name): the C++ runtime is not taken from the system, which is what linking it in gives')
+        r.info('the program is %s' % ('stripped (it has no symbol table)' if r.stripped else 'NOT stripped (it carries a symbol table%s)' % (' and debug sections' if r.has_debug else '')))
+        # 7b. the floor the caller named (--max-glibc): a program built on a newer system than the oldest one it should run on asks for a newer glibc than that
+        if max_glibc is not None:
+            got = r.needs.get('GLIBC')
+            if got is None:
+                r.fail(FLOOR, 'the program names no GLIBC version, so the floor of glibc %s cannot be checked' % '.'.join(map(str, max_glibc)))
+            elif got > max_glibc:
+                r.fail(FLOOR, 'the program asks for glibc %s and the floor is %s: it was built on a system newer than the oldest one it should run on (build it on that one)'
+                       % ('.'.join(map(str, got)), '.'.join(map(str, max_glibc))))
+            else:
+                r.ok('glibc floor: the program asks for glibc %s, at most the %s asked for' % ('.'.join(map(str, got)), '.'.join(map(str, max_glibc))))
     return r
 
 
@@ -480,10 +535,19 @@ def read_file(path):
         return f.read()
 
 
+def parse_glibc_floor(text):
+    """`--max-glibc 2.35` as the tuple (2, 35); None for no floor. Refuses anything that is not two or three numbers joined by dots."""
+    if text is None:
+        return None
+    if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', text):
+        raise ReleaseError('--max-glibc wants a glibc version such as 2.35, not %r' % text)
+    return tuple(int(part) for part in text.split('.'))
+
+
 def cmd_check_program(args):
     repo = os.path.abspath(args.repo) if args.repo else vs.default_repo()
     data = read_file(args.file)
-    report = check_program_bytes(data, args.platform, repo=repo, also_forbid=args.also_forbid or ())
+    report = check_program_bytes(data, args.platform, repo=repo, also_forbid=args.also_forbid or (), max_glibc=parse_glibc_floor(args.max_glibc))
     print('check-program %s (%s, %d bytes, sha256 %s)' % (args.file, args.platform, len(data), hashlib.sha256(data).hexdigest()))
     print_report(report, args.allow_dev)
     blocking = report.blocking(args.allow_dev)
@@ -504,7 +568,8 @@ def cmd_check_program(args):
 
 SUMS_FILE = 'SHA256SUMS.txt'
 NOTICE_FILES = ('LICENSE', 'NOTICE.md')
-# The files of a release folder: the archives of the five platforms and the notices that sit beside an APK. -dev marks a developer's archive.
+# The files of a release folder: the archives of the five platforms and the notices that sit beside an APK. -dev marks a developer's archive, -shell a shell without the
+# game and -nodata an archive made with `assemble --no-data` (planning step 209, PORT10-6 b): none of the three is a release, and none is listed in a release's sums.
 ARTIFACT = re.compile(r'^MagicPortals-\d+\.\d+\.\d+(?:-[A-Za-z0-9_]+)*\.(?:zip|tar\.gz|apk|ipa)$')
 
 
@@ -514,8 +579,9 @@ def release_files(folder):
 
 
 def is_developer_name(name):
-    """Whether an archive's name says it is not a release: -dev (a developer's build, a smoke archive) or -shell (a shell without the game)."""
-    return bool(re.search(r'-(?:dev|shell)(?:\.|-)', name))
+    """Whether an archive's name says it is not a release: -dev (a developer's build, a smoke archive), -shell (a shell without the game) or -nodata (an archive made with
+    --no-data, a program without the game). A release folder is the whole game, so the last two are left out of its sums the way the first is."""
+    return bool(re.search(r'-(?:dev|shell|nodata)(?:\.|-)', name))
 
 
 def sums_text(folder, names):
@@ -530,7 +596,8 @@ def write_sums(folder, allow_dev=False, skip_dev=False):
         names = [n for n in names if not is_developer_name(n)]
     dev = [n for n in names if is_developer_name(n)]
     if dev and not allow_dev:
-        raise ReleaseError('%s is a developer\'s archive or a shell (-dev or -shell in its name) and a release folder\'s sums do not list one (--allow-dev for a smoke check)' % dev[0])
+        raise ReleaseError('%s is a developer\'s archive, a shell or an archive with no game (-dev, -shell or -nodata in its name) and a release folder\'s sums do not list one '
+                           '(--allow-dev for a smoke check)' % dev[0])
     if not names:
         raise ReleaseError('%s holds no release archive (MagicPortals-<version>-<platform>...)' % folder)
     pk.write_text(os.path.join(folder, SUMS_FILE), sums_text(folder, names))
@@ -868,14 +935,19 @@ def playing_windows(version, arch, redist_names, data, dev):
     return finish(lines, dev)
 
 
-def playing_linux(version, arch, needs, data, dev):
+def playing_linux(version, arch, needs, data, dev, stripped=None):
     glibc, glibcxx = needs.get('GLIBC'), needs.get('GLIBCXX')
     if glibc:
+        # The floor is whatever the machine that built the program had (planning step 209, PORT10-3): it is read from the program and said here, with the version. A program
+        # with libstdc++ and libgcc linked in (build_linux.sh --portable) names no GLIBCXX, and the line then says that the C++ runtime is not asked of the system.
         need_line = ('  * glibc %s or newer%s: the highest versions the program asks for (read from the program). A system with an older glibc will\n'
-                     '    refuse it with a "version `GLIBC_...\' not found" message.'
-                     % ('.'.join(map(str, glibc)), (' and a libstdc++ with GLIBCXX %s' % '.'.join(map(str, glibcxx))) if glibcxx else ''))
+                     '    refuse it with a "version `GLIBC_...\' not found" message.%s'
+                     % ('.'.join(map(str, glibc)), (' and a libstdc++ with GLIBCXX %s' % '.'.join(map(str, glibcxx))) if glibcxx else '',
+                        '' if glibcxx else '\n    It asks the system for no libstdc++ version: the C++ runtime is inside the program.'))
     else:
         need_line = '  * The system libraries the program names (libc, libstdc++, libgcc_s, libm).'
+    stripped_line = ('  The program is stripped (it carries no symbol table); the packager does not change it.' if stripped else
+                     '  The program is not stripped (the packager does not change it).')
     lines = [version_line(version, 'Linux', arch), '=' * 60, '',
              'TO PLAY',
              '  1. Unpack with tar, which keeps the program\'s executable bit:   tar xzf <this archive>   If you unpacked it some other way, restore the bit:   chmod +x MagicPortals',
@@ -889,7 +961,7 @@ def playing_linux(version, arch, needs, data, dev):
              '  * A Vulkan 1.2 driver and the Vulkan loader, libvulkan.so.1 (Mesa\'s radv, anv or lavapipe, or the vendor\'s driver; Debian and Ubuntu: libvulkan1).',
              '  * libasound.so.2 (ALSA) for sound (Debian and Ubuntu: libasound2t64).',
              need_line,
-             '  The program is not stripped (the packager does not change it).', '',
+             stripped_line, '',
              'IF IT DOES NOT START',
              '  * With the Vulkan loader but no driver the game ends at once, exit code 1, with one line on the terminal and in the log: "fatal: GLFW could not report the required Vulkan instance extensions. This usually means no Vulkan loader or ICD is installed."',
              '    That was measured by telling the loader to look for no driver files (VK_DRIVER_FILES), not on a PC without one. Without libvulkan.so.1 itself your system answers before the game starts ("error while loading shared libraries"; expected, not run). The friendly check the Windows program has does not exist on Linux.',
@@ -963,7 +1035,7 @@ def assemble_desktop(args):
     data = read_file(program)
 
     # Every refusal comes before anything is staged or written.
-    report = check_program_bytes(data, platform, version=version, repo=repo, also_forbid=args.also_forbid or ())
+    report = check_program_bytes(data, platform, version=version, repo=repo, also_forbid=args.also_forbid or (), max_glibc=parse_glibc_floor(args.max_glibc))
     if report.blocking(args.allow_dev):
         raise ReleaseError('check-program refuses %s (%d fact(s) fail):%s' % (program, len(report.blocking(args.allow_dev)), refusal_text(report, args.allow_dev)))
     dev = bool(report.developer())
@@ -1010,7 +1082,7 @@ def assemble_desktop(args):
         entries += redist_entries
         redist_names = sorted(n[len(prefix):] for n, _, _ in redist_entries)
         text = (playing_windows(version, report.arch, redist_names, bool(content), dev) if platform == WINDOWS
-                else playing_linux(version, report.arch, report.needs, bool(content), dev))
+                else playing_linux(version, report.arch, report.needs, bool(content), dev, report.stripped))
         entries.append((prefix + PLAYING_FILE, text.encode('utf-8'), FILE_MODE))
         if dev:
             entries.append((prefix + DEV_MARKER_FILE, developer_note(report).encode('utf-8'), FILE_MODE))
@@ -1027,7 +1099,9 @@ def assemble_desktop(args):
         shutil.rmtree(stage, ignore_errors=True)
         if os.path.exists(part):
             os.remove(part)
-    sums = None if dev else write_sums(out, skip_dev=True)
+    # An archive with no game in it (--no-data) is no release and is left out of the sums as the Apple shell without content is (PORT10-6 b): writing the sums over a folder
+    # that holds only that archive would also stop at "holds no release archive" after the archive was written.
+    sums = None if (dev or not content) else write_sums(out, skip_dev=True)
     print('archive: %s' % target)
     print('  %d bytes, sha256 %s' % (os.path.getsize(target), pk.sha256_of(target)))
     print('  program: %s %s%s' % (platform, report.arch, ' -- a DEVELOPER BUILD (--allow-dev), the name carries -dev' if dev else ", a player's build"))
@@ -1035,7 +1109,8 @@ def assemble_desktop(args):
                              if content else 'none (--no-data)'))
     print('  runtime: %s' % ('%s copied from %s' % (', '.join(redist_names), redist) if redist_names else ('the Visual C++ runtime is NOT carried (PLAYING.txt says what a PC without it shows)'
                                                                                                          if platform == WINDOWS else 'the system\'s')))
-    print('  %s' % ('no %s written for a developer\'s archive' % SUMS_FILE if dev else '%s: %s' % (SUMS_FILE, ', '.join(sums))))
+    print('  %s' % ('no %s written for a developer\'s archive' % SUMS_FILE if dev else
+                    'no %s written for an archive with no game (-nodata is no release)' % SUMS_FILE if not content else '%s: %s' % (SUMS_FILE, ', '.join(sums))))
     return 0
 
 
@@ -1137,8 +1212,8 @@ def assemble_apple(args):
     platform = args.platform
     repo = os.path.abspath(args.repo) if args.repo else vs.default_repo()
     version = vs.read_version(repo)
-    if args.program or args.vc_redist or args.no_data:
-        raise ReleaseError('--program, --vc-redist and --no-data are for windows and linux; a %s archive is made of --shell (and --content)' % platform)
+    if args.program or args.vc_redist or args.no_data or args.max_glibc:
+        raise ReleaseError('--program, --vc-redist, --no-data and --max-glibc are for windows and linux; a %s archive is made of --shell (and --content)' % platform)
     if not args.shell:
         raise ReleaseError('give --shell <the zip or ipa make_app.sh made, or the folder it wrote>')
     shell_path = os.path.abspath(args.shell)
@@ -1353,6 +1428,8 @@ def build_parser():
     c.add_argument('--platform', required=True, choices=CHECKED_PLATFORMS)
     c.add_argument('--allow-dev', action='store_true', help='print the developer-build refusals as warnings (a smoke check; any archive made of it is named -dev)')
     c.add_argument('--also-forbid', action='append', metavar='TEXT', help='one more string that must not occur (repeatable): a stranger\'s account name, a CI path')
+    c.add_argument('--max-glibc', metavar='X.Y', help='linux: refuse a program that asks the system for a glibc newer than this (the oldest system it should run on); the check is on the '
+                                                      'GLIBC_x.y names the program holds, and --allow-dev does not waive it')
     c.add_argument('--repo', help='this repository (for the version and the checkout\'s own path); default: the one this file is in')
     c.set_defaults(func=cmd_check_program)
 
@@ -1360,7 +1437,9 @@ def build_parser():
                        description='Writes ONE archive with the whole game: windows .zip, linux .tar.gz, macos .zip, ios .ipa. Refuses, naming every cause and leaving nothing behind: '
                                    'a program that check-program refuses (--allow-dev: only the kind-of-build facts), content that fails package.py verify or holds a file outside '
                                    'its manifest, a missing LICENSE or NOTICE.md, an output folder inside the tracked tree or into a folder it reads, an archive that already exists, '
-                                   '--vc-redist DLLs that are missing or of the wrong machine type. The same inputs give the same archive bytes. Writes SHA256SUMS.txt beside it.')
+                                   '--vc-redist DLLs that are missing or of the wrong machine type, a macos or ios shell that holds an entry that is not a plain file (a symbolic link: '
+                                   'not even a link to a file inside a bundle folder), a linux program that asks for a newer glibc than --max-glibc. The same inputs give the same '
+                                   'archive bytes. Writes SHA256SUMS.txt beside it, except for a developer\'s archive and an archive with no game in it (-dev, -nodata, -shell: none is a release).')
     a.add_argument('--platform', required=True, choices=DESKTOP_PLATFORMS + APPLE_PLATFORMS)
     a.add_argument('--program', help='windows, linux: the built program (MagicPortals.exe, MagicPortals)')
     a.add_argument('--shell', help='macos, ios: the zip or ipa tools/apple/make_app.sh made, or the folder it wrote')
@@ -1372,14 +1451,16 @@ def build_parser():
     a.add_argument('--shaders', help='the engine\'s compiled shaders (default <repo>/engine/assets/shaders)')
     a.add_argument('--allow-dev', action='store_true', help='accept a developer\'s build for a smoke check: DEVELOPER BUILD is written into the archive, whose name carries -dev')
     a.add_argument('--also-forbid', action='append', metavar='TEXT')
+    a.add_argument('--max-glibc', metavar='X.Y', help='linux: refuse a program that asks the system for a glibc newer than this (as check-program --max-glibc)')
     a.add_argument('--repo')
     a.set_defaults(func=cmd_assemble)
 
     d = sub.add_parser('android', help='check an APK as a signed release of the one version and place it in a release folder',
                        description='Runs android_package.py inspect on the APK as a RELEASE and refuses (every cause listed): a debug or debuggable APK, one signed with the debug key '
                                    'or unsigned, a verification or performance-diagnostic variant (read out of its libraries), a developer\'s build, a versionName that is not the '
-                                   'one version, a versionCode other than the rule of version.py, a missing crash-report fact, no game data. It never signs and never reads a key. '
-                                   'Copies the APK to MagicPortals-<version>-android.apk, puts LICENSE and NOTICE.md beside it, and writes SHA256SUMS.txt.')
+                                   'one version, a versionCode other than the rule of version.py, a missing crash-report fact, no game data, and (before anything is placed) a '
+                                   'LICENSE or NOTICE.md already beside the place for the APK that differs from the one given, is a folder, or is a link, dangling or not. It never '
+                                   'signs and never reads a key. Copies the APK to MagicPortals-<version>-android.apk, puts LICENSE and NOTICE.md beside it, and writes SHA256SUMS.txt.')
     d.add_argument('--apk', required=True)
     d.add_argument('--sdk', required=True, help='the Android SDK (aapt2, apksigner, zipalign)')
     d.add_argument('--build-tools')

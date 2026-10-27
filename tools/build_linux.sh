@@ -10,7 +10,7 @@
 #
 # The game's data is NOT in this repository (README, "The data"): the converted levels, the original's extracted assets and the
 # achievements table are the owner's, gitignored, and a developer's build finds them through six paths it bakes in. Without them the
-# game draws boxes and 31 suites skip (exit 77, reported as skipped, never as passed). Give them with one folder or one by one:
+# game draws boxes and the suites that need them skip (exit 77, reported as skipped, never as passed). Give them with one folder or one by one:
 #
 #   --assets-from DIR    a folder laid out like this repository after the converter and the extraction have run:
 #                          DIR/out/levels   DIR/out/data/chapters.json   DIR/out/data/achievements.json
@@ -31,6 +31,14 @@
 #                        the program, which then finds its data at run time (MagicPortals --root DIR, a "content" folder next to the
 #                        program, or the user's data folder; docs/packaging.md). The suites read the baked paths, so this builds the
 #                        game alone (default target MagicPortals) and any data option above is ignored. Use a build directory of its own.
+#
+# A PROGRAM THAT RUNS ON MORE THAN THE MACHINE THAT BUILT IT (planning step 209, PORT10-3). Both are linker flags and nothing in the source:
+#   --portable           link libstdc++ and libgcc INTO the program (-static-libstdc++ -static-libgcc), so that it asks the system for no GLIBCXX or
+#                        CXXABI version and for no libstdc++.so.6 or libgcc_s.so.1. The C library stays the system's: the program still asks for the
+#                        highest glibc version of the machine it was built on (the fixture's numbers are in docs/packaging.md section 6), and that is
+#                        the floor, so build a release on the OLDEST system it should run on. Not with --sanitize (a sanitizer needs the shared runtime).
+#   --strip              strip the symbol table at link time (-Wl,--strip-all), so that the program, its archive and its hash all see the same bytes
+#                        (no separate strip step). Without it the program is about twice the size and carries its symbols.
 #
 # What kind of program (planning step 201; docs/packaging.md says which belong in a release). Neither is passed unless given, so a build
 # with neither is the build it was, and an existing build folder keeps what it has:
@@ -89,6 +97,8 @@ build_dir="$REPO/build"
 jobs=""
 cxx="${CXX:-}"
 sanitize=0
+portable=0
+strip=0
 validation=OFF
 wayland=OFF
 configure_only=0
@@ -123,6 +133,8 @@ while [ "$#" -gt 0 ]; do
         --cxx)          [ "$#" -ge 2 ] || die "--cxx needs a compiler"; cxx="$2"; shift 2 ;;
         --target)       [ "$#" -ge 2 ] || die "--target needs a name"; targets+=("$2"); shift 2 ;;
         --sanitize)     sanitize=1; shift ;;
+        --portable)     portable=1; shift ;;
+        --strip)        strip=1; shift ;;
         --validation)   validation=ON; shift ;;
         --wayland)      wayland=ON; shift ;;
         --configure-only) configure_only=1; shift ;;
@@ -132,6 +144,11 @@ while [ "$#" -gt 0 ]; do
         *)              die "unknown option $1 (--help lists them)" ;;
     esac
 done
+# Refused before any tool is looked for: a sanitizer needs the shared C++ runtime and its reports are read with the symbols.
+if [ "$sanitize" -eq 1 ]; then
+    [ "$portable" -eq 0 ] || die "--portable links the C++ runtime in, and a sanitizer needs the shared one: not together"
+    [ "$strip" -eq 0 ] || die "--strip would take the symbols a sanitizer's reports are read with: not together"
+fi
 if [ "${#targets[@]}" -eq 0 ]; then
     # The suites read the baked paths, so a release configure (tests off) has no test_mp to build.
     if [ "$baked" = ON ]; then targets=(MagicPortals test_mp); else targets=(MagicPortals); fi
@@ -197,7 +214,7 @@ if [ "$baked" = OFF ]; then
     cmake_data=()
     note "MAGICPORTALS_BAKED_PATHS=OFF: no data path is compiled in; run it with --root <folder> (docs/packaging.md)"
 elif [ -z "$levels" ] && [ ! -d "$REPO/out/levels" ]; then
-    note "no converted levels given and none at $REPO/out/levels: the game will draw boxes and 31 suites will skip (exit 77)"
+    note "no converted levels given and none at $REPO/out/levels: the game will draw boxes and the suites that need them will skip (exit 77)"
 fi
 
 # ---- jobs -------------------------------------------------------------------------------------------------------------------
@@ -224,6 +241,14 @@ flags=()
 if [ "$sanitize" -eq 1 ]; then
     san="-fsanitize=undefined,address -fno-omit-frame-pointer -g"
     flags+=("-DCMAKE_CXX_FLAGS=$san" "-DCMAKE_C_FLAGS=$san" "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=undefined,address" "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=undefined,address")
+fi
+# The linker flags of a program meant for other machines (see --portable and --strip above). Only the executable's: the engine's static libraries are archives.
+exe_ldflags=""
+[ "$portable" -eq 0 ] || exe_ldflags="$exe_ldflags -static-libstdc++ -static-libgcc"
+[ "$strip" -eq 0 ] || exe_ldflags="$exe_ldflags -Wl,--strip-all"
+if [ -n "$exe_ldflags" ]; then
+    flags+=("-DCMAKE_EXE_LINKER_FLAGS=${exe_ldflags# }")
+    note "linker flags of the program:${exe_ldflags}"
 fi
 note "compiler $cxx, jobs $jobs, build dir $build_dir"
 cmake -S "$REPO" -B "$build_dir" -G Ninja \

@@ -36,7 +36,10 @@
 # stops the configure rather than being dropped; only a word CMake reads as false
 # (OFF, NO, 0, IGNORE...) gets through. A suite that skips only a part of itself
 # and still returns its summary takes no mark: that part is skipped without the
-# data, and never with 77.
+# data, and never with 77. That is for a small part. Where the part is large, or a
+# run without the data would otherwise count it as passed, the part is a suite of its
+# own that exits 77 (add_mp_test(<name> IN_SOURCE <file> SKIPS_WITH_77) below, planning
+# step 209): test_mp_shoot_levels, test_mp_sprites_original and test_mp_sprites_levels.
 #
 # The layer (MagicPortalsGame) and game/Route.cpp are linked for every suite now,
 # where only test_mp_layer and test_mp_routes had them: the static library adds
@@ -49,12 +52,23 @@ else()
     target_compile_options(test_mp PRIVATE -Wall -Wextra)
 endif()
 
+# IN_SOURCE <suite>: this suite is the second (third) of a file that add_mp_test(<suite>) already compiled in, registered under its own name by a MpSuite::Registration of its
+# own in that file (planning step 209, PORT-11): the part of a suite that needs the owner's data is a suite of its own that exits 77, so that a run without the data
+# reports it SKIPPED and not passed. The line keeps the form add_mp_test(<name> IN_SOURCE <file> SKIPS_WITH_77), which the macOS job's count of marked suites reads.
 function(add_mp_test name)
-    cmake_parse_arguments(PARSE_ARGV 1 MP "SKIPS_WITH_77" "" "")
+    cmake_parse_arguments(PARSE_ARGV 1 MP "SKIPS_WITH_77" "IN_SOURCE" "")
     if (MP_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "add_mp_test(${name}): unknown argument ${MP_UNPARSED_ARGUMENTS}")
     endif()
-    target_sources(test_mp PRIVATE ${name}.cpp)
+    if (MP_IN_SOURCE)
+        get_target_property(_mpSources test_mp SOURCES)
+        list(FIND _mpSources ${MP_IN_SOURCE}.cpp _mpAt)
+        if (_mpAt EQUAL -1)
+            message(FATAL_ERROR "add_mp_test(${name} IN_SOURCE ${MP_IN_SOURCE}): ${MP_IN_SOURCE}.cpp is not compiled into test_mp yet, so there is no file for ${name} to be in")
+        endif()
+    else()
+        target_sources(test_mp PRIVATE ${name}.cpp)
+    endif()
     add_test(NAME ${name} COMMAND test_mp ${name})
     if (MP_SKIPS_WITH_77)
         set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
@@ -207,8 +221,10 @@ add_mp_test(test_mp_minions SKIPS_WITH_77)
 # its level cases skip without it (a part of the suite, so no 77).
 add_mp_test(test_mp_sight)
 # What a knight does once it has seen (planning step 159): the shot's flight and its kills, the contact's hold cap, the order a
-# knight's target is chosen in, a stone's crush and a barrel's blast. Its rig cases need no data; its level cases skip without it.
+# knight's target is chosen in, a stone's crush and a barrel's blast. Its rig cases need no data and are test_mp_shoot; its level cases are the suite
+# test_mp_shoot_levels of the same file (planning step 209, PORT5-7 and APPLE-22), which exits 77 without the converted levels and Enhanced's data.
 add_mp_test(test_mp_shoot)
+add_mp_test(test_mp_shoot_levels IN_SOURCE test_mp_shoot SKIPS_WITH_77)
 # Chapter 3's boss: the ghost of level 3-32, which only fire can hurt and which
 # drops the only key its level has.
 add_mp_test(test_mp_ghost SKIPS_WITH_77)
@@ -252,9 +268,13 @@ add_mp_test(test_mp_shot SKIPS_WITH_77)
 # Chapter 1's boss, the beholder of level31, as the original's script plays it.
 add_mp_test(test_mp_boss SKIPS_WITH_77)
 # A level's own art: the sprites the converter wrote, their order and blend.
-# Its reader is tested on files it writes, so it runs anywhere; only the part
-# that reads the converted levels is skipped without them, and never with 77.
+# Its reader is tested on files it writes, so it runs anywhere (test_mp_sprites). The
+# two parts that need the owner's data are suites of the same file (planning step 209,
+# APPLE-22), each of which exits 77 without it: test_mp_sprites_original reads the
+# original's extracted assets, test_mp_sprites_levels the converted levels.
 add_mp_test(test_mp_sprites)
+add_mp_test(test_mp_sprites_original IN_SOURCE test_mp_sprites SKIPS_WITH_77)
+add_mp_test(test_mp_sprites_levels IN_SOURCE test_mp_sprites SKIPS_WITH_77)
 # A level's lighting: the converter's eth_* keys, read strictly and drawn by
 # nothing yet (sim/Lighting). Like test_mp_sprites, the reader is tested on files
 # it writes and runs anywhere; only the part that reads the converted levels is

@@ -66,8 +66,8 @@ ctest --test-dir build
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
 compiles from a fresh clone, but it plays nothing until the original's levels are converted
-locally, and 32 of the 74 suites skip without them (measured on Linux with `out/` and `reference/` hidden; two more, `test_mp_shoot` and `test_mp_sprites`, then
-fail: `docs/parity-backlog.md` APPLE-22): *Local setup* below, steps 5-8.
+locally, and 35 of the 77 suites skip without them (measured on Linux with `out/` and `reference/` hidden: `ctest` lists 80 tests and gives 44 passed, 36 skipped and none failed; `test_mp_shoot` and
+`test_mp_sprites` used to fail there and each now has a second suite for the part that needs the data, planning step 209): *Local setup* below, steps 5-8.
 
 **Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
 with g++ 13 or clang 18, from a clone with its submodule; `--assets-from <folder>` (or the five `SUPERSONIC_MAGICPORTALS_*`
@@ -87,6 +87,11 @@ questions only a phone can answer. The sample cap, `edge_cover` and dynamic reso
 The report Android shows at the next start after the game ended unexpectedly is titled, since the engine commit of planning step 207, with the game's own name (`Magic Portals Enhanced closed unexpectedly last time`) and no longer another game's; that is **built, checked by the packager and run on a JVM, and not yet shown on an emulator or a phone** (step 207's emulator flows were not run: the PC had under 6 GB of memory free, `docs/android.md` section 11).
 
 **macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written, and have run once on GitHub's macOS runner** (planning step 206: the macOS shell started, drew the hand-written fixture level and exited clean on arm64 and, under Rosetta, x86_64, on a paravirtual GPU; the iOS programs compiled and linked and nothing iOS has run) and **never on a person's Mac, an iPhone or an iPad**: nothing about how the game looks or plays there is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
+
+**Platforms, building and CI.** [docs/platforms.md](docs/platforms.md) says, for Windows, Linux, Android, macOS and iOS, what a player downloads, what it needs and what is known; [docs/building.md](docs/building.md)
+builds it from source on each, with no game data. `.github/workflows/` holds four dispatch-only workflows ([docs/ci.md](docs/ci.md)): **three of them (`ci.yml`, `release.yml`, `android-emulator.yml`) were written in planning
+step 209 and have never been dispatched, so nothing here says that a step of them works on GitHub**; `apple.yml` ran twice in its earlier form. What was checked instead is a checker of the rules every workflow keeps,
+`actionlint` with `shellcheck`, and a rehearsal of the commands of two Linux jobs from a clean clone in the Linux subsystem (`docs/ci.md` section 6). The Android crash-report dialog has still never been shown on any emulator or phone.
 
 ## How it fits together
 
@@ -327,14 +332,14 @@ hand, `build/tests/test_mp.exe test_mp_<suite>` runs one suite (the `test_mp_` m
 `build/tests/test_mp.exe` runs them all in one process and ends with a tally, and `--list` names
 them. Convert the levels (step 3) before running them. Without the converted levels:
 
-- 29 suites (`levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
+- 35 suites (among them `levels`, `play`, `start`, `statics`, `chapters`, `timed`, `movers`,
   `hazards`, `demolish`, `launchers`, `shot`, `boss`, `layer`, `zerog`, `bounce`, `wells`,
   `dragon`, `darkdragon`, `turrets`, `fire`, `hinge`, `minions`, `ghost`, `torch`, `keys`,
-  `diamonds`, `fields`, `routes`, `census`) exit 77 and print the path they looked in, which ctest reports as
+  `diamonds`, `fields`, `routes`, `census`, and, since planning step 209, `shoot_levels`, `sprites_original` and `sprites_levels`) exit 77 and print the path they looked in, which ctest reports as
   SKIPPED: each carries `SKIPS_WITH_77` on its `add_mp_test` line in `tests/CMakeLists.txt`
   (a mark made in Supersonic-Engine `80a4ed2`, before the port moved here; before it, the
   last nine were missing from the skip list, so ctest would have reported them as Failed);
-- 6 suites (`sprites`, `lighting`, `sky`, `tiers`, `motion`, `sounds`) skip only the part
+- 5 suites (`lighting`, `sky`, `tiers`, `motion`, `sounds`) skip only the part
   that needs the converted levels or the original's extracted assets, say so, and report
   Passed.
 
