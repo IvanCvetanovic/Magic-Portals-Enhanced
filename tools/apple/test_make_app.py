@@ -212,6 +212,8 @@ class Sandbox:
         put(os.path.join(self.repo, 'tools', 'apple', 'make_app.sh'), text, executable=True)
         put(os.path.join(self.repo, 'tools', 'art', 'make_app_icon.py'), '# a name for the stand-in python3 to be called with\n')
         put(os.path.join(self.repo, 'tools', 'apple', 'ios_icons.py'), '# a name for the stand-in python3 to be called with\n')
+        put(os.path.join(self.repo, 'LICENSE'), 'the game licence, invented\n')
+        put(os.path.join(self.repo, 'NOTICE.md'), 'the notices, invented\n')
         put(os.path.join(self.repo, 'engine', 'LICENSE'), 'the engine licence, invented\n')
         put(os.path.join(self.repo, 'engine', 'THIRD_PARTY_LICENSES.md'), 'the list, invented\n')
         put(os.path.join(self.repo, 'engine', 'assets', 'shaders', 'frag.spv'), 'spv-a\n')
@@ -399,7 +401,8 @@ class MakeAppTest(unittest.TestCase):
         return sorted(found)
 
     SHADER_FILES = ['engine/assets/shaders/frag.spv', 'engine/assets/shaders/vert.spv']
-    LICENCE_FILES = ['licenses/README.txt', 'licenses/Supersonic-Engine-LICENSE.txt', 'licenses/Supersonic-Engine-THIRD_PARTY_LICENSES.md']
+    LICENCE_FILES = ['licenses/Magic-Portals-Enhanced-LICENSE.txt', 'licenses/NOTICE.md', 'licenses/README.txt', 'licenses/Supersonic-Engine-LICENSE.txt',
+                     'licenses/Supersonic-Engine-THIRD_PARTY_LICENSES.md']
     IOS_ICON_FILES = ['AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon76x76@2x~ipad.png', 'AppIcon83.5x83.5@2x~ipad.png']
 
     def macos_files(self):
@@ -432,6 +435,33 @@ class MakeAppTest(unittest.TestCase):
         proc, _lines = self.mutate('run cp "$REPO/engine/THIRD_PARTY_LICENSES.md" "$RES/licenses/Supersonic-Engine-THIRD_PARTY_LICENSES.md"', 'true')
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertNotEqual(self.bundle_files(self.boxes[-1]), self.macos_files())
+
+    def test_mutation_the_games_licence_not_copied_turns_the_file_list_red(self):
+        proc, _lines = self.mutate('run cp "$REPO/LICENSE" "$RES/licenses/Magic-Portals-Enhanced-LICENSE.txt"', 'true')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotEqual(self.bundle_files(self.boxes[-1]), self.macos_files())
+
+    def test_mutation_the_notices_not_copied_turns_the_file_list_red(self):
+        proc, _lines = self.mutate('run cp "$REPO/NOTICE.md" "$RES/licenses/NOTICE.md"', 'true')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotEqual(self.bundle_files(self.boxes[-1]), self.macos_files())
+
+    def test_the_macos_bundle_carries_the_repositorys_own_licence_and_notices_unchanged(self):
+        box, _proc, _lines = self.run_ok('macos')
+        licences = os.path.join(box.out, 'MagicPortals.app', 'Contents', 'Resources', 'licenses')
+        with open(os.path.join(licences, 'Magic-Portals-Enhanced-LICENSE.txt'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), 'the game licence, invented\n')
+        with open(os.path.join(licences, 'NOTICE.md'), encoding='utf-8') as f:
+            self.assertEqual(f.read(), 'the notices, invented\n')
+
+    def test_the_licences_readme_says_which_file_is_which_and_does_not_say_anything_is_missing(self):
+        box, _proc, _lines = self.run_ok('macos')
+        with open(os.path.join(box.out, 'MagicPortals.app', 'Contents', 'Resources', 'licenses', 'README.txt'), encoding='utf-8') as f:
+            text = f.read()
+        for name in ('Magic-Portals-Enhanced-LICENSE.txt', 'NOTICE.md', 'Supersonic-Engine-LICENSE.txt', 'Supersonic-Engine-THIRD_PARTY_LICENSES.md', 'MoltenVK-LICENSE.txt'):
+            self.assertIn(name, text)
+        for stale in ('not held', 'not yet', 'before the licence', 'planning step', 'is not written', 'neither is written'):
+            self.assertNotIn(stale, text.lower(), stale)
 
     def test_ios_device_commands_are_the_pinned_list(self):
         box, proc, lines = self.run_ok('ios', ['--sdk', 'iphoneos'], {'STUB_ARCHS': 'arm64'})

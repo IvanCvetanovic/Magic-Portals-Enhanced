@@ -1,6 +1,6 @@
 # `asbc` — AngelScript bytecode reader
 
-Reads `android_game.bin`, the compiled AngelScript from the original APK.
+Reads `android_game.bin`, the compiled AngelScript from the original APK. It is a Python port of the saved-bytecode reader of the AngelCode Scripting Library (zlib licence); the library's notice is in `NOTICE.md` at the repository root.
 
 **Not a decompiler, and deliberately not a translator.** `CLAUDE.md` is explicit that
 Ethanon gameplay logic "is *not* converted — it is read as design reference and

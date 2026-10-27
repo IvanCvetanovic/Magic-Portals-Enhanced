@@ -79,8 +79,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     steps:
-      # The engine submodule with it, over https. Whether the engine's repository is public is NOT KNOWN here (the sibling's workflow says so of the same address,
-      # and nothing in this step could check it): if it is private, this step fails in all three jobs, and what to do about it is the owner's (docs/apple.md, APPLE-25).
+      # The engine submodule with it, over https. The engine's repository is public: the checkout fetches it with the default read-only token and no other credential
+      # (docs/apple.md, APPLE-25). Were it ever made private, this step would fail in all three jobs.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive

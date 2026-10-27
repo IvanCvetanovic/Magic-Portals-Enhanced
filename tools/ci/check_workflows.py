@@ -43,6 +43,9 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WORKFLOWS = os.path.join(REPO, '.github', 'workflows')
+sys.path.insert(0, HERE)
+
+from running_account import account_regex, running_accounts, searchable_accounts  # noqa: E402  (the account that runs the check, read from the system)
 
 EXIT_OK, EXIT_BROKEN, EXIT_NOT_RUN = 0, 1, 3
 
@@ -69,7 +72,6 @@ ALWAYS = ('always()', '!cancelled()')
 # pieces, so that this file itself passes the grep for them that the hard rule's pre-commit check makes.
 OTHER_PROJECT = 'pen' + 'umbra'
 ORIGINAL_MAKER = 'asan' + 'tee'
-OWNER_ACCOUNT = 'ic' + 'vet'  # written in pieces, like the two above, so that this file passes the grep for the account name that the hygiene rule asks of every file
 FORBIDDEN_WORDS = (
     (r'secrets\.', 'a secret'),
     (r'toJSON\s*\(\s*(secrets|github)\b|\$\{\{\s*github\s*\}\}', 'a whole context dumped'),
@@ -79,7 +81,7 @@ FORBIDDEN_WORDS = (
     (r'(^|[^A-Za-z0-9_])out/', "the owner's out folder"),
     (r'(^|[/\\])reference\b|\breference[/\\]', "the owner's reference folder (the content packager's --reference flag is a flag and is not this)"),
     (r'GameData', "the game's data folder"),
-    (OWNER_ACCOUNT + r'|C:[/\\]Users|/mnt/[a-z]/', "the owner's account or a path of his PC"),
+    (r'C:[/\\]Users|/mnt/[a-z]/', "a path of the owner's PC"),
     (OTHER_PROJECT, 'the name of another project'),
     (ORIGINAL_MAKER, "the name of the original's maker"),
 )
@@ -243,8 +245,8 @@ def steps_of(job):
     return job.get('steps') or []
 
 
-def check_file(name, text):
-    """Every rule over one workflow file's text. Returns a list of Problem."""
+def check_file(name, text, accounts=None):
+    """Every rule over one workflow file's text. Returns a list of Problem. `accounts`: the names W03 must not find (default: the account that runs the check, read from the system)."""
     require_yaml()
     problems = []
 
@@ -278,6 +280,9 @@ def check_file(name, text):
         m = re.search(pattern, text, re.I | re.M)
         if m:
             bad('W03', '', 'the file holds %s (%r)' % (what, m.group(0)))
+    searched, _ = searchable_accounts(running_accounts() if accounts is None else accounts)
+    if account_regex(searched) and account_regex(searched).search(text):
+        bad('W03', '', "the file holds the name of the account that runs the check (never printed): an account name or a path of the owner's PC")
     # W04
     for job_id, job in jobs.items():
         refs = [('job', job['uses'])] if 'uses' in job else []

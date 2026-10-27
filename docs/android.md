@@ -198,7 +198,7 @@ If that file cannot be read, a phone's run stops with a message that says so ins
    key for a release. A release APK is *not* debuggable, has no `.idsig`, and its certificate is checked against the keystore's. A release cannot be installed over a
    debug build (another signer): uninstall first. Losing the key means no update can ever be installed over the app.
 3. **Each release's version code**: it follows the version (section 3 above); give `--version-code` only to number it differently, and tell `release.py android` the same.
-4. **The icon's look**, the store listing, the rights question. `docs/permission.md` governs what may be shipped; it was not changed.
+4. **The icon's look** and the store listing.
 5. **Whether the 16 KB-aligned libraries and `targetSdk` 35 suit the store you publish to**; the store's rules change yearly.
 6. **Whether the post-mortem report should stay on.** It used to say "Penumbra closed unexpectedly last time" in this game too; since the engine commit of step 207 it is titled with the game's own name (section 11), so the reason to switch it off should be gone once a device shows the new title. The manifest's `supersonic.reportUnexpectedExit` still turns the report off, and with it the words of a failed start at the next start; **the owner's call**, now a question about whether a tester should see a dialog at all, and one to answer after the dialog has been seen on a device (not done: section 11.5).
 

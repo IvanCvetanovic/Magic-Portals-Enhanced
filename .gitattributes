@@ -23,5 +23,9 @@
 .gitattributes text eol=lf
 .gitmodules    text eol=lf
 
+# LICENSE has no extension either. Without this line it falls under `text=auto` below and a checkout with core.autocrlf=true (the default on Windows, and on GitHub's Windows runners)
+# writes it with CRLF, while NOTICE.md beside it stays LF; release.py copies both into every archive unchanged. tools/ci/test_notice.py pins it.
+LICENSE        text eol=lf
+
 # Let git decide for anything not listed.
 *       text=auto

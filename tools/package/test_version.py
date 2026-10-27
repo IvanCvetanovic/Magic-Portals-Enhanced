@@ -122,6 +122,29 @@ class TheRules(unittest.TestCase):
             ap.default_version_code('0.100.0')
 
 
+def copy_with_unix_line_ends(src, dst):
+    """A clone made with core.autocrlf=true (a Windows default) holds its text files with CRLF line ends. The check reads them as LF, and the mutations below spell their
+    multi-line snippets with LF, so the copy is LF too: a tree of either kind gives the same tests."""
+    with open(src, 'rb') as f:
+        data = f.read().replace(b'\r\n', b'\n')
+    with open(dst, 'wb') as f:
+        f.write(data)
+
+
+class TheCopyOfATree(unittest.TestCase):
+    def test_a_file_with_windows_line_ends_is_copied_with_unix_ones_and_nothing_else_changes(self):
+        folder = tempfile.mkdtemp(prefix='mp-checkversion-eol-')
+        try:
+            src, dst = os.path.join(folder, 'a'), os.path.join(folder, 'b')
+            with open(src, 'wb') as f:
+                f.write(b'one\r\ntwo\r\n\r\nthree\rfour\n')
+            copy_with_unix_line_ends(src, dst)
+            with open(dst, 'rb') as f:
+                self.assertEqual(f.read(), b'one\ntwo\n\nthree\rfour\n')
+        finally:
+            shutil.rmtree(folder, True)
+
+
 class TheCheck(unittest.TestCase):
     """The check on the real tree, and on a copy of it with one place changed at a time."""
 
@@ -139,7 +162,7 @@ class TheCheck(unittest.TestCase):
                 continue  # a file the tables name that does not exist yet is the check's to report, not the copy's
             dst = os.path.join(cls.tmp, *rel.split('/'))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.copyfile(src, dst)
+            copy_with_unix_line_ends(src, dst)
 
     @classmethod
     def tearDownClass(cls):

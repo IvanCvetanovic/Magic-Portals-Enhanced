@@ -7,10 +7,8 @@ lives only in the gitignored `reference/magic-rampage/`, made by `tools/art/make
 
 The owner's request of 2026-10-15 ("Reuse the control buttons from Magic Rampage") is the go-ahead
 for copying Magic Rampage's sprites into the gitignored `reference/magic-rampage/` for local use.
-`docs/permission.md` is still the unfilled placeholder and says nothing about Magic Rampage (another
-Asantee game). Nothing here is committed or shipped, and any release package containing
-`reference/magic-rampage/` stays gated on the owner's word with the rights holder (the CTL design's
-question Q2). Without that folder the modern controls fall back to art this repository draws itself
+Nothing here is committed. Whether a release package carries `reference/magic-rampage/` is the owner's to choose (the CTL design's
+question Q2; `package.py content --with-pad-art` is off by default). Without that folder the modern controls fall back to art this repository draws itself
 (CTL design, section 4.2); nothing else depends on it.
 
 ## What exists
@@ -197,7 +195,7 @@ their role in `assets/extract.json`:
 ## How the game reads them (planning step 184)
 
 The port reads the five pictures **at run time** and holds none of them. The precondition above is recorded again for this step: the owner's request of
-2026-10-15 is the go-ahead for local, gitignored use; `docs/permission.md` is still the unfilled placeholder and says nothing about Magic Rampage; no
+2026-10-15 is the go-ahead for local, gitignored use; no
 Magic Rampage file is read by any test, committed or shipped (the tier tests' own pictures are synthetic grey PNGs written into a scratch directory of their own; the one exception, `TheDrawRectUsesTheTiersMargin`, lets the original's own corner sprites stand and reads only their size); a release package that
 bundles the folder is the owner's call and no packaging script knows about it.
 
@@ -228,5 +226,5 @@ bundles the folder is the owner's call and no packaging script knows about it.
 ## Left to the owner
 
 Looks are the owner's: pause as a framed square or Magic Rampage's pill (Q5); the clear-portals glyph
-as drawn here or the original game's own button (Q12); the 60 px glyph box; and whether the art may
-leave his machine at all (Q2, above).
+as drawn here or the original game's own button (Q12); the 60 px glyph box; and whether a release package carries the art
+(Q2, above).

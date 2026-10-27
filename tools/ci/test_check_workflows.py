@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -263,9 +264,29 @@ class TheMutations(unittest.TestCase):
         self.assertEqual(cw.check_file('android-emulator.yml', workflow('android-emulator.yml')), [])
 
     @requires_yaml
-    def test_w03_an_account_name_or_a_path_of_the_owners_pc(self):
-        for text in ('/home/%s/x' % ('ic' + 'vet'), 'C:/Users/someone/x', 'C:\\Users\\someone\\x', '/mnt/c/x'):
+    def test_w03_a_path_of_the_owners_pc(self):
+        for text in ('C:/Users/someone/x', 'C:\\Users\\someone\\x', '/mnt/' + 'c/x'):
             self.mutated('ci.yml', '        run: python tools/package/check_version.py\n', '        run: python tools/package/check_version.py %s\n' % text, 'W03')
+
+    @requires_yaml
+    def test_w03_the_name_of_the_account_that_runs_the_check_is_asked_of_the_system_and_never_printed(self):
+        # an INVENTED name stands for the account (the check reads the real one from the system when it runs, so no file of the project spells it)
+        anchor = '        run: python tools/package/check_version.py\n'
+        with mock.patch.object(cw, 'running_accounts', return_value=['zorbgar']):
+            self.mutated('ci.yml', anchor, '        run: python tools/package/check_version.py x/zorbgar/y\n', 'W03', expect='account that runs the check')
+            self.mutated('ci.yml', anchor, '        run: python tools/package/check_version.py # ZORBGAR\n', 'W03', expect='account that runs the check')
+            problems = cw.check_file('ci.yml', workflow('ci.yml').replace(anchor, anchor + '        # zorbgar\n'))
+            self.assertNotIn('zorbgar', ' '.join(str(p) for p in problems).lower())
+            # a name of five letters or more is a substring search (fix round 2): glued to letters or digits it is still the account
+            for glued in ('zorbgarage', 'xxzorbgar', 'zorbgar2'):
+                self.mutated('ci.yml', anchor, anchor + '        # %s\n' % glued, 'W03', expect='account that runs the check')
+        # a name of four letters is a whole word: inside a longer word it is ordinary text, alone it is the account
+        with mock.patch.object(cw, 'running_accounts', return_value=['zorb']):
+            self.assertEqual(cw.check_file('ci.yml', workflow('ci.yml').replace(anchor, anchor + '        # zorbing xzorbx zorb2\n')), [])
+            self.mutated('ci.yml', anchor, anchor + '        # a zorb here\n', 'W03', expect='account that runs the check')
+        # a short or ordinary name is a word of ordinary text and is not searched
+        with mock.patch.object(cw, 'running_accounts', return_value=['bo', 'runner']):
+            self.assertEqual(cw.check_file('ci.yml', workflow('ci.yml').replace(anchor, anchor + '        # bo runner\n')), [])
 
     @requires_yaml
     def test_w03_the_name_of_another_project_or_the_originals_maker(self):

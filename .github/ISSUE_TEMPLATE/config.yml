@@ -1,0 +1,6 @@
+# Blank issues stay allowed: there is no form for a question or an idea, and a bug report has its own form (bug_report.yml).
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/security/advisories/new
+    about: Report a security problem privately. Do not open a public issue for it.

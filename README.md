@@ -1,32 +1,113 @@
 # Magic Portals — Enhanced
 
+Magic Portals is a 2D puzzle-platformer first made for phones by Asantee Games. You walk, shoot a portal at a wall and step through it to reach the door of each level. The original was delisted in 2025.
+
+**Magic Portals Enhanced** is a new version of that game. It runs on the [Supersonic Engine](https://github.com/IvanCvetanovic/Supersonic-Engine), an engine written in C++20 on Vulkan, and is meant to play like the original on five platforms. This repository holds the game's code, the tools that read the original's file formats, the tests and the documents. It holds no content of the original game: no art, audio, levels, texts or APK. See [Permission](#permission) and [Credits](#credits).
+
+## Platforms
+
+What a run has shown, and what nobody knows yet. [docs/platforms.md](docs/platforms.md) has the detail behind each row.
+
+| Platform | Status | Not known |
+|---|---|---|
+| Windows | **Verified by a run.** The build runs on the Windows 11 PC that every test and capture was made on. A release program was built, started and read as bytes. | Windows 10, other graphics cards, a PC without the C++ runtime. |
+| Linux | **Verified by a run, without a real GPU.** Built with g++ and clang in a Linux subsystem of Windows (WSL, Ubuntu 24.04). The suites pass or skip, all 128 recorded win routes win, and a test level draws on a software Vulkan driver. | A real GPU on a real desktop, Wayland, other distributions, sound from a speaker. |
+| Android | **Verified on an emulator only.** On an x86_64 emulator it installs, all 128 levels start and all 128 routes win. | Any phone, 64-bit ARM code, speed, memory, real two-finger play. |
+| macOS | **Verified on a CI runner only.** GitHub's macOS runner built it and drew a test level on a virtual GPU. | A Mac that a person owns, a real Apple GPU, how it looks and plays. |
+| iOS | **Built, not run.** The device and simulator builds compile and link. | Everything about running it. |
+
+No workflow of this repository has been run on GitHub except the one that builds the macOS and iOS programs, which ran twice before its file was edited again; the others have only been checked by tools ([docs/ci.md](docs/ci.md)).
+
+## How to play
+
+There is no release yet. A release archive will hold the program with a `content` folder beside it; the program looks for the game's content there, or in the folder named by `--root` ([docs/building.md](docs/building.md), section 6).
+
+Until then, a build from source runs a small hand-written test level that needs no game content ([docs/building.md](docs/building.md), section 5). Playing the full game needs the original's content, which this repository does not hold: a developer who has a copy converts it as [Local setup after cloning](#local-setup-after-cloning) says.
+
+## Controls
+
+The modern on-screen controls are the default. On a phone they are touch; on a desktop the mouse stands in for the finger and the keyboard works too.
+
+* **Walk:** the two arrows in the bottom corners, or `←` `→` or `A` `D`.
+* **Shoot a portal:** touch or click where it should go. The portal opens where the shot arrives.
+* **Restart and pause:** the buttons at the top right. `R` retries the level and `Esc` pauses, and goes back in a menu.
+* **Clear portals:** the button at the top left.
+* **There is no jump.** The original has none.
+* **Classic controls:** the original's own layout. The gear on the main menu opens Options, where you can choose them.
+* **No gamepad:** the game binds none of its actions to one.
+
+## Build it
+
+Every command below exists in this repository. [docs/building.md](docs/building.md) says which were run, by whom, and which were not.
+
+```
+# Linux (built on Ubuntu 24.04; 22.04 is named by the project and untried)
+git clone --recurse-submodules https://github.com/IvanCvetanovic/Magic-Portals-Enhanced.git
+cd Magic-Portals-Enhanced
+sudo apt-get install -y build-essential cmake ninja-build pkg-config libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libasound2-dev
+tools/build_linux.sh
+```
+
+```
+# Windows (MSVC, from an x64 Native Tools prompt)
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUPERSONIC_ENABLE_VALIDATION=OFF -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND
+cmake --build build --target MagicPortals test_mp
+ctest --test-dir build
+```
+
+`-DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND` keeps CMake from looking for a shader compiler. The compiled shaders are committed in `engine/`, and a compiler that was found would rewrite them ([docs/building.md](docs/building.md), section 0).
+
+* **Android:** `tools/build_android.sh --no-data --abi all` builds an APK with no game in it (it needs the Android SDK, the NDK r28 and a JDK 17; [docs/android.md](docs/android.md)).
+* **macOS and iOS:** they need a Mac with Xcode. The configure lines are in `.github/workflows/apple.yml`, and `bash tools/apple/make_app.sh macos|ios <build folder> <out folder>` makes the app ([docs/apple.md](docs/apple.md)).
+
+## What is where
+
+```
+game/        the game: its code, its simulation, and its own tables (game/data)
+engine/      the Supersonic Engine, a git submodule pinned to one commit
+tests/       the test suites (test_mp_*) and the recorded win routes
+data/        gameplay tables, committed
+tools/       the converter, the bytecode reader, the packager, the CI checks, the parity tools
+docs/        the documents: platforms, building, CI, packaging, Android, Apple, the original's formats and behaviour
+.github/     the workflows, the issue form and the pull request template
+```
+
+## Credits
+
+Magic Portals is a game by Asantee Games, created by Andre Santee. The rest of the original team is named on the game's credits screen, which shows the original's own credits.
+
+Ethanon, the engine the original was built on, is by Andre Santee and MIT-licensed; its source was read to decode the original's file formats. The Supersonic Engine and this enhanced version are by Ivan Cvetanovic. The libraries the game is built from, with their licences, are listed in [NOTICE.md](NOTICE.md).
+
+## Licence
+
+[LICENSE](LICENSE) is the MIT No Attribution licence. The notices of the software the game contains are in [NOTICE.md](NOTICE.md).
+
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) says how to build, test and send a change. To report a vulnerability, read [SECURITY.md](SECURITY.md).
+
+## For developers and contributors
+
 An enhanced version of **Magic Portals**, a 2D mobile puzzle-platformer originally published by
 **Asantee Games** and delisted in 2025, running on the **Supersonic Engine**. This
 repository holds the game itself — the port, in `game/`, built against the engine as a git
 submodule at `engine/` — together with the data pipeline that decodes the original's files
 and converts its levels, the parity tools that compare the port with the original, and
-the docs.
+the docs. The rest of this file is for people who build, test and extend it.
 
 ## Permission
 
-This project exists with the **written permission of the rights holder** to rebuild the
-game and reuse its assets. The original engine, [Ethanon](https://github.com/asantee/ethanon),
-is MIT-licensed and is used here only as read-only reference for decoding the original
-file formats.
+Ivan Cvetanovic, the owner of this project, got explicit permission from Andre Santee, the creator of Magic Portals, to make this enhanced version.
 
-**That permission covers rebuilding and reuse — it does not cover redistribution.** So:
+Magic Portals is a game by Asantee Games, created by Andre Santee; see [Credits](#credits). The original engine, [Ethanon](https://github.com/asantee/ethanon), is MIT-licensed and is used here only as a reference for decoding the original file formats.
 
-> **No original asset, data file, or APK is ever committed to this repository.**
-> `reference/` is gitignored in full and stays that way. See `CLAUDE.md` and the comment
-> block at the top of `.gitignore`.
-
-The authoritative record of the grant and its scope is `docs/permission.md`.
+This repository holds no content of the original game: no art, audio, levels, texts or APK. `reference/` and `out/` are listed in `.gitignore`, so what a developer puts there stays out of the repository. The program finds the game's content in a `content` folder beside it, or in the folder given with `--root`; [docs/building.md](docs/building.md), section 6, tells the whole story.
 
 ## Status
 
 **All 128 levels start and play on the Supersonic port** — four chapters of 32, with no
 mechanic the levels use left unbuilt, drawn with the original's own art apart from
-placeholder boxes for the minions, the knights and some spawned effects. Around them the
+placeholder boxes for some spawned effects (the carrancas' fireballs, for one). Around them the
 port draws the original's lighting (lightmaps, 2D lights, halos), its camera-pinned skies,
 entity particle systems and the player's walk animation, plays its sounds and music, and
 has its screens: HUD, pause, level finished, game over, tutorial popups, loading screen,
@@ -35,12 +116,11 @@ main menu, credits, achievements, chapter select and the level grid.
 **It does not yet match the original.** The work now is side-by-side parity against
 captures of the original running in an emulator:
 
-- entity visuals — particle brightness, minions and knights that still have no sprites,
-  image tiers, spawned effects;
+- entity visuals — particle brightness, image tiers, spawned effects;
 - the lighting and UI differences still open;
-- the numbers the port still reads from `data/` as marked guesses: the player's walk
-  speed, acceleration, friction, air control, gravity, fall speed and body size, and the
-  camera's follow lag and hold time;
+- the numbers still marked as guesses (`"_guess": true`) in `data/` and `game/data/`: 55 of
+  them, 30 of which are the layout numbers of the modern controls and one the player's
+  `jump` block; the backlog lists the rest;
 - last, a sweep of all 128 levels against the reference library.
 
 The live record is the port's planning doc,
@@ -65,8 +145,8 @@ ctest --test-dir build
 
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
-compiles from a fresh clone, but it plays nothing until the original's levels are converted
-locally, and 35 of the 77 suites skip without them (measured on Linux with `out/` and `reference/` hidden: `ctest` lists 80 tests and gives 44 passed, 36 skipped and none failed; `test_mp_shoot` and
+compiles from a fresh clone and runs a hand-written test level that needs no game content ([docs/building.md](docs/building.md), section 5), but it plays the game only after the original's levels are converted
+locally, and 36 of the 80 tests that `ctest` lists skip without them (`test_mp` itself runs 77 suites when the data is there; measured on Linux with `out/` and `reference/` hidden: 44 passed, 36 skipped and none failed; `test_mp_shoot` and
 `test_mp_sprites` used to fail there and each now has a second suite for the part that needs the data, planning step 209): *Local setup* below, steps 5-8.
 
 **Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
@@ -86,7 +166,7 @@ A phone's build takes the phone profile (sprites-only pipelines on, the sprite r
 questions only a phone can answer. The sample cap, `edge_cover` and dynamic resolution on a phone are the owner's decision and were measured, not decided.
 The report Android shows at the next start after the game ended unexpectedly is titled, since the engine commit of planning step 207, with the game's own name (`Magic Portals Enhanced closed unexpectedly last time`) and no longer another game's; that is **built, checked by the packager and run on a JVM, and not yet shown on an emulator or a phone** (step 207's emulator flows were not run: the PC had under 6 GB of memory free, `docs/android.md` section 11).
 
-**macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written, and have run once on GitHub's macOS runner** (planning step 206: the macOS shell started, drew the hand-written fixture level and exited clean on arm64 and, under Rosetta, x86_64, on a paravirtual GPU; the iOS programs compiled and linked and nothing iOS has run) and **never on a person's Mac, an iPhone or an iPad**: nothing about how the game looks or plays there is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
+**macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written, and have run twice on GitHub's macOS runner** (planning step 206: the macOS shell started, drew the hand-written fixture level and exited clean on arm64 and, under Rosetta, x86_64, on a paravirtual GPU; the iOS programs compiled and linked and nothing iOS has run) and **never on a person's Mac, an iPhone or an iPad**: nothing about how the game looks or plays there is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
 
 **Platforms, building and CI.** [docs/platforms.md](docs/platforms.md) says, for Windows, Linux, Android, macOS and iOS, what a player downloads, what it needs and what is known; [docs/building.md](docs/building.md)
 builds it from source on each, with no game data. `.github/workflows/` holds four dispatch-only workflows ([docs/ci.md](docs/ci.md)): **three of them (`ci.yml`, `release.yml`, `android-emulator.yml`) were written in planning
@@ -131,7 +211,7 @@ tools/parity/      emulator driver, reference-library capture, frame comparison,
                    check, port_build.bat
 tools/art/         make_mr_controls.py: Magic Rampage's control buttons, read from its package into the gitignored
                    reference/magic-rampage/ for the modern controls (code only; docs/magic-rampage-controls.md)
-docs/              format notes, the original's behaviour, parity rig and backlog, permission record
+docs/              format notes, the original's behaviour, the platform and release documents, parity rig and backlog
 docs/planning/     the port's planning records
 reference/         ⛔ gitignored in full — not present in a fresh clone (see below)
 out/               converter output and parity captures — gitignored
@@ -140,12 +220,11 @@ build/             the CMake build tree — gitignored
 
 ## Local setup after cloning
 
-> **A fresh clone has no game content and cannot be played.** That is by design, not an
-> oversight. Levels are converted from the original APK, and a converted level is the
-> original's level geometry in a different encoding — so converted output is gitignored
-> for the same reason the APK is. **Everyone who builds this project supplies their own
-> copy of the original and runs the converter locally.** There is no path around this
-> that does not involve redistributing content we have no permission to redistribute.
+> **A fresh clone has no game content, so it cannot play the full game.** That is by design.
+> Levels are converted from the original APK, and the converted output goes under `out/`,
+> which is ignored like `reference/`. **Everyone who builds this project supplies their own
+> copy of the original and runs the converter locally.** A build of a fresh clone still runs
+> a small hand-written test level ([docs/building.md](docs/building.md), section 5).
 
 **1. Recreate `reference/`** — intentionally absent from the repo:
 
@@ -387,6 +466,8 @@ From this repository's root:
 build\game\MagicPortals.exe
 ```
 
+On Linux the program is `build/game/MagicPortals` ([docs/building.md](docs/building.md), section 1); the Android and the macOS and iOS programs are started as [docs/android.md](docs/android.md) and [docs/apple.md](docs/apple.md) say.
+
 The game finds the engine's shaders in `engine/` by itself (the engine's
 `SUPERSONIC_ASSET_ROOT`, set to the submodule) and makes `engine/` its working directory
 before it opens anything, so it runs from any directory — and a relative path given to one
@@ -445,7 +526,7 @@ many seconds; nothing is measured unless asked. The log also says how long the s
 read in 67.8 ms`) and each level's (`level0 data read in 7.7 ms`), to one decimal.
 
 The medals and the sound and music switches are kept between runs, as the original keeps
-them, in `%APPDATA%\Magic Portals\` (`scores.json`, and `audio.json` from the first press of
+them, in `%APPDATA%\Magic Portals\` on Windows (`~/.local/share/Magic Portals` on Linux; [docs/platforms.md](docs/platforms.md) has the other platforms) (`scores.json`, and `audio.json` from the first press of
 a switch). So is the choice of controls (`controls.json`, from the first tile pressed in
 Options). `--saves <dir>` moves all of them, for a run that must not touch the player's.
 
@@ -473,7 +554,7 @@ configures once - if `build\`'s data paths move, delete `build-play\` and run it
 | `←`/`→` or `A`/`D`, held | walk |
 | left mouse button | fire a portal shot toward the pointer; the portal opens where the shot arrives |
 | left mouse on the on-screen controls | walk pads (held), restart, pause, clear portals. Classic: restart, pause and clear act on the press. Modern (what a player's run starts in; `--controls modern` asks for it in a rig run): they act when the button comes up, if the press began on it (slide off and it is cancelled); a held arrow or button is drawn brighter, and a press that did something else (the pause's Resume, a popup's close) and is still down when the level takes over works no arrow until it is lifted |
-| a second finger (a touch device, or a replayed tick) | `--controls modern` with `input.two_contacts` on in `game/data/controls.json` (shipped on; `--controls modern,contacts=one` turns it off for a run): a finger held on an arrow or a corner button keeps its control while another finger shoots, aims, pans the camera or taps a help block - a thumb on the walk arrow no longer stops a shot. One finger works the controls and one the world; a further finger, or a second one on a control while another works the controls, is ignored (restart and pause are not pressed through a held arrow); a finger that lands on the very tick the one holding its place lifts is not lost, its press follows on the next tick. With one finger nothing differs from the one-pointer game, and the classic style never reads a second finger. **A desktop mouse is one finger and there is no touch build, so real multi-touch hardware is not tested: only replayed ticks are** |
+| a second finger (a touch device, or a replayed tick) | `--controls modern` with `input.two_contacts` on in `game/data/controls.json` (shipped on; `--controls modern,contacts=one` turns it off for a run): a finger held on an arrow or a corner button keeps its control while another finger shoots, aims, pans the camera or taps a help block - a thumb on the walk arrow no longer stops a shot. One finger works the controls and one the world; a further finger, or a second one on a control while another works the controls, is ignored (restart and pause are not pressed through a held arrow); a finger that lands on the very tick the one holding its place lifts is not lost, its press follows on the next tick. With one finger nothing differs from the one-pointer game, and the classic style never reads a second finger. **A desktop mouse is one finger, and no real multi-touch hardware has been tried (the Android build takes touch, and was run on an emulator): only replayed ticks are tested** |
 | left mouse on a menu | buttons and tiles; drag scrolls the credits and the achievements, the wheel scrolls the achievements |
 | left mouse on the main menu's top-right gear | Options (below); a run that is not a developer's and not `--controls classic` has it |
 | left mouse on Options' "Adjust controls" button | the adjustment screen (below); shown and claimed only while the style in force is Modern |
@@ -532,8 +613,8 @@ back inside; a window resized inside a run can leave two stored moves meeting). 
 The mouse is contact 0 and stands in for the original's touch: the port reads the pointer and the left
 button as that contact, and, under the modern controls, the engine's other contacts (the other fingers
 its Android backend reports, or a replayed tick's contacts) through one path in the layer, by which a
-second contact reaches the controls and the world; with one contact nothing differs from before. No
-touch build exists, so real multi-touch is replay-tested only. **There is no jump.** The original's on-screen pad has only left
+second contact reaches the controls and the world; with one contact nothing differs from before. The Android
+build takes touch (it was run on an emulator, `docs/android.md`), but no real multi-touch hardware has been tried, so multi-touch is replay-tested only. **There is no jump.** The original's on-screen pad has only left
 and right (the decoded `SCREEN_PAD_BUTTON` enum), and the project owner confirms it from play.
 
 ### Capture flags
@@ -573,6 +654,10 @@ The flags a capture uses (`--help` prints every flag):
 | `--place <x>,<y>@<tick>` | DEV: put the player at the level's pixel `(x, y)` after that tick's physics step, to film what a door opens; never a win route; pass `--saves` with it, since a win records a medal |
 | `--press <what>@<tick>` | DEV: press `pause`, a pause button (`levels`, `resume`, `skip`, `achievements`, `sound`, `music`), or `back` on a menu |
 | `--saves <dir>` | DEV: keep the medals (`scores.json`), the sound and music switches (`audio.json`) and the controls chosen in Options (`controls.json`) here instead of the user's data directory, for a capture that needs a medal recorded, presses a switch or chooses a style; without it a capture reads the player's switches, which its pause and menus show |
+| `--root <absolute folder>` | the folder that holds the game's content (levels, tables, art, sounds), in the shape a package or a checkout has; strict: a folder that does not hold the game ends the run with exit 1 ([docs/packaging.md](docs/packaging.md) sections 1 and 2) |
+| `--original`, `--chapters`, `--achievements`, `--port-data` `<absolute path>` | each replaces the answer for that one path and nothing else; `--levels` brings the art with it |
+| `--no-baked-paths` | ignore the paths the build was configured with, so that a package can be proven to hold everything the game opens |
+| `--profile <desktop\|mobile>` | the answers of a phone's run (the `mobile` block of `game/data/engine.json`: [docs/packaging.md](docs/packaging.md) section 6); a phone's build starts under `mobile`, a desktop run asks for it for a test |
 | `--levels <dir>` | read the converted levels from here instead of the configured path |
 | `--art <dir>` | the directory the levels' art paths resolve against (default: the one above the levels) |
 | `--data <dir>` | read Enhanced's `data/` from here instead of the configured path |
@@ -639,7 +724,7 @@ well, so they also go under `out/parity/`, never inside `engine/`.
 
 ## Docs
 
-- `CLAUDE.md` — the project's rules: legal basis, the hard rule on committed assets, the
+- `CLAUDE.md` — the project's rules for working on it: the hard rule on committed assets, the
   environment, and how to verify a converter or port change
 - `DEVLOG.md` — append-only build diary
 - `docs/parity.md` — the parity rig: emulator, reaching levels, reference library, captures
@@ -652,8 +737,15 @@ well, so they also go under `out/parity/`, never inside `engine/`.
   all §3's rule that the portal mechanic's values are measured, not guessed
 - `tools/asbc/` — AngelScript bytecode reader, ported from the engine's own deserialiser
 - `tools/converter/README.md` — the converter's modules, its checks and its test-fixture rule
-- `docs/magic-rampage-controls.md` — the modern controls' art: where it comes from, what the tool writes, the rights caveat
+- `docs/magic-rampage-controls.md` — the modern controls' art: where it comes from, what the tool writes
 - `docs/planning/2026-09-11-magic-portals-remaster.md` — the port's record: every step,
   with its gates; beside it, the port's plan and the spike that started it
 - `engine/README.md`, `engine/AGENTS.md`, `engine/ARCHITECTURE.md` — the engine the port
   is built on, and the conventions port code follows
+- `docs/platforms.md` — the five platforms: what a player downloads, what it needs, what is known
+- `docs/building.md` — building from source on each platform, and which commands were run as written
+- `docs/ci.md` — the four workflows: what each does, what it costs, and what has and has not run
+- `docs/packaging.md` — where the game finds its data, the build options, and the release archives
+- `docs/android.md`, `docs/apple.md` — the Android build and the macOS and iOS builds
+- `docs/releasing.md` — the numbered path from this repository to a release, and the list for going public
+- `CONTRIBUTING.md`, `SECURITY.md`, `NOTICE.md`, `LICENSE` — how to contribute, how to report a vulnerability, the notices of the software the game contains, and the licence

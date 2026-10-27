@@ -19,8 +19,8 @@ kept out of the `.esc` → `.tscn` pipeline: that pipeline converts *data*, and 
 FORMAT
 ------
 Ported from AngelScript's own deserialiser, `asCReader` in
-`reference/ethanon/toolkit/Source/src/angelscript/source/as_restore.cpp` (MIT, vendored by
-Ethanon at version 2.26.1). Section order is `asCReader::ReadInner` (`:107`):
+`reference/ethanon/toolkit/Source/src/angelscript/source/as_restore.cpp` (zlib licence, vendored by
+Ethanon at version 2.26.1; the library's notice, for this port and for module.py and opcodes.py, is in NOTICE.md at the repository root). Section order is `asCReader::ReadInner` (`:107`):
 
     noDebugInfo (1 byte)
     enums          count + declarations      <- decoded here

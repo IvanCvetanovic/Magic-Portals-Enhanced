@@ -8,7 +8,7 @@
 #
 #   tools/build_linux.sh [options]
 #
-# The game's data is NOT in this repository (README, "The data"): the converted levels, the original's extracted assets and the
+# The game's data is NOT in this repository (README, *Local setup after cloning*): the converted levels, the original's extracted assets and the
 # achievements table are the owner's, gitignored, and a developer's build finds them through six paths it bakes in. Without them the
 # game draws boxes and the suites that need them skip (exit 77, reported as skipped, never as passed). Give them with one folder or one by one:
 #
@@ -55,7 +55,7 @@
 #
 # Build:
 #   --build-dir DIR      where to build (default: <repo>/build; a folder named build is gitignored). Build on a Linux file system:
-#                        a Windows drive mounted into WSL (/mnt/c) is case-insensitive and slow, and a build there is refused unless
+#                        a Windows drive mounted into WSL (under /mnt) is case-insensitive and slow, and a build there is refused unless
 #                        --allow-drvfs is given.
 #   --jobs N             compile jobs (default: min(cores, RAM in GiB / 1.5): the layer's translation unit needs about 2 GiB)
 #   --cxx g++|clang++    the compiler (default: $CXX, else g++, else clang++)

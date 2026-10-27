@@ -83,7 +83,7 @@ list the app's first-run unpack reads (`game/sim/Unpack.hpp`). The APK is determ
 ## The release packager (`release.py`, planning step 208)
 
 Turns a built program and this packager's content folder into the archive a player downloads, one per platform, with the whole game in it: `docs/packaging.md` section 8 is the record (what each archive
-holds, the order of a release, what was run and what was not). It reads a program as bytes and **never starts it**, refuses a developer's build (a baked path or an account name in it, the developer's tools,
+holds, the order of a release, what was run and what was not). It reads a program as bytes and **never starts it**, refuses a developer's build (a baked path or the name of the account that runs the check in it, the developer's tools,
 the performance readout, a Windows version that is not the one version, a Vulkan loader imported at start, the wrong machine type), writes the same bytes twice, re-reads its own archive and runs `verify` on the
 content inside it, copies `LICENSE` and `NOTICE.md` unchanged and refuses to write without them, and decides nothing that is the owner's (the version, the licence text, the runtime choice, the keys, whether
 the Apple packages carry the data). `version.py` reads the ONE version (`project(MagicPortals VERSION ...)`) and gives the Android `versionCode` (`major*10000 + minor*100 + patch`) and the Windows four-field

@@ -1,0 +1,73 @@
+name: Bug report
+description: Something does not work, or does not look right.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not attach game files, art, audio, levels or an APK**, and do not paste any of them. Words are enough: say what you saw.
+        A vulnerability is not reported here: see SECURITY.md.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux
+        - Android
+        - macOS
+        - iOS
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating system and version
+      placeholder: "for example Windows 11 23H2, Ubuntu 24.04, Android 13"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card or phone model
+      placeholder: "for example NVIDIA GeForce RTX 3060, Pixel 7"
+    validations:
+      required: true
+  - type: input
+    id: driver
+    attributes:
+      label: Graphics driver and its version
+      description: The driver of the graphics card (NVIDIA, AMD, Intel, Mesa), or "the phone's own".
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Game version, or the commit you built
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The log
+      description: |
+        The game writes a log. Windows: %TEMP%\magicportals.log. Linux: magicportals.log in the temporary folder (usually /tmp). Android: files/Magic Portals/scratch/magicportals.log in the app's private folder.
+        macOS and iOS: see docs/apple.md. The run before the last one is magicportals.prev.log, beside it. Paste the first lines and the last lines.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: no-game-files
+    attributes:
+      label: Before you send
+      options:
+        - label: I have not attached or pasted any game file, art, audio, level or APK.
+          required: true

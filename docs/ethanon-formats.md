@@ -2085,8 +2085,8 @@ Confirmed twice more: `Sprite::SetRect(col,row) → SetRect(row*m_nColumns + col
 - `SetRect(index)` clamps: `m_currentRect = Min(rect, GetNumRects()-1)` and returns false (`:143-148`).
 - Values `<= 0` are clamped up to 1 in `ETHSpriteEntity::Create` (`:111-112`) — that clamp, not
   `SetupSpriteRects`, is what prevents the null-rects early-out. Same block duplicated at `:190-193`.
-- `strideX * columns` can be **less** than the bitmap width; the remainder pixels belong to no rect.
-  Do not redistribute them.
+- `strideX * columns` can be **less** than the bitmap width; the remainder pixels belong to no rect,
+  and nothing gives them one.
 - **Off-by-one in `ETHEntity::SetFrame(uint)`** (`:745-758`): the bound is `frame > numFrames` (should be
   `>=`), so `frame == numFrames` is accepted and then clamped down by `Sprite::SetRect`; `frame > numFrames`
   resets to 0. Replicate only if you emulate script calls.

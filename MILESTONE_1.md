@@ -1,5 +1,9 @@
 # MILESTONE 1 — Vertical Slice
 
+> **Status of this file.** It is the first milestone's plan, written before the port existed, and it is kept as the quality bar (above all §3's rule that the portal mechanic's values are
+> measured, not guessed). Its scope (chapter 1 only), its Godot items and its `TBD` markers date from that time and are not the current plan: the port plays all 128 levels, and
+> `docs/planning/2026-09-11-magic-portals-remaster.md` and `docs/parity-backlog.md` are the live record.
+
 **Goal:** chapter 1, playable end to end, with the portal mechanic *feeling right*,
 holding 60fps on a modern Android device.
 

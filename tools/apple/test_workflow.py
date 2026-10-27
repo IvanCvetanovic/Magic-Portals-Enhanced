@@ -282,7 +282,7 @@ class AppleWorkflow(unittest.TestCase):
     def test_the_doc_cites_the_names_this_file_has(self):
         doc = os.path.join(REPO, 'docs', 'apple.md')
         if not os.path.isfile(doc):
-            self.skipTest('docs/apple.md is not written yet')
+            self.skipTest('docs/apple.md is missing: nothing to compare with')
         text = read_text(doc)
         for name in JOB_NAMES.values():
             self.assertIn(name, text, 'docs/apple.md cites the job %r' % name)

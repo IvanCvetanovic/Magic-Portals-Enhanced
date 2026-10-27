@@ -20,7 +20,7 @@ name: CI
 #             Vulkan driver that was checked, and the step that wrote this file downloaded none (it was allowed no download but the linter's: a fact about that step, not about software drivers); the
 #             step says so in the log.
 #   android   the Android SDK and NDK: the shell APK without game data for both ABIs, the packager's inspect, and the release check that must REFUSE a debug APK.
-#   tools     the Python tests (package, ci, apple, converter), the version check, the workflow checker and actionlint.
+#   tools     the Python tests (package, ci, apple, converter), the version check, the workflow checker, the public-readiness checker (tools/ci/check_public.py) and actionlint.
 # The jobs do not wait for one another (no needs:) and no step of one cancels another, so one failure never hides the next job's result. Every job ends by uploading its logs,
 # whatever happened. A cache (ccache) only makes a build faster: no result depends on it.
 on:
@@ -179,7 +179,7 @@ jobs:
       - name: Engine submodule
         run: |
           git -C engine log --oneline -1
-          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots" "$RUNNER_TEMP/saves" "$RUNNER_TEMP/notices"
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots" "$RUNNER_TEMP/saves"
           echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
 
       # g++-12: the engine asks for GCC 11 or newer, and nothing of this project was ever built with the 11 that this image has by default. Whether 12 builds it is NOT KNOWN until a run.
@@ -221,14 +221,12 @@ jobs:
           python3 tools/package/release.py check-version
           python3 tools/package/release.py check-program "$RUNNER_TEMP/build-release/game/MagicPortals" --platform linux --max-glibc "$LINUX_GLIBC_FLOOR" 2>&1 | tee "$RUNNER_TEMP/logs/check-program-linux.log"
 
-      # An archive with no game data in it (the game is the owner's), made twice from two folders: it must be the same bytes. The notices are a line each that says this is a CI archive.
+      # An archive with no game data in it (the game is the owner's), made twice from two folders: it must be the same bytes. It carries the repository's own LICENSE and NOTICE.md (the packager takes them from the root of the checkout).
       - name: Assemble the archive without game data (twice)
         run: |
-          printf 'An archive made by a CI run from a program with no game in it. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
-          printf '# A CI archive\n\nNo licence or notice of the project is in it: those are the owner'"'"'s.\n' > "$RUNNER_TEMP/notices/NOTICE.md"
           for n in 1 2; do
             python3 tools/package/release.py assemble --platform linux --program "$RUNNER_TEMP/build-release/game/MagicPortals" --no-data --max-glibc "$LINUX_GLIBC_FLOOR" \
-              --notices "$RUNNER_TEMP/notices" --out "$RUNNER_TEMP/archive-$n/deeper" 2>&1 | tee -a "$RUNNER_TEMP/logs/assemble-linux.log"
+              --out "$RUNNER_TEMP/archive-$n/deeper" 2>&1 | tee -a "$RUNNER_TEMP/logs/assemble-linux.log"
           done
           a="$(ls "$RUNNER_TEMP"/archive-1/deeper/MagicPortals-*-nodata.tar.gz)"
           b="$(ls "$RUNNER_TEMP"/archive-2/deeper/MagicPortals-*-nodata.tar.gz)"
@@ -316,7 +314,7 @@ jobs:
       - name: Engine submodule
         run: |
           git -C engine log --oneline -1
-          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/notices"
+          mkdir -p "$RUNNER_TEMP/logs"
 
       - name: Runner
         run: |
@@ -378,10 +376,8 @@ jobs:
 
       - name: Assemble the archive without game data
         run: |
-          printf 'An archive made by a CI run from a program with no game in it. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
-          printf '# A CI archive\n\nNo licence or notice of the project is in it: those are the owner'"'"'s.\n' > "$RUNNER_TEMP/notices/NOTICE.md"
           python tools/package/release.py assemble --platform windows --program "$RUNNER_TEMP/build-release/game/MagicPortals.exe" --no-data \
-            --notices "$RUNNER_TEMP/notices" --out "$RUNNER_TEMP/archive" 2>&1 | tee "$RUNNER_TEMP/logs/assemble-windows.log"
+            --out "$RUNNER_TEMP/archive" 2>&1 | tee "$RUNNER_TEMP/logs/assemble-windows.log"
 
       - name: Source tree untouched
         run: |
@@ -422,7 +418,7 @@ jobs:
       - name: Engine submodule
         run: |
           git -C engine log --oneline -1
-          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/notices"
+          mkdir -p "$RUNNER_TEMP/logs"
           echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
 
       - name: Packages
@@ -470,10 +466,8 @@ jobs:
       # The release check must REFUSE this APK: it is a debug APK with no game in it. Exit 2 and the sentence of the refusal are the evidence; any other result fails the step.
       - name: The release check refuses a debug APK
         run: |
-          printf 'An archive made by a CI run. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
-          printf '# A CI archive\n' > "$RUNNER_TEMP/notices/NOTICE.md"
           rc=0
-          python3 tools/package/release.py android --apk "$APK" --sdk "$ANDROID_HOME" --notices "$RUNNER_TEMP/notices" --out "$RUNNER_TEMP/release-folder" \
+          python3 tools/package/release.py android --apk "$APK" --sdk "$ANDROID_HOME" --out "$RUNNER_TEMP/release-folder" \
             > "$RUNNER_TEMP/logs/release-refusal-android.log" 2>&1 || rc=$?
           cat "$RUNNER_TEMP/logs/release-refusal-android.log"
           echo "exit code: $rc"
@@ -557,6 +551,10 @@ jobs:
 
       - name: The version in every place it is written
         run: python tools/package/check_version.py
+
+      # What a stranger finds in the tracked files (tools/ci/check_public.py, rules H1 to H12; docs/ci.md section 8). Exit 1 on any ERROR; the other classes are listed in the log.
+      - name: The public-readiness check
+        run: python tools/ci/check_public.py 2>&1 | tee "$RUNNER_TEMP/logs/check-public.log"
 
       - name: The workflow checker
         run: python tools/ci/check_workflows.py 2>&1 | tee "$RUNNER_TEMP/logs/check-workflows.log"

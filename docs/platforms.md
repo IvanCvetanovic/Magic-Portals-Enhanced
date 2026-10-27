@@ -8,6 +8,8 @@ or **NOT KNOWN** (nobody has run it). Each platform ends with `VERIFIED BY` and 
 assembles on his PC from a program and his own content package (`packaging.md` section 8, `ci.md` section 7). A shell run with the fixture level (`building.md` section 5) shows a hand-written test
 level, not the game.
 
+Every archive carries `LICENSE` (the project's licence) and `NOTICE.md` (the notices of the software the game contains), beside the APK for Android; the packager refuses to write one without them.
+
 | | Windows | Linux | Android | macOS | iOS |
 |---|---|---|---|---|---|
 | **What is downloaded** | `MagicPortals-<version>-windows-x64.zip` | `MagicPortals-<version>-linux-x86_64.tar.gz` | `MagicPortals-<version>-android.apk` (+ `LICENSE`, `NOTICE.md` beside it) | `MagicPortals-<version>-macos-universal.zip` (a `MagicPortals.app`) | `MagicPortals-<version>-ios-arm64.ipa` |

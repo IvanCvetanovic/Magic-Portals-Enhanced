@@ -3,10 +3,8 @@
 
 PRECONDITION. The owner's request of 2026-10-15 ("Reuse the control buttons from Magic Rampage") is
 the go-ahead for copying Magic Rampage's sprites into the gitignored reference/magic-rampage/ for
-local use. docs/permission.md is still the unfilled placeholder and says nothing about Magic Rampage
-(another Asantee game). Nothing this tool reads or writes is committed or shipped, and any release
-package containing that folder stays gated on the owner's word with the rights holder (CTL design,
-question Q2). This file holds code only: no image, no base64 of one, no byte of Asantee's art.
+local use. Nothing this tool reads or writes is committed. Whether a release package carries that
+folder is the owner's to choose (CTL design, question Q2). This file holds code only: no image, no base64 of one, no byte of Asantee's art.
 
     python -I tools/art/make_mr_controls.py --assets <folder holding the base APK's assets/>
     python -I tools/art/make_mr_controls.py --xapk   <Magic+Rampage_7.8.7_APKPure.xapk>

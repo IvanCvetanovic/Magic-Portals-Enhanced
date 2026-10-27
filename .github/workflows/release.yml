@@ -308,7 +308,7 @@ jobs:
         with:
           submodules: recursive
       - name: Folders
-        run: mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/notices" "$RUNNER_TEMP/programs"
+        run: mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/programs"
       - name: Download what the jobs made
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -321,12 +321,10 @@ jobs:
       - name: Check the two Apple shells
         if: ${{ !cancelled() }}
         run: |
-          printf 'An archive made by a CI run. It is not a release.\n' > "$RUNNER_TEMP/notices/LICENSE"
-          printf '# A CI archive\n' > "$RUNNER_TEMP/notices/NOTICE.md"
           status=0
-          python3 tools/package/release.py assemble --platform macos --shell "$RUNNER_TEMP/in/macos-shell/MagicPortals-macOS-shell.zip" --notices "$RUNNER_TEMP/notices" \
+          python3 tools/package/release.py assemble --platform macos --shell "$RUNNER_TEMP/in/macos-shell/MagicPortals-macOS-shell.zip" \
             --out "$RUNNER_TEMP/apple-check/macos" 2>&1 | tee "$RUNNER_TEMP/logs/check-apple-macos.log" || status=1
-          python3 tools/package/release.py assemble --platform ios --shell "$RUNNER_TEMP/in/ios-device-shell/MagicPortals-iOS-shell.ipa" --notices "$RUNNER_TEMP/notices" \
+          python3 tools/package/release.py assemble --platform ios --shell "$RUNNER_TEMP/in/ios-device-shell/MagicPortals-iOS-shell.ipa" \
             --out "$RUNNER_TEMP/apple-check/ios" 2>&1 | tee "$RUNNER_TEMP/logs/check-apple-ios.log" || status=1
           test "$status" = 0
 

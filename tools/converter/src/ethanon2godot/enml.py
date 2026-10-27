@@ -8,7 +8,7 @@ and ``<Joints>`` embedded inside ``.ent`` and ``.esc`` files
 Grammar is ``docs/ethanon-formats.md`` §6.1, itself derived from ``File::ParseString``
 (``gs2d/src/Enml/Enml.cpp:313-448``). This is a port of that state machine rather than
 a regex, because several of its behaviours are load-bearing and a regex quietly gets
-them wrong:
+them wrong. (Ethanon is MIT-licensed: its notice is in NOTICE.md at the repository root.)
 
 * A **single** ``/`` starts a line comment (not ``//``).
 * Only ``\\;`` and ``\\\\`` are escapes. **Any other backslash aborts the whole parse**

@@ -177,19 +177,18 @@ carries none would mean inventing a player, which the fixture does not do (LEFT 
 
 The fixture can only say "the shell starts, loads a level, ticks and draws"; there is no art, so the picture is a few placeholder boxes on black.
 
-## 6. What a bundle must carry of the licences
+## 6. What a bundle carries of the licences
 
-`make_app.sh` copies, into `Resources/licenses` (iOS: the bundle's `licenses`): the engine's `LICENSE` and `THIRD_PARTY_LICENSES.md` (which names every library the engine vendors, GLFW and the stb and
-dr_libs headers among them), MoltenVK's licence text when `--moltenvk-license` hands it over (MoltenVK is Apache-2.0 and is **linked into the program**; the engine's list does not name it, because
-the engine links it only when a build asks), and a `README.txt` that says what is **not yet there**: this game's own licence and the full notice for the code the game's decoding and
-arithmetic derive from (Ethanon's MIT notice, AngelScript's zlib notice). Neither exists yet; both are planning step 209 and the owner's decision about the licence (D10). A shell is therefore a
-build for testing, not something to hand to other people. The sibling's licence list (its own MIT-0 file, its LGPL and GPL texts) is for its game logic and is not carried.
+`make_app.sh` copies, into `Resources/licenses` (iOS: the bundle's `licenses`): the repository's `LICENSE` and `NOTICE.md` (the game's licence, and the notices of the software it contains, with the
+notices of the two places where the tools follow Ethanon's and AngelScript's source: planning step 210), the engine's `LICENSE` and `THIRD_PARTY_LICENSES.md` (which names every library the engine vendors,
+GLFW and the stb and dr_libs headers among them), MoltenVK's licence text when `--moltenvk-license` hands it over (MoltenVK is Apache-2.0 and is **linked into the program**; the engine's list does not
+name it, because the engine links it only when a build asks), and a `README.txt` that says which file is which. The licence is the one proposed in planning step 210 until the owner confirms it (D10). The
+sibling's licence list (its own MIT-0 file, its LGPL and GPL texts) is for its game logic and is not carried.
 
 ## 7. Getting the data into a shell: the three routes, none of them proven
 
 A macOS bundle's ad-hoc signature covers every file of the bundle: **a `GameData` folder added to `Contents/Resources` after the signature is made breaks the seal** ("is damaged and can't be
-opened", the sibling's note), so a data-bearing zip needs the seal **made again after the data is in**. Nothing here decides how; the owner decides (planning record D1 and D2; also whether the data may leave
-his machine at all, which is a question of `docs/permission.md`):
+opened", the sibling's note), so a data-bearing zip needs the seal **made again after the data is in**. Nothing here decides how; the route is the owner's to choose (planning record D1 and D2):
 
 1. **A Mac assembles and signs it** (his, a borrowed one, or a hosted one, which sends the data to someone else's machine). Not run: no Mac.
 2. **A cross-platform ad-hoc signer on the Windows PC** (for example Apple-codesign's `rcodesign`) re-signs the bundle after the data is added. **Untested**: nothing has done it, and whether macOS accepts the result is NOT KNOWN.
@@ -238,11 +237,11 @@ Items for the engine's list (the engine is read-only here): no gap that this ste
 ## 10. Decisions that are the owner's, and left
 
 * the bundle identifier (a placeholder shared with the Android package), the display name (`Magic Portals`; the Android label says `Magic Portals Enhanced`), the icon (a placeholder drawn by arithmetic), the version (`0.1.0`);
-* signing: ad hoc only; a Developer ID and notarisation (a paid account), and whether to publish through TestFlight or the App Store at all (a rights question: `docs/permission.md`);
+* signing: ad hoc only; a Developer ID and notarisation (a paid account), and whether to publish through TestFlight or the App Store at all;
 * the export-compliance statement (`ITSAppUsesNonExemptEncryption`): not claimed in either plist; it is a declaration of the owner's;
 * `UIFileSharingEnabled`: ON in the iOS template as in the sibling's (the flags file lives in Documents); it shows Documents in the Files app;
 * whether to dispatch the workflow, and when; the minutes it costs;
-* which of the three routes of section 7 makes a data-bearing macOS zip, and whether the data may leave his machine.
+* which of the three routes of section 7 makes a data-bearing macOS zip.
 
 ## 11. The sideloading story for the iOS shell, as the sibling documents its own
 

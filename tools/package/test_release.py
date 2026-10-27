@@ -20,6 +20,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -32,10 +33,25 @@ import version as vs  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(HERE))
 VERSION = vs.read_version(REPO)
 WINDOWS_VERSION = vs.windows_version(VERSION)
-# The owner's account name, in pieces: no file of the project but the packager's own table of forbidden strings and its document may hold the word (the hygiene rule asks of every script),
-# so every test that needs it builds it here. The path is the one a builder's machine would bake into a program.
-ACCOUNT = 'ic' + 'vet'
+# An INVENTED account name stands for the account that runs the check: the packager reads the real one from the system when it runs (planning step 210), so no file of the project
+# spells it. Every test in this module sees this name as the running account (setUpModule); the tests of the lookup itself put the real function back. The path is the one a
+# builder's machine would bake into a program.
+ACCOUNT = 'zorbgar'
 CHECKOUT_PATH_OF_A_BUILDER = ('C:/Users/%s/Desktop/Magic-Portals-Enhanced/out/levels' % ACCOUNT).encode()
+REAL_RUNNING_ACCOUNTS = rl.running_accounts
+
+
+def setUpModule():
+    rl.running_accounts = lambda: [ACCOUNT]
+
+
+def tearDownModule():
+    rl.running_accounts = REAL_RUNNING_ACCOUNTS
+
+
+def phrase(*parts):
+    """A phrase from its parts, so that a list of words a text must NOT hold does not hold them whole itself."""
+    return ' '.join(parts)
 
 
 # ---- synthetic programs ---------------------------------------------------------------------------------------------------------------------
@@ -255,13 +271,14 @@ class TheTiesToTheCpp(unittest.TestCase):
         self.assertNotIn(self.lines_with(rl.GAME_MARKERS[1].decode())[0], self.dev, 'the second marker must not be a developer-tools-only line')
 
     def test_the_list_of_forbidden_strings_is_the_one_the_documentation_names(self):
-        # the list is a decision, and the loops below run over it: this is what pins its contents (docs/packaging.md section 8 names the same ones; the checkout's own path is added at run time).
+        # the list is a decision, and the loops below run over it: this is what pins its contents (docs/packaging.md section 8 names the same ones; the checkout's own path and the name of the
+        # account that runs the check are added at run time, planning step 210).
         # Planning step 209 (PORT10-2 g): the two folder names are listed as PATHS (between two separators), not as bare names, because the folder name is also the project's public name.
-        self.assertEqual([b for b, _ in rl.FORBIDDEN_STRINGS], [ACCOUNT.encode(), b'/Magic-Portals-Enhanced/', b'\\Magic-Portals-Enhanced\\', b'/Magic-Portals-Remake/', b'\\Magic-Portals-Remake\\',
+        self.assertEqual([b for b, _ in rl.FORBIDDEN_STRINGS], [b'/Magic-Portals-Enhanced/', b'\\Magic-Portals-Enhanced\\', b'/Magic-Portals-Remake/', b'\\Magic-Portals-Remake\\',
                                                                  b'/mnt/', b'/home/', b'/Users/', b'\\Users\\'])
         with open(os.path.join(REPO, 'docs', 'packaging.md'), encoding='utf-8') as f:
             doc = f.read()
-        for word in ('`%s`' % ACCOUNT, '`/mnt/`', '`/home/`', '`/Users/`', '`\\Users\\`', "the checkout's two folder names as paths", "this checkout's own path"):
+        for word in ('`/mnt/`', '`/home/`', '`/Users/`', '`\\Users\\`', "the checkout's two folder names as paths", "this checkout's own path", 'the name of the account that runs the check'):
             self.assertIn(word, doc)
 
     def test_every_forbidden_string_says_why_and_the_list_has_no_duplicate(self):
@@ -488,7 +505,7 @@ class TheCommandLine(Temp):
         code, out, err = run_cli('check-program', dev, '--platform', 'windows')
         self.assertEqual(code, 1)
         self.assertIn('REFUSED', err)
-        for word in ("'%s'" % ACCOUNT, "'/Magic-Portals-Enhanced/'", 'developer tools are compiled in', 'no version information'):
+        for word in ('the name of the account that runs this check', "'/Magic-Portals-Enhanced/'", 'developer tools are compiled in', 'no version information'):
             self.assertIn(word, err)
 
     def test_allow_dev_turns_the_refusals_into_warnings_and_not_a_wrong_machine(self):
@@ -720,27 +737,36 @@ class TheWindowsArchive(ArchiveCase):
                      'were not seen on a PC that lacked', 'LICENSE and NOTICE.md', OTHER_VERSION):
             self.assertIn(word, text)
 
-    def test_the_text_never_says_why_the_original_may_be_shipped(self):
-        # the packager and its texts say what an archive holds, not why one may hold it (the owner's line)
+    def test_the_texts_of_an_archive_hold_none_of_the_words_of_the_list(self):
+        # an archive's texts say what it holds and how to use it. The phrases are built from parts (phrase), so that this file holds none of them whole.
         texts = [rl.playing_windows('1.0.0', 'x64', [], True, False), rl.playing_windows('1.0.0', 'x64', ['MSVCP140.dll'], False, True),
                  rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38)}, True, False), rl.playing_linux('1.0.0', 'x86_64', {}, False, False),
                  rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True),
                  rl.intro_text(rl.MACOS, '1.0.0', 'universal', False), rl.intro_text(rl.IOS, '1.0.0', 'arm64', True), rl.developer_note(rl.Report('windows'))]
+        words = ('permission', 'permitted', 'grant', phrase('rights', 'holder'), phrase('allowed', 'to', 'ship'), phrase('may', 'be', 'shipped'), phrase('may', 'ship'), 'asantee',
+                 'original game', phrase('may', 'leave'), phrase('may', 'travel'), phrase('whether', 'the', 'data'))
         for text in texts:
-            # 'may leave' and 'may travel': a doubt about the right to ship is not written into a file a player downloads either (docs/apple.md section 7 is where that question is kept)
-            for word in ('permission', 'permitted', 'grant', 'rights holder', 'allowed to ship', 'may be shipped', 'may ship', 'asantee', 'original game', 'may leave',
-                         'may travel', 'whether the data'):
+            for word in words:
                 self.assertNotIn(word, text.lower(), word)
-        # the tool's own source says what an archive holds, never why one may hold it ("permissions" there is a file's mode)
+        # the tool's own source: the same words are not in it ("permissions" there is a file's mode)
         with open(os.path.join(HERE, 'release.py'), encoding='utf-8') as f:
             source = f.read().lower()
-        for phrase in ('permission to', 'permission from', 'permitted to', 'granted', 'rights holder', 'allowed to ship', 'may be shipped', 'may ship', 'asantee', 'original game',
-                       'may leave', 'may travel'):
-            self.assertNotIn(phrase, source, phrase)
-        # what the Apple texts DO say of the owner's decision: the route, and nothing about a right
+        for word in ('permission to', 'permission from', 'permitted to', 'granted', phrase('rights', 'holder'), phrase('allowed', 'to', 'ship'), phrase('may', 'be', 'shipped'),
+                     phrase('may', 'ship'), 'asantee', 'original game', phrase('may', 'leave'), phrase('may', 'travel')):
+            self.assertNotIn(word, source, word)
+        # what the Apple texts DO say of the owner's decision: the route
         for text in (rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True)):
             self.assertIn("Which route", text)
             self.assertIn("is the owner's decision", text)
+
+    def test_the_text_of_an_archive_with_no_game_does_not_promise_a_manifest_or_sums(self):
+        for text in (rl.playing_windows('1.0.0', 'x64', [], False, False), rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38)}, False, False)):
+            self.assertNotIn('manifest.json', text)
+            self.assertIn('no content folder and no SHA256SUMS.txt', text)
+            self.assertIn('LICENSE and NOTICE.md', text)
+        for text in (rl.playing_windows('1.0.0', 'x64', [], True, False), rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38)}, True, False)):
+            self.assertIn('manifest.json lists every file of the game', text)
+            self.assertNotIn('no content folder', text)
 
     def test_the_texts_say_only_what_is_read_from_the_program_or_a_history_of_runs(self):
         # an archive's text must be true of ANY program it is made for: how a build was made (its distribution, its compiler) is not read from the program, so it is not said
@@ -897,7 +923,7 @@ class TheRefusalsOfAnArchive(ArchiveCase):
         program = self.windows_program(payload=game_payload(dev=True, extra=[CHECKOUT_PATH_OF_A_BUILDER]), version=b'')
         code, out, err = self.assemble('windows', program)
         self.assertEqual(code, 2)
-        for word in ('check-program refuses', "'%s'" % ACCOUNT, 'developer tools are compiled in', 'no version information'):
+        for word in ('check-program refuses', 'the name of the account that runs this check', 'developer tools are compiled in', 'no version information'):
             self.assertIn(word, err)
         self.assert_nothing_left()
 
@@ -955,7 +981,7 @@ class TheRefusalsOfAnArchive(ArchiveCase):
                                      '--notices', folder)
             self.assertEqual(code, 2)
             self.assertIn('no ' + missing, err)
-            self.assertIn('planning step 210', err)
+            self.assertIn('LICENSE and NOTICE.md are at the root of the repository', err)
         empty = self.path('notices-empty')
         put(os.path.join(empty, 'LICENSE'), b'  \n')
         put(os.path.join(empty, 'NOTICE.md'), NOTICES['NOTICE.md'])
@@ -1614,7 +1640,8 @@ def skip_loudly(case, reason):
 
 
 class TheCheckoutPathAndTheProjectName(Temp):
-    """PORT10-2 (g): `Magic-Portals-Enhanced` is the checkout's folder name AND the project's public name. A path of a build tree is refused; a credits line or a URL is not."""
+    """PORT10-2 (g): `Magic-Portals-Enhanced` is the checkout's folder name AND the project's public name. A path of a build tree is refused; a line that ends at the name (a URL or a
+    credits line that stops there) is not, and a URL with a path after the name holds the name between two separators and is refused (planning step 210 corrects the earlier wording)."""
     NAMES = (b'Magic-Portals-Enhanced', b'Magic-Portals-Remake')
 
     def refused_for(self, text, name_form):
@@ -1658,10 +1685,194 @@ class TheCheckoutPathAndTheProjectName(Temp):
 
     def test_the_other_forbidden_strings_still_refuse(self):
         # the account name, a home folder and the checkout's own path are not touched by the change
-        r = checked(make_elf_program(payload=game_payload(extra=[b'/home/someone/x', ACCOUNT.encode(), b'/mnt/c/x'])), rl.LINUX)
+        r = checked(make_elf_program(payload=game_payload(extra=[b'/home/someone/x', ACCOUNT.encode(), b'/mnt/' + b'c/x'])), rl.LINUX)
         text = ' '.join(t for _, t in r.problems)
-        for word in ("'/home/'", "'%s'" % ACCOUNT, "'/mnt/'"):
+        for word in ("'/home/'", 'the name of the account that runs this check', "'/mnt/'"):
             self.assertIn(word, text)
+
+
+class TheAccountOfTheCheck(Temp):
+    """Planning step 210: the name of the account that RUNS the check is refused, read from the system when the check runs, and no file of the project spells it. Every test names an
+    INVENTED account (through the system's own lookups, patched, or through the argument the function takes)."""
+    OTHER = 'quuxbert'
+
+    def holds(self, text, platform=rl.LINUX, **kw):
+        make = make_pe if platform == rl.WINDOWS else make_elf_program
+        r = checked(make(payload=game_payload(extra=[text])), platform, **kw)
+        return [t for k, t in r.problems if k == rl.DEVELOPER and 'the account that runs this check' in t]
+
+    def test_the_running_users_name_is_refused_in_both_encodings_and_any_case(self):
+        for text in (('C:/Users/%s/x' % ACCOUNT).encode(), ('owner %s here' % ACCOUNT.upper()).encode(), ACCOUNT.encode(), ('before %s after' % ACCOUNT).encode('utf-16-le')):
+            self.assertEqual(len(self.holds(text)), 1, text)
+            self.assertEqual(len(self.holds(text, rl.WINDOWS)), 1, text)
+
+    def test_the_refusal_names_the_rule_and_never_spells_the_name_or_quotes_it_back(self):
+        found = self.holds(('C:/Users/%s/Desktop/x' % ACCOUNT).encode())
+        self.assertEqual(len(found), 1)
+        self.assertNotIn(ACCOUNT, found[0].lower())
+        self.assertIn('<account>', found[0])
+        self.assertIn('%d letters' % len(ACCOUNT), found[0])
+        wide = self.holds(('before %s after' % ACCOUNT).encode('utf-16-le'), rl.WINDOWS)
+        self.assertNotIn(ACCOUNT, wide[0].lower())
+
+    def test_a_long_name_is_refused_wherever_it_stands_even_glued_to_letters_and_digits(self):
+        # step 210, fix round 2: the literal this lookup replaced was a SUBSTRING, so a name of five letters or more is searched as one. These are the shapes an independent probe
+        # (16 byte strings that hold a name) found missed when the search wanted a word: all of them must be refused, in ASCII and in UTF-16, whatever the case.
+        name = ACCOUNT
+        shapes = [('C:\\Users\\%s\\Desktop' % name).encode(), ('/home/%s/x' % name).encode(), ('built by %s today' % name).encode(), ('built by %s today' % name.upper()).encode(),
+                  ('xx%s ' % name).encode(), (' %szz ' % name).encode(), (' %s2 ' % name).encode(), (' %s_build ' % name).encode(), (' %s-build ' % name).encode(),
+                  ('%srest99@example.invalid' % name).encode(), ('x.%s.y' % name).encode(), ('"%s"' % name).encode(), (b'zorbgarage door'), (b'xzorbgar'), (b'azorbgarx')]
+        shapes += [text.encode('utf-16-le') for text in ('built by %s ok' % name, 'C:\\Users\\%s\\x' % name, '%srest99@example.invalid' % name, ' %s2 ' % name, 'xx%szz' % name)]
+        for text in shapes:
+            self.assertEqual(len(self.holds(text)), 1, text)
+            self.assertEqual(len(self.holds(text, rl.WINDOWS)), 1, text)
+
+    def test_a_name_of_four_letters_is_refused_as_a_whole_word_only(self):
+        # four letters are found inside too many honest words ("zorb" in "zorbing"): such a name is a word, a path component, a quoted or dotted name, and not a part of a longer one
+        name = 'zorb'
+        self.assertEqual(rl.ACCOUNT_SUBSTRING_LETTERS, len(name) + 1)
+        for text in (b'zorbgarage door', b'xzorb', b'zorb2', b'azorbx', b'zorbing'):
+            self.assertEqual(self.holds(text, accounts=[name]), [], text)
+        for text in (b'/zorb/', b'(zorb)', b'zorb.DESKTOP-1A2B', b'zorb_backup', b'"zorb"', b'built by ZORB today', 'a zorb b'.encode('utf-16-le')):
+            self.assertEqual(len(self.holds(text, accounts=[name])), 1, text)
+
+    def test_the_home_folders_name_is_searched_too_when_it_differs_from_the_user_name(self):
+        with mock.patch.object(rl.getpass, 'getuser', return_value=self.OTHER), mock.patch.object(rl.os.path, 'expanduser', return_value='/somewhere/' + ACCOUNT), \
+                mock.patch.dict(os.environ, {'USERNAME': '', 'USER': '', 'LOGNAME': ''}):
+            names = REAL_RUNNING_ACCOUNTS()
+            self.assertEqual(sorted(names), sorted([self.OTHER, ACCOUNT]))
+            for name in (self.OTHER, ACCOUNT):
+                r = checked(make_elf_program(payload=game_payload(extra=[('x/%s/y' % name).encode()])), rl.LINUX, accounts=names)
+                self.assertTrue([t for k, t in r.problems if 'the account that runs this check' in t], name)
+
+    def test_the_running_account_is_what_the_default_check_reads(self):
+        with mock.patch.object(rl, 'running_accounts', return_value=[self.OTHER]):
+            self.assertEqual(len(self.holds(('C:/Users/%s/x' % self.OTHER).encode())), 1)
+            self.assertEqual(self.holds(('owner %s here' % ACCOUNT).encode()), [])  # another account's name is not this check's business (--also-forbid is)
+
+    def test_a_short_or_ordinary_name_is_searched_only_as_a_path_component(self):
+        for name in ('bo', 'Runner', 'root', 'USER'):
+            found = rl.account_forbidden([name])
+            self.assertEqual([item for item, *_ in found], [b'/' + name.encode() + b'/', b'\\' + name.encode() + b'\\'], name)
+            self.assertTrue(all(not word for *_, word in found))
+            self.assertEqual(self.holds(('the %s of the matter, bobo, a runner and root and users' % name).encode(), accounts=[name]), [], name)
+            self.assertEqual(len(self.holds(('/home/x/%s/y' % name).encode(), accounts=[name])), 1, name)
+            self.assertEqual(len(self.holds(('C:\\x\\%s\\y' % name).encode(), accounts=[name])), 1, name)
+
+    def test_a_long_name_is_searched_anywhere_and_once_however_many_lookups_give_it(self):
+        found = rl.account_forbidden([ACCOUNT, ACCOUNT.upper(), ' ' + ACCOUNT, ''])
+        self.assertEqual([item for item, *_ in found], [ACCOUNT.encode()])
+        self.assertFalse(found[0][3], 'a name of five letters or more is a substring search, not a whole-word one')
+        four = rl.account_forbidden(['zorb', 'ZORB'])
+        self.assertEqual([(item, word) for item, _why, _label, word in four], [(b'zorb', True)])
+
+    def test_no_name_known_means_nothing_extra_is_searched(self):
+        self.assertEqual(rl.account_forbidden([]), [])
+        self.assertEqual(rl.account_forbidden(['', None]), [])
+
+    def test_the_lookup_gives_the_user_name_the_home_folder_and_the_variables(self):
+        with mock.patch.object(rl.getpass, 'getuser', return_value='aaaa1'), mock.patch.object(rl.os.path, 'expanduser', return_value='/x/bbbb2'), \
+                mock.patch.dict(os.environ, {'USERNAME': 'cccc3', 'USER': '', 'LOGNAME': 'dddd4'}):
+            self.assertEqual(REAL_RUNNING_ACCOUNTS(), ['aaaa1', 'bbbb2', 'cccc3', 'dddd4'])
+
+    def test_a_lookup_that_raises_is_skipped_not_fatal(self):
+        with mock.patch.object(rl.getpass, 'getuser', side_effect=OSError('no user')), mock.patch.object(rl.os.path, 'expanduser', return_value='/x/home-name'), \
+                mock.patch.dict(os.environ, {'USERNAME': '', 'USER': '', 'LOGNAME': ''}):
+            self.assertEqual(REAL_RUNNING_ACCOUNTS(), ['home-name'])
+
+    def test_also_forbid_is_how_a_program_built_by_another_account_is_checked(self):
+        data = make_elf_program(payload=game_payload(extra=[('x/%s/y' % self.OTHER).encode()]))
+        self.assertEqual([t for k, t in checked(data, rl.LINUX).problems if self.OTHER in t], [])
+        r = checked(data, rl.LINUX, also_forbid=[self.OTHER])
+        self.assertTrue([t for k, t in r.problems if "'%s'" % self.OTHER in t])
+
+    def test_the_command_line_refuses_a_program_that_holds_the_running_account(self):
+        program = self.path('built.exe')
+        put(program, make_pe(payload=game_payload(extra=[CHECKOUT_PATH_OF_A_BUILDER])))
+        code, out, err = run_cli('check-program', program, '--platform', 'windows')
+        self.assertEqual(code, 1)
+        self.assertIn('the name of the account that runs this check', err)
+        self.assertNotIn(ACCOUNT, err.lower())
+        self.assertNotIn(ACCOUNT, out.lower())
+
+    def test_the_name_is_hidden_in_the_whole_refusal_and_not_only_in_the_bytes_it_quotes(self):
+        # the checkout's own path is a forbidden string, and it names the account when the checkout lives in the account's folder
+        repo = self.path('Users', ACCOUNT, 'a-long-checkout-name')
+        os.makedirs(repo)
+        data = make_elf_program(payload=game_payload(extra=[repo.replace(os.sep, '/').encode()]))
+        r = checked(data, rl.LINUX, repo=repo)
+        texts = [t for k, t in r.problems if k == rl.DEVELOPER]
+        self.assertTrue([t for t in texts if "this checkout's own path" in t], texts)
+        for text in texts:
+            self.assertNotIn(ACCOUNT, text.lower(), text)
+        self.assertIn('<account>', ' '.join(texts))
+        for fact in (t for _, t in r.facts):
+            self.assertNotIn(ACCOUNT, fact.lower(), fact)
+
+    def test_the_header_of_the_check_hides_the_name_when_the_program_is_given_by_an_absolute_path(self):
+        # the first line of check-program echoes the argument, and an absolute path on a builder's PC holds the account's folder; the line is copied into logs, so it is hidden like the refusal
+        folder = self.path('Users', ACCOUNT, 'built')
+        os.makedirs(folder)
+        program = os.path.join(folder, 'MagicPortals.exe')
+        put(program, make_pe(payload=game_payload(dev=True), version=b''))
+        code, out, err = run_cli('check-program', program, '--platform', 'windows')
+        self.assertEqual(code, 1)
+        header = out.splitlines()[0]
+        self.assertTrue(header.startswith('check-program '), header)
+        self.assertIn('<account>', header)
+        self.assertIn('(windows, ', header)  # the rest of the line is the same as before
+        self.assertNotIn(ACCOUNT, (out + err).lower())
+
+    def test_an_error_line_hides_the_name_of_a_path_it_was_given(self):
+        folder = self.path('Users', ACCOUNT, 'built')
+        os.makedirs(folder)
+        code, out, err = run_cli('check-program', os.path.join(folder, 'missing.exe'), '--platform', 'windows')
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith('release.py: '), err)
+        self.assertIn('<account>', err)
+        self.assertIn('is not a plain file', err)
+        self.assertNotIn(ACCOUNT, (out + err).lower())
+
+    def test_hide_names_replaces_a_name_and_leaves_a_short_or_ordinary_one_alone(self):
+        self.assertEqual(rl.hide_names('x %s y %s z' % (ACCOUNT, ACCOUNT.upper()), [ACCOUNT]), 'x <account> y <account> z')
+        self.assertEqual(rl.hide_names('a robot at the bo of a runner', ['bo', 'runner', '']), 'a robot at the bo of a runner')
+        self.assertEqual(rl.hide_names('nothing here', []), 'nothing here')
+
+    def test_the_two_lookups_of_the_account_agree_on_what_a_name_is(self):
+        # tools/ci/running_account.py (the checkers) and release.py (the packager, which runs on its own) each hold the rule; they must not drift apart
+        sys.path.insert(0, os.path.join(REPO, 'tools', 'ci'))
+        try:
+            import running_account as ra
+        finally:
+            sys.path.pop(0)
+        self.assertEqual(ra.ACCOUNT_MIN_LETTERS, rl.ACCOUNT_MIN_LETTERS)
+        self.assertEqual(ra.ACCOUNT_SUBSTRING_LETTERS, rl.ACCOUNT_SUBSTRING_LETTERS)
+        self.assertEqual(set(ra.GENERIC_NAMES), set(rl.GENERIC_ACCOUNTS))
+        for names in (['abcd', 'ab', 'runner', 'Alice1', 'alice1'], ['root', 'USER', 'zorbgar'], ['zorb', 'x'], []):
+            # which names are searched bare (a path component is the packager's way of searching a short name; the checkers skip such a name)
+            packager = sorted(item.decode().lower() for item, _why, _label, _word in rl.account_forbidden(names) if not item.startswith((b'/', b'\\')))
+            checkers = sorted(n.lower() for n in ra.searchable_accounts(names)[0])
+            self.assertEqual(packager, checkers, names)
+        # and HOW: the same strings are a hit for both, a name of five letters anywhere, a name of four letters only as a whole word
+        for name in ('zorbgar', 'Alice1', 'zorb', 'ABCD'):
+            regex = ra.account_regex([name])
+            bare = [(item, word) for item, _why, _label, word in rl.account_forbidden([name])]
+            for text in (name, 'x' + name, name + 'x', name + '2', '2' + name, '/' + name + '/', '"' + name + '"', name + '_build', 'rest-' + name, name.lower() + 'rest99@example.invalid'):
+                data = text.encode()
+                in_packager = any(rl.occurrences(data, data.lower(), item, word) for item, word in bare)
+                self.assertEqual(in_packager, bool(regex.search(text)), (name, text))
+
+    def test_no_file_of_the_project_but_the_tests_spells_the_real_accounts_name(self):
+        names = [n for n in REAL_RUNNING_ACCOUNTS() if len(n) >= rl.ACCOUNT_MIN_LETTERS and n.lower() not in rl.GENERIC_ACCOUNTS]
+        if not names:
+            self.skipTest('the account that runs this test has a short or ordinary name: nothing to look for')
+        # the same three kinds as the lookup itself (a name of five letters or more anywhere, one of four letters as a word), so that a file cannot hold the name glued to something
+        pattern = re.compile('|'.join(re.escape(n) if len(n) >= rl.ACCOUNT_SUBSTRING_LETTERS else r'(?<![A-Za-z0-9])%s(?![A-Za-z0-9])' % re.escape(n) for n in names), re.I)
+        for name in ('release.py', 'test_release.py', 'package.py', 'android_package.py', 'check_version.py'):
+            with open(os.path.join(HERE, name), encoding='utf-8') as f:
+                self.assertEqual(pattern.findall(f.read()), [], name)
+        with open(os.path.join(REPO, 'docs', 'packaging.md'), encoding='utf-8') as f:
+            self.assertEqual(pattern.findall(f.read()), [], 'docs/packaging.md')
 
 
 class TheLinuxProgramsFacts(Temp):

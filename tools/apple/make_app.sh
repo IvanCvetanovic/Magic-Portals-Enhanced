@@ -34,9 +34,9 @@
 #                      the engine's compiled shaders. Not assets/shaders, which would make the bundle itself the engine's asset root
 #                      (ChooseAssetRoot): the engine writes where it runs, and a bundle is read-only. The game's entry copies them to a folder it may
 #                      write in and runs from there (game/macos/MacMain.mm, game/ios/IOSMain.mm).
-#   licenses/          what a bundle must carry of the licences: the engine's licence and its list of third-party notices, MoltenVK's licence text when
-#                      --moltenvk-license names it (MoltenVK is linked into the program, Apache-2.0), and a READ ME that says what is NOT yet there
-#                      (the game's own licence and the full notice: planning step 209).
+#   licenses/          what a bundle carries of the licences: this repository's LICENSE and NOTICE.md (the game's licence and the notices of the
+#                      software it contains), the engine's licence and its list of third-party notices, MoltenVK's licence text when --moltenvk-license
+#                      names it (MoltenVK is linked into the program, Apache-2.0), and a READ ME that says which file is which.
 #   the icon           a PLACEHOLDER drawn by tools/art/make_app_icon.py from arithmetic alone (no file of the original is read): MagicPortals.icns on a
 #                      Mac, AppIcon*.png on iOS (opaque: iOS fills what is transparent and the App Store refuses an alpha channel). The real icon is the
 #                      owner's.
@@ -202,9 +202,12 @@ run plutil -lint "$PLIST"
 run mkdir -p "$RES/engine/assets/shaders"
 run cp "$SHADERS"/*.spv "$RES/engine/assets/shaders/"
 
-# The licences a bundle must carry, and a note of what is not there yet. The engine's own list names every library it vendors; MoltenVK is not among them
-# (the engine links it only when a build names one) and is Apache-2.0, so its text travels when the workflow hands it over.
+# The licences a bundle carries, and a note of which file is which. The repository's LICENSE and NOTICE.md are the game's licence and the notices of what it contains (NOTICE.md
+# reproduces the text of each component's licence). The engine's own list names every library it vendors; MoltenVK is not among them (the engine links it only when a build
+# names one) and is Apache-2.0, so its text travels when the workflow hands it over.
 run mkdir -p "$RES/licenses"
+run cp "$REPO/LICENSE" "$RES/licenses/Magic-Portals-Enhanced-LICENSE.txt"
+run cp "$REPO/NOTICE.md" "$RES/licenses/NOTICE.md"
 run cp "$REPO/engine/LICENSE" "$RES/licenses/Supersonic-Engine-LICENSE.txt"
 run cp "$REPO/engine/THIRD_PARTY_LICENSES.md" "$RES/licenses/Supersonic-Engine-THIRD_PARTY_LICENSES.md"
 if [ -n "$MVK_LICENSE" ]; then run cp "$MVK_LICENSE" "$RES/licenses/MoltenVK-LICENSE.txt"; fi
@@ -212,13 +215,13 @@ if [ "$DRY" = 1 ]; then
     say write "$RES/licenses/README.txt"
 else
     cat >"$RES/licenses/README.txt" <<'EOF'
-What this folder holds, and what it does not.
+What this folder holds.
 
-Held: the Supersonic Engine's licence and its list of third-party notices, and (when it was given) MoltenVK's licence text: MoltenVK is linked into
-this program.
+Magic-Portals-Enhanced-LICENSE.txt and NOTICE.md: this game's licence, and the notices of the software it contains (the repository's LICENSE and NOTICE.md).
 
-NOT held yet: this game's own licence, and the full notice for the code the game's decoding and arithmetic derive from. Neither is written
-(planning step 209 of the project's record). Until they are, this is a build for testing the shell, not something to hand to other people.
+Supersonic-Engine-LICENSE.txt and Supersonic-Engine-THIRD_PARTY_LICENSES.md: the engine's licence, and the engine's own list of the libraries it vendors.
+
+MoltenVK-LICENSE.txt, when it was given: MoltenVK's licence text. MoltenVK is linked into this program.
 EOF
 fi
 

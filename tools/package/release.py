@@ -16,8 +16,8 @@ package, and writes ONE archive per platform with the whole game in it. CI holds
 built there or by CI, and from his content package (tools/package/package.py content). Nothing it writes goes into the repository: it refuses an output folder in
 the tracked tree.
 
-WHAT IT DECIDES NOTHING OF. The licence text and the notices are step 210's: this tool takes LICENSE and NOTICE.md from the repository root or from the folder
---notices names, copies them unchanged, and refuses to write a release archive without them. The version (a placeholder today) is read from the one definition
+WHAT IT DECIDES NOTHING OF. The licence text and the notices are the repository's own LICENSE and NOTICE.md (planning step 210): this tool takes them from the repository root or
+from the folder --notices names, copies them unchanged, and refuses to write a release archive without them. The version (a placeholder today) is read from the one definition
 (tools/package/version.py) and never set here. The application id, the signing identities, the Android release keystore, and whether the game's data goes into the macOS
 and iOS packages are the owner's; this tool only offers the mechanisms. For the C++ runtime of a Windows archive it offers --vc-redist (below); without it the archive
 carries no runtime and its PLAYING.txt says what a PC without it shows.
@@ -31,7 +31,9 @@ compressed bytes are those of the Python zlib of the machine: two runs on one ma
 
 check-program READS A BUILT PROGRAM WITHOUT STARTING IT and checks exactly the facts a built program carries as bytes. Each fact says where it comes from:
   format and machine   the PE machine, the ELF class and e_machine, the Mach-O cputype (thin or fat) must be what the platform name says.
-  no baked path        FORBIDDEN_STRINGS below, the checkout's own absolute path and any --also-forbid text must not occur, in ASCII or in UTF-16, in any case. A build
+  no baked path        FORBIDDEN_STRINGS below, the checkout's own absolute path, the name of the account that RUNS THE CHECK (read from the system when it runs, so no file holds it;
+                       a program built by another account is checked for that one's name through --also-forbid) and any --also-forbid text must not occur, in ASCII or in
+                       UTF-16, in any case. A build
                        made with MAGICPORTALS_BAKED_PATHS=ON, or by MSVC with its program database path and __FILE__ text, has them.
   developer tools OFF  none of DEV_TOOLS_SENTINELS occurs. They are whole lines of --help that main.cpp prints only inside `#if MAGICPORTALS_DEV_TOOLS`, so a program
                        made with the tools OFF cannot hold them. The OTHER direction (the refusal sentence "is a developer's flag, and this build was made without the
@@ -49,6 +51,7 @@ Standard library only.
 """
 import argparse
 import contextlib
+import getpass
 import gzip
 import hashlib
 import io
@@ -92,20 +95,78 @@ MACHO_EXECUTE, MOST_FAT_ARCHS = 2, 30  # a Java class file starts with the fat m
 GAME_MARKERS = (b'magicportals.log', b'ignore the paths this build was configured with')
 
 # THE FORBIDDEN BYTE STRINGS, searched in ASCII and in UTF-16LE, in any case. Each says why it is there. A built program that holds one has the builder's machine in it.
+# The name of the ACCOUNT is not in this table: it is read from the system when the check runs (running_accounts, account_forbidden below), so that no file of the project spells it
+# (planning step 210).
 FORBIDDEN_STRINGS = (
-    (b'icvet', "the owner's account name (CLAUDE.md, Environment): a baked data path, a checkout path in an assertion or a log text, a program database's path all carry it"),
-    # THE CHECKOUT'S FOLDER NAME, AS A PATH AND NOT AS A NAME (planning step 209, PORT10-2 g). The folder name is also the project's public name, so a credits line or a URL in a
-    # later program must not be refused with the account-name message: only the name BETWEEN TWO SEPARATORS is a path of a build tree (`D:\a\Magic-Portals-Enhanced\...` on a
-    # Windows runner, which carries neither /home/ nor /Users/). A line that ends at the name, or has spaces or words round it, is not a path.
+    # THE CHECKOUT'S FOLDER NAME, AS A PATH AND NOT AS A NAME (planning step 209, PORT10-2 g). The folder name is also the project's public name, so a line that ENDS at the name (a
+    # URL such as https://github.com/<owner>/Magic-Portals-Enhanced, or a credits line that stops there) must not be refused: only the name BETWEEN TWO SEPARATORS is a path of a build
+    # tree (`D:\a\Magic-Portals-Enhanced\...` on a Windows runner, which carries neither /home/ nor /Users/). A URL with a path after the name, such as .../Magic-Portals-Enhanced/releases,
+    # holds the name between two separators and is refused; so is any line that has a separator on both sides of the name.
     (b'/Magic-Portals-Enhanced/', "the checkout's folder name inside a path written with slashes: any absolute path of the build tree, whoever's account it was in"),
     (b'\\Magic-Portals-Enhanced\\', "the checkout's folder name inside a path written with backslashes (a Windows runner's workspace is D:\\a\\<repository>\\<repository>)"),
     (b'/Magic-Portals-Remake/', "the checkout's former folder name (until 2026-10-01) inside a path written with slashes: a tree configured before the rename"),
     (b'\\Magic-Portals-Remake\\', "the checkout's former folder name (until 2026-10-01) inside a path written with backslashes: a tree configured before the rename"),
-    (b'/mnt/', 'a Windows drive mounted into WSL (/mnt/c/...): a build made there baked that drive\'s paths'),
+    (b'/mnt/', "a Windows drive mounted into WSL (a /mnt/<drive>/... path): a build made there baked that drive's paths"),
     (b'/home/', "a Linux home folder: the builder's account"),
-    (b'/Users/', "a macOS home folder or a Windows one written with slashes (C:/Users/...): the builder's account"),
+    (b'/Users/', "a macOS home folder or a Windows one written with slashes (<drive>:/Users/...): the builder's account"),
     (b'\\Users\\', "a Windows home folder written with backslashes: the builder's account (a program database's path is written so)"),
 )
+
+# THE ACCOUNT THAT RUNS THE CHECK (planning step 210). A program is built by an account and checked by an account, and on the owner's PC they are one. The name is read from the system now and
+# searched like the table above, in three kinds. ANYWHERE, as a substring (a path, a build label with a digit glued to it, the local part of an address), when it has
+# ACCOUNT_SUBSTRING_LETTERS letters or more and is not the name of an ordinary folder: that is how the literal this lookup replaced was searched. As a WHOLE WORD (no letter or digit touching
+# it) when it has ACCOUNT_MIN_LETTERS letters, because four letters are too few to be found inside longer words without refusing honest text. As a path component (/name/ and \name\) when it
+# is shorter or is the name of an ordinary folder, because a bare "bo" or "runner" would refuse every program that holds the word. A program built by ANOTHER account is checked for that
+# account's name through --also-forbid. tools/ci/running_account.py keeps the same three kinds for the checkers (a test holds the two together).
+ACCOUNT_MIN_LETTERS = 4
+ACCOUNT_SUBSTRING_LETTERS = 5
+GENERIC_ACCOUNTS = frozenset(('runner', 'runneradmin', 'public', 'default', 'administrator', 'user', 'username', 'name', 'yourname', 'you', 'me', 'example', 'someone', 'shared', 'guest', 'root',
+                              'ubuntu', 'admin', 'vagrant', 'home', 'all', 'users', 'account', 'owner'))  # the same words as tools/ci/running_account.py (a test holds the two together)
+WHY_ACCOUNT = ("the name of the account that runs this check, read from the system now: a baked data path, a checkout path in an assertion or a log text and a program database's path all "
+               "carry the builder's account")
+WHY_ACCOUNT_PATH = WHY_ACCOUNT + " (a short or ordinary name, so only as a path component)"
+WHY_ACCOUNT_WORD = WHY_ACCOUNT + " (a name of four letters, so only as a whole word)"
+
+
+def running_accounts():
+    """The names of the account that runs this check, from the system when it runs: the user name and the name of the home folder (the two can differ on Windows). Nothing is stored."""
+    names = []
+    for getter in (getpass.getuser, lambda: os.path.basename(os.path.expanduser('~'))):
+        try:
+            names.append(getter())
+        except Exception:  # getpass raises when no variable and no password database names a user
+            pass
+    names += [os.environ[v] for v in ('USERNAME', 'USER', 'LOGNAME') if os.environ.get(v)]
+    return names
+
+
+def account_forbidden(names):
+    """[(bytes, why, label, whole_word)] to look for: each account name once (case does not matter); anywhere in the bytes when it has ACCOUNT_SUBSTRING_LETTERS letters or more, as a
+    whole word when it has ACCOUNT_MIN_LETTERS, else between two separators. The label never spells the name."""
+    found, seen = [], set()
+    for name in names:
+        name = (name or '').strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        raw = name.encode('utf-8')
+        if len(name) >= ACCOUNT_SUBSTRING_LETTERS and name.lower() not in GENERIC_ACCOUNTS:
+            found.append((raw, WHY_ACCOUNT, "the name of the account that runs this check (%d letters, read from the system now; not printed)" % len(name), False))
+        elif len(name) >= ACCOUNT_MIN_LETTERS and name.lower() not in GENERIC_ACCOUNTS:
+            found.append((raw, WHY_ACCOUNT_WORD, "the name of the account that runs this check as a whole word (%d letters, read from the system now; not printed)" % len(name), True))
+        else:
+            for form in (b'/' + raw + b'/', b'\\' + raw + b'\\'):
+                found.append((form, WHY_ACCOUNT_PATH, "the name of the account that runs this check as a path component (%d letters; not printed)" % len(name), False))
+    return found
+
+
+def hide_names(text, names):
+    """The text with every account name that is a name (long enough, and not an ordinary folder's) replaced by <account>, so that a refusal does not repeat it: not in the bytes
+    it quotes round a hit, and not in the checkout's path it names. A short or ordinary name is a word of the text and stays."""
+    for name in sorted({n.strip() for n in names if n and len(n.strip()) >= ACCOUNT_MIN_LETTERS and n.strip().lower() not in GENERIC_ACCOUNTS}, key=len, reverse=True):
+        text = re.sub(re.escape(name), '<account>', text, flags=re.I)
+    return text
+
 
 # THE DEVELOPER TOOLS' SENTINELS: whole lines of `MagicPortals --help` that game/main.cpp prints only inside `#if MAGICPORTALS_DEV_TOOLS`. test_release.py ties each one to
 # that region of main.cpp, so a reworded help text cannot quietly make the check vacuous. NOT the flags' names (a program with the tools OFF holds them, to refuse them by
@@ -276,15 +337,32 @@ def printable(chunk):
     return re.sub(rb'[^\x20-\x7e]', b'.', chunk).decode('ascii')
 
 
-def occurrences(data, lowered, needle):
-    """[(offset, 'ascii'|'utf-16', context)] of `needle` in `data`, in any case, in ASCII/UTF-8 and in UTF-16LE. `lowered` is data.lower()."""
+LETTER_OR_DIGIT = re.compile(rb'[a-z0-9]')
+
+
+def standalone(lowered, at, length, wide):
+    """Whether the match at `at` is a whole word: the character before and the one after it are not an ASCII letter or digit (in UTF-16 the characters are two bytes)."""
+    unit = 2 if wide else 1
+    before, after = lowered[max(0, at - unit):at], lowered[at + length:at + length + unit]
+    for side in (before, after):
+        if len(side) == unit and LETTER_OR_DIGIT.fullmatch(side[:1]) and (not wide or side[1:] == b'\0'):
+            return False
+    return True
+
+
+def occurrences(data, lowered, needle, word=False):
+    """[(offset, 'ascii'|'utf-16', context)] of `needle` in `data`, in any case, in ASCII/UTF-8 and in UTF-16LE. `lowered` is data.lower(). With `word`, only a match that is a whole
+    word (no letter or digit touches it) counts: that is how an account name of four letters is searched, so that it is found in a path and not in the middle of a longer word (a name of
+    five letters or more is searched without it)."""
     found = []
     low = needle.lower()
     for at in find_all(lowered, low):
-        found.append((at, 'ascii', printable(data[max(0, at - 24):at + len(needle) + 40])))
+        if not word or standalone(lowered, at, len(low), False):
+            found.append((at, 'ascii', printable(data[max(0, at - 24):at + len(needle) + 40])))
     wide = utf16(low.decode('latin-1'))
     for at in find_all(lowered, wide):
-        found.append((at, 'utf-16', printable(data[max(0, at - 48):at + len(wide) + 80]).replace('.', '')))
+        if not word or standalone(lowered, at, len(wide), True):
+            found.append((at, 'utf-16', printable(data[max(0, at - 48):at + len(wide) + 80]).replace('.', '')))
     return found
 
 
@@ -368,9 +446,10 @@ def checkout_forbidden(repo):
     return [(item, "this checkout's own path (%s)" % item.decode('utf-8', 'replace')) for item in found]
 
 
-def check_program_bytes(data, platform, version=None, repo=None, also_forbid=(), max_glibc=None):
+def check_program_bytes(data, platform, version=None, repo=None, also_forbid=(), max_glibc=None, accounts=None):
     """Everything check-program asks of a built program given as bytes. Returns a Report; never raises for a bad program (that is a fact), only for a bad question.
-    `max_glibc` (a Linux program only, a tuple such as (2, 35)): the highest glibc the program may ask of the system."""
+    `max_glibc` (a Linux program only, a tuple such as (2, 35)): the highest glibc the program may ask of the system. `accounts`: the names of the account that runs the check
+    (default: read from the system now); a test names an invented one."""
     if platform not in CHECKED_PLATFORMS:
         raise ReleaseError('unknown platform %r (%s)' % (platform, ', '.join(CHECKED_PLATFORMS)))
     if max_glibc is not None and platform != LINUX:
@@ -433,14 +512,17 @@ def check_program_bytes(data, platform, version=None, repo=None, also_forbid=(),
 
     lowered = data.lower()
     # 2. no baked path, no checkout path, no builder's account
-    forbidden = [(item, why) for item, why in FORBIDDEN_STRINGS] + checkout_forbidden(repo) + [(t.encode('utf-8'), '--also-forbid') for t in also_forbid]
+    names = list(running_accounts() if accounts is None else accounts)
+    forbidden = ([(item, why, repr(item.decode('utf-8', 'replace')), False) for item, why in FORBIDDEN_STRINGS]
+                 + [(i, w, repr(i.decode('utf-8', 'replace')), False) for i, w in checkout_forbidden(repo)]
+                 + account_forbidden(names) + [(t.encode('utf-8'), '--also-forbid', repr(t), False) for t in also_forbid])
     clean = True
-    for item, why in forbidden:
-        hits = occurrences(data, lowered, item)
+    for item, why, label, word in forbidden:
+        hits = occurrences(data, lowered, item, word)
         if hits:
             clean = False
             at, form, context = hits[0]
-            r.fail(DEVELOPER, 'the program holds %r %d time(s) (first at byte %d, %s: ...%s...): %s' % (item.decode('utf-8', 'replace'), len(hits), at, form, context.strip(), why))
+            r.fail(DEVELOPER, hide_names('the program holds %s %d time(s) (first at byte %d, %s: ...%s...): %s' % (label, len(hits), at, form, context.strip(), why), names))
     if clean:
         r.ok('no baked path and no builder\'s account: none of %d forbidden strings occurs (ASCII or UTF-16, any case)' % len(forbidden))
 
@@ -548,7 +630,8 @@ def cmd_check_program(args):
     repo = os.path.abspath(args.repo) if args.repo else vs.default_repo()
     data = read_file(args.file)
     report = check_program_bytes(data, args.platform, repo=repo, also_forbid=args.also_forbid or (), max_glibc=parse_glibc_floor(args.max_glibc))
-    print('check-program %s (%s, %d bytes, sha256 %s)' % (args.file, args.platform, len(data), hashlib.sha256(data).hexdigest()))
+    # The program's path is the caller's own, and on a builder's PC it holds the account's folder: the header is the line that gets copied into a log, so it is hidden like the refusal.
+    print(hide_names('check-program %s (%s, %d bytes, sha256 %s)' % (args.file, args.platform, len(data), hashlib.sha256(data).hexdigest()), running_accounts()))
     print_report(report, args.allow_dev)
     blocking = report.blocking(args.allow_dev)
     sys.stdout.flush()  # the facts above, then the refusal: one stream's order, even when both go to a file
@@ -822,7 +905,7 @@ def verify_archive(path, entries, content_prefix=None):
 
 def find_notices(repo, notices):
     """{name: bytes} of LICENSE and NOTICE.md, from the folder --notices names or the repository root. A release archive is never written without them, and they are
-    copied unchanged: what they say is the owner's (planning step 210)."""
+    copied unchanged: what they say is the repository's own text (planning step 210), not this tool's."""
     folder = os.path.abspath(notices) if notices else repo
     out, missing = {}, []
     for name in NOTICE_FILES:
@@ -835,7 +918,7 @@ def find_notices(repo, notices):
             missing.append(name + ' (it is empty)')
         out[name] = data
     if missing:
-        raise ReleaseError('a release archive carries the licence and the notices, and %s has no %s. They are the owner\'s to write (planning step 210); name the folder '
+        raise ReleaseError('a release archive carries the licence and the notices, and %s has no %s. LICENSE and NOTICE.md are at the root of the repository; name the folder '
                            'that holds them with --notices' % (folder, ' and no '.join(missing)))
     return out
 
@@ -930,7 +1013,8 @@ def playing_windows(version, arch, redist_names, data, dev):
              '    controls.json). Delete the folder to start from nothing.',
              '  * The log of the last run: %TEMP%\\magicportals.log (the run before it: magicportals.prev.log), and files the game can make again in %TEMP%\\supersonic-magicportals.', '',
              'THIS ARCHIVE',
-             '  content\\manifest.json lists every file of the game with its size and SHA-256; SHA256SUMS.txt, beside the archive, has the archive\'s own.',
+             ('  content\\manifest.json lists every file of the game with its size and SHA-256; SHA256SUMS.txt, beside the archive, has the archive\'s own.' if data else
+              '  This archive has no content folder and no SHA256SUMS.txt: it is a test archive of the program alone.'),
              '  LICENSE and NOTICE.md are the licence and the notices. The program is MagicPortals.exe; it has no installer and changes nothing outside the places above.']
     return finish(lines, dev)
 
@@ -971,7 +1055,8 @@ def playing_linux(version, arch, needs, data, dev, stripped=None):
              '    Delete the folder to start from nothing.',
              '  * The log of the last run: <the temporary folder, usually /tmp>/magicportals.log (the run before it: magicportals.prev.log).', '',
              'THIS ARCHIVE',
-             '  content/manifest.json lists every file of the game with its size and SHA-256; SHA256SUMS.txt, beside the archive, has the archive\'s own.',
+             ('  content/manifest.json lists every file of the game with its size and SHA-256; SHA256SUMS.txt, beside the archive, has the archive\'s own.' if data else
+              '  This archive has no content folder and no SHA256SUMS.txt: it is a test archive of the program alone.'),
              '  LICENSE and NOTICE.md are the licence and the notices. The program is MagicPortals; it has no installer and changes nothing outside the places above.']
     return finish(lines, dev)
 
@@ -998,7 +1083,7 @@ def seal_text(platform, version, with_data_dir, notices_beside):
                 'PC), and nothing here has ever been run on a Mac. docs/apple.md section 7 lists the three routes, none proven: (1) a Mac assembles and signs the app; (2) a\n'
                 'cross-platform ad-hoc signer such as rcodesign, run on the PC that holds the data, signs it again; (3) the shell WITHOUT data, plus a folder the player puts into\n'
                 '~/Library/Application Support/Magic Portals/GameData. Which route is the owner\'s decision.\n\n'
-                'The bundle\'s own Resources/licenses/README.txt was written before the licence existed and says so; the LICENSE and NOTICE.md beside the app are the ones that apply.\n'
+                'The LICENSE and NOTICE.md beside the app are this archive\'s licence and notices; the bundle\'s own Resources/licenses folder holds them too, with the engine\'s.\n'
                 % with_data_dir)
     return ('THE GAME\'S DATA IS IN THIS BUNDLE\n\n'
             'The folder %s was added at the root of the app after the shell was made and signed (ad hoc only). A sideloading tool (Sideloadly, AltStore, SideStore) signs the whole\n'
@@ -1492,7 +1577,7 @@ def main(argv=None):
         return args.func(args)
     except (ReleaseError, pk.PackageError, ap.PackError, vs.VersionError) as e:
         sys.stdout.flush()
-        print('release.py: %s' % e, file=sys.stderr)
+        print('release.py: %s' % hide_names(str(e), running_accounts()), file=sys.stderr)  # an error names the paths it was given, and a path may hold the account's folder
         return 2
 
 

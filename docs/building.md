@@ -9,7 +9,7 @@ and which were not. The game's data is not here and is not needed to build, test
   pinned to a commit; the build scripts run the second command themselves when `engine/` is empty and `.git` is there).
 * CMake 3.20 or newer, Ninja, a C++20 compiler, and Python 3 for the tools (`tools/package`, `tools/ci` and `tools/apple` use the standard library only; they were run on Python 3.12 and 3.14, and no older one was tried). The engine asks for MSVC 2022, GCC 11 or newer, or Clang 13 or newer; this project
   has been built with MSVC (Visual Studio Build Tools, the owner's PC), g++ 13.3, clang 18 (with libstdc++ and with libc++), the Android NDK's clang (r28) and Apple's clang (`apple.md`).
-* **Build on a case-sensitive file system with no spaces in the path.** A Windows drive mounted into WSL (`/mnt/c`) is refused by `tools/build_linux.sh` unless you pass `--allow-drvfs`.
+* **Build on a case-sensitive file system with no spaces in the path.** A Windows drive mounted into WSL (under `/mnt`) is refused by `tools/build_linux.sh` unless you pass `--allow-drvfs`.
 * The engine's compiled shaders (`engine/assets/shaders/*.spv`) are committed. A shader compiler (`glslc`) is **not** needed, and if the build finds one it would rewrite them; the CI jobs and the Apple
   workflow pass `-DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND` so that nothing is rewritten.
 
@@ -88,7 +88,7 @@ folder beside the program, or give `--root <that folder>`. That is the whole sto
 ## 7. Packaging (the owner's step)
 
 `python3 tools/package/release.py assemble --platform windows|linux --program <program> --content <content package> --out <folder>` and the rest of `packaging.md` section 8. `--no-data` makes a
-test archive with no game (named `-nodata`; it is no release and is left out of a release's sums).
+test archive with no game (named `-nodata`; it is no release and is left out of a release's sums). Every archive carries the repository's `LICENSE` and `NOTICE.md`, taken from its root.
 
 ## 8. What was run as written
 
@@ -110,6 +110,8 @@ All on the owner's PC in the Linux subsystem (Ubuntu 24.04, g++ 13.3, CMake 3.28
 | `tools/build_linux.sh --configure-only`, and with the release options (1) | exit 0; the cache shows `-static-libstdc++ -static-libgcc -Wl,--strip-all` for the second |
 | `python3 tools/package/release.py check-version` (7) | ok |
 | `python tools/art/make_app_icon.py` (2), **Windows** | wrote the icon |
+| `python3 tools/package/release.py assemble --platform linux --program <the release program of planning step 209, not rebuilt in step 210> --no-data --max-glibc 2.38 --out <a folder>` (7), twice, from two folders (planning step 210) | exit 0 both times, the same bytes (5,212,292; sha256 `5eeb3e28...`, taken from the final `LICENSE` and `NOTICE.md`, which hold the GCC runtime exception); unpacked with `tar xzf`: `LICENSE`, `NOTICE.md`, `PLAYING.txt`, `MagicPortals` and `assets/shaders` (17 files); the `LICENSE` and `NOTICE.md` in it are the repository's, byte for byte |
+| `python tools/ci/check_public.py --include-untracked` (the public-readiness check, `ci.md` section 8), **Windows**, Python 3.14 (planning step 210) | exit 0: no ERROR, 3 OWNER-FILE findings, 4 RECORD-PATH findings, 24 NOTE lines; the lines are the maintainer's to read |
 
 **Not run:** `git clone --recurse-submodules` and `git submodule update --init` against the real address (the clean clone was a local one, with the engine cloned from the local module repository and
 verified to be the pinned commit); `sudo apt-get install ...` (the packages were already there, checked with `dpkg -s`); everything in section 2 but the icon (**no Windows program was built, linked or started
