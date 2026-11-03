@@ -4,16 +4,16 @@
 
 **The 2D puzzle-platformer by Asantee Games, rebuilt for modern systems.**
 
-<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Windows.zip"><img alt="Download for Windows" height="56" src="https://img.shields.io/badge/Download%20for-Windows-2F7DE1?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>&nbsp;&nbsp;<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz"><img alt="Download for Linux" height="56" src="https://img.shields.io/badge/Download%20for-Linux-E0533D?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>
+<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Windows.zip"><img alt="Download for Windows" height="56" src="https://img.shields.io/badge/Download%20for-Windows-2F7DE1?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>&nbsp;&nbsp;<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk"><img alt="Download for Android" height="56" src="https://img.shields.io/badge/Download%20for-Android-1E8C6E?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>&nbsp;&nbsp;<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz"><img alt="Download for Linux" height="56" src="https://img.shields.io/badge/Download%20for-Linux-E0533D?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>
 
-<a href="#platforms"><img alt="Android, Mac, iPhone and iPad: not released yet" height="36" src="https://img.shields.io/badge/Android%20%C2%B7%20Mac%20%C2%B7%20iPhone%20%26%20iPad-not%20released%20yet-4B5563?style=for-the-badge&labelColor=1B1F3B"></a>
+<a href="#platforms"><img alt="Mac, iPhone and iPad: not released yet" height="36" src="https://img.shields.io/badge/Mac%20%C2%B7%20iPhone%20%26%20iPad-not%20released%20yet-4B5563?style=for-the-badge&labelColor=1B1F3B"></a>
 
-**New to this?** After the download, follow the [step-by-step guide](docs/install.md): Windows asks for a few extra clicks the first time.
+**New to this?** After the download, follow the [step-by-step guide](docs/install.md): Windows and Android each ask for a few extra clicks the first time.
 
 ### [How to install: step by step](docs/install.md)
 
 Free, with no ads and no accounts. The download is the whole game: 128 levels in four chapters, with the original's art and sound.<br>
-It runs on a 64-bit Windows PC (Windows 11 is the one it was run on) and on a 64-bit Linux PC from about 2022 on, and it needs a graphics driver with Vulkan 1.2.<br>
+It runs on a 64-bit Windows PC (Windows 11 is the one it was run on), on a 64-bit Linux PC from about 2022 on, and on an Android phone or tablet with Android 8 or newer, 64-bit or 32-bit (32-bit Android is new: [what is known](docs/android.md#12-a-phone-whose-android-is-32-bit-the-third-abi-armeabi-v7a)). It needs a graphics driver with Vulkan 1.2 on a PC and Vulkan 1.1 on a phone; most PCs from the last eight years have one, and so do many phones, but not all.<br>
 The Windows download is not code-signed yet, so Windows asks you to confirm before it runs, and **Windows 11 PCs with Smart App Control turned on may refuse to run it** ([how to check](docs/install.md#windows-pc)).
 
 Something not working? [Report a problem](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/issues/new/choose): the form asks for what a fix needs (your system, your graphics card and the game version).
@@ -36,7 +36,7 @@ Magic Portals is a 2D puzzle-platformer first made for phones by Asantee Games. 
 |---|---|
 | **The game** | All 128 levels, in four chapters of 32, with the original's art, lighting, sound and music, its screens (menu, chapters, level grid, achievements, credits) and its medals, kept between runs |
 | **Controls** | Modern on-screen controls by default: two walk arrows in the bottom corners, a touch or a click where the portal should go, and buttons to restart, pause and clear your portals. The original's classic layout is one tile away in Options, and *Adjust controls* changes the size, opacity and place of the modern ones. On a desktop the mouse stands in for a finger and the keyboard works too |
-| **Platforms** | Downloads for Windows and Linux; Android, macOS and iOS builds exist in the code and are not released yet ([Platforms](#platforms) says what each has been through) |
+| **Platforms** | Downloads for Windows, Linux and Android (phones with a 32-bit Android too); macOS and iOS builds exist in the code and are not released yet ([Platforms](#platforms) says what each has been through) |
 | **Parity** | It is built to play like the original and is measured against the original running in an emulator. It does not match it everywhere yet: [Status](#status) says where it differs |
 
 ## Platforms
@@ -47,7 +47,7 @@ What a run has shown, and what nobody knows yet. [docs/platforms.md](docs/platfo
 |---|---|---|
 | Windows | **Verified by a run.** The build runs on the Windows 11 PC that every test and capture was made on. A release program was built, started and read as bytes. | Windows 10, other graphics cards, a PC without the C++ runtime. |
 | Linux | **Verified by a run, without a real GPU.** Built with g++ and clang in a Linux subsystem of Windows (WSL, Ubuntu 24.04). The suites pass or skip, all 128 recorded win routes win, and a test level draws on a software Vulkan driver. | A real GPU on a real desktop, Wayland, other distributions, sound from a speaker. |
-| Android | **Verified on an emulator only.** On an x86_64 emulator it installs, all 128 levels start and all 128 routes win. | Any phone, 64-bit ARM code, speed, memory, real two-finger play. |
+| Android | **Verified on an emulator only.** On an x86_64 emulator it installs, all 128 levels start and all 128 routes win. The APK also carries a 64-bit ARM and a 32-bit ARM library (the 32-bit one for phones whose Android is 32-bit): they are compiled and linked, and have never been started. | Any phone, 64-bit or 32-bit ARM code running, speed, memory, real two-finger play. |
 | macOS | **Verified on a CI runner only.** GitHub's macOS runner built it and drew a test level on a virtual GPU. | A Mac that a person owns, a real Apple GPU, how it looks and plays. |
 | iOS | **Built, not run.** The device and simulator builds compile and link. | Everything about running it. |
 

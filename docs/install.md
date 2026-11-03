@@ -2,14 +2,15 @@
 
 Free, with no ads and no accounts. There is no installer: you unpack a folder and start the game from it.
 
-Pick your system: [Windows PC](#windows-pc) or [Linux PC](#linux-pc). Android, Mac, iPhone and iPad are not released yet (see [Platforms](../README.md#platforms)).
+Pick your device: [Windows PC](#windows-pc), [Android phone or tablet](#android-phone-or-tablet) or [Linux PC](#linux-pc). Mac, iPhone and iPad are not released yet (see [Platforms](../README.md#platforms)).
 
 | | File | Download |
 |---|---|---|
 | Windows | `MagicPortals-Windows.zip` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Windows.zip) |
+| Android | `MagicPortals-Android.apk` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk) |
 | Linux | `MagicPortals-Linux.tar.gz` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz) |
 
-Every release also has a [`SHA256SUMS.txt`](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/SHA256SUMS.txt) with the checksum of each file, and the [Releases page](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases) lists them all. Each download holds the whole game: the program, a `content` folder with the levels, pictures and sounds, a `PLAYING.txt` with a shorter version of this help, and the licence and notices.
+Every release also has a [`SHA256SUMS.txt`](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/SHA256SUMS.txt) with the checksum of each file, and the [Releases page](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases) lists them all. Each download holds the whole game. The Windows and Linux archives hold the program, a `content` folder with the levels, pictures and sounds, a `PLAYING.txt` with a shorter version of this help, and the licence and notices; the Android file is the app itself, with the game inside.
 
 The download is **not code-signed** (it has no digital signature from a publisher), so Windows asks you to confirm before it runs it. That is a fact about the file and not a warning about its contents; the checksums let you check that you have the file that was published.
 
@@ -38,6 +39,27 @@ Have fun!
 - **The game says its data was not found:** it was started from inside the zip, or `MagicPortals.exe` was moved out of its folder. Extract the whole zip and start the program where it is.
 - **Nothing happens, or a Smart App Control message:** see *Check this first on Windows 11* above.
 - **Anything else:** read the log, `%TEMP%\magicportals.log`, and [report a problem](#reporting-a-problem) with it.
+
+</details>
+
+## Android phone or tablet
+
+**You need:** Android 8.0 or newer and a phone or tablet whose graphics support Vulkan 1.1 (many phones from about 2018 on do, not all). The same file installs on a phone whose Android is 32-bit (some cheap phones are, mainly ones with Android Go) and on one whose Android is 64-bit; the installer picks the right program inside it. The 32-bit program has been compiled and tested as a stand-in on a PC, and **has not been started on a 32-bit phone**: if yours is one, please say how it went ([report a problem](#reporting-a-problem)).
+
+**[Download for Android](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk)**
+
+1. **Open the downloaded file** (in the notification, or in your *Downloads* or *Files* app).
+2. **If Android says it can't install apps from this source**, tap **Settings**, switch on **Allow from this source** for the app you opened the file with (your browser or *Files*), go back, and tap **Install**. Android asks this for every app that does not come from a store.
+3. **If Google Play Protect says the app is unrecognised**, tap **More details**, then **Install anyway**. The app is not published in a store, so Google has not seen it before.
+4. **Open the game.** The first start copies the game's files into the app, which takes a moment on a black screen; the next starts are quicker. The game plays in landscape.
+
+<details>
+<summary>It didn't install or start?</summary>
+
+- **“App not installed” or “not compatible”:** your phone is older than Android 8, or has no Vulkan 1.1 graphics. The game cannot run there.
+- **A message about Vulkan when the game starts:** the same cause; the message is the graphics system's own words, and it helps a report.
+- **The game says it has no space:** it needs about 26 MB free for its copy of the files, besides the app.
+- **Anything else:** [report a problem](#reporting-a-problem) with your phone model and its Android version.
 
 </details>
 
@@ -81,7 +103,7 @@ The modern on-screen controls are the default: the two arrows in the bottom corn
 
 ## Where the game keeps things
 
-Your medals, the sound and music switches, your achievements and your choice of controls are kept between runs, in `%APPDATA%\Magic Portals` on Windows and `~/.local/share/Magic Portals` on Linux. To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
+Your medals, the sound and music switches, your achievements and your choice of controls are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, and in the app's own storage on Android (uninstalling the app removes them). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
 
 ## Reporting a problem
 
