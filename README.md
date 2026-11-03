@@ -1,8 +1,43 @@
+<div align="center">
+
 # Magic Portals — Enhanced
+
+**The 2D puzzle-platformer by Asantee Games, rebuilt for modern systems.**
+
+<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Windows.zip"><img alt="Download for Windows" height="56" src="https://img.shields.io/badge/Download%20for-Windows-2F7DE1?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>&nbsp;&nbsp;<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz"><img alt="Download for Linux" height="56" src="https://img.shields.io/badge/Download%20for-Linux-E0533D?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>
+
+<a href="#platforms"><img alt="Android, Mac, iPhone and iPad: not released yet" height="36" src="https://img.shields.io/badge/Android%20%C2%B7%20Mac%20%C2%B7%20iPhone%20%26%20iPad-not%20released%20yet-4B5563?style=for-the-badge&labelColor=1B1F3B"></a>
+
+**New to this?** After the download, follow the [step-by-step guide](docs/install.md): Windows asks for a few extra clicks the first time.
+
+### [How to install: step by step](docs/install.md)
+
+Free, with no ads and no accounts. The download is the whole game: 128 levels in four chapters, with the original's art and sound.<br>
+It runs on a 64-bit Windows PC (Windows 11 is the one it was run on) and on a 64-bit Linux PC from about 2022 on, and it needs a graphics driver with Vulkan 1.2.<br>
+The Windows download is not code-signed yet, so Windows asks you to confirm before it runs, and **Windows 11 PCs with Smart App Control turned on may refuse to run it** ([how to check](docs/install.md#windows-pc)).
+
+Something not working? [Report a problem](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/issues/new/choose): the form asks for what a fix needs (your system, your graphics card and the game version).
+
+[![Licence: MIT-0](https://img.shields.io/badge/licence-MIT--0-1F6FEB)](LICENSE)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)
+![Vulkan](https://img.shields.io/badge/Vulkan-1.2-AC162C?logo=vulkan&logoColor=white)
+
+</div>
+
+## About
 
 Magic Portals is a 2D puzzle-platformer first made for phones by Asantee Games. You walk, shoot a portal at a wall and step through it to reach the door of each level. The original was delisted in 2025.
 
-**Magic Portals Enhanced** is a new version of that game. It runs on the [Supersonic Engine](https://github.com/IvanCvetanovic/Supersonic-Engine), an engine written in C++20 on Vulkan, and is meant to play like the original on five platforms. This repository holds the game's code, the tools that read the original's file formats, the tests and the documents. It holds no content of the original game: no art, audio, levels, texts or APK. See [Permission](#permission) and [Credits](#credits).
+**Magic Portals Enhanced** is a new version of that game. It runs on the [Supersonic Engine](https://github.com/IvanCvetanovic/Supersonic-Engine), an engine written in C++20 on Vulkan, and is meant to play like the original on five platforms. This repository holds the game's code, the tools that read the original's file formats, the tests and the documents. It holds no content of the original game: no art, audio, levels, texts or APK. See [Permission](#permission) and [Credits](#credits). The downloads on the [Releases page](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases) hold the whole game; this repository does not.
+
+## What's enhanced
+
+| | |
+|---|---|
+| **The game** | All 128 levels, in four chapters of 32, with the original's art, lighting, sound and music, its screens (menu, chapters, level grid, achievements, credits) and its medals, kept between runs |
+| **Controls** | Modern on-screen controls by default: two walk arrows in the bottom corners, a touch or a click where the portal should go, and buttons to restart, pause and clear your portals. The original's classic layout is one tile away in Options, and *Adjust controls* changes the size, opacity and place of the modern ones. On a desktop the mouse stands in for a finger and the keyboard works too |
+| **Platforms** | Downloads for Windows and Linux; Android, macOS and iOS builds exist in the code and are not released yet ([Platforms](#platforms) says what each has been through) |
+| **Parity** | It is built to play like the original and is measured against the original running in an emulator. It does not match it everywhere yet: [Status](#status) says where it differs |
 
 ## Platforms
 
@@ -16,13 +51,13 @@ What a run has shown, and what nobody knows yet. [docs/platforms.md](docs/platfo
 | macOS | **Verified on a CI runner only.** GitHub's macOS runner built it and drew a test level on a virtual GPU. | A Mac that a person owns, a real Apple GPU, how it looks and plays. |
 | iOS | **Built, not run.** The device and simulator builds compile and link. | Everything about running it. |
 
-No workflow of this repository has been run on GitHub except the one that builds the macOS and iOS programs, which ran twice before its file was edited again; the others have only been checked by tools ([docs/ci.md](docs/ci.md)).
+The workflows are started by hand, and [docs/ci.md](docs/ci.md) says what each has shown and what it has not.
 
 ## How to play
 
-There is no release yet. A release archive will hold the program with a `content` folder beside it; the program looks for the game's content there, or in the folder named by `--root` ([docs/building.md](docs/building.md), section 6).
+Download the archive for your system from the buttons at the top or from the [Releases page](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases), unpack the whole archive, and start `MagicPortals` (`MagicPortals.exe` on Windows) from the folder it unpacked into. The archive holds the program, a `content` folder with the game, a `PLAYING.txt` and the licence and notices; [docs/install.md](docs/install.md) goes through it step by step.
 
-Until then, a build from source runs a small hand-written test level that needs no game content ([docs/building.md](docs/building.md), section 5). Playing the full game needs the original's content, which this repository does not hold: a developer who has a copy converts it as [Local setup after cloning](#local-setup-after-cloning) says.
+A build from source runs a small hand-written test level that needs no game content ([docs/building.md](docs/building.md), section 5). Playing the full game from a source build needs the original's content, which this repository does not hold: a developer who has a copy converts it as [Local setup after cloning](#local-setup-after-cloning) says.
 
 ## Controls
 
