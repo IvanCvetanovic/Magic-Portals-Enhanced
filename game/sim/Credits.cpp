@@ -69,6 +69,33 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !Factor(strip, "fling_decay_per_tick", read.strip.flingDecayPerTick, why, "credits.strip")) {
         return fail();
     }
+    // The closing card (Enhanced): strictly, like the rest, and never empty - a card with no line would be a strip that grew for nothing.
+    const Json::Value& tail = credits["tail"];
+    if (!tail.IsObject() || !tail["lines"].IsArray() || tail["lines"].AsArray().empty()) {
+        error = path + ": credits.tail is an object with lines, and lines is not empty";
+        return false;
+    }
+    if (!Positive(tail, "height_units", read.tail.heightUnits, why, "credits.tail") ||
+        !Positive(tail, "centre_x_units", read.tail.centreXUnits, why, "credits.tail") ||
+        !Byte(tail, "ink_byte", read.tail.inkByte, why, "credits.tail")) {
+        return fail();
+    }
+    for (const Json::Value& item : tail["lines"].AsArray()) {
+        Rules::Tail::Line line;
+        if (!item.IsObject() || !Text(item, "words", line.words, why, "credits.tail.lines") ||
+            !Text(item, "font", line.font, why, "credits.tail.lines") ||
+            !Positive(item, "units_per_font_px", line.unitsPerFontPx, why, "credits.tail.lines") ||
+            !Positive(item, "centre_y_units", line.centreYUnits, why, "credits.tail.lines")) {
+            if (why.empty()) why = "credits.tail.lines holds an entry that is not an object";
+            return fail();
+        }
+        // The card lies under the picture and within the strip.
+        if (line.centreYUnits <= read.strip.sizeUnits.y || line.centreYUnits >= read.strip.sizeUnits.y + read.tail.heightUnits) {
+            why = "credits.tail.lines: \"" + line.words + "\" is not between the picture's end and the strip's end";
+            return fail();
+        }
+        read.tail.lines.push_back(std::move(line));
+    }
     out = std::move(read);
     return true;
 }
@@ -94,13 +121,33 @@ void Step(const Rules& rules, Scroll& scroll, const glm::dvec2& viewUnits, doubl
         scroll.moveSpeed *= rules.strip.flingDecayPerTick;
         scroll.y -= UnitsPerSecond(rules, viewUnits) * tickMs / 1000.0 - scroll.moveSpeed;
     }
-    const double minY = -rules.strip.sizeUnits.y;
+    const double minY = -StripHeight(rules);
     if (scroll.y < minY) scroll.y = viewUnits.y;
     if (scroll.y > viewUnits.y) scroll.y = minY;
 }
 
 double ColumnX(const Rules& rules, const glm::dvec2& viewUnits) {
     return viewUnits.x * rules.papyrus.xOfWidth.x * rules.papyrus.xOfWidth.y;
+}
+
+double StripHeight(const Rules& rules) {
+    return rules.strip.sizeUnits.y + rules.tail.heightUnits;
+}
+
+std::vector<Words> TailWords(const Rules& rules, const glm::dvec2& viewUnits, const Scroll& scroll) {
+    std::vector<Words> words;
+    const double x = ColumnX(rules, viewUnits) + rules.tail.centreXUnits;
+    for (const Rules::Tail::Line& line : rules.tail.lines) {
+        Words drawn;
+        drawn.text = line.words;
+        drawn.font = line.font;
+        drawn.centre = glm::dvec2(x, scroll.y + line.centreYUnits);
+        drawn.unitsPerFontPx = line.unitsPerFontPx;
+        drawn.rgbByte = rules.tail.inkByte;
+        drawn.alphaByte = rules.strip.alphaByte; // the picture's own alpha: one source of truth
+        words.push_back(std::move(drawn));
+    }
+    return words;
 }
 
 Hud::Rect BackHitRect(const Rules& rules, const glm::dvec2& viewUnits, double stateMs) {

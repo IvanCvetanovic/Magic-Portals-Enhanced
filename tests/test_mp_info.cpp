@@ -169,6 +169,48 @@ void TheCreditsFileSaysWhatWasDecoded() {
     CHECK_EQ(rules.strip.screenPxPerSecond, 64.0);
     CHECK_EQ(rules.strip.atScreenPx, 720.0);
     CHECK_EQ(rules.strip.flingDecayPerTick, 0.95);
+    // The closing card (ENHANCED, planning step 212: the original's strip names nothing of this version): the owner's name and the engine, as data.
+    CHECK_EQ(rules.tail.lines.size(), static_cast<std::size_t>(6));
+    CHECK_EQ(rules.tail.heightUnits, 212.0);
+    CHECK_EQ(rules.tail.centreXUnits, 128.0);
+    CHECK_EQ(rules.tail.inkByte, 0);
+    bool names = rules.tail.lines.size() == 6;
+    if (names) {
+        names = rules.tail.lines[0].words == "Magic Portals Enhanced" && rules.tail.lines[2].words == "Ivan Cvetanovic" &&
+                rules.tail.lines[4].words == "Supersonic Engine";
+    }
+    CHECK_MSG(names, "the card names the enhanced version, its maker and the engine");
+    for (const Credits::Rules::Tail::Line& line : rules.tail.lines) {
+        // Under the picture and inside the strip, on the original's fonts, in ASCII (the fonts hold ids 32..255 and the layout reads bytes).
+        CHECK_MSG(line.centreYUnits > rules.strip.sizeUnits.y && line.centreYUnits < Credits::StripHeight(rules),
+                  "\"" + line.words + "\" lies under the picture and inside the strip");
+        CHECK_MSG(line.font.size() > 4 && line.font.substr(line.font.size() - 4) == ".fnt", line.words + ": a font file");
+        CHECK_MSG(std::all_of(line.words.begin(), line.words.end(), [](unsigned char c) { return c >= 32 && c < 127; }),
+                  line.words + ": ASCII");
+    }
+    CHECK_EQ(Credits::StripHeight(rules), 512.0 + 212.0);
+}
+
+// The card lands where the strip puts it, in the column, at every shape of view (20:9 is a phone), and the original's four pieces do not change:
+// the Options screen borrows the credits' background and back button from them.
+void TheClosingCardStaysInTheColumnAtEveryAspect() {
+    const Credits::Rules rules = LoadCredits();
+    const glm::dvec2 view209(256.0 * 2400.0 / 1080.0, 256.0);
+    for (const glm::dvec2& view : {kView720, kView43, view209}) {
+        const std::string what = Num(view.x) + " x " + Num(view.y);
+        const Credits::Scroll scroll{100.0, 0.0};
+        const std::vector<Credits::Words> words = Credits::TailWords(rules, view, scroll);
+        CHECK_MSG(words.size() == rules.tail.lines.size(), what + ": one entry per line");
+        const double column = Credits::ColumnX(rules, view);
+        for (std::size_t i = 0; i < words.size() && i < rules.tail.lines.size(); ++i) {
+            CHECK_MSG(Near(words[i].centre.x, column + 128.0, 1e-9), what + ": centred in the 256-unit column");
+            CHECK_MSG(Near(words[i].centre.y, 100.0 + rules.tail.lines[i].centreYUnits, 1e-9), what + ": scrolls with the strip");
+            CHECK_EQ(words[i].rgbByte, 0);
+            CHECK_EQ(words[i].alphaByte, rules.strip.alphaByte);
+        }
+        // The pieces are the original's four, in the original's order: the card is not one of them.
+        CHECK_EQ(Credits::Pieces(rules, view, 1000.0, scroll, false).size(), static_cast<std::size_t>(4));
+    }
 }
 
 // A-C1: C0, C1, C2 and C3 where info.png and info_b.png have them.
@@ -248,21 +290,22 @@ void TheStripRisesAndComesRound() {
     CHECK_MSG(Near((256.0 - scroll.y) * kPxPerUnit / 10.0, 64.0, 64.0 * 0.01), "10 s: " + Num(256.0 - scroll.y));
     CHECK_MSG(Near(256.0 - scroll.y, speed * 10.0, 1e-6), "exactly 227.56 u in 600 ticks");
 
-    // The wrap: the top re-enters on the bottom edge once it is 512 u above the top.
+    // The wrap: the top re-enters on the bottom edge once the whole strip, the picture's 512 u and the closing card's 212 (ENHANCED, planning step 212), is
+    // above the top: (256 + 724) u at 0.3793 u a tick. The original's own loop was 768 u, 2025 ticks, 33.75 s.
     scroll = Credits::Start(kView720);
     int wrapped = -1;
-    for (int tick = 1; tick <= 2100 && wrapped < 0; ++tick) {
+    for (int tick = 1; tick <= 2700 && wrapped < 0; ++tick) {
         const double before = scroll.y;
         Credits::Step(rules, scroll, kView720, kTickMs, false, 0.0);
         if (scroll.y > before) wrapped = tick;
     }
-    CHECK_MSG(wrapped == 2025 || wrapped == 2026, "the wrap on tick " + std::to_string(wrapped) + " (768 u / 0.3793)");
+    CHECK_MSG(wrapped == 2584 || wrapped == 2585, "the wrap on tick " + std::to_string(wrapped) + " (980 u / 0.3793)");
     CHECK_MSG(Near(scroll.y, 256.0, 1e-9), "back on the bottom edge");
-    CHECK_MSG(Near(wrapped / 60.0, 33.75, 33.75 * 0.01), "period " + Num(wrapped / 60.0) + " s");
+    CHECK_MSG(Near(wrapped / 60.0, 43.07, 43.07 * 0.01), "period " + Num(wrapped / 60.0) + " s");
     // And the other way: dragged below the bottom, it comes back above the top.
     scroll.y = 250.0;
     Credits::Step(rules, scroll, kView720, kTickMs, true, 10.0);
-    CHECK_EQ(scroll.y, -512.0);
+    CHECK_EQ(scroll.y, -(512.0 + 212.0));
 }
 
 // A-C6: 1:1 while held, then the last tick's move decaying x0.95 a tick on top of
@@ -794,6 +837,7 @@ void runTests() {
     TheCreditsSitWhereTheStillsPutThem();
     TheCreditsBackButtonComesIn();
     TheStripRisesAndComesRound();
+    TheClosingCardStaysInTheColumnAtEveryAspect();
     TheStripFollowsAFingerAndIsFlung();
     TheSaveOpensAsTheOriginal();
     AchievementsFollowTheSave();

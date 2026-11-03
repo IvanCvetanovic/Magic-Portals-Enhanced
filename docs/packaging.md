@@ -166,8 +166,8 @@ translation unit that is given neither those two nor a suite's own declaration, 
 | `MAGICPORTALS_WIN_GUI` | OFF | the Windows release program (below) | **ON** on Windows, with MSVC; a configure with it ON on anything else stops |
 | `MAGICPORTALS_ICON` | empty | an `.ico` for the release program (nothing is committed: `tools/art/make_app_icon.py` draws one) | the file that tool writes, or the owner's own; used only with `MAGICPORTALS_WIN_GUI` |
 
-The version is `project(MagicPortals VERSION 0.1.0 ...)` in the top-level `CMakeLists.txt`: **one definition**, and the Windows file properties
-(`FileVersion`, `ProductVersion` 0.1.0.0) are made from it. 0.1.0 began as a pre-release placeholder and is the number of the files of the first release (section 8); whether a public release keeps it is the owner's.
+The version is `project(MagicPortals VERSION 0.1.1 ...)` in the top-level `CMakeLists.txt`: **one definition**, and the Windows file properties
+(`FileVersion`, `ProductVersion` 0.1.1.0) are made from it. 0.1.0 began as a pre-release placeholder and is the number of the files of the first release (section 8); 0.1.1 is the second release's (planning step 212: the loading screen's portal, the credits' closing card, the sides of the menu pictures and the original's icon); whether a public release keeps the numbering is the owner's.
 
 **The Windows release, exactly** (from a shell where MSVC is on `PATH`, e.g. after `vcvars64.bat`; use a build folder of its own that is
 gitignored, such as `out/build-release` (`/out/` is ignored), and not `build-play/`, which is the owner's play build
@@ -287,6 +287,7 @@ arithmetic alone: nothing is read, no file of the original is opened, and the ou
 by default: `icon_<1024 512 256 192 128 64 48 32 16>.png`, `magic_portals.ico` (16 to 256, PNG-compressed entries), `android/mipmap-*/ic_launcher.png`
 (48 72 96 144 192), `android/play_store_512.png` and `SHA256SUMS.txt`. It refuses to write inside the tracked tree. The colours are its own
 choice (the original's portals are blue and red; the orange is for legibility on a dark disc): the owner may want another.
+**The original's icon** (planning step 212). The owner asked for the original game's launcher icon on the phone. `python tools/package/original_icon.py --reference <reference folder> --out <folder>` reads the original APK's own icons from `<reference>/apk_work/decoded/res/drawable-{mdpi,hdpi,xhdpi}-v4/icon.png` (48, 72 and 96 pixels) and writes `android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png`: the first three are the original's files byte for byte, the 144 and 192 are made from the 96 by bicubic resampling on premultiplied alpha (the original has nothing larger). It writes only under `out/` or outside the repository (the content packager's rule) because the icon is the original's file; `tools/build_android.sh --icons <folder>` hands the set to the packager. The Windows program keeps the drawn icon, which CI builds into the program and which cannot be the original's there (no file of the original is on a runner).
 
 ## 7. The Apple layouts, and what adding the data to a macOS bundle costs
 

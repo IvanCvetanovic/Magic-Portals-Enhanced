@@ -3865,6 +3865,58 @@ void TheMainMenuActsOnTheRelease() {
     CHECK_MSG(layer.MenuScreen() == Screen::Main, "and let go off it: no press");
 }
 
+// The loading screen's portal stands where the character walks to, at every window shape (planning step 212). The owner's phone is 20:9: the portal's two
+// particle systems (the spiral the player sees) had been built at attach, before the engine publishes a viewport, on the 16:9 default, while the character,
+// the halos and the vanish were placed from the live view, so the character walked THROUGH the spiral and ended 74 units to its right. The case attaches
+// with NO viewport, as the program does (every other loading case publishes 1280x720 first, which equals the default and hid the bug), then publishes the
+// window and ticks.
+void TheLoadingPortalStandsWhereTheCharacterWalksToAtEveryAspect() {
+    namespace Loading = MagicPortals::Loading;
+    if (!OriginalArtIsThere("TheLoadingPortalStandsWhereTheCharacterWalksToAtEveryAspect")) return;
+    const auto check = [](const glm::vec2& first, const glm::vec2& then, const std::string& what) {
+        entt::registry registry;
+        MagicPortalsLayer layer(TestPaths(), "");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        publishViewport(registry, first);
+        for (int tick = 0; tick < 3; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        if (then != first) {
+            publishViewport(registry, then); // a window that changes shape while it loads: a phone turned
+            for (int tick = 0; tick < 3; ++tick) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+        }
+        const glm::dvec2 view(256.0 * static_cast<double>(then.x) / static_cast<double>(then.y), 256.0);
+        const glm::dvec2 portal = Loading::PortalAt(layer.LoadingRules(), view);
+        int systems = 0;
+        for (const MagicPortalsLayer::EmitterReport& report : layer.EmitterReports()) {
+            if (!EndsWith(report.bitmap, "portal_spiral.png") && !EndsWith(report.bitmap, "portal.png")) continue;
+            ++systems;
+            CHECK_MSG(glm::length(report.owner.atPx - portal) < 1e-3, // a float's rounding (3e-5 at 370 units) is not a place
+                      what + ": the owner of " + report.bitmap + " stands at (" + std::to_string(report.owner.atPx.x) + ", " +
+                          std::to_string(report.owner.atPx.y) + ") and the portal at (" + std::to_string(portal.x) + ", " +
+                          std::to_string(portal.y) + ")");
+            if (report.anyReleased) {
+                CHECK_MSG(glm::length(report.newestBornPx - portal) < 1e-3,
+                          what + ": the newest particle of " + report.bitmap + " was born away from the portal");
+            }
+        }
+        CHECK_MSG(systems == 2, what + ": the portal has two systems, found " + std::to_string(systems));
+    };
+    check(glm::vec2(2400.0f, 1080.0f), glm::vec2(2400.0f, 1080.0f), "20:9 (2400x1080)");
+    check(glm::vec2(1024.0f, 768.0f), glm::vec2(1024.0f, 768.0f), "4:3 (1024x768)");
+    check(glm::vec2(2560.0f, 1080.0f), glm::vec2(2560.0f, 1080.0f), "21:9 (2560x1080)");
+    check(glm::vec2(1280.0f, 720.0f), glm::vec2(1280.0f, 720.0f), "16:9 (1280x720), where it never was wrong");
+    check(glm::vec2(1280.0f, 720.0f), glm::vec2(2400.0f, 1080.0f), "16:9 turned to 20:9 while loading");
+}
+
 // The loading screen: 81 ticks of walking, the character gone on the 81st, the
 // 1000 ms hold, and the main menu's first tick the 143rd (owner ruling R4).
 void TheLoadingScreenLeadsToTheMenu() {
@@ -34526,6 +34578,7 @@ void runTests() {
     EscapePausesALevelAndResumesIt();
     TheMainMenuActsOnTheRelease();
     TheLoadingScreenLeadsToTheMenu();
+    TheLoadingPortalStandsWhereTheCharacterWalksToAtEveryAspect();
     TheMenuStatesOpenUnderABlack();
     TheBackKeyOnTheMainMenuQuits();
     TheMainMenusSwitchesAndCornerButtons();

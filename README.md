@@ -19,9 +19,7 @@ The Windows download is not code-signed yet, so Windows asks you to confirm befo
 
 Something not working? [Report a problem](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/issues/new/choose): the form asks for what a fix needs (your system, your graphics card and the game version).
 
-[![Licence: MIT-0](https://img.shields.io/badge/licence-MIT--0-1F6FEB)](LICENSE)
-![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)
-![Vulkan](https://img.shields.io/badge/Vulkan-1.2-AC162C?logo=vulkan&logoColor=white)
+[![Licence: MIT-0](https://img.shields.io/badge/licence-MIT--0-1F6FEB)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white) ![Vulkan](https://img.shields.io/badge/Vulkan-1.2-AC162C?logo=vulkan&logoColor=white)
 
 </div>
 
@@ -37,6 +35,7 @@ Magic Portals is a 2D puzzle-platformer first made for phones by Asantee Games. 
 |---|---|
 | **The game** | All 128 levels, in four chapters of 32, with the original's art, lighting, sound and music, its screens (menu, chapters, level grid, achievements, credits) and its medals, kept between runs |
 | **Controls** | Modern on-screen controls by default: two walk arrows in the bottom corners, a touch or a click where the portal should go, and buttons to restart, pause and clear your portals. The original's classic layout is one tile away in Options, and *Adjust controls* changes the size, opacity and place of the modern ones. On a desktop the mouse stands in for a finger and the keyboard works too |
+| **Wide screens** | On a phone or a monitor wider than 16:9 the menu pictures run on to the edges of the screen, in place of black columns, and the loading screen's portal stands where the character walks to at every shape of screen |
 | **Platforms** | Downloads for Windows, Linux and Android (phones with a 32-bit Android too); macOS and iOS builds exist in the code and are not released yet ([Platforms](#platforms) says what each has been through) |
 | **Parity** | It is built to play like the original and is measured against the original running in an emulator. It does not match it everywhere yet: [Status](#status) says where it differs |
 

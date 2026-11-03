@@ -2129,6 +2129,32 @@
       "speed_screen_px_per_s": 64,
       "speed_at_screen_px": 720,
       "fling_decay_per_tick": 0.95
+    },
+    "tail": {
+      "_source": [
+        "ENHANCEMENT, not the original: the original's strip ends one unit under the Ethanon logo (the picture's last opaque row is 511 of 512 units) and names nothing of",
+        "this version. This closing card follows it on the same strip, in the original's own bitmap fonts, and says who made the enhanced version and the engine it runs on.",
+        "WORDS: README.md 'Credits' ('The Supersonic Engine and this enhanced version are by Ivan Cvetanovic') and NOTICE.md's credit section; nothing is added that those",
+        "do not say, and no role is invented. All ASCII: the fonts hold ids 32..255 and the layout reads a string byte by byte (Hud::LayOutTextFrom).",
+        "INK: black, as the original's picture (every opaque pixel of hd/credit_name.png is rgb 0, drawn at alpha 230/255 by `strip.alpha_byte`): the `_shadow` fonts' glyphs are white, so",
+        "the tint is black and their drop shadow stays a soft black.",
+        "PLACEMENT: PORT, _guess: the lines are centred in the 256-unit column under the Ethanon logo (which is centred), 40 units under its last row as the picture's own gap",
+        "between its two logos; `height_units` is the strip's growth, so the loop is (512 + 212 + 256) / 22.7556 = 43.07 s instead of 33.75 s. Sizes are chosen so that the name",
+        "is about as tall as the picture's own names (cap height about 19-20 units). Retune after a capture.",
+        "centre_y_units is measured from the strip's top, in strip units; centre_x_units from the column's left edge."
+      ],
+      "_guess": true,
+      "height_units": 212,
+      "centre_x_units": 128,
+      "ink_byte": 0,
+      "lines": [
+        {"words": "Magic Portals Enhanced", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.26, "centre_y_units": 560},
+        {"words": "an enhanced version of Magic Portals by Asantee Games", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.125, "centre_y_units": 580},
+        {"words": "Ivan Cvetanovic", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.36, "centre_y_units": 618},
+        {"words": "the enhanced version and the Supersonic Engine", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.13, "centre_y_units": 642},
+        {"words": "Supersonic Engine", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.30, "centre_y_units": 684},
+        {"words": "github.com/IvanCvetanovic/Supersonic-Engine", "font": "Verdana40_shadow.fnt", "units_per_font_px": 0.20, "centre_y_units": 706}
+      ]
     }
   },
 

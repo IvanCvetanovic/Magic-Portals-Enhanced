@@ -34,6 +34,9 @@
 #   --version-code <n>   the APK's versionCode: a whole number that must go UP with every release, or Android refuses the update. Without it the packager
 #                        derives it from the version (major*10000 + minor*100 + patch; `python tools/package/version.py code` prints it), so that the number and the
 #                        version cannot disagree; give one to override it. versionName is the project VERSION in the top-level CMakeLists.txt, the one place it is written.
+#   --icons <folder>     the launcher icon set to use instead of the one tools/art/make_app_icon.py draws: android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png.
+#                        The original game's icon is such a set: `python tools/package/original_icon.py --reference <reference> --out <folder>` makes it from the
+#                        owner's own copy (the icon is the original's file, so it is never in the repository: docs/packaging.md, section 8)
 #   --config Release     the native build type (only Release is packaged)
 #   --jobs <n>           compile jobs per ABI (default 6; fewer when memory is short)
 #   --out <folder>       where the APK, SHA256SUMS.txt and the work folder go (default out/android, under the repository)
@@ -93,6 +96,7 @@ JOBS=6
 OUT_ARG=""
 BUILD_ONLY=0
 PACKAGE_ONLY=0
+ICONS=""
 SDK_ARG=""
 NDK_ARG=""
 BT_ARG=""
@@ -101,6 +105,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --abi) [ $# -ge 2 ] || die "--abi needs a value"; ABI_ARG="$2"; shift 2 ;;
         --config) [ $# -ge 2 ] || die "--config needs a value"; CONFIG="$2"; shift 2 ;;
+        --icons) [ $# -ge 2 ] || die "--icons needs a folder"; ICONS="$2"; shift 2 ;;
         --data) [ $# -ge 2 ] || die "--data needs a folder"; DATA="$2"; shift 2 ;;
         --no-data) NO_DATA=1; shift ;;
         --verification) VERIFICATION=1; shift ;;
@@ -284,6 +289,7 @@ if [ "$BUILD_ONLY" -eq 1 ]; then note "built (--build-only)"; exit 0; fi
 args=(build --repo "$(native "$REPO")" --sdk "$(native "$SDK")" --ndk "$(native "$NDK")" --build-tools "$BUILD_TOOLS_VERSION" --out "$(native "$OUT")")
 if [ "$NO_DATA" -eq 1 ]; then args+=(--no-data); else args+=(--package "$(native "$(posixp "$DATA")")"); fi
 [ -z "$VERSION_CODE" ] || args+=(--version-code "$VERSION_CODE")
+[ -z "$ICONS" ] || args+=(--icons "$(native "$(posixp "$ICONS")")")
 [ "$VERIFICATION" -eq 0 ] || args+=(--verification)
 [ "$PERF_DIAG" -eq 0 ] || args+=(--perf-diag)
 if [ "$RELEASE" -eq 1 ]; then

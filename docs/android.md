@@ -96,7 +96,10 @@ that is ignored), strips them, and calls the packager, which writes `out/android
   the minimum SDK is 26 and v2 is read from Android 7.0, so the three `META-INF` files that Step 203's APKs carried (221,636 bytes) served no phone this
   app installs on. **Run:** the APK verifies (v2 true, v3 true) and installs on the API 33 emulator; `inspect` refuses an APK that carries `META-INF`.
 * **The icon** is drawn at package time by `tools/art/make_app_icon.py` (the five launcher sizes and the 512 px store icon) into the work folder;
-  nothing of the kind is committed. Its colours are its own choice.
+  nothing of the kind is committed. Its colours are its own choice. That drawn icon is what release 0.1.0 carries, and the owner asked for the original's
+  (planning step 212): `python tools/package/original_icon.py --reference <reference> --out <folder>` writes the original's launcher icons (48, 72 and 96 pixels, the
+  original's files byte for byte; 144 and 192 resampled from the 96, because the original has nothing larger) into a folder under `out/`, and
+  `tools/build_android.sh --icons <folder>` (`android_package.py build --icons`) uses that set. It is the original's file, so it is only ever in `out/`.
 * **The variants.** A *player's* APK has `MAGICPORTALS_DEV_TOOLS` OFF: none of the developer's flags (`--route`, `--tap`, ...) exist in it.
   `--verification` builds the other kind (DEV_TOOLS ON, trees `out/build/android-<abi>-verification`, APK `MagicPortals-<version>-VERIFICATION-debug.apk`)
   **for driving an emulator run with `files/magicportals_args.txt`; it is never signed with a release key** and must never be mistaken for the shipped file.
@@ -208,8 +211,8 @@ Without a device (all run):
 
 ```
 tools/build_android.sh --abi all --package-only --data out/dist/content            (packages, then prints every check below)
-python tools/package/android_package.py inspect out/android/MagicPortals-0.1.0-debug.apk --sdk <sdk>
-python tools/package/android_package.py compare out/android/MagicPortals-0.1.0-debug.apk --package out/dist/content
+python tools/package/android_package.py inspect out/android/MagicPortals-0.1.1-debug.apk --sdk <sdk>
+python tools/package/android_package.py compare out/android/MagicPortals-0.1.1-debug.apk --package out/dist/content
 <build-tools>/aapt2 dump badging <apk>;  <build-tools>/zipalign -c -P 16 -v 4 <apk>;  java -jar <build-tools>/lib/apksigner.jar verify --print-certs <apk>
 ```
 

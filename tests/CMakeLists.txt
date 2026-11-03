@@ -292,6 +292,8 @@ add_mp_test(test_mp_sky)
 # The pixel-centre rule at the frame's edge: edge_cover.json and sim/EdgeCover's snap, strips and uv,
 # pure arithmetic and files the suite writes: it runs anywhere.
 add_mp_test(test_mp_edgecover)
+# The sides of a menu picture on a wide window: side_fill.json and sim/SideFill (planning step 212), pure arithmetic; it runs anywhere.
+add_mp_test(test_mp_sidefill)
 # The texture tiers and the one cut rule: tiers.json and sim/Tiers - which file of an
 # image the original draws, its size in units and its frames' uv - on files the suite
 # writes, and over the original's own tier folders, which are skipped without them and

@@ -398,6 +398,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Sky::LoadRules(m_paths.portData + "/sky.json", m_skyRules, error) &&
                       Sky::LoadSpaceRules(m_paths.portData + "/sky.json", m_spaceRules, error) &&
                       EdgeCover::LoadRules(m_paths.portData + "/edge_cover.json", m_edgeRules, error) &&
+                      SideFill::LoadRules(m_paths.portData + "/side_fill.json", m_sideFillRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
@@ -4137,6 +4138,8 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         // CreditsScreenLayer's constructor: the strip's top on the bottom edge.
         m_credits = Credits::Start(MenuBoxPx());
         m_creditsTouch = CreditsTouch{};
+        // The closing card's words are the original's fonts, loaded once for the run (a font already loaded is kept).
+        for (const Credits::Rules::Tail::Line& line : m_creditsRules.tail.lines) loadUiFont(line.font);
     }
     if (changed && screen == Screen::Options) {
         // The screen's words are the original's font: loaded once for the run, as the dashboard's are.
@@ -4502,6 +4505,22 @@ void MagicPortalsLayer::loadingTick(entt::registry& registry) {
                     0.0f);
     }
     const glm::dvec2 portal = Loading::PortalAt(rules, view);
+    // The portal's particle systems (the spiral the player sees) were built at attach, BEFORE the engine publishes a ViewportInfo, so on the 16:9 default
+    // aspect; every other drawable of this screen is placed from the live view each tick, which left the spiral standing where a 16:9 window would put it
+    // while the character walked to the true place: on a 20:9 phone it walked THROUGH the spiral and ended 74 units to its right. An emitter with no sprite
+    // keeps its owner (updateEmitters), and these two systems have no direction, gravity or start spread, so moving the owner and every particle by the
+    // same shift is exact. Nothing is rebuilt: a rebuild would draw from m_particleRandom and move the random stream of every level entered from the menu.
+    // The shift is 0 on a 16:9 window and after the first corrected tick, so a 16:9 run is what it was, and a window that changes shape is followed.
+    for (std::size_t i = 0; i < m_loadingPortalEmitters && i < m_emitters.size(); ++i) {
+        Emitter& emitter = m_emitters[i];
+        const glm::dvec2 shift = portal - emitter.owner.atPx;
+        if (shift.x == 0.0 && shift.y == 0.0) continue;
+        for (Particles::Particle& particle : emitter.particles) {
+            particle.atPx += shift;
+            particle.bornPx += shift;
+        }
+        emitter.owner.atPx = portal;
+    }
     if (m_loadingPortal != entt::null && registry.valid(m_loadingPortal)) {
         placeSprite(registry, m_loadingPortal, portal,
                     glm::dvec2(drawnImage(originalImage(m_artRules.portal.sprite)).units), 0.3f, 0.0f);
@@ -5036,6 +5055,16 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
     const Hud::Rect whole{glm::dvec2(0.0), view};
     const float black =
         static_cast<float>(MenuState::FadeAlphaByte(m_mainMenuRules.state, m_menuClock.wallMs)) / 255.0f;
+    // THE SIDES of a menu picture on a window wider than it (Enhanced, planning step 212; sim/SideFill): where the original shows the engine's black,
+    // the picture's own edge carried on and darkened. Drawn right after the picture, so under every button; nothing here is pressable. Empty at 16:9
+    // and 4:3, so those frames are what they were.
+    const auto fillSides = [&](const Hud::Rect& picture, const std::string& file) {
+        const std::string& image = menuPicture(file);
+        if (image.empty()) return;
+        for (const SideFill::Quad& quad : SideFill::Quads(m_sideFillRules, file, picture, view)) {
+            add(quad.rect, quad.textured ? image : std::string(), quad.colour, quad.uvMin, quad.uvMax);
+        }
+    };
 
     if (m_screen == Screen::Main) {
         // The background, then the layer's buttons in the order they were added,
@@ -5047,6 +5076,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             if (image.empty()) continue;
             const float grey = static_cast<float>(piece.rgbByte) / 255.0f;
             add(piece.rect, image, glm::vec4(grey, grey, grey, static_cast<float>(piece.alphaByte) / 255.0f));
+            if (piece.element == MainMenu::Element::Background) fillSides(piece.rect, piece.file);
         }
         // THE OPTIONS ENTRY (planning step 185), where the feature exists: the layer's last button, at its entrance. The gear the game drew
         // and wrote, or - with nowhere to write it - a flat quad on the button's box.
@@ -5077,6 +5107,21 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             if (image.empty()) continue;
             const float grey = static_cast<float>(piece.rgbByte) / 255.0f;
             add(piece.rect, image, glm::vec4(grey, grey, grey, static_cast<float>(piece.alphaByte) / 255.0f));
+            if (piece.element == Credits::Element::Background) fillSides(piece.rect, piece.file);
+        }
+        // THE CLOSING CARD (Enhanced, planning step 212): words under the original's picture on the same strip, drawn after it. The glyphs are the
+        // fonts' white; the tint is the picture's black at its alpha, so they read as part of it. A font that did not load draws nothing.
+        for (const Credits::Words& words : Credits::TailWords(m_creditsRules, view, m_credits)) {
+            const Supersonic::BitmapFont* font = uiFont(words.font);
+            if (font == nullptr) continue;
+            const auto& pages = font->Pages();
+            const float ink = static_cast<float>(words.rgbByte) / 255.0f;
+            for (const Hud::Glyph& glyph : Hud::LayOutText(*font, words.text, words.centre, words.unitsPerFontPx)) {
+                if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+                add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)],
+                    glm::vec4(ink, ink, ink, static_cast<float>(words.alphaByte) / 255.0f), glyph.uvOffset,
+                    glyph.uvOffset + glyph.uvScale);
+            }
         }
         add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
         return;
@@ -5095,6 +5140,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 case Options::Element::Back: {
                     const std::string& image = menuPicture(piece.file);
                     if (!image.empty()) add(piece.rect, image, colour);
+                    if (piece.element == Options::Element::Background) fillSides(piece.rect, piece.file);
                     break;
                 }
                 case Options::Element::Title:
@@ -5197,6 +5243,9 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             if (piece.kind == Dashboard::Kind::Sprite) {
                 const std::string& image = menuPicture(piece.file);
                 if (!image.empty()) add(piece.rect, image, colour);
+                if (piece.file == m_dashboardRules.background.sprite && piece.rect.size == m_dashboardRules.background.sizeUnits) {
+                    fillSides(piece.rect, piece.file);
+                }
                 continue;
             }
             const Supersonic::BitmapFont* font = uiFont(piece.file);
@@ -5218,8 +5267,12 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
     if (m_screen == Screen::Loading) {
         // BaseState::loop draws the black first; LoadingScreen::loop then writes
         // the dots, while it is still loading, and the logo on every frame.
-        add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
         const Loading::Rules& rules = m_loadingRules;
+        // The scene's background is a sprite of the scene, drawn under the overlay; the sides of its picture are overlay quads, drawn BEFORE the black so
+        // that they fade in with the scene.
+        fillSides(Hud::Rect{rules.background.centreOfScreen * view - rules.background.sizeUnits * 0.5, rules.background.sizeUnits},
+                  rules.background.sprite);
+        add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
         const int frame = m_menuClock.ticks + 1;
         if (Loading::IsLoading(rules, frame)) {
             const glm::dvec2 at = rules.dots.centreOfScreen * view;
@@ -5244,6 +5297,9 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             if (piece.kind == Selector::Kind::Sprite) {
                 const std::string& image = menuPicture(piece.file);
                 if (!image.empty()) add(piece.rect, image, colour, piece.uvMin, piece.uvMax);
+                if (piece.file == m_selectorRules.background.sprite && piece.rect.size == m_selectorRules.background.sizeUnits) {
+                    fillSides(piece.rect, piece.file);
+                }
                 continue;
             }
             const Supersonic::BitmapFont* font = uiFont(piece.file);

@@ -1,0 +1,37 @@
+{
+  "_about": [
+    "THE SIDES OF A MENU PICTURE ON A WIDE WINDOW (planning step 212; sim/SideFill.hpp). ENHANCED, not the original: the original's menu pictures were painted for the screens of",
+    "2013, so a window wider than 16:9 (a phone is 19.5:9 to 21:9) shows black columns where no picture is drawn. The owner asked for them to be filled with something more polished.",
+    "Each picture the fill knows is drawn as before; at each side where the window goes on past its visible content, a quad takes the picture's edge on outward and a feather of flat black",
+    "quads darkens it toward the window's side. `enabled: false` draws the original's frame. At 16:9 and 4:3 nothing is added (no gap), so those frames are as they were.",
+    "WHAT IS MEASURED: content_units. entities/main_menu_bg.png is 512 x 256 units; its columns 0-27 and 484-511 are exactly black (hd twin: columns 0-55 and 968-1023), so its content is",
+    "units 28 to 484, 456 wide (16:9 is 455.1). entities/world_select_bg.png has no black column. Every other number is a design choice made from mock-ups and is `_guess: true`:",
+    "steps (the feather's slices: alpha steps of max_alpha / steps stay below one level on the dark art), overlap_units (the textured quad runs this far under the picture, over its first",
+    "antialiased texel, one texel of the 1x file), min_gap_units, max_alpha, power, sample_inset_units (the edge column is sampled this far inside the content, never in the padding)."
+  ],
+  "side_fill": {
+    "enabled": true,
+    "steps": 64,
+    "overlap_units": 1.0,
+    "min_gap_units": 0.25,
+    "_guess": true,
+    "pictures": [
+      {
+        "sprite": "entities/main_menu_bg.png",
+        "mode": "edge",
+        "content_units": [28, 484],
+        "sample_inset_units": 0.5,
+        "max_alpha": 0.85,
+        "power": 1.0
+      },
+      {
+        "sprite": "entities/world_select_bg.png",
+        "mode": "mirror",
+        "content_units": [0, 512],
+        "sample_inset_units": 0.5,
+        "max_alpha": 0.6,
+        "power": 1.0
+      }
+    ]
+  }
+}

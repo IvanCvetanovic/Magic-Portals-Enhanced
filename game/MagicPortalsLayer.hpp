@@ -37,6 +37,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Dashboard.hpp"
 #include "sim/Earthquake.hpp"
 #include "sim/EdgeCover.hpp"
+#include "sim/SideFill.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
@@ -2407,6 +2408,8 @@ private:
     Art::Rules m_artRules;                  // the port's art.json
     Sky::Rules m_skyRules;                  // the port's sky.json
     EdgeCover::Rules m_edgeRules;           // the port's edge_cover.json
+    // The sides of a menu picture on a window wider than it (side_fill.json; Enhanced, planning step 212).
+    SideFill::Rules m_sideFillRules;
     std::vector<entt::entity> m_edgeStrips; // the pool of edge strips; those past the frame's use are hidden
     std::vector<EdgeCoverReport> m_edgeReports; // what the last frame's strips extend
     std::vector<entt::entity> m_edgeCulled; // the quads the last frame's cull hid, to show again

@@ -48,6 +48,21 @@ struct Rules {
         double atScreenPx = 0.0;        // the screen height those pixels are taken at (P2)
         double flingDecayPerTick = 0.0;
     } strip;
+
+    // ENHANCED (planning step 212): a closing card under the original's picture, on the same strip, in the original's fonts: who made this version and its
+    // engine. Data (ui.json `credits.tail`), centred in the column; the original's strip ends one unit under the Ethanon logo and has none.
+    struct Tail {
+        double heightUnits = 0.0;  // how far the strip grows below its picture
+        double centreXUnits = 0.0; // the column's middle, from its left edge
+        int inkByte = 0;           // the tint of the (white) glyphs: the picture's ink is black
+        struct Line {
+            std::string words;
+            std::string font; // a file of the original's data/ folder
+            double unitsPerFontPx = 0.0;
+            double centreYUnits = 0.0; // from the strip's top
+        };
+        std::vector<Line> lines;
+    } tail;
 };
 
 // ui.json's `ui_layer`, `menu_state` and `credits`, strictly.
@@ -76,6 +91,22 @@ void Step(const Rules& rules, Scroll& scroll, const glm::dvec2& viewUnits, doubl
 
 // The papyrus's and the strip's left edge.
 double ColumnX(const Rules& rules, const glm::dvec2& viewUnits);
+
+// The whole strip: the original's picture and the closing card under it. The wrap is taken at this, not at the picture's height.
+double StripHeight(const Rules& rules);
+
+// One line of the closing card as drawn this tick: its centre in view units, and the ink and alpha it is tinted with. The card is NOT a Piece: it
+// is words and not a picture, so Pieces (and the Options screen, which borrows the credits' background and back button from it) stay as the
+// original has them.
+struct Words {
+    std::string text;
+    std::string font;
+    glm::dvec2 centre{0.0};
+    double unitsPerFontPx = 0.0;
+    int rgbByte = 0;
+    int alphaByte = 255;
+};
+std::vector<Words> TailWords(const Rules& rules, const glm::dvec2& viewUnits, const Scroll& scroll);
 
 enum class Element { Background, Back, Papyrus, Strip };
 
