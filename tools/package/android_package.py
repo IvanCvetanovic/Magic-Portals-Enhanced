@@ -19,7 +19,8 @@ WHAT THE APK HOLDS, and where each part comes from (nothing is read from outside
                                      top-level CMakeLists.txt (the one definition) and versionCode is --version-code, else the rule of version.py
                                      (major*10000 + minor*100 + patch; planning step 208): aapt2 writes both in.
   classes.dex                        the engine's Java activity (engine/src/platform/android/java), javac then d8.
-  lib/<abi>/libMagicPortals.so       the libraries tools/build_android.sh built, each checked as an ELF file (machine, NEEDED, 16 KB alignment...).
+  lib/<abi>/libMagicPortals.so       the libraries tools/build_android.sh built (arm64-v8a, armeabi-v7a, x86_64: --lib takes any of them), each checked as an ELF file
+                                     of its ABI's class, ELF32 for armeabi-v7a and ELF64 for the others (machine, NEEDED, 16 KB alignment of the 64-bit ones...).
   assets/gamedata.list               the list the first-run unpack reads (game/sim/Unpack.hpp): a stamp, then `size TAB path` per file.
   assets/GameData/**                 the content packager's files (tools/package/package.py), EXACTLY the files its manifest.json lists, each
                                      re-hashed against it. The only input folder that holds the owner's data: --package. Nothing else is read from
@@ -32,9 +33,9 @@ WHAT IT REFUSES, each with a message that names the cause and a non-zero exit:
   link; a file in the folder the manifest does not list; a name that is not a safe relative path; anything on the never-package list (the original's
   scenes, .pvr/.pkm/.par/.enml, .exe/.dll/.so/.bin/.as, the APK, build folders ...) and a package that is itself under reference/apk or
   reference/ethanon; a build tree whose cache says Vulkan validation ON, baked data paths ON, the phone profile OFF or developer tools in a player's
-  build; a missing or unreadable library, or one that is not an ELF shared object of its ABI with only the allowed NEEDED libraries, 16 KB LOAD
-  alignment, no executable-and-writable segment and no text relocation; --release with the verification variant, with no key or with the debug key;
-  an output folder inside the repository other than under out/.
+  build; a missing or unreadable library, or one that is not an ELF shared object of its ABI (its machine AND its class, 32-bit for armeabi-v7a and 64-bit for the
+  others) with only the allowed NEEDED libraries, 16 KB LOAD alignment, no executable-and-writable segment and no text relocation; --release with the
+  verification variant, with no key or with the debug key; an output folder inside the repository other than under out/.
   a manifest that sets supersonic.reportTitle (the name the engine's crash report calls the game by, planning step 207) to a blank value or to a value aapt2 stores as a
   number, true/false, a colour or a reference (the engine reads the key as a string and would take it as absent), and an APK whose built manifest stores it so. `inspect`
   prints 'the crash report will call the game: ...' (the key, else the application's android:label: the engine's rule, copied here).
@@ -43,6 +44,7 @@ DETERMINISTIC: the same inputs give a byte-identical APK (sorted entries, a fixe
 deterministic RSA). The bytes the tools make are those of the Python zlib and the JDK's javac/d8 of the machine; two runs on one machine are equal.
 """
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -68,10 +70,15 @@ OWNED_ROOTS = (CONTENT_FOLDER, ENGINE_FOLDER)
 LIB_NAME = 'libMagicPortals.so'
 STAMP_CHARS = 32  # hex digits of the stamp: 128 bits of sha256
 
-ABI_MACHINE = {'arm64-v8a': 183, 'x86_64': 62}  # ELF e_machine: EM_AARCH64, EM_X86_64
+ABI_MACHINE = {'arm64-v8a': 183, 'armeabi-v7a': 40, 'x86_64': 62}  # ELF e_machine: EM_AARCH64, EM_ARM, EM_X86_64
+# The ELF class (EI_CLASS) of each ABI's libraries: armeabi-v7a is the one 32-bit ABI, so its file has the Elf32 structures (ELF_LAYOUTS below) and the other two the Elf64 ones.
+ABI_ELF_CLASS = {'arm64-v8a': 2, 'armeabi-v7a': 1, 'x86_64': 2}
 # Libraries the game may need from the phone (the C++ runtime is linked in statically, ANDROID_STL=c++_static).
 ALLOWED_NEEDED = ('libandroid.so', 'liblog.so', 'libvulkan.so', 'libaaudio.so', 'libc.so', 'libm.so', 'libdl.so')
-MIN_LOAD_ALIGN = 0x4000  # 16 KB pages
+# The page size a library's LOAD segments must be aligned to. Android 15 and Google Play ask for 16 KB pages of 64-bit code (arm64-v8a, x86_64): a device that runs
+# with 16 KB pages is a 64-bit one, and the NDK links those two ABIs that way by default. armeabi-v7a is not part of it: NDK r28 links it with 4 KB (0x1000) and a 32-bit
+# kernel does not use larger pages, so 4 KB is its floor; a segment below it is not loadable at all.
+MIN_LOAD_ALIGN = {'arm64-v8a': 0x4000, 'x86_64': 0x4000, 'armeabi-v7a': 0x1000}
 
 # Stored, not deflated, in the APK: formats that are compressed already (aapt2's own list, shortened to what the game has).
 STORED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.mp3', '.ogg', '.wav'}
@@ -496,33 +503,53 @@ def check_build_tree(tree, verification, perf_diag=False):
 
 # ---- ELF -----------------------------------------------------------------------------------------------------------------------------
 
+# The two layouts a library of an Android ABI can have, by EI_CLASS (elf.h's Elf32_* and Elf64_*; both little-endian). Not every difference is a width: the program header's FIELD ORDER
+# differs too (the 64-bit form moves p_flags up to second place, for alignment; the 32-bit form keeps it after p_memsz), so the order is data here and the reader looks fields up by name.
+ElfLayout = collections.namedtuple('ElfLayout', 'bits header_bytes phoff_fmt phoff_at phent_at phdr_fmt phdr_fields dyn_fmt')
+ELF_LAYOUTS = {
+    1: ElfLayout(32, 52, '<I', 0x1C, 0x2A, '<8I', ('p_type', 'p_offset', 'p_vaddr', 'p_paddr', 'p_filesz', 'p_memsz', 'p_flags', 'p_align'), '<iI'),
+    2: ElfLayout(64, 64, '<Q', 0x20, 0x36, '<IIQQQQQQ', ('p_type', 'p_flags', 'p_offset', 'p_vaddr', 'p_paddr', 'p_filesz', 'p_memsz', 'p_align'), '<qQ'),
+}
+
+
 def check_elf(path, abi):
-    """Facts of an ELF64 shared object, and the problems a phone would have with it. Pure Python: llvm-readelf is the cross-check, not the tool."""
+    """Facts of an ELF shared object, and the problems a phone would have with it: ELF32 for armeabi-v7a, ELF64 for the other ABIs (a library of the other class is a problem that
+    names both). A file that cannot be read as an ELF file of either class at all raises PackError. Pure Python: llvm-readelf is the cross-check, not the tool."""
     with open(path, 'rb') as f:
         data = f.read()
     problems = []
     if data[:4] != b'\x7fELF':
         raise PackError('%s is not an ELF file' % path)
-    if len(data) < 64 or data[4] != 2 or data[5] != 1:
-        raise PackError('%s is not a 64-bit little-endian ELF file' % path)
-    e_type, e_machine = struct.unpack_from('<HH', data, 0x10)
-    e_phoff, = struct.unpack_from('<Q', data, 0x20)
-    e_phentsize, e_phnum = struct.unpack_from('<HH', data, 0x36)
+    if len(data) < 6 or data[4] not in ELF_LAYOUTS or data[5] != 1:
+        raise PackError('%s is not a 32-bit or 64-bit little-endian ELF file' % path)
+    layout = ELF_LAYOUTS[data[4]]
+    if len(data) < layout.header_bytes:
+        raise PackError('%s is cut short: %d bytes, and the header of a %d-bit ELF file is %d' % (path, len(data), layout.bits, layout.header_bytes))
+    e_type, e_machine = struct.unpack_from('<HH', data, 0x10)  # the same two offsets in both classes
     facts = {'machine': e_machine, 'type': e_type, 'needed': [], 'load_aligns': [], 'rwx': 0, 'textrel': False, 'exec_stack': False}
     if e_type != 3:
         problems.append('not a shared object (ET_DYN): type %d' % e_type)
     if e_machine != ABI_MACHINE[abi]:
         problems.append('machine %d, the ABI %s wants %d' % (e_machine, abi, ABI_MACHINE[abi]))
+    want = ELF_LAYOUTS[ABI_ELF_CLASS[abi]]
+    if layout is not want:
+        # Stops here: a library of the wrong class is not one the ABI's loader would take whatever else it holds, and its other facts would be read for nothing (a file whose class byte
+        # is a lie would be read with structures it does not have).
+        problems.append('a %d-bit ELF file, the ABI %s wants a %d-bit one' % (layout.bits, abi, want.bits))
+        return facts, problems
+    e_phoff, = struct.unpack_from(layout.phoff_fmt, data, layout.phoff_at)
+    e_phentsize, e_phnum = struct.unpack_from('<HH', data, layout.phent_at)
     loads = []
     dynamic = None
     for i in range(e_phnum):
         off = e_phoff + i * e_phentsize
-        p_type, p_flags, p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align = struct.unpack_from('<IIQQQQQQ', data, off)
+        ph = dict(zip(layout.phdr_fields, struct.unpack_from(layout.phdr_fmt, data, off)))
+        p_type, p_flags, p_offset, p_vaddr, p_filesz, p_align = ph['p_type'], ph['p_flags'], ph['p_offset'], ph['p_vaddr'], ph['p_filesz'], ph['p_align']
         if p_type == 1:  # PT_LOAD
             loads.append((p_vaddr, p_offset, p_filesz))
             facts['load_aligns'].append(p_align)
-            if p_align < MIN_LOAD_ALIGN:
-                problems.append('a LOAD segment is aligned to 0x%x, below 0x%x (16 KB pages)' % (p_align, MIN_LOAD_ALIGN))
+            if p_align < MIN_LOAD_ALIGN[abi]:
+                problems.append('a LOAD segment is aligned to 0x%x, below 0x%x (%s)' % (p_align, MIN_LOAD_ALIGN[abi], '16 KB pages' if MIN_LOAD_ALIGN[abi] >= 0x4000 else '4 KB pages, the 32-bit floor'))
             if p_flags & 7 == 7:
                 facts['rwx'] += 1
                 problems.append('a LOAD segment is readable, writable and executable')
@@ -538,8 +565,8 @@ def check_elf(path, abi):
     needed_offsets = []
     strtab = None
     off, size = dynamic
-    for pos in range(off, off + size, 16):
-        tag, val = struct.unpack_from('<qQ', data, pos)
+    for pos in range(off, off + size, struct.calcsize(layout.dyn_fmt)):  # an entry is d_tag and d_val: 8 bytes in ELF32, 16 in ELF64
+        tag, val = struct.unpack_from(layout.dyn_fmt, data, pos)
         if tag == 0:
             break
         if tag == 1:  # DT_NEEDED

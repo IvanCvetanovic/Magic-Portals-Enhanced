@@ -83,11 +83,16 @@ APPLE_PLATFORMS = (MACOS, IOS)
 
 # What each platform's program may be. The name of the machine is the one the archive's name carries.
 PE_MACHINES = {0x8664: 'x64'}
-ELF_MACHINES = {62: 'x86_64', 183: 'arm64'}
+ELF_MACHINES = {62: 'x86_64', 183: 'arm64', 40: 'armv7'}  # EM_X86_64, EM_AARCH64, EM_ARM (an Android library of the ABI armeabi-v7a; no other platform takes it)
+# The EI_CLASS a file of each machine has here, and the width each class stands for. armeabi-v7a is the only 32-bit one, so a machine whose file says the other class is a file
+# that is not what it claims, and the Elf64 structures read out of an Elf32 file (or the reverse) are garbage.
+ELF_ARCH_CLASS = {'x86_64': 2, 'arm64': 2, 'armv7': 1}
+ELF_CLASS_BITS = {1: 32, 2: 64}
 MACHO_CPUS = {0x01000007: 'x86_64', 0x0100000C: 'arm64'}
-ACCEPTED_ARCHS = {WINDOWS: ('x64',), LINUX: ('x86_64',), MACOS: ('universal', 'arm64', 'x86_64'), IOS: ('arm64',), ANDROID_LIB: ('x86_64', 'arm64')}
+ACCEPTED_ARCHS = {WINDOWS: ('x64',), LINUX: ('x86_64',), MACOS: ('universal', 'arm64', 'x86_64'), IOS: ('arm64',), ANDROID_LIB: ('x86_64', 'arm64', 'armv7')}
 MACHO_LE_MAGIC, MACHO_FAT_MAGIC, MACHO_FAT64_MAGIC = b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf'
-ELF_SECTION_HEADER_BYTES = 64  # sizeof(Elf64_Shdr)
+ELF_SECTION_HEADER_BYTES = {1: 40, 2: 64}  # sizeof(Elf32_Shdr), sizeof(Elf64_Shdr)
+ELF_HEADER_BYTES = {1: 52, 2: 64}  # sizeof(Elf32_Ehdr), sizeof(Elf64_Ehdr)
 SYMBOL_TABLE_SECTION = '.symtab'
 MACHO_EXECUTE, MOST_FAT_ARCHS = 2, 30  # a Java class file starts with the fat magic too, and has no 30 architectures
 
@@ -266,17 +271,23 @@ def read_pe(data):
 
 
 def elf_section_names(data):
-    """The names of the sections of an ELF64 little-endian file, read from its section header table and the section-name string table; [] for a file with no table (a
-    program stripped to the bone has none). Raises BinaryError for a table that runs past the end of the file."""
-    shoff = struct.unpack_from('<Q', data, 0x28)[0]
-    shentsize, shnum, shstrndx = struct.unpack_from('<HHH', data, 0x3A)
-    if shoff == 0 or shnum == 0 or shentsize < ELF_SECTION_HEADER_BYTES or shstrndx >= shnum:
+    """The names of the sections of an ELF little-endian file of either class, read from its section header table and the section-name string table; [] for a file with no table (a
+    program stripped to the bone has none). Raises BinaryError for a table that runs past the end of the file. The class is the file's own (EI_CLASS), and so are the offsets: the
+    table's fields sit elsewhere, and in other widths, in an Elf32 header."""
+    cls = data[4]
+    if cls == 1:  # Elf32_Ehdr: e_shoff (4 bytes) at 0x20, then e_shentsize, e_shnum, e_shstrndx at 0x2E; the first six words of an Elf32_Shdr
+        shoff_fmt, shoff_at, counts_at, header_fmt = '<I', 0x20, 0x2E, '<IIIIII'
+    else:  # Elf64_Ehdr: e_shoff (8 bytes) at 0x28 and the three counts at 0x3A; the first six fields of an Elf64_Shdr
+        shoff_fmt, shoff_at, counts_at, header_fmt = '<Q', 0x28, 0x3A, '<IIQQQQ'
+    shoff = struct.unpack_from(shoff_fmt, data, shoff_at)[0]
+    shentsize, shnum, shstrndx = struct.unpack_from('<HHH', data, counts_at)
+    if shoff == 0 or shnum == 0 or shentsize < ELF_SECTION_HEADER_BYTES[cls] or shstrndx >= shnum:
         return []
     if shoff + shentsize * shnum > len(data):
         raise BinaryError('the section header table runs past the end of the file')
 
     def header(index):
-        return struct.unpack_from('<IIQQQQ', data, shoff + index * shentsize)  # name, type, flags, address, file offset, size
+        return struct.unpack_from(header_fmt, data, shoff + index * shentsize)  # name, type, flags, address, file offset, size
 
     _, _, _, _, names_at, names_size = header(shstrndx)
     table = data[names_at:names_at + names_size]
@@ -289,12 +300,18 @@ def elf_section_names(data):
 
 
 def read_elf(data):
-    if len(data) < 64 or data[:4] != b'\x7fELF':
+    if len(data) < min(ELF_HEADER_BYTES.values()) or data[:4] != b'\x7fELF':
         raise BinaryError('not an ELF file')
     cls, little = data[4], data[5]
+    if len(data) < ELF_HEADER_BYTES.get(cls, 0):
+        raise BinaryError('not an ELF file')
     etype, machine = struct.unpack_from('<HH', data, 0x10) if little == 1 else struct.unpack_from('>HH', data, 0x10)
-    sections = elf_section_names(data) if cls == 2 and little == 1 else []
-    return {'format': 'ELF', 'class': cls, 'little': little == 1, 'type': etype, 'machine': machine, 'arch': ELF_MACHINES.get(machine), 'sections': sections}
+    arch = ELF_MACHINES.get(machine)
+    # The sections are read only from a file whose class is the one its machine has: one that lies about its class has a table that would be read at the wrong offsets, and the
+    # refusal that names the class and the machine (check_program_bytes) is the answer to it, not a table that "runs past the end".
+    consistent = ELF_ARCH_CLASS.get(arch, cls) == cls
+    sections = elf_section_names(data) if cls in ELF_CLASS_BITS and little == 1 and consistent else []
+    return {'format': 'ELF', 'class': cls, 'little': little == 1, 'type': etype, 'machine': machine, 'arch': arch, 'sections': sections}
 
 
 def read_macho(data):
@@ -474,12 +491,19 @@ def check_program_bytes(data, platform, version=None, repo=None, also_forbid=(),
             elf = read_elf(data)
             r.arch = elf['arch']
             problems = []
-            if elf['class'] != 2 or not elf['little']:
-                problems.append('not a 64-bit little-endian ELF file')
+            if not elf['little']:
+                problems.append('not a little-endian ELF file')
+            if elf['class'] not in ELF_CLASS_BITS:
+                problems.append('ELF class %d is neither 32-bit (1) nor 64-bit (2)' % elf['class'])
             if elf['arch'] is None:
                 problems.append('ELF e_machine %d is not one this packager has a layout for' % elf['machine'])
-            elif elf['arch'] not in wanted:
-                problems.append('ELF machine %s is not one for %s (%s)' % (elf['arch'], platform, ', '.join(wanted)))
+            else:
+                if elf['arch'] not in wanted:
+                    problems.append('ELF machine %s is not one for %s (%s)' % (elf['arch'], platform, ', '.join(wanted)))
+                # The class is held to the machine's, whichever platform: an armeabi-v7a library is ELF32 and the other machines' files are ELF64 (see ELF_ARCH_CLASS).
+                if elf['class'] in ELF_CLASS_BITS and ELF_ARCH_CLASS[elf['arch']] != elf['class']:
+                    problems.append('the file is a %d-bit ELF file and its machine %d (%s) is a %d-bit one' % (
+                        ELF_CLASS_BITS[elf['class']], elf['machine'], elf['arch'], ELF_CLASS_BITS[ELF_ARCH_CLASS[elf['arch']]]))
             want_types = (3,) if platform == ANDROID_LIB else (2, 3)
             if elf['type'] not in want_types:
                 problems.append('ELF type %d is not %s' % (elf['type'], 'a shared object (ET_DYN)' if platform == ANDROID_LIB else 'an executable (ET_EXEC or ET_DYN)'))
@@ -487,7 +511,7 @@ def check_program_bytes(data, platform, version=None, repo=None, also_forbid=(),
                 for p in problems:
                     r.fail(STRUCTURE, p)
             else:
-                r.ok('format: ELF64, little-endian, machine %d (%s), type %d' % (elf['machine'], elf['arch'], elf['type']))
+                r.ok('format: ELF%d, little-endian, machine %d (%s), type %d' % (ELF_CLASS_BITS[elf['class']], elf['machine'], elf['arch'], elf['type']))
                 if platform == LINUX:
                     r.stripped = SYMBOL_TABLE_SECTION not in elf['sections']
                     r.has_debug = any(n.startswith('.debug') for n in elf['sections'])

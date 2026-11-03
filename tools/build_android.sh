@@ -16,7 +16,8 @@
 #   --no-data            a shell with no game data in it (what CI can build): the game starts and says it has no data.
 #
 # Options:
-#   --abi arm64-v8a|x86_64|all   which ABIs (default all: both go in the one APK)
+#   --abi arm64-v8a|armeabi-v7a|x86_64|all   which ABIs (default all: the three go in the one APK: arm64-v8a for most phones, armeabi-v7a for a phone whose
+#                        Android is 32-bit, which the installer refuses an APK without it for as "not compatible", and x86_64 for the emulator)
 #   --verification       THE VERIFICATION BUILD: MAGICPORTALS_DEV_TOOLS=ON, so the developer's flags (--route, --tap, --visit-levels ...) are in
 #                        the program, for a run on an emulator driven by files/magicportals_args.txt. Its trees, libraries and APK carry
 #                        VERIFICATION in their names, and it is never signed with a release key. A player's APK never has them.
@@ -124,9 +125,9 @@ done
 
 # ---- What was asked, checked before anything is built ---------------------------------------------------------------------------------
 case "$ABI_ARG" in
-    all) ABIS=(arm64-v8a x86_64) ;;
-    arm64-v8a|x86_64) ABIS=("$ABI_ARG") ;;
-    *) die "--abi wants arm64-v8a, x86_64 or all, got '$ABI_ARG'" ;;
+    all) ABIS=(arm64-v8a armeabi-v7a x86_64) ;;
+    arm64-v8a|armeabi-v7a|x86_64) ABIS=("$ABI_ARG") ;;
+    *) die "--abi wants arm64-v8a, armeabi-v7a, x86_64 or all, got '$ABI_ARG'" ;;
 esac
 [ "$CONFIG" = Release ] || die "only --config Release is packaged (got '$CONFIG')"
 if [ -n "$VERSION_CODE" ]; then case "$VERSION_CODE" in *[!0-9]*|0) die "--version-code wants a whole number of at least 1, got '$VERSION_CODE'" ;; esac; fi

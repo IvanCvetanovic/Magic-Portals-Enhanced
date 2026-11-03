@@ -305,7 +305,7 @@ jobs:
   windows:
     name: Windows - build, test, release program
     if: ${{ inputs.job == 'all' || inputs.job == 'windows' }}
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -457,7 +457,7 @@ jobs:
       # The game's library of each ABI is read as bytes like any other program (no baked path, no developer tools, no builder's account): it is the program of this platform.
       - name: Check the libraries
         run: |
-          for abi in arm64-v8a x86_64; do
+          for abi in arm64-v8a armeabi-v7a x86_64; do
             mkdir -p "$RUNNER_TEMP/libs/$abi"
             unzip -o -q "$APK" "lib/$abi/libMagicPortals.so" -d "$RUNNER_TEMP/libs/$abi"
             python3 tools/package/release.py check-program "$RUNNER_TEMP/libs/$abi/lib/$abi/libMagicPortals.so" --platform android-lib 2>&1 | tee -a "$RUNNER_TEMP/logs/check-program-android.log"

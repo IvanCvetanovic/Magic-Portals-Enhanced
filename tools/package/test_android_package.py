@@ -13,6 +13,7 @@ same names; the build-tree cache check; the ELF check on hand-made ELF files; th
 APK's list with the package's manifest; the output-folder rule; and the command line's refusals, each with a message and a non-zero exit.
 """
 import contextlib
+import glob
 import hashlib
 import io
 import json
@@ -71,26 +72,41 @@ def make_shaders(root, names=('a_vert.spv', 'a_frag.spv')):
     return root
 
 
-def make_elf(machine=62, etype=3, aligns=(0x4000, 0x4000), flags=(5, 6), needed=('libc.so', 'libm.so'), textrel=False, stack_flags=6, bits=2):
-    """A minimal ELF64 shared object: header, program headers (two LOADs, DYNAMIC, GNU_STACK), a string table and a dynamic section."""
+def make_elf(machine=62, etype=3, aligns=(0x4000, 0x4000), flags=(5, 6), needed=('libc.so', 'libm.so'), textrel=False, stack_flags=6, width=64, ei_class=None):
+    """A minimal ELF shared object: header, program headers (two LOADs, DYNAMIC, GNU_STACK), a string table and a dynamic section. `width` is the layout it is written in, 64
+    (the default: Elf64 structures, the ABIs arm64-v8a and x86_64) or 32 (Elf32, armeabi-v7a, machine 40). `ei_class` is the class BYTE the header carries, which follows `width` unless
+    a test wants a file that lies about it."""
+    if width not in (32, 64):
+        raise ValueError(width)
+    elf32 = width == 32
+    ph_size, ehdr_size = (32, 52) if elf32 else (56, 64)
     phnum = 4
     strtab = b'\0' + b''.join(n.encode() + b'\0' for n in needed)
     name_offsets, at = [], 1
     for n in needed:
         name_offsets.append(at)
         at += len(n) + 1
-    off_ph = 64
-    off_str = off_ph + phnum * 56
+    off_ph = ehdr_size
+    off_str = off_ph + phnum * ph_size
     off_dyn = (off_str + len(strtab) + 7) // 8 * 8
     dyn = [(1, o) for o in name_offsets] + [(5, off_str)] + ([(22, 0)] if textrel else []) + [(0, 0)]
-    dyn_bytes = b''.join(struct.pack('<qQ', t, v) for t, v in dyn)
+    dyn_bytes = b''.join(struct.pack('<iI' if elf32 else '<qQ', t, v) for t, v in dyn)  # d_tag and d_val: 8 bytes each in Elf32, 16 in Elf64
     total = off_dyn + len(dyn_bytes)
-    ehdr = b'\x7fELF' + bytes([bits, 1, 1, 0]) + b'\0' * 8
-    ehdr += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, off_ph, 0, 0, 64, 56, phnum, 0, 0, 0)
-    ph = struct.pack('<IIQQQQQQ', 1, flags[0], 0, 0, 0, total, total, aligns[0])           # LOAD over the whole file, vaddr 0
-    ph += struct.pack('<IIQQQQQQ', 1, flags[1], 0, 0x100000, 0x100000, 0, 0, aligns[1])    # a second LOAD, no bytes
-    ph += struct.pack('<IIQQQQQQ', 2, 6, off_dyn, off_dyn, off_dyn, len(dyn_bytes), len(dyn_bytes), 8)
-    ph += struct.pack('<IIQQQQQQ', 0x6474E551, stack_flags, 0, 0, 0, 0, 0, 16)
+    ehdr = b'\x7fELF' + bytes([ei_class or (1 if elf32 else 2), 1, 1, 0]) + b'\0' * 8
+    if elf32:
+        ehdr += struct.pack('<HHIIIIIHHHHHH', etype, machine, 1, 0, off_ph, 0, 0, ehdr_size, ph_size, phnum, 0, 0, 0)
+    else:
+        ehdr += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, off_ph, 0, 0, ehdr_size, ph_size, phnum, 0, 0, 0)
+
+    def phdr(p_type, p_flags, offset, address, filesz, memsz, align):
+        # Elf32_Phdr: type, offset, vaddr, paddr, filesz, memsz, FLAGS, align. Elf64_Phdr: type, FLAGS, offset, vaddr, paddr, filesz, memsz, align. The flags move.
+        if elf32:
+            return struct.pack('<8I', p_type, offset, address, address, filesz, memsz, p_flags, align)
+        return struct.pack('<IIQQQQQQ', p_type, p_flags, offset, address, address, filesz, memsz, align)
+    ph = phdr(1, flags[0], 0, 0, total, total, aligns[0])                         # LOAD over the whole file, vaddr 0
+    ph += phdr(1, flags[1], 0, 0x100000, 0, 0, aligns[1])                         # a second LOAD, no bytes
+    ph += phdr(2, 6, off_dyn, off_dyn, len(dyn_bytes), len(dyn_bytes), 8)
+    ph += phdr(0x6474E551, stack_flags, 0, 0, 0, 0, 16)
     data = ehdr + ph
     data += b'\0' * (off_str - len(data)) + strtab
     data += b'\0' * (off_dyn - len(data)) + dyn_bytes
@@ -685,21 +701,26 @@ class TheInspectLine(ManifestVariants):
     BADGING = ("package: name='com.ivancvetanovic.magicportals' versionCode='1' versionName='%s'\nsdkVersion:'26'\ntargetSdkVersion:'35'\n"
                "uses-feature: name='android.hardware.vulkan.version' version='4198400'\nuses-feature-not-required: name='android.hardware.touchscreen'\n"
                "uses-feature-not-required: name='android.hardware.gamepad'\nuses-feature: name='android.hardware.screen.landscape'\napplication-debuggable\n"
-               "native-code: 'x86_64'\napplication-label:'%s'\n")
+               "native-code: %s\napplication-label:'%s'\n")
+    ALL_THREE = {'arm64-v8a': make_elf(machine=183), 'armeabi-v7a': make_elf(machine=40, width=32), 'x86_64': make_elf()}
 
-    def inspect(self, label='Magic Portals Enhanced', tree_extra='', repo_manifest=None):
+    def inspect(self, label='Magic Portals Enhanced', tree_extra='', repo_manifest=None, libs=None, native=None):
+        """`libs`: {ABI: library bytes} the APK holds (default: x86_64 alone); `native`: the ABIs aapt2's badging says (default: the keys of `libs`, as aapt2 prints them)."""
+        libs = libs if libs is not None else {'x86_64': make_elf()}
+        native = sorted(libs) if native is None else native
         apk = self.path('MagicPortals-0.1.0-debug.apk')
         with zipfile.ZipFile(apk, 'w') as z:
-            z.writestr('lib/x86_64/libMagicPortals.so', make_elf())
+            for abi, data in libs.items():
+                z.writestr('lib/%s/libMagicPortals.so' % abi, data)
             z.writestr('assets/gamedata.list', ap.make_list([])[1])
         mask = 0
         for bit in range(32):
             mask |= 1 << bit
         tree = 'E: manifest\n  A: screenOrientation(0x0101001e)=0\n  A: configChanges(0x0101001f)=0x%x\n%s' % (mask, tree_extra)
-        answers = {'aapt2 dump badging': self.BADGING % (ap.read_version(REPO), label), 'aapt2 dump xmltree': tree, 'zipalign -c': 'Verification successful\n',
+        answers = {'aapt2 dump badging': self.BADGING % (ap.read_version(REPO), ' '.join("'%s'" % a for a in native), label), 'aapt2 dump xmltree': tree, 'zipalign -c': 'Verification successful\n',
                    'apksigner verify': 'Verifies\nVerified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate DN: CN=Android Debug\n'}
         repo = self.path('repo')
-        os.makedirs(os.path.join(repo, 'game', 'android'))
+        os.makedirs(os.path.join(repo, 'game', 'android'), exist_ok=True)  # exist_ok: a test may inspect more than one APK
         shutil.copyfile(repo_manifest or self.MANIFEST, os.path.join(repo, 'game', 'android', 'AndroidManifest.xml'))
         shutil.copyfile(os.path.join(REPO, 'CMakeLists.txt'), os.path.join(repo, 'CMakeLists.txt'))
 
@@ -737,6 +758,34 @@ class TheInspectLine(ManifestVariants):
     def test_an_apk_whose_label_is_not_the_manifests_is_a_problem(self):
         lines, problems = self.inspect(label='Penumbra')
         self.assertEqual(len([p for p in problems if 'application-label' in p]), 1, problems)
+
+    def test_an_apk_with_all_three_abis_is_inspected_library_by_library(self):
+        lines, problems = self.inspect(libs=self.ALL_THREE)
+        self.assertEqual(problems, [])
+        self.assertIn('native-code ABIs: arm64-v8a armeabi-v7a x86_64', lines)
+        self.assertIn('lib entries: lib/arm64-v8a/libMagicPortals.so lib/armeabi-v7a/libMagicPortals.so lib/x86_64/libMagicPortals.so', lines)
+        for abi, machine in (('arm64-v8a', 183), ('armeabi-v7a', 40), ('x86_64', 62)):
+            self.assertIn('lib/%s/libMagicPortals.so: machine %d, NEEDED libc.so libm.so, LOAD aligns 0x4000 0x4000, rwx 0, textrel False' % (abi, machine), lines)
+
+    def test_a_native_code_line_that_is_not_the_lib_entries_is_a_problem_both_ways(self):
+        # aapt2's badging lists two ABIs and the APK holds three libraries: the library nobody declared.
+        lines, problems = self.inspect(libs=self.ALL_THREE, native=['arm64-v8a', 'x86_64'])
+        self.assertEqual(len([p for p in problems if 'does not match the lib/ entries' in p]), 1, problems)
+        # and badging lists three and one library is missing: an APK that lacks a library it declares.
+        lines, problems = self.inspect(libs={k: v for k, v in self.ALL_THREE.items() if k != 'armeabi-v7a'}, native=sorted(self.ALL_THREE))
+        mismatch = [p for p in problems if 'does not match the lib/ entries' in p]
+        self.assertEqual(len(mismatch), 1, problems)
+        self.assertIn('armeabi-v7a', mismatch[0])
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_a_library_under_the_wrong_abi_folder_is_a_problem_naming_both(self):
+        # The 64-bit x86_64 library filed under the 32-bit ABI, and the 32-bit library filed under arm64-v8a.
+        lines, problems = self.inspect(libs={'armeabi-v7a': make_elf(machine=62)})
+        self.assertTrue(any(p.startswith('lib/armeabi-v7a/libMagicPortals.so: machine 62, the ABI armeabi-v7a wants 40') for p in problems), problems)
+        self.assertTrue(any(p.startswith('lib/armeabi-v7a/libMagicPortals.so: a 64-bit ELF file, the ABI armeabi-v7a wants a 32-bit one') for p in problems), problems)
+        lines, problems = self.inspect(libs={'arm64-v8a': make_elf(machine=183, width=32)})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertTrue(problems[0].startswith('lib/arm64-v8a/libMagicPortals.so: a 32-bit ELF file, the ABI arm64-v8a wants a 64-bit one'), problems)
 
 
 class TheSigning(unittest.TestCase):
@@ -954,6 +1003,13 @@ class ThePerformanceDiagnosticVariant(unittest.TestCase):
         _, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-PERFDIAG-debug.apk', {'lib/x86_64/libMagicPortals.so': self.DIAG, 'lib/arm64-v8a/libMagicPortals.so': self.PLAIN})
         self.assertTrue(problems and 'disagree' in problems[0])
 
+    def test_the_third_abis_library_is_held_to_the_same_variant(self):
+        names = ('lib/arm64-v8a/libMagicPortals.so', 'lib/armeabi-v7a/libMagicPortals.so', 'lib/x86_64/libMagicPortals.so')
+        line, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-PERFDIAG-debug.apk', {n: self.DIAG for n in names})
+        self.assertEqual(problems, [])
+        _, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-debug.apk', {names[0]: self.PLAIN, names[1]: self.DIAG, names[2]: self.PLAIN})
+        self.assertTrue(problems and 'disagree' in problems[0] and 'lib/armeabi-v7a/libMagicPortals.so has it' in problems[0], problems)
+
     def test_no_library_is_not_a_variant(self):
         line, problems = ap.check_perf_diag_variant('MagicPortals-0.1.0-debug.apk', {})
         self.assertEqual(len(problems), 1)
@@ -980,6 +1036,10 @@ class TheElfCheck(TempCase):
         put(path, make_elf(**kw))
         return ap.check_elf(path, abi)
 
+    def check32(self, **kw):
+        """A library of the 32-bit ABI as the phone loads it: Elf32 structures, machine 40 (EM_ARM); `kw` break one thing."""
+        return self.check('armeabi-v7a', **dict({'machine': 40, 'width': 32}, **kw))
+
     def test_a_good_library(self):
         facts, problems = self.check()
         self.assertEqual(problems, [])
@@ -987,6 +1047,9 @@ class TheElfCheck(TempCase):
         self.assertEqual(facts['machine'], 62)
         facts, problems = self.check('arm64-v8a', machine=183)
         self.assertEqual(problems, [])
+        facts, problems = self.check32()
+        self.assertEqual(problems, [])
+        self.assertEqual(facts['machine'], 40)
 
     def test_each_problem_is_found(self):
         self.assertTrue(any('machine' in p for p in self.check('arm64-v8a', machine=62)[1]), 'an x86_64 library for the arm64 slot')
@@ -1007,9 +1070,138 @@ class TheElfCheck(TempCase):
         put(self.path('a.so'), b'MZ\x90\0' + b'\0' * 100)
         with self.assertRaises(ap.PackError):
             ap.check_elf(self.path('a.so'), 'x86_64')
-        put(self.path('b.so'), make_elf(bits=1))
-        with self.assertRaises(ap.PackError):
-            ap.check_elf(self.path('b.so'), 'x86_64')
+        # What cannot be read as an ELF file of either class at all is an error, not a list of problems.
+        big_endian = bytearray(make_elf())
+        big_endian[5] = 2
+        unknown_class = make_elf(ei_class=3)
+        for name, data in (('big-endian', bytes(big_endian)), ('class 3', unknown_class), ('64-bit header cut short', make_elf()[:63]), ('32-bit header cut short', make_elf(width=32)[:51]),
+                           ('magic only', b'\x7fELF')):
+            put(self.path('b.so'), data)
+            with self.assertRaises(ap.PackError, msg=name):
+                ap.check_elf(self.path('b.so'), 'x86_64')
+
+    def test_a_64_bit_file_that_calls_itself_32_bit_is_a_class_problem_not_a_crash(self):
+        # This used to be a PackError (the check knew one class). Now class 1 is armeabi-v7a's, so the label is read and held to the ABI, and nothing is parsed under the Elf32 structures of
+        # a file that is not laid out so: the check stops at the class.
+        facts, problems = self.check('x86_64', ei_class=1)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertTrue(all(word in problems[0] for word in ('32-bit', '64-bit', 'x86_64')), problems)
+
+    def test_a_good_32_bit_library(self):
+        facts, problems = self.check32()
+        self.assertEqual(problems, [])
+        self.assertEqual((facts['machine'], facts['type'], facts['load_aligns'], facts['rwx'], facts['textrel'], facts['exec_stack']), (40, 3, [0x4000, 0x4000], 0, False, False))
+        # NDK r28 links armeabi-v7a with 4 KB pages (the library the build makes: 0x1000 on every LOAD), and 4 KB is enough for a 32-bit library; the same alignment on a 64-bit ABI is refused.
+        facts, problems = self.check32(aligns=(0x1000, 0x1000))
+        self.assertEqual((facts['load_aligns'], problems), ([0x1000, 0x1000], []))
+        self.assertTrue(any('16 KB' in p for p in self.check('arm64-v8a', machine=183, aligns=(0x1000, 0x1000))[1]))
+        self.assertTrue(any('16 KB' in p for p in self.check('x86_64', aligns=(0x1000, 0x1000))[1]))
+        # Three NEEDED entries and then DT_STRTAB: an entry read as 16 bytes instead of 8 would skip every second one and lose the string table.
+        facts, problems = self.check32(needed=('libc.so', 'libm.so', 'libdl.so'))
+        self.assertEqual((facts['needed'], problems), (['libc.so', 'libm.so', 'libdl.so'], []))
+
+    def test_every_problem_is_found_in_a_32_bit_library_one_at_a_time(self):
+        # Each fixture breaks ONE rule of an otherwise good Elf32 library, so a rule that stopped working would leave the list empty.
+        cases = (('an x86_64 machine in the arm slot', dict(machine=62), 'machine 62'), ('an aarch64 machine in the arm slot', dict(machine=183), 'machine 183'),
+                 ('a first LOAD aligned below 4 KB', dict(aligns=(0x800, 0x4000)), '4 KB pages'), ('a second LOAD aligned below 4 KB', dict(aligns=(0x4000, 0x800)), '4 KB pages'),
+                 ('a first LOAD that is rwx', dict(flags=(7, 6)), 'writable and executable'), ('a second LOAD that is rwx', dict(flags=(6, 7)), 'writable and executable'),
+                 ('text relocations', dict(textrel=True), 'text relocation'), ('a library off the allow-list', dict(needed=('libc.so', 'libc++_shared.so')), 'libc++_shared.so'),
+                 ('an executable stack', dict(stack_flags=7), 'the stack is executable'), ('an executable, not a shared object', dict(etype=2), 'shared object'))
+        for what, kw, word in cases:
+            facts, problems = self.check32(**kw)
+            self.assertEqual(len(problems), 1, '%s: %s' % (what, problems))
+            self.assertIn(word, problems[0], what)
+        # The facts say what was read: the flags of a LOAD are read from where the Elf32 header keeps them (after p_memsz), not where the Elf64 one does.
+        facts, _ = self.check32(aligns=(0x4000, 0x1000), flags=(7, 5))
+        self.assertEqual((facts['load_aligns'], facts['rwx']), ([0x4000, 0x1000], 1))
+
+    def test_the_class_of_a_library_must_be_the_abis(self):
+        # One rule broken at a time: the machine is right in the first three, so the class is the only problem; in the last two both are wrong and both are said.
+        for what, abi, kw in (('an Elf64 file with the arm machine, for armeabi-v7a', 'armeabi-v7a', dict(machine=40)), ('an Elf32 file with the aarch64 machine, for arm64-v8a', 'arm64-v8a', dict(machine=183, width=32)),
+                              ('an Elf32 file with the x86_64 machine, for x86_64', 'x86_64', dict(machine=62, width=32))):
+            facts, problems = self.check(abi, **kw)
+            self.assertEqual(len(problems), 1, '%s: %s' % (what, problems))
+            self.assertTrue(all(word in problems[0] for word in ('32-bit', '64-bit', abi)), '%s: the message names both classes and the ABI: %s' % (what, problems))
+        facts, problems = self.check('arm64-v8a', machine=40, width=32)  # the very bytes of a good armeabi-v7a library, given to the other ABI
+        self.assertEqual(len(problems), 2, 'the machine and the class: %s' % problems)
+        self.assertTrue(any('machine 40' in p for p in problems) and any('32-bit' in p and 'arm64-v8a' in p for p in problems), problems)
+        facts, problems = self.check('armeabi-v7a', machine=183)
+        self.assertEqual(len(problems), 2, problems)
+        self.assertTrue(any('machine 183' in p for p in problems) and any('64-bit' in p and 'armeabi-v7a' in p for p in problems), problems)
+
+    def test_the_abi_tables_agree(self):
+        self.assertEqual(ap.ABI_MACHINE, {'arm64-v8a': 183, 'armeabi-v7a': 40, 'x86_64': 62})  # EM_AARCH64, EM_ARM, EM_X86_64
+        self.assertEqual(sorted(ap.ABI_ELF_CLASS), sorted(ap.ABI_MACHINE), 'every ABI has a class')
+        self.assertEqual({abi for abi, cls in ap.ABI_ELF_CLASS.items() if cls == 1}, {'armeabi-v7a'}, 'the one 32-bit ABI')
+        self.assertEqual(sorted(ap.ABI_MACHINE), ['arm64-v8a', 'armeabi-v7a', 'x86_64'], 'the order the APK holds them in (assemble sorts)')
+
+    def test_the_layouts_are_the_sizes_of_elf_h(self):
+        # Pinned as numbers from elf.h (sizeof Elf32_Ehdr, Elf32_Phdr, Elf32_Dyn and the 64-bit ones), not read from the fabricator above.
+        for cls, header, phdr, dyn in ((1, 52, 32, 8), (2, 64, 56, 16)):
+            layout = ap.ELF_LAYOUTS[cls]
+            self.assertEqual((layout.header_bytes, struct.calcsize(layout.phdr_fmt), struct.calcsize(layout.dyn_fmt)), (header, phdr, dyn), cls)
+            self.assertEqual(sorted(layout.phdr_fields), sorted(('p_type', 'p_offset', 'p_vaddr', 'p_paddr', 'p_filesz', 'p_memsz', 'p_flags', 'p_align')))
+            data = make_elf(machine=40 if cls == 1 else 62, width=32 if cls == 1 else 64)
+            self.assertEqual(struct.unpack_from(layout.phoff_fmt, data, layout.phoff_at)[0], header, 'e_phoff')
+            self.assertEqual(struct.unpack_from('<H', data, layout.phent_at)[0], phdr, 'e_phentsize')
+        self.assertEqual(ap.ELF_LAYOUTS[1].phdr_fields.index('p_flags'), 6, 'Elf32_Phdr: p_flags comes after p_memsz')
+        self.assertEqual(ap.ELF_LAYOUTS[2].phdr_fields.index('p_flags'), 1, 'Elf64_Phdr: p_flags is second')
+
+
+def sections_needed(data):
+    """The DT_NEEDED names of an ELF file read by ANOTHER route than check_elf: through the section headers (the SHT_DYNAMIC section and its linked string table), not through the
+    program headers. Independent of the reader under test, and of the fabricator that makes its fixtures."""
+    if data[4] == 1:
+        shoff, = struct.unpack_from('<I', data, 0x20)
+        shentsize, shnum = struct.unpack_from('<HH', data, 0x2E)
+        shdr, dyn = '<IIIIIIIIII', '<iI'
+    else:
+        shoff, = struct.unpack_from('<Q', data, 0x28)
+        shentsize, shnum = struct.unpack_from('<HH', data, 0x3A)
+        shdr, dyn = '<IIQQQQIIQQ', '<qQ'
+    sections = [struct.unpack_from(shdr, data, shoff + i * shentsize) for i in range(shnum)]
+    names = []
+    for _name, kind, _flags, _addr, offset, size, link, _info, _align, _entsize in sections:
+        if kind == 6:  # SHT_DYNAMIC
+            strings = sections[link][4]
+            for pos in range(offset, offset + size, struct.calcsize(dyn)):
+                tag, val = struct.unpack_from(dyn, data, pos)
+                if tag == 0:
+                    break
+                if tag == 1:
+                    names.append(data[strings + val:data.index(b'\0', strings + val)].decode('ascii'))
+    return names
+
+
+def find_ndk_library(triple, name):
+    """The NDK's own `name` for the target `triple` (a real ELF file, made by a linker that is not this repository's code), or None: then the test that needs it is skipped, and says so."""
+    roots = [os.environ.get(key) for key in ('ANDROID_NDK_ROOT', 'ANDROID_NDK_HOME', 'ANDROID_NDK')]
+    for sdk in (os.environ.get('ANDROID_HOME'), os.environ.get('ANDROID_SDK_ROOT'), os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Android', 'Sdk')):
+        roots += sorted(glob.glob(os.path.join(sdk or '', 'ndk', '*')), reverse=True)
+    for root in roots:
+        for hit in glob.glob(os.path.join(root or '', 'toolchains', 'llvm', 'prebuilt', '*', 'sysroot', 'usr', 'lib', triple, name)):
+            if os.path.isfile(hit):
+                return hit
+    return None
+
+
+class TheRealElf32(TempCase):
+    """The hand-made files above are written by the hands that wrote the reader. The NDK's own libc++_shared.so for armeabi-v7a is a real ELF32 file from someone else's linker."""
+    def test_the_readers_view_of_a_real_arm_library_is_what_its_section_table_says(self):
+        found = find_ndk_library('arm-linux-androideabi', 'libc++_shared.so')
+        if found is None:
+            skip_loudly(self, 'no Android NDK with an armeabi-v7a libc++_shared.so here: check_elf was NOT compared with a real ELF32 file')
+        with open(found, 'rb') as f:
+            data = f.read()
+        self.assertEqual(data[4], 1, 'a 32-bit file')
+        facts, problems = ap.check_elf(found, 'armeabi-v7a')
+        self.assertEqual((facts['machine'], facts['type']), (40, 3))
+        self.assertTrue(sections_needed(data), 'the library needs the C library')
+        self.assertEqual(facts['needed'], sections_needed(data), 'the NEEDED names through the program headers and through the section headers')
+        self.assertTrue(facts['load_aligns'] and all(a >= 0x1000 and a & (a - 1) == 0 for a in facts['load_aligns']), facts['load_aligns'])
+        self.assertEqual((facts['rwx'], facts['textrel'], facts['exec_stack']), (0, False, False), 'a toolchain library has none of the three')
+        self.assertEqual([p for p in problems if '16 KB' not in p], [], 'whatever else it is, it is not wrong in these ways (its 4 KB alignment, if it has it, is the NDK default for 32-bit)')
+        self.assertTrue(any('wants a 64-bit one' in p for p in ap.check_elf(found, 'arm64-v8a')[1]), 'and it is not an arm64-v8a library')
 
 
 # ---- the zip -----------------------------------------------------------------------------------------------------------------------------
@@ -1029,8 +1221,10 @@ class TheAssembledZip(TempCase):
         self.base = self.path('base.apk')
         make_base_apk(self.base)
         put(self.path('classes.dex'), b'dex\n035\0')
-        self.libs = {'x86_64': self.path('x.so'), 'arm64-v8a': self.path('a.so')}
+        # All three ABIs, given in an order that is NOT the APK's (x86_64, armeabi-v7a, arm64-v8a), so that only the sort in assemble puts them in order.
+        self.libs = {'x86_64': self.path('x.so'), 'armeabi-v7a': self.path('v7.so'), 'arm64-v8a': self.path('a.so')}
         put(self.libs['x86_64'], make_elf())
+        put(self.libs['armeabi-v7a'], make_elf(machine=40, width=32))
         put(self.libs['arm64-v8a'], make_elf(machine=183))
         self.content = ap.load_package(self.package)
         self.shader_list = ap.load_shaders(self.shaders)
@@ -1052,9 +1246,11 @@ class TheAssembledZip(TempCase):
             names = z.namelist()
             self.assertEqual(names[:3], ['AndroidManifest.xml', 'resources.arsc', 'res/mipmap-mdpi/ic_launcher.png'], "aapt2's entries first, as they came")
             self.assertEqual(names[3], 'classes.dex')
-            self.assertEqual(names[4:6], ['lib/arm64-v8a/libMagicPortals.so', 'lib/x86_64/libMagicPortals.so'])
-            self.assertEqual(names[6], 'assets/gamedata.list')
-            assets = [n[len('assets/'):] for n in names[7:]]
+            self.assertEqual(names[4:7], ['lib/arm64-v8a/libMagicPortals.so', 'lib/armeabi-v7a/libMagicPortals.so', 'lib/x86_64/libMagicPortals.so'])
+            for abi, machine, width in (('arm64-v8a', 183, 64), ('armeabi-v7a', 40, 32), ('x86_64', 62, 64)):
+                self.assertEqual(z.read('lib/%s/libMagicPortals.so' % abi), make_elf(machine=machine, width=width), 'each entry holds the library of its ABI')
+            self.assertEqual(names[7], 'assets/gamedata.list')
+            assets = [n[len('assets/'):] for n in names[8:]]
             self.assertEqual(assets, ['GameData/' + r for r, _, _ in self.content] + ['engine/assets/shaders/' + n for n, _, _, _ in self.shader_list])
             self.assertEqual(z.getinfo('resources.arsc').compress_type, zipfile.ZIP_STORED, 'resources.arsc stays stored')
             self.assertEqual(z.getinfo('assets/GameData/assets/entities/tile_a.png').compress_type, zipfile.ZIP_STORED, 'a picture is already compressed')
@@ -1187,6 +1383,38 @@ class TheCommandLine(TempCase):
                                   '--no-data', '--lib', 'x86_64=' + wrong)
         self.assertEqual(code, 2)
         self.assertIn('not fit for a phone', err)
+
+    def build_libs(self, *specs):
+        """['--lib', '<abi>=<file>', ...] for (abi, ELF bytes) pairs, the files written to the temporary folder."""
+        args = []
+        for abi, data in specs:
+            put(self.path('lib-' + abi + '.so'), data)
+            args += ['--lib', abi + '=' + self.path('lib-' + abi + '.so')]
+        return args
+
+    def test_the_third_abi_is_a_library_argument_like_the_others(self):
+        code, err = self.run_main('build', '--repo', REPO, '--sdk', self.path('no-sdk'), '--build-tools', '35.0.0', '--out', os.path.join(REPO, 'out', 'android-unit-test'), '--no-data',
+                                  '--lib', 'mips=' + self.path('x.so'))
+        self.assertEqual(code, 2)
+        for abi in ('arm64-v8a', 'armeabi-v7a', 'x86_64'):
+            self.assertIn(abi, err, 'the refusal of an unknown ABI lists the ones there are')
+        # All three are accepted as arguments and every one of their libraries passes the ELF check: the first refusal is then the build tree's, which comes after.
+        cache = self.path('tree', 'CMakeCache.txt')
+        put(cache, 'CMAKE_BUILD_TYPE:STRING=Release\nSUPERSONIC_ENABLE_VALIDATION:BOOL=ON\nMAGICPORTALS_BAKED_PATHS:BOOL=OFF\nMAGICPORTALS_MOBILE:BOOL=ON\nMAGICPORTALS_DEV_TOOLS:STRING=OFF\n')
+        libs = self.build_libs(('x86_64', make_elf()), ('armeabi-v7a', make_elf(machine=40, width=32)), ('arm64-v8a', make_elf(machine=183)))
+        code, err = self.run_main('build', '--repo', REPO, '--sdk', self.path('no-sdk'), '--build-tools', '35.0.0', '--out', os.path.join(REPO, 'out', 'android-unit-test'),
+                                  '--no-data', *libs, '--build-tree', self.path('tree'))
+        self.assertEqual(code, 2)
+        self.assertIn('validation', err)
+        self.assertNotIn('not fit for a phone', err)
+
+    def test_a_library_of_the_wrong_class_for_its_abi_is_refused_before_anything_is_built(self):
+        for abi, data in (('armeabi-v7a', make_elf(machine=40)), ('arm64-v8a', make_elf(machine=183, width=32)), ('x86_64', make_elf(machine=62, width=32))):
+            code, err = self.run_main('build', '--repo', REPO, '--sdk', self.path('no-sdk'), '--build-tools', '35.0.0', '--out', os.path.join(REPO, 'out', 'android-unit-test'),
+                                      '--no-data', *self.build_libs((abi, data)))
+            self.assertEqual(code, 2, abi)
+            self.assertIn('not fit for a phone', err, abi)
+            self.assertTrue('32-bit' in err and '64-bit' in err and abi in err, '%s: the refusal names both classes and the ABI: %s' % (abi, err))
 
     def test_a_tree_with_validation_on_is_refused(self):
         lib = self.path('x.so')

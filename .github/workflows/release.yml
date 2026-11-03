@@ -141,7 +141,7 @@ jobs:
   windows:
     name: Windows program
     needs: [version]
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -234,7 +234,7 @@ jobs:
       - name: Check the libraries
         run: |
           apk="$(ls "$RUNNER_TEMP"/programs/android/MagicPortals-*-nodata-debug.apk)"
-          for abi in arm64-v8a x86_64; do
+          for abi in arm64-v8a armeabi-v7a x86_64; do
             mkdir -p "$RUNNER_TEMP/libs/$abi"
             unzip -o -q "$apk" "lib/$abi/libMagicPortals.so" -d "$RUNNER_TEMP/libs/$abi"
             python3 tools/package/release.py check-program "$RUNNER_TEMP/libs/$abi/lib/$abi/libMagicPortals.so" --platform android-lib 2>&1 | tee -a "$RUNNER_TEMP/logs/check-program-android.log"

@@ -29,6 +29,7 @@ import android_package as ap  # noqa: E402
 import package as pk  # noqa: E402
 import release as rl  # noqa: E402
 import version as vs  # noqa: E402
+from test_android_package import find_ndk_library  # noqa: E402  (a real ELF32 file from the NDK, for the one test that reads it)
 
 REPO = os.path.dirname(os.path.dirname(HERE))
 VERSION = vs.read_version(REPO)
@@ -118,9 +119,13 @@ def make_pe(machine=0x8664, subsystem=2, imports=('KERNEL32.dll', 'USER32.dll'),
     return bytes(header) + body
 
 
-def make_elf_program(machine=62, etype=3, cls=2, little=1, payload=None, glibc=('2.34', '2.38'), glibcxx=('3.4.29', '3.4.32'), sections=None, table_past_the_end=False):
+def make_elf_program(machine=62, etype=3, cls=None, little=1, payload=None, glibc=('2.34', '2.38'), glibcxx=('3.4.29', '3.4.32'), sections=None, table_past_the_end=False, width=64):
     """`sections`: the names of the sections the program has (None: no section header table at all, which reads as a program stripped to the bone). The table is written
-    after the payload: a null section, one section per name, and the section-name string table last."""
+    after the payload: a null section, one section per name, and the section-name string table last. `width` is the layout: 64 (Elf64, the default) or 32 (Elf32: the header is
+    52 bytes and a section header 40, a library of the ABI armeabi-v7a, machine 40). `cls` is the class BYTE the header carries; it follows `width` unless a test wants a lie."""
+    elf32 = width == 32
+    head_size, section_size = (52, 40) if elf32 else (64, 64)
+    cls = cls if cls is not None else (1 if elf32 else 2)
     payload = game_payload() if payload is None else payload
     names = b''.join(b'GLIBC_%s\0' % v.encode() for v in glibc) + b''.join(b'GLIBCXX_%s\0' % v.encode() for v in glibcxx)
     body = b'\0' * 64 + names + payload
@@ -132,19 +137,23 @@ def make_elf_program(machine=62, etype=3, cls=2, little=1, payload=None, glibc=(
             offsets[n] = len(strings)
             strings += n.encode() + b'\0'
         body += strings
-        string_at = 64 + len(body) - len(strings)
+        string_at = head_size + len(body) - len(strings)
         body += b'\0' * (-len(body) % 8)
-        shoff = 64 + len(body)
-        headers = b'\0' * 64  # the null section
+        shoff = head_size + len(body)
+        headers = b'\0' * section_size  # the null section
         for n in list(sections) + ['.shstrtab']:
             at, size = (string_at, len(strings)) if n == '.shstrtab' else (0, 0)
-            headers += struct.pack('<IIQQQQIIQQ', offsets[n], 3 if n == '.shstrtab' else 1, 0, 0, at, size, 0, 0, 1, 0)
+            # name, type, flags, address, file offset, size, link, info, alignment, entry size: ten words of 4 bytes in Elf32, and the 8-byte ones in Elf64
+            headers += struct.pack('<10I' if elf32 else '<IIQQQQIIQQ', offsets[n], 3 if n == '.shstrtab' else 1, 0, 0, at, size, 0, 0, 1, 0)
         shnum = len(sections) + 2
         body += headers
         if table_past_the_end:
             shoff += 10_000
     head = b'\x7fELF' + bytes([cls, little, 1, 0]) + b'\0' * 8
-    head += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, 64, shoff, 0, 64, 56, 0, 64 if sections is not None else 0, shnum, shnum - 1 if shnum else 0)
+    if elf32:
+        head += struct.pack('<HHIIIIIHHHHHH', etype, machine, 1, 0, head_size, shoff, 0, head_size, 32, 0, section_size if sections is not None else 0, shnum, shnum - 1 if shnum else 0)
+    else:
+        head += struct.pack('<HHIQQQIHHHHHH', etype, machine, 1, 0, head_size, shoff, 0, head_size, 56, 0, section_size if sections is not None else 0, shnum, shnum - 1 if shnum else 0)
     return head + body
 
 
@@ -314,7 +323,9 @@ class TheFormatsAndMachines(Temp):
         self.assertEqual(checked(make_macho(0x0100000C), rl.IOS).arch, 'arm64')
         self.assertEqual(checked(make_elf_program(machine=183), rl.ANDROID_LIB).arch, 'arm64')
         self.assertEqual(checked(make_elf_program(machine=62), rl.ANDROID_LIB).arch, 'x86_64')
-        for platform, data in ((rl.WINDOWS, make_pe()), (rl.LINUX, make_elf_program()), (rl.MACOS, make_fat()), (rl.IOS, make_macho()), (rl.ANDROID_LIB, make_elf_program())):
+        self.assertEqual(checked(make_elf_program(machine=40, width=32), rl.ANDROID_LIB).arch, 'armv7')
+        for platform, data in ((rl.WINDOWS, make_pe()), (rl.LINUX, make_elf_program()), (rl.MACOS, make_fat()), (rl.IOS, make_macho()), (rl.ANDROID_LIB, make_elf_program()),
+                               (rl.ANDROID_LIB, make_elf_program(machine=183)), (rl.ANDROID_LIB, make_elf_program(machine=40, width=32))):
             self.assertEqual(checked(data, platform).problems, [], platform)
 
     def test_a_wrong_machine_is_refused_and_never_allowed_through(self):
@@ -327,6 +338,91 @@ class TheFormatsAndMachines(Temp):
             r = checked(data, platform)
             self.assertTrue([t for k, t in r.problems if k == rl.STRUCTURE], (platform, r.problems))
             self.assertTrue(r.blocking(allow_dev=True), 'a wrong machine or format is never allowed through (%s)' % platform)
+
+    def test_an_armeabi_v7a_library_is_an_elf32_file_of_the_arm_machine_and_only_an_android_library_may_be(self):
+        r = checked(make_elf_program(machine=40, width=32), rl.ANDROID_LIB)
+        self.assertEqual((r.problems, r.arch), ([], 'armv7'))
+        self.assertTrue(any('format: ELF32, little-endian, machine 40 (armv7), type 3' in t for _, t in r.facts), r.facts)
+        self.assertTrue(any('format: ELF64, little-endian, machine 183 (arm64), type 3' in t for _, t in checked(make_elf_program(machine=183), rl.ANDROID_LIB).facts))
+        # The other platforms take no 32-bit ARM program: the machine is refused, and the class is right for it, so the machine is the only reason.
+        r = checked(make_elf_program(machine=40, width=32), rl.LINUX)
+        self.assertEqual([t for _, t in r.problems], ['ELF machine armv7 is not one for linux (x86_64)'])
+        self.assertTrue(r.blocking(allow_dev=True))
+
+    def test_the_class_must_be_the_machines_and_the_refusal_names_both(self):
+        # Each file breaks ONE rule: the machine is one the platform takes, so the only problem is the class/machine combination, and it names the class, the machine and its class.
+        cases = (('an Elf64 file with the arm machine', make_elf_program(machine=40), 'the file is a 64-bit ELF file and its machine 40 (armv7) is a 32-bit one'),
+                 ('an Elf32 file with the aarch64 machine', make_elf_program(machine=183, width=32), 'the file is a 32-bit ELF file and its machine 183 (arm64) is a 64-bit one'),
+                 ('an Elf32 file with the x86_64 machine', make_elf_program(machine=62, width=32), 'the file is a 32-bit ELF file and its machine 62 (x86_64) is a 64-bit one'),
+                 ('the Elf32 layout under a 64-bit class byte', make_elf_program(machine=40, width=32, cls=2), 'the file is a 64-bit ELF file and its machine 40 (armv7) is a 32-bit one'),
+                 ('the Elf64 layout under a 32-bit class byte', make_elf_program(machine=183, cls=1), 'the file is a 32-bit ELF file and its machine 183 (arm64) is a 64-bit one'))
+        for what, data, message in cases:
+            r = checked(data, rl.ANDROID_LIB)
+            self.assertEqual([t for k, t in r.problems if k == rl.STRUCTURE], [message], what)
+            self.assertTrue(r.blocking(allow_dev=True), 'never allowed through: %s' % what)
+        r = checked(make_elf_program(machine=62, cls=1), rl.LINUX)
+        self.assertEqual([t for _, t in r.problems], ['the file is a 32-bit ELF file and its machine 62 (x86_64) is a 64-bit one'], 'a Linux program too')
+        # What is not a class at all, or not little-endian, is said as it is.
+        self.assertEqual([t for _, t in checked(make_elf_program(cls=3), rl.ANDROID_LIB).problems], ['ELF class 3 is neither 32-bit (1) nor 64-bit (2)'])
+        self.assertEqual([t for _, t in checked(make_elf_program(little=2), rl.ANDROID_LIB).problems][0], 'not a little-endian ELF file')
+
+    def test_a_file_that_lies_about_its_class_gets_the_named_refusal_not_a_section_table_error(self):
+        # An Elf32 library whose header says 64-bit has a section table that would be read at the wrong offsets; the answer is the class/machine refusal, not "not the program".
+        # The fixtures carry bytes where the OTHER class's header keeps its table fields, so that reading the table by the class byte would run past the end of the file.
+        elf32_called_64 = bytearray(make_elf_program(machine=40, width=32, cls=2, sections=['.text', '.symtab']))
+        struct.pack_into('<HHH', elf32_called_64, 0x3A, 64, 3, 1)  # Elf64's e_shentsize, e_shnum, e_shstrndx
+        elf64_called_32 = bytearray(make_elf_program(machine=183, cls=1, sections=['.text', '.symtab']))
+        struct.pack_into('<I', elf64_called_32, 0x20, 100_000)  # Elf32's e_shoff (the low half of Elf64's e_phoff)
+        for data, message in ((bytes(elf32_called_64), 'the file is a 64-bit ELF file and its machine 40 (armv7) is a 32-bit one'),
+                              (bytes(elf64_called_32), 'the file is a 32-bit ELF file and its machine 183 (arm64) is a 64-bit one')):
+            r = checked(data, rl.ANDROID_LIB)
+            self.assertEqual([t for _, t in r.problems], [message])
+            self.assertEqual(rl.read_elf(data)['sections'], [], 'a table that cannot be trusted is not read')
+
+    def test_the_section_names_of_an_elf32_file_are_read_by_its_own_table_layout(self):
+        names = rl.read_elf(make_elf_program(machine=40, width=32, sections=['.text', '.symtab', '.strtab']))['sections']
+        self.assertEqual(names, ['', '.text', '.symtab', '.strtab', '.shstrtab'], 'a section header of 40 bytes is a whole one in Elf32')
+        self.assertEqual(rl.read_elf(make_elf_program(machine=40, width=32))['sections'], [])
+        with self.assertRaises(rl.BinaryError):
+            rl.read_elf(make_elf_program(machine=40, width=32, sections=['.text'], table_past_the_end=True))
+        self.assertEqual(rl.read_elf(make_elf_program(machine=40, width=32))['arch'], 'armv7')
+
+    def test_an_elf32_header_alone_is_a_whole_header_and_a_cut_one_is_not_a_file(self):
+        header = make_elf_program(machine=40, width=32)[:52]  # sizeof(Elf32_Ehdr); an Elf64 header is 64 bytes, so these 52 would not be one
+        elf = rl.read_elf(header)
+        self.assertEqual((elf['class'], elf['machine'], elf['arch'], elf['sections']), (1, 40, 'armv7', []))
+        with self.assertRaises(rl.BinaryError):
+            rl.read_elf(header[:51])
+        with self.assertRaises(rl.BinaryError):
+            rl.read_elf(make_elf_program(machine=183)[:63])
+
+    def test_a_real_elf32_library_from_the_ndk_is_read_as_one(self):
+        # The hand-made files above come from the hands that wrote the reader; the NDK's libc++_shared.so for armeabi-v7a does not.
+        found = find_ndk_library('arm-linux-androideabi', 'libc++_shared.so')
+        if found is None:
+            skip_loudly(self, 'no Android NDK with an armeabi-v7a libc++_shared.so here: read_elf was NOT compared with a real ELF32 file')
+        with open(found, 'rb') as f:
+            data = f.read()
+        elf = rl.read_elf(data)
+        self.assertEqual((elf['class'], elf['machine'], elf['arch'], elf['type']), (1, 40, 'armv7', 3))
+        self.assertEqual(len(elf['sections']), struct.unpack_from('<H', data, 0x30)[0], 'one name per section header (e_shnum, at 0x30 in an Elf32 header)')
+        for name in ('.text', '.dynamic', '.dynsym', '.dynstr', '.shstrtab'):
+            self.assertIn(name, elf['sections'])
+        facts = [t for _, t in checked(data, rl.ANDROID_LIB).facts]
+        self.assertIn('format: ELF32, little-endian, machine 40 (armv7), type 3', facts, 'the format and the machine of an armeabi-v7a library (it is not the game, which is another fact)')
+
+    def test_the_machine_tables_agree_with_the_packagers(self):
+        # Two tables describe one set of ABIs: android_package.py's (ABI -> machine, class) and this tool's (machine -> arch, class). A new ABI in one and not the other is a library
+        # that is built and then refused, or one that is accepted here and never built.
+        arch_of = {abi: rl.ELF_MACHINES[machine] for abi, machine in ap.ABI_MACHINE.items()}
+        self.assertEqual(sorted(arch_of.values()), sorted(rl.ACCEPTED_ARCHS[rl.ANDROID_LIB]), 'the architectures an Android library may have are the ABIs')
+        for abi, arch in arch_of.items():
+            self.assertEqual(rl.ELF_ARCH_CLASS[arch], ap.ABI_ELF_CLASS[abi], abi)
+        self.assertEqual(rl.ACCEPTED_ARCHS[rl.LINUX], ('x86_64',), 'a Linux program is still x86_64 only')
+        self.assertEqual(sorted(rl.ELF_ARCH_CLASS), sorted(rl.ELF_MACHINES.values()))
+        for abi in ap.ABI_MACHINE:
+            data = make_elf_program(machine=ap.ABI_MACHINE[abi], width=rl.ELF_CLASS_BITS[ap.ABI_ELF_CLASS[abi]])
+            self.assertEqual(checked(data, rl.ANDROID_LIB).problems, [], abi)
 
     def test_a_file_of_another_format_is_not_the_program(self):
         for platform in rl.CHECKED_PLATFORMS:
@@ -519,6 +615,27 @@ class TheCommandLine(Temp):
         put(wrong, make_pe(machine=0xAA64, payload=game_payload(dev=True)))
         code, out, err = run_cli('check-program', wrong, '--platform', 'windows', '--allow-dev')
         self.assertEqual(code, 1)
+
+    def test_an_armeabi_v7a_library_passes_check_program_as_an_android_library_and_a_wrong_class_does_not(self):
+        good = self.path('v7.so')
+        put(good, make_elf_program(machine=40, width=32))
+        code, out, err = run_cli('check-program', good, '--platform', 'android-lib')
+        self.assertEqual(code, 0, err)
+        self.assertIn('format: ELF32, little-endian, machine 40 (armv7)', out)
+        self.assertIn("android-lib, armv7, a player's build", out)
+        for what, data, words in (('an Elf64 file with the arm machine', make_elf_program(machine=40), ('64-bit', 'machine 40 (armv7)', '32-bit')),
+                                  ('an Elf32 file with the aarch64 machine', make_elf_program(machine=183, width=32), ('32-bit', 'machine 183 (arm64)', '64-bit'))):
+            wrong = self.path('wrong.so')
+            put(wrong, data)
+            for extra in ((), ('--allow-dev',)):
+                code, out, err = run_cli('check-program', wrong, '--platform', 'android-lib', *extra)
+                self.assertEqual(code, 1, '%s %s' % (what, extra))
+                self.assertIn('REFUSED', err)
+                for word in words:
+                    self.assertIn(word, err, what)
+        code, out, err = run_cli('check-program', good, '--platform', 'linux')
+        self.assertEqual(code, 1, 'a 32-bit ARM library is not a Linux program')
+        self.assertIn('ELF machine armv7 is not one for linux', err)
 
     def test_help_says_what_each_subcommand_refuses(self):
         for argv, words in ((['check-program'], ('forbidden string', 'developer tools', 'machine')), (['sums'], ('developer', '-dev')), (['assemble'], ('refuses',)),
@@ -1480,12 +1597,16 @@ class FakeTools:
 
 
 GOOD_LINES = ["the crash report will call the game: Magic Portals Enhanced (from the application's android:label)", 'supersonic.reportTitle: not set in the APK (the application\'s label names the game)',
-              'native-code ABIs: arm64-v8a x86_64']
+              'native-code ABIs: arm64-v8a armeabi-v7a x86_64']
+
+
+# The libraries of an APK that carries all three ABIs, as the APK holds them (entry ABI -> the library's bytes).
+THREE_ABIS = {'arm64-v8a': make_elf_program(machine=183), 'armeabi-v7a': make_elf_program(machine=40, width=32), 'x86_64': make_elf_program(machine=62)}
 
 
 class TheAndroidRelease(ArchiveCase):
     def apk(self, name='MagicPortals-%s-release.apk' % OTHER_VERSION, libs=None):
-        libs = libs if libs is not None else {'arm64-v8a': make_elf_program(machine=183), 'x86_64': make_elf_program(machine=62)}
+        libs = libs if libs is not None else dict(THREE_ABIS)
         path = self.path('apks', name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with zipfile.ZipFile(path, 'w') as z:
@@ -1527,6 +1648,46 @@ class TheAndroidRelease(ArchiveCase):
         text = '\n'.join(lines)
         for word in ('a signed release of version ' + OTHER_VERSION, 'versionCode %d' % vs.version_code(OTHER_VERSION), 'not inside', 'no key was read or made'):
             self.assertIn(word, text)
+
+    def test_an_apk_with_all_three_abis_is_a_release_and_each_library_is_a_players_build(self):
+        # android_release does not read the native-code line itself (inspect_apk does, and test_android_package pins it for three ABIs); it is handed here as the line a real inspect prints.
+        apk = self.apk()
+        with zipfile.ZipFile(apk) as z:
+            self.assertEqual(sorted(n for n in z.namelist() if n.startswith('lib/')),
+                             ['lib/arm64-v8a/libMagicPortals.so', 'lib/armeabi-v7a/libMagicPortals.so', 'lib/x86_64/libMagicPortals.so'])
+        lines, calls = self.release(apk, lines=GOOD_LINES[:2] + ['native-code ABIs: arm64-v8a armeabi-v7a x86_64'])
+        self.assertIsInstance(lines, list, lines)
+        self.assertIn('3 libraries checked as a player\'s build', '\n'.join(lines))
+        self.assertEqual(os.listdir(self.out).count('MagicPortals-%s-android.apk' % OTHER_VERSION), 1)
+
+    def test_no_particular_set_of_abis_is_required_today(self):
+        # Pinned so that a change is a decision: the refusals are "no library at all" and what inspect says; a release of two ABIs (as every APK was before the third) is still one.
+        lines, _ = self.release(self.apk(libs={'arm64-v8a': THREE_ABIS['arm64-v8a'], 'x86_64': THREE_ABIS['x86_64']}), lines=GOOD_LINES[:2] + ['native-code ABIs: arm64-v8a x86_64'])
+        self.assertIsInstance(lines, list, lines)
+        self.assertIn('2 libraries checked', '\n'.join(lines))
+
+    def test_a_wrong_library_in_a_three_abi_apk_is_named_by_its_entry_and_nothing_is_placed(self):
+        entry = 'lib/armeabi-v7a/libMagicPortals.so'
+        cases = (('a developer build', make_elf_program(machine=40, width=32, payload=game_payload(dev=True)), 'the developer tools are compiled in'),
+                 ('a diagnostic build', make_elf_program(machine=40, width=32, payload=game_payload(perf=True)), 'the program is a PERFORMANCE-DIAGNOSTIC build'),
+                 ('a baked path', make_elf_program(machine=40, width=32, payload=game_payload(extra=[b'/home/someone/x'])), "the program holds '/home/'"),
+                 ('an executable, not a shared object', make_elf_program(machine=40, width=32, etype=2), 'ELF type 2'),
+                 ('an Elf64 file with the arm machine', make_elf_program(machine=40), 'the file is a 64-bit ELF file and its machine 40 (armv7) is a 32-bit one'),
+                 ('a 32-bit machine nobody builds', make_elf_program(machine=3, width=32), 'ELF e_machine 3 is not one this packager has a layout for'))
+        for what, data, message in cases:
+            text, _ = self.release(self.apk(libs=dict(THREE_ABIS, **{'armeabi-v7a': data})))
+            self.assertIn('%s: %s' % (entry, message), text, what)
+            self.assertIn('(1 fact(s) fail)', text, '%s: the other two libraries are fine and not named' % what)
+            self.assertEqual(os.listdir(self.out) if os.path.isdir(self.out) else [], [], 'nothing is placed (%s)' % what)
+
+    def test_an_apk_that_declares_a_library_it_lacks_or_has_none_is_refused(self):
+        # What inspect_apk says when badging lists an ABI the lib/ folder does not hold is its problem, carried into the refusal with the rest; an APK with no library is refused here.
+        three = self.apk()
+        text, _ = self.release(three, problems=["native-code ['arm64-v8a', 'armeabi-v7a', 'x86_64'] does not match the lib/ entries ['arm64-v8a', 'x86_64']"])
+        self.assertIn('does not match the lib/ entries', text)
+        self.assertEqual(os.listdir(self.out) if os.path.isdir(self.out) else [], [])
+        text, _ = self.release(self.apk(libs={}))
+        self.assertIn('the APK has no lib/<abi>/libMagicPortals.so', text)
 
     def test_the_version_code_rule_and_its_override(self):
         wrong, _ = self.release(self.apk(), package=(OTHER_VERSION, 1))

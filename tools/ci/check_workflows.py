@@ -59,7 +59,7 @@ NEEDS = {
         'collect': ['android', 'apple-ios', 'apple-macos', 'linux', 'version', 'windows'],
     },
 }
-RUNNERS = ('ubuntu-22.04', 'ubuntu-24.04', 'windows-2022', 'macos-15')
+RUNNERS = ('ubuntu-22.04', 'ubuntu-24.04', 'windows-2025-vs2026', 'macos-15')
 # (file, job, step name): the one step that may fail and be forgiven (Rosetta may be missing from a macOS image; the Intel half then does not run).
 FORGIVEN = {('apple.yml', 'macos', 'Rosetta')}
 # Steps that name a shell other than bash: the Windows runner's cmd, which loads MSVC's environment for a configure and a build (nothing else can).
