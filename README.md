@@ -13,7 +13,8 @@
 ### [How to install: step by step](docs/install.md)
 
 Free, with no ads and no accounts. The download is the whole game: 128 levels in four chapters, with the original's art and sound.<br>
-It runs on a 64-bit Windows PC (Windows 11 is the one it was run on), on a 64-bit Linux PC from about 2022 on, and on an Android phone or tablet with Android 8 or newer, 64-bit or 32-bit (32-bit Android is new: [what is known](docs/android.md#12-a-phone-whose-android-is-32-bit-the-third-abi-armeabi-v7a)). It needs a graphics driver with Vulkan 1.2 on a PC and Vulkan 1.1 on a phone; most PCs from the last eight years have one, and so do many phones, but not all.<br>
+It is built for a 64-bit Windows PC, a 64-bit Linux PC from about 2022 on, and an Android phone or tablet with Android 8 or newer, 64-bit or 32-bit ([what is known about 32-bit](docs/android.md#12-a-phone-whose-android-is-32-bit-the-third-abi-armeabi-v7a)). It needs a graphics driver with Vulkan 1.2 on a PC, and on a phone one with Vulkan 1.1 (a phone with only 1.1 has not been tried); most PCs from the last eight years have one, and so do many phones, but not all.<br>
+**This is the first release.** GitHub's servers built the Windows file and it has not been started on any PC yet, the Android file has not been started on any phone, and the Linux file has been run on a software graphics driver only: [Platforms](#platforms) says what each has been through.<br>
 The Windows download is not code-signed yet, so Windows asks you to confirm before it runs, and **Windows 11 PCs with Smart App Control turned on may refuse to run it** ([how to check](docs/install.md#windows-pc)).
 
 Something not working? [Report a problem](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/issues/new/choose): the form asks for what a fix needs (your system, your graphics card and the game version).
@@ -45,9 +46,9 @@ What a run has shown, and what nobody knows yet. [docs/platforms.md](docs/platfo
 
 | Platform | Status | Not known |
 |---|---|---|
-| Windows | **Verified by a run.** The build runs on the Windows 11 PC that every test and capture was made on. A release program was built, started and read as bytes. | Windows 10, other graphics cards, a PC without the C++ runtime. |
-| Linux | **Verified by a run, without a real GPU.** Built with g++ and clang in a Linux subsystem of Windows (WSL, Ubuntu 24.04). The suites pass or skip, all 128 recorded win routes win, and a test level draws on a software Vulkan driver. | A real GPU on a real desktop, Wayland, other distributions, sound from a speaker. |
-| Android | **Verified on an emulator only.** On an x86_64 emulator it installs, all 128 levels start and all 128 routes win. The APK also carries a 64-bit ARM and a 32-bit ARM library (the 32-bit one for phones whose Android is 32-bit): they are compiled and linked, and have never been started. | Any phone, 64-bit or 32-bit ARM code running, speed, memory, real two-finger play. |
+| Windows | **Verified by a run, for the maker's own builds.** Those run on the Windows 11 PC that every test and capture was made on. The program in the first download was built by GitHub Actions and read as bytes; it has not been started. | That program running at all, Windows 10, other graphics cards, a PC without the C++ runtime. |
+| Linux | **Verified by a run, without a real GPU.** Built with g++ and clang in a Linux subsystem of Windows (WSL, Ubuntu 24.04), and the first download was built on Ubuntu 22.04 by GitHub Actions. All 80 suites pass, as 64-bit and as 32-bit x86 processes, all 128 recorded win routes win, and the download itself, unpacked, starts the levels and draws the original's art on a software Vulkan driver. | A real GPU on a real desktop, Wayland, other distributions, sound from a speaker, running on Ubuntu 22.04 itself. |
+| Android | **Verified on an emulator only.** On an x86_64 emulator it installs, all 128 levels start and all 128 routes win. The APK also carries a 64-bit ARM and a 32-bit ARM library (the 32-bit one for phones whose Android is 32-bit): they are compiled and linked, and have never been started. | Any phone, 64-bit or 32-bit ARM code running, a phone with only Vulkan 1.1, speed, memory, real two-finger play. |
 | macOS | **Verified on a CI runner only.** GitHub's macOS runner built it and drew a test level on a virtual GPU. | A Mac that a person owns, a real Apple GPU, how it looks and plays. |
 | iOS | **Built, not run.** The device and simulator builds compile and link. | Everything about running it. |
 
@@ -76,7 +77,7 @@ The modern on-screen controls are the default. On a phone they are touch; on a d
 Every command below exists in this repository. [docs/building.md](docs/building.md) says which were run, by whom, and which were not.
 
 ```
-# Linux (built on Ubuntu 24.04; 22.04 is named by the project and untried)
+# Linux (built on Ubuntu 24.04 by the maker and on Ubuntu 22.04 by the release workflow)
 git clone --recurse-submodules https://github.com/IvanCvetanovic/Magic-Portals-Enhanced.git
 cd Magic-Portals-Enhanced
 sudo apt-get install -y build-essential cmake ninja-build pkg-config libvulkan-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libasound2-dev
@@ -115,7 +116,7 @@ Ethanon, the engine the original was built on, is by Andre Santee and MIT-licens
 
 ## Licence
 
-[LICENSE](LICENSE) is the MIT No Attribution licence. The notices of the software the game contains are in [NOTICE.md](NOTICE.md).
+[LICENSE](LICENSE) is the MIT No Attribution licence, for the code of this repository; it does not cover the original game's art, sound or levels, which belong to their makers. The notices of the software the game contains are in [NOTICE.md](NOTICE.md).
 
 ## Contributing
 
@@ -204,8 +205,7 @@ The report Android shows at the next start after the game ended unexpectedly is 
 **macOS and iOS.** The entries, the app bundles' layout, a shell-assembling script and a dispatch-only CI workflow are **written, and have run twice on GitHub's macOS runner** (planning step 206: the macOS shell started, drew the hand-written fixture level and exited clean on arm64 and, under Rosetta, x86_64, on a paravirtual GPU; the iOS programs compiled and linked and nothing iOS has run) and **never on a person's Mac, an iPhone or an iPad**: nothing about how the game looks or plays there is known; `docs/apple.md` lists what is written, what was checked by which tool, and what nobody knows.
 
 **Platforms, building and CI.** [docs/platforms.md](docs/platforms.md) says, for Windows, Linux, Android, macOS and iOS, what a player downloads, what it needs and what is known; [docs/building.md](docs/building.md)
-builds it from source on each, with no game data. `.github/workflows/` holds four dispatch-only workflows ([docs/ci.md](docs/ci.md)): **three of them (`ci.yml`, `release.yml`, `android-emulator.yml`) were written in planning
-step 209 and have never been dispatched, so nothing here says that a step of them works on GitHub**; `apple.yml` ran twice in its earlier form. What was checked instead is a checker of the rules every workflow keeps,
+builds it from source on each, with no game data. `.github/workflows/` holds four dispatch-only workflows ([docs/ci.md](docs/ci.md)): **`release.yml` and `apple.yml` have run on GitHub** (`release.yml` on 2026-11-03: its second run built the Windows, Linux, Android and Apple programs and checked them as bytes) **and `ci.yml` and `android-emulator.yml` have never been dispatched, so nothing here says that a step of those two works on GitHub**. Besides the runs, what was checked is a checker of the rules every workflow keeps,
 `actionlint` with `shellcheck`, and a rehearsal of the commands of two Linux jobs from a clean clone in the Linux subsystem (`docs/ci.md` section 6). The Android crash-report dialog has still never been shown on any emulator or phone.
 
 ## How it fits together

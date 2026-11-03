@@ -19,7 +19,7 @@ name: CI
 #   windows   MSVC: the developer's build, every suite, the release program (check-program, the archive without game data). The fixture level is NOT RUN on Windows: the runner has no
 #             Vulkan driver that was checked, and the step that wrote this file downloaded none (it was allowed no download but the linter's: a fact about that step, not about software drivers); the
 #             step says so in the log.
-#   android   the Android SDK and NDK: the shell APK without game data for both ABIs, the packager's inspect, and the release check that must REFUSE a debug APK.
+#   android   the Android SDK and NDK: the shell APK without game data for the three ABIs, the packager's inspect, and the release check that must REFUSE a debug APK.
 #   tools     the Python tests (package, ci, apple, converter), the version check, the workflow checker, the public-readiness checker (tools/ci/check_public.py) and actionlint.
 # The jobs do not wait for one another (no needs:) and no step of one cancels another, so one failure never hides the next job's result. Every job ends by uploading its logs,
 # whatever happened. A cache (ccache) only makes a build faster: no result depends on it.
@@ -443,8 +443,8 @@ jobs:
           key: ccache-android-${{ github.sha }}
           restore-keys: ccache-android-
 
-      # The shell: the game's library for both ABIs and the APK around it, with no game data in it (the owner's). Debug-signed with the throwaway key the packager makes in its work folder.
-      - name: Build the shell APK (both ABIs)
+      # The shell: the game's library for the three ABIs and the APK around it, with no game data in it (the owner's). Debug-signed with the throwaway key the packager makes in its work folder.
+      - name: Build the shell APK (three ABIs)
         run: |
           tools/build_android.sh --no-data --abi all --jobs 4 --ndk "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" --out "$RUNNER_TEMP/apk" 2>&1 | tee "$RUNNER_TEMP/logs/build-android.log"
           ls -l "$RUNNER_TEMP/apk"

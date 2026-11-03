@@ -1,7 +1,8 @@
 name: Release programs
 
-# The release PROGRAMS of every platform, built where the owner's PC is not, checked as bytes, and uploaded with a SHA256SUMS.txt and a text file of the versions and the commit. WRITTEN,
-# NEVER RUN (planning step 209, PORT-11): nothing here says that a step works on GitHub; docs/ci.md says what has run and what has not.
+# The release PROGRAMS of every platform, built where the owner's PC is not, checked as bytes, and uploaded with a SHA256SUMS.txt and a text file of the versions and the commit. WRITTEN in
+# planning step 209 (PORT-11) and RUN TWICE on 2026-11-03 (step 211): the first run failed at the configure of the Windows program (the windows-2022 image has no vulkan-1.dll), the second built every
+# program; docs/ci.md section 9 says what that showed and what it did not.
 #
 # WHAT IT MAKES AND WHAT IT NEVER HOLDS. The programs are the game WITHOUT the game: no level, no picture, no sound of the owner's is in this repository, so none is here. It creates NO
 # GitHub Release and no tag and writes nothing outside the artifacts. The archive a player downloads, with the whole game in it, is assembled on the OWNER'S PC from one of these
@@ -15,7 +16,7 @@ name: Release programs
 # wait for `version` alone; `collect` waits for them all and runs even when one failed, so that what was made is still uploaded and what was not is said in VERSIONS.txt.
 #   linux        Ubuntu 22.04: the release program (no baked paths, no developer tools, libstdc++ and libgcc inside, stripped), check-program with the glibc floor.
 #   windows      MSVC: the release program with its file properties and icon, check-program.
-#   android      the shell APK without game data for both ABIs, debug-signed, inspected.
+#   android      the shell APK without game data for the three ABIs, debug-signed, inspected.
 #   apple-*      .github/workflows/apple.yml, called (its own jobs build the macOS universal shell and the iOS device shell); `collect` runs the release packager's check on both.
 #   collect      downloads them all, checks the two Apple shells, writes SHA256SUMS.txt and VERSIONS.txt, verifies the sums and uploads the folder.
 on:
@@ -223,7 +224,7 @@ jobs:
           path: ${{ runner.temp }}/ccache
           key: ccache-release-android-${{ github.sha }}
           restore-keys: ccache-release-android-
-      - name: Build the shell APK (both ABIs)
+      - name: Build the shell APK (three ABIs)
         run: |
           tools/build_android.sh --no-data --abi all --jobs 4 --ndk "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" --out "$RUNNER_TEMP/apk" 2>&1 | tee "$RUNNER_TEMP/logs/build-android.log"
           cp "$RUNNER_TEMP"/apk/MagicPortals-*-nodata-debug.apk "$RUNNER_TEMP/programs/android/"

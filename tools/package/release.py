@@ -1009,9 +1009,10 @@ def runtime_paragraph(redist_names):
     if redist_names:
         return ('  * The Microsoft Visual C++ runtime: this folder carries the runtime DLLs the program loads (%s), copied unchanged from Microsoft\'s redistributable, so a PC that\n'
                 '    lacks the redistributable can still start the game. (Windows\' own C and system libraries are not in this folder; they are part of Windows.)' % ', '.join(redist_names))
-    return ('  * The Microsoft Visual C++ runtime. This archive does NOT carry it. A PC without the "Microsoft Visual C++ Redistributable for Visual Studio 2015-2022\n'
-            '    (x64)" shows Windows\' own message ("the code execution cannot proceed because VCRUNTIME140.dll was not found", or MSVCP140.dll) BEFORE the game starts, and no\n'
-            '    message of the game can help it. Install the redistributable from Microsoft, then start the game again.')
+    return ('  * The Microsoft Visual C++ runtime, a current one. This archive does NOT carry it. A PC without the "Microsoft Visual C++ Redistributable for Visual Studio 2015-2026\n'
+            '    (x64)", or with one older than the compiler that built this program, shows Windows\' own message ("the code execution cannot proceed because VCRUNTIME140.dll was\n'
+            '    not found", or MSVCP140.dll or VCRUNTIME140_1.dll, or a procedure entry point that was not found) BEFORE the game starts, and no message of the game can help it.\n'
+            '    Install the latest redistributable from Microsoft (https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist), then start the game again.')
 
 
 def playing_windows(version, arch, redist_names, data, dev):
@@ -1020,14 +1021,16 @@ def playing_windows(version, arch, redist_names, data, dev):
              '  1. Unpack the whole zip into a folder you may write to (for example inside Documents). Do not run the game from inside the zip.',
              '  2. Start MagicPortals.exe. It must stay next to the folders "assets" (the engine\'s shaders) and "content" (the game).' if data else
              '  2. Start MagicPortals.exe. It must stay next to the folder "assets" (the engine\'s shaders). THIS ARCHIVE HAS NO GAME DATA: the game will say so and stop.',
-             '  The engine keeps a small cache beside the program (assets\\shaders); a folder you cannot write to loses it.', '',
+             '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets\\scenes there; in a folder you cannot write to the game still starts, without the cache.', '',
              'WHAT YOUR PC NEEDS',
-             '  * 64-bit Windows. The game has been run on Windows 11; whether it starts on Windows 10 was not tried.',
+             '  * 64-bit Windows. The game has been run on Windows 11 (builds made by the maker, on his PC); whether it starts on Windows 10 was not tried. The tool that made this archive reads the program as bytes and never starts it.',
              '  * A graphics driver that provides Vulkan 1.2 or newer (NVIDIA, AMD or Intel: from the maker, or Windows Update).',
              runtime_paragraph(redist_names),
              '  * On a Windows "N" edition: the Media Feature Pack. The game decodes its sounds with Windows Media Foundation, and without the pack Windows shows a message about',
              '    MFPlat.DLL before the game starts.',
-             '  The last two points are a reading of the program\'s import table; they were not seen on a PC that lacked the runtime or the pack.', '',
+             '  The last two points are a reading of the program\'s import table; they were not seen on a PC that lacked the runtime or the pack.',
+             '  * A program without a digital signature makes Windows SmartScreen say "Windows protected your PC": choose More info, then Run anyway. A Windows 11 PC with Smart App Control turned on',
+             '    may refuse such a program, and then there is no Run anyway button (Settings, Privacy & security, Windows Security, App & browser control, Smart App Control settings).', '',
              'IF IT DOES NOT START',
              '  * With no usable Vulkan driver the game shows ONE message box, beginning "No Vulkan graphics driver was found" (or "The Vulkan graphics driver cannot be used"),',
              '    and names vulkan-1.dll; the same words are in the log. They are written in the program and a test checks them; the box has not been seen on a PC without a driver.',
@@ -1059,15 +1062,15 @@ def playing_linux(version, arch, needs, data, dev, stripped=None):
     lines = [version_line(version, 'Linux', arch), '=' * 60, '',
              'TO PLAY',
              '  1. Unpack with tar, which keeps the program\'s executable bit:   tar xzf <this archive>   If you unpacked it some other way, restore the bit:   chmod +x MagicPortals',
-             '  2. Start ./MagicPortals from a terminal, or from your file manager (in a desktop session). It must stay next to the folders "assets" (the engine\'s shaders) and',
+             '  2. Start ./MagicPortals from a terminal, in a desktop session (some file managers do not start a program of this kind by a double-click). It must stay next to the folders "assets" (the engine\'s shaders) and',
              '     "content" (the game).' if data else
              '     "content" (the game). THIS ARCHIVE HAS NO GAME DATA: the game will say so and stop.',
-             '  The engine keeps a small cache beside the program (assets/shaders); a folder you cannot write to loses it.', '',
+             '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets/scenes there; in a folder you cannot write to the game still starts, without the cache.', '',
              'WHAT YOUR PC NEEDS',
              '  * 64-bit Linux on an x86-64 CPU, in a desktop session with an X11 display. The program opens libX11 at run time; on a Wayland desktop it needs XWayland, which',
              '    was not tried.',
              '  * A Vulkan 1.2 driver and the Vulkan loader, libvulkan.so.1 (Mesa\'s radv, anv or lavapipe, or the vendor\'s driver; Debian and Ubuntu: libvulkan1).',
-             '  * libasound.so.2 (ALSA) for sound (Debian and Ubuntu: libasound2t64).',
+             '  * libasound.so.2 (ALSA) for sound (Debian and Ubuntu: libasound2, or libasound2t64 on releases from 2024 on).',
              need_line,
              stripped_line, '',
              'IF IT DOES NOT START',
@@ -1077,7 +1080,7 @@ def playing_linux(version, arch, needs, data, dev, stripped=None):
              'WHERE THE GAME WRITES',
              '  * Your medals, the sound and music switches, the achievements and your control choices: ~/.local/share/Magic Portals (or under $XDG_DATA_HOME).',
              '    Delete the folder to start from nothing.',
-             '  * The log of the last run: <the temporary folder, usually /tmp>/magicportals.log (the run before it: magicportals.prev.log).', '',
+             '  * The log of the last run: <the temporary folder, usually /tmp>/magicportals.log (the run before it: magicportals.prev.log), and files the game can make again in <the temporary folder>/supersonic-magicportals.', '',
              'THIS ARCHIVE',
              ('  content/manifest.json lists every file of the game with its size and SHA-256; SHA256SUMS.txt, beside the archive, has the archive\'s own.' if data else
               '  This archive has no content folder and no SHA256SUMS.txt: it is a test archive of the program alone.'),

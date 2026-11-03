@@ -1,6 +1,6 @@
 # Building Magic Portals Enhanced from source, on each platform
 
-Planning step 209 (PORT-11). For a stranger with a clone and no game data. Every command below is one that exists in this repository; section 8 is the table of which ones were run as written, by whom, where,
+Planning step 209 (PORT-11), brought up to date at planning step 211 (2026-11-03). For a stranger with a clone and no game data. Every command below is one that exists in this repository; section 8 is the table of which ones were run as written, by whom, where,
 and which were not. The game's data is not here and is not needed to build, test or run the fixture level.
 
 ## 0. What you need, whatever the platform
@@ -8,8 +8,9 @@ and which were not. The game's data is not here and is not needed to build, test
 * A clone **with its engine**: `git clone --recurse-submodules <the repository's address>` or, in a clone, `git submodule update --init` (the engine, Supersonic Engine, is a git submodule at `engine/`
   pinned to a commit; the build scripts run the second command themselves when `engine/` is empty and `.git` is there).
 * CMake 3.20 or newer, Ninja, a C++20 compiler, and Python 3 for the tools (`tools/package`, `tools/ci` and `tools/apple` use the standard library only; they were run on Python 3.12 and 3.14, and no older one was tried). The engine asks for MSVC 2022, GCC 11 or newer, or Clang 13 or newer; this project
-  has been built with MSVC (Visual Studio Build Tools, the owner's PC), g++ 13.3, clang 18 (with libstdc++ and with libc++), the Android NDK's clang (r28) and Apple's clang (`apple.md`).
-* **Build on a case-sensitive file system with no spaces in the path.** A Windows drive mounted into WSL (under `/mnt`) is refused by `tools/build_linux.sh` unless you pass `--allow-drvfs`.
+  has been built with MSVC (Visual Studio Build Tools, the owner's PC, and MSVC 19.51 on GitHub's `windows-2025-vs2026` image), g++ 13.3 and g++ 12.3 (the latter on GitHub's Ubuntu 22.04 image), clang 18 (with libstdc++ and with libc++), the Android NDK's clang (r28) and Apple's clang (`apple.md`).
+* **Build on a case-sensitive file system with no spaces in the path.** A Windows drive mounted into WSL (under `/mnt`) is refused by `tools/build_linux.sh` unless you pass `--allow-drvfs`. It is also slow to run on: with the game's data on the Windows drive mounted into WSL the suites took 5 to 10 times as long as from the Linux disk
+  (`test_mp_layer` 510 s against 67 s, and the run hit a 900 s `ctest` limit), so use a clone on the Linux disk.
 * The engine's compiled shaders (`engine/assets/shaders/*.spv`) are committed. A shader compiler (`glslc`) is **not** needed, and if the build finds one it would rewrite them; the CI jobs and the Apple
   workflow pass `-DGLSL_COMPILER=GLSL_COMPILER-NOTFOUND` so that nothing is rewritten.
 
@@ -31,7 +32,7 @@ tools/build_linux.sh --no-baked-paths --dev-tools OFF --portable --strip --build
 python3 tools/package/release.py check-program build-release/game/MagicPortals --platform linux
 ```
 
-The program asks the system for the glibc of the machine that built it (`ci.md` section 5 has the numbers): **build a release on the oldest system it should run on.**
+The program asks the system for the glibc of the machine that built it (`ci.md` section 5 has the numbers): **build a release on the oldest system it should run on.** The developer builds on Ubuntu 24.04; `release.yml`'s `linux` job builds this release program on GitHub's Ubuntu 22.04 image (g++ 12.3, glibc 2.35, with `--cxx g++-12` and `--max-glibc 2.35`), and `check-program` passed it there on 2026-11-03 (`ci.md` section 9). A 22.04 machine has not been used by hand, and the program built there was not started on it.
 
 ## 2. Windows (MSVC)
 
@@ -45,11 +46,11 @@ ctest --test-dir build
 
 `tools\parity\port_build.bat` does the same on the owner's machine (his Build Tools path and Vulkan SDK are written in that one file, and it turns validation on). Name the two targets: the default target also builds `MagicPortalsSpike`, the stale spike that CLAUDE.md says is never built. **A release program**
 (`packaging.md` section 6 has the exact command): add `-DMAGICPORTALS_BAKED_PATHS=OFF -DMAGICPORTALS_DEV_TOOLS=OFF -DMAGICPORTALS_WIN_GUI=ON` and, for the icon,
-`-DMAGICPORTALS_ICON=<the .ico that python tools/art/make_app_icon.py writes>`, in a build folder of its own, and build the target `MagicPortals`.
+`-DMAGICPORTALS_ICON=<the .ico that python tools/art/make_app_icon.py writes>`, in a build folder of its own, and build the target `MagicPortals`. `release.yml`'s `windows` job did this on GitHub on 2026-11-03 (`windows-2025-vs2026`, Visual Studio 2026, MSVC 19.51) and `check-program` passed the program. **The configure needs the Vulkan loader:** `engine/CMakeLists.txt:150` requires `vulkan-1.dll` in `System32` when no Vulkan SDK is installed, and the first attempt, on a `windows-2022` image that has neither, stopped there with "Vulkan loader not found" (`ci.md` section 9).
 
 ## 3. Android
 
-Needs the Android SDK (platform 35, build-tools 35.0.0), the NDK r28.2 (`28.2.13676358`; r28 or newer is what links 16 KB-aligned), a JDK 17 or newer, and Python. The script finds them from `ANDROID_HOME`
+Needs the Android SDK (platform 35, build-tools 35.0.0), the NDK r28.2 (`28.2.13676358`; r28 or newer is what links 16 KB-aligned, for the two 64-bit ABIs: NDK r28 links `armeabi-v7a` with 4 KB pages), a JDK 17 or newer, and Python. The script finds them from `ANDROID_HOME`
 and `ANDROID_NDK_HOME` or its own options (`docs/android.md` section 1):
 
 ```
@@ -57,13 +58,13 @@ tools/build_android.sh --no-data --abi all                     # a shell APK wit
 tools/build_android.sh --data <content folder> --abi all       # the APK with a content package in it; docs/packaging.md section 3 makes the package
 ```
 
-`--release` signs with a key you name (`--keystore`, `--keystore-pass-file`, `--key-alias`): this repository has none. The Linux and macOS paths of this script were written from the same rules and **have never been run** (`ci.yml`'s `android` job would be their first run);
-on Windows it ran under Git Bash.
+`--abi all` builds the three ABIs, `arm64-v8a`, `armeabi-v7a` and `x86_64`. `--release` signs with a key you name (`--keystore`, `--keystore-pass-file`, `--key-alias`): this repository has none (the first release APK was built on the owner's PC with an existing key of his, which is not in the repository). On Windows the script ran under Git Bash.
+Its Linux path ran on GitHub on 2026-11-03, in `release.yml`'s `android` job (`--no-data --abi all`, all three ABIs built and their libraries checked: `ci.md` section 9). Its macOS path was written from the same rules and **has never been run**, and `ci.yml`'s `android` job has not been dispatched.
 
 ## 4. macOS and iOS
 
-Need a Mac with Xcode, and MoltenVK's static library (`SUPERSONIC_MOLTENVK_LIBRARY`). The exact configure lines are the ones in `.github/workflows/apple.yml`, which ran twice on GitHub's runner
-(`apple.md` section 4b); `bash tools/apple/make_app.sh macos|ios <build folder> <out folder>` assembles the shell from a build. `apple.md` section 3 is the long form. Nothing in this section has been run on a
+Need a Mac with Xcode, and MoltenVK's static library (`SUPERSONIC_MOLTENVK_LIBRARY`). The exact configure lines are the ones in `.github/workflows/apple.yml`, which ran twice on GitHub's runner on 2026-10-25
+(`apple.md` section 4b) and has run since in both runs of `release.yml`, which calls it for `macos` and `ios-device` (`ci.md` section 9); `bash tools/apple/make_app.sh macos|ios <build folder> <out folder>` assembles the shell from a build. `apple.md` section 3 is the long form. Nothing in this section has been run on a
 Mac that a person owns.
 
 ## 5. Running the fixture level with no game data
@@ -92,7 +93,7 @@ test archive with no game (named `-nodata`; it is no release and is left out of 
 
 ## 8. What was run as written
 
-All on the owner's PC in the Linux subsystem (Ubuntu 24.04, g++ 13.3, CMake 3.28, Ninja 1.11, Python 3.12, a case-sensitive ext4 folder), 2026-10-27, unless the row says Windows. Anything not in this table was
+All on the owner's PC in the Linux subsystem (Ubuntu 24.04, g++ 13.3, CMake 3.28, Ninja 1.11, Python 3.12, a case-sensitive ext4 folder), 2026-10-27, unless the row says Windows. Anything not in this table, or in the paragraph that follows the table (planning step 211, 2026-11-03), was
 **not run**.
 
 | Command (section) | Result |
@@ -113,7 +114,9 @@ All on the owner's PC in the Linux subsystem (Ubuntu 24.04, g++ 13.3, CMake 3.28
 | `python3 tools/package/release.py assemble --platform linux --program <the release program of planning step 209, not rebuilt in step 210> --no-data --max-glibc 2.38 --out <a folder>` (7), twice, from two folders (planning step 210) | exit 0 both times, the same bytes (5,212,292; sha256 `5eeb3e28...`, taken from the final `LICENSE` and `NOTICE.md`, which hold the GCC runtime exception); unpacked with `tar xzf`: `LICENSE`, `NOTICE.md`, `PLAYING.txt`, `MagicPortals` and `assets/shaders` (17 files); the `LICENSE` and `NOTICE.md` in it are the repository's, byte for byte |
 | `python tools/ci/check_public.py --include-untracked` (the public-readiness check, `ci.md` section 8), **Windows**, Python 3.14 (planning step 210) | exit 0: no ERROR, 3 OWNER-FILE findings, 4 RECORD-PATH findings, 24 NOTE lines; the lines are the maintainer's to read |
 
-**Not run:** `git clone --recurse-submodules` and `git submodule update --init` against the real address (the clean clone was a local one, with the engine cloned from the local module repository and
+**Run since, on 2026-11-03 (planning step 211).** On GitHub, in the second dispatch of `release.yml` (`ci.md` section 9): the Windows release build of section 2 (`windows-2025-vs2026`, MSVC 19.51: configure, build of `MagicPortals`, `check-program` passed); the Linux release build of section 1 on Ubuntu 22.04 (g++ 12.3, `check-program --max-glibc 2.35` passed); `tools/build_android.sh --no-data --abi all` of section 3 on an Ubuntu 24.04 runner (three ABIs; their libraries checked). In the Linux subsystem, at the engine pin `4261485`, on a copy of the repository on the Linux disk (GCC 13): the game and its suites build with no warning and all 80 `ctest` tests pass at 64 bits (0 skipped, with the owner's data); the same sources built with `-m32 -msse2 -mfpmath=sse` (a 32-bit x86 process, **not an ARM one**) also build with no warning and all 80 pass, the 128 win routes among them; and the game compiles and links with NDK r28, with no warning, for `armeabi-v7a`, `arm64-v8a` and `x86_64`. **Still not run:** anything on a 32-bit ARM device, and the jobs of `ci.yml` and `android-emulator.yml`.
+
+**Not run (as of 2026-10-27; the paragraph above says what ran afterwards):** `git clone --recurse-submodules` and `git submodule update --init` against the real address (the clean clone was a local one, with the engine cloned from the local module repository and
 verified to be the pinned commit); `sudo apt-get install ...` (the packages were already there, checked with `dpkg -s`); everything in section 2 but the icon (**no Windows program was built, linked or started
 in this step**, by the owner's rule); `tools/build_android.sh --no-data --abi all` and everything in section 3 (the Android SDK was not used; `ci.yml`'s `android` job is the first run of the Linux path of
 that script); everything in section 4 (no Mac); the `windows`, `android` and `tools` jobs of `ci.yml`, `release.yml` and `android-emulator.yml` (`ci.md` section 6).

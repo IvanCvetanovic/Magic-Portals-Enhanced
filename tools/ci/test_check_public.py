@@ -15,6 +15,7 @@ import io
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -85,8 +86,20 @@ class SyntheticRepos(unittest.TestCase):
         self.addCleanup(self.cleanup)
 
     def cleanup(self):
+        # git writes its objects read-only, and on Windows shutil.rmtree cannot delete a read-only file: with ignore_errors the synthetic repositories stayed in %TEMP% for ever
+        # (PORT12-9; hundreds after a few runs). The error handler makes the file writable and tries once more; what still cannot go is left, as before.
+        def clear_and_retry(function, path, _error):
+            try:
+                os.chmod(path, stat.S_IWRITE)
+                function(path)
+            except OSError:
+                pass
+
         for folder in self.folders:
-            shutil.rmtree(folder, ignore_errors=True)
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(folder, onexc=clear_and_retry)
+            else:
+                shutil.rmtree(folder, onerror=clear_and_retry)
 
     def make(self, files, executable=('tools/build.sh',), gitlink='engine', links=None, commit=True, message='first'):
         folder = tempfile.mkdtemp(prefix='check_public_test_')

@@ -33,7 +33,7 @@ Have fun!
 <details>
 <summary>It didn't start?</summary>
 
-- **“VCRUNTIME140.dll was not found” or “MSVCP140.dll was not found”** (Windows' own message, before the game opens): the PC lacks Microsoft's C++ runtime. Install the *Microsoft Visual C++ Redistributable for Visual Studio 2015-2022 (x64)* from [Microsoft](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist), then start the game again. The download does not carry it.
+- **“VCRUNTIME140.dll”, “MSVCP140.dll” or “VCRUNTIME140_1.dll was not found”, or a procedure entry point that was not found** (Windows' own message, before the game opens): the PC lacks Microsoft's C++ runtime, or has an older one than the game was built with. Install the **latest** *Microsoft Visual C++ Redistributable (x64)* from [Microsoft](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist), even if you already have one of 2015-2022, then start the game again. The download does not carry it.
 - **A message about “MFPlat.DLL”** on a Windows *N* edition: install the *Media Feature Pack* from Windows' optional features (the game decodes its sounds with Windows Media Foundation).
 - **“No Vulkan graphics driver was found”**: update the graphics driver. A very old PC may not be able to run the game.
 - **The game says its data was not found:** it was started from inside the zip, or `MagicPortals.exe` was moved out of its folder. Extract the whole zip and start the program where it is.
@@ -44,7 +44,7 @@ Have fun!
 
 ## Android phone or tablet
 
-**You need:** Android 8.0 or newer and a phone or tablet whose graphics support Vulkan 1.1 (many phones from about 2018 on do, not all). The same file installs on a phone whose Android is 32-bit (some cheap phones are, mainly ones with Android Go) and on one whose Android is 64-bit; the installer picks the right program inside it. The 32-bit program has been compiled and tested as a stand-in on a PC, and **has not been started on a 32-bit phone**: if yours is one, please say how it went ([report a problem](#reporting-a-problem)).
+**You need:** Android 8.0 or newer and a phone or tablet whose graphics support Vulkan 1.1 (many phones from about 2018 on do, not all; a phone with only 1.1 has not been tried). The same file installs on a phone whose Android is 32-bit (some cheap phones are, mainly ones with Android Go) and on one whose Android is 64-bit; the installer picks the right program inside it. The 32-bit program has been compiled and tested as a stand-in on a PC, and **has not been started on a 32-bit phone**: if yours is one, please say how it went ([report a problem](#reporting-a-problem)).
 
 **[Download for Android](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk)**
 
@@ -68,10 +68,10 @@ Have fun!
 **You need:** a 64-bit Linux on an x86-64 CPU, from about 2022 on (glibc 2.35 or newer, which Ubuntu 22.04 has), in a desktop session with an X11 display (on a Wayland desktop it needs XWayland, which was not tried), a Vulkan 1.2 driver with the Vulkan loader, and ALSA for sound. On Debian and Ubuntu:
 
 ```
-sudo apt install libvulkan1 mesa-vulkan-drivers libasound2t64
+sudo apt install libvulkan1 mesa-vulkan-drivers libasound2
 ```
 
-(`libasound2t64` is `libasound2` on systems older than Ubuntu 24.04. NVIDIA's own driver brings its own Vulkan driver, so `mesa-vulkan-drivers` is for AMD and Intel graphics.)
+(On Ubuntu 24.04 and newer the last package is called `libasound2t64`. NVIDIA's own driver brings its own Vulkan driver, so `mesa-vulkan-drivers` is for AMD and Intel graphics.)
 
 **[Download for Linux](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz)**
 
@@ -84,7 +84,7 @@ sudo apt install libvulkan1 mesa-vulkan-drivers libasound2t64
    ```
    ./MagicPortals
    ```
-   (or double-click it in your file manager, in a desktop session). It must stay next to the folders `assets` and `content`. If you unpacked it some other way and it will not run, `chmod +x MagicPortals` restores the executable bit.
+   in a desktop session (some file managers do not start a program of this kind by a double-click). It must stay next to the folders `assets` and `content`. If you unpacked it some other way and it will not run, `chmod +x MagicPortals` restores the executable bit.
 
 <details>
 <summary>It didn't start?</summary>
