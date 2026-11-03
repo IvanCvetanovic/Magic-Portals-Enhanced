@@ -101,7 +101,7 @@ All on the owner's PC in the Linux subsystem (Ubuntu 24.04, g++ 13.3, CMake 3.28
 | `tools/build_linux.sh --help` (1) | prints, exit 0; names `--portable` and `--strip` |
 | `tools/build_linux.sh` with its defaults (1), in a standing tree and, as the scripts of `ci.yml`'s `linux` job (taken out of the YAML and run here, not on a runner; `ci.md` section 6), in a clean local clone of the checkout | built, 0 warnings in `game/` and `tests/` (`ci.md` section 6 has the clone's numbers) |
 | `build/tests/test_mp --list`, `build/tests/test_mp test_mp_numbers` (1) | 77 suites; `test_mp_numbers`: 0 failures (its count of checks depends on the locales installed: 446 in the implementer's tree, 442 in the verifier's, and 444 in step 199's) |
-| `ctest --test-dir build -N` (1) | 80 tests listed |
+| `ctest --test-dir build -N` (1) | 80 tests listed at planning step 211, 81 since step 212 |
 | `build/tests/test_mp` (every suite) with the owner's data present; `ctest --test-dir build` with it hidden (1) | with it: 77 suites, 77 passed, 87,943 checks; without it: 80 tests, 44 passed, 36 skipped (exit 77), 0 failed |
 | `tools/build_linux.sh --no-baked-paths --dev-tools OFF --portable --strip --build-dir <a folder>` (1) | built; the program asks the system for `GLIBC_2.38` alone, four shared libraries, stripped, 12,135,904 bytes (the folder was not called `build-release`) |
 | `release.py check-program <that program> --platform linux --max-glibc 2.38`, and the same with `2.35` (1) | passes; refused in words (the program asks for glibc 2.38, the floor is 2.35) |

@@ -44,7 +44,7 @@ Have fun!
 
 ## Android phone or tablet
 
-**You need:** Android 8.0 or newer and a phone or tablet whose graphics support Vulkan 1.1 (many phones from about 2018 on do, not all; a phone with only 1.1 has not been tried). The same file installs on a phone whose Android is 32-bit (some cheap phones are, mainly ones with Android Go) and on one whose Android is 64-bit; the installer picks the right program inside it. The 32-bit program has been compiled and tested as a stand-in on a PC, and **has not been started on a 32-bit phone**: if yours is one, please say how it went ([report a problem](#reporting-a-problem)).
+**You need:** Android 8.0 or newer and a phone or tablet whose graphics support Vulkan 1.1 (many phones from about 2018 on do, not all; a phone with only 1.1 has not been tried). The same file installs on a phone whose Android is 32-bit (some cheap phones are, mainly ones with Android Go) and on one whose Android is 64-bit; the installer picks the right program inside it. The 32-bit program has been compiled, and the game's tests have run as a 32-bit x86 stand-in on a PC; it **has not been started on a 32-bit phone**: if yours is one, please say how it went ([report a problem](#reporting-a-problem)).
 
 **[Download for Android](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk)**
 
@@ -56,8 +56,8 @@ Have fun!
 <details>
 <summary>It didn't install or start?</summary>
 
-- **“App not installed” or “not compatible”:** your phone is older than Android 8, or has no Vulkan 1.1 graphics. The game cannot run there.
-- **A message about Vulkan when the game starts:** the same cause; the message is the graphics system's own words, and it helps a report.
+- **“App not installed” or “not compatible”:** your phone is older than Android 8 (or an older version of this app, signed with another key, is installed: uninstall it first). The game cannot run there.
+- **A message about Vulkan when the game starts:** the phone's graphics do not support Vulkan 1.1; the message is the graphics system's own words, and it helps a report.
 - **The game says it has no space:** it needs about 26 MB free for its copy of the files, besides the app.
 - **Anything else:** [report a problem](#reporting-a-problem) with your phone model and its Android version.
 

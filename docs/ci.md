@@ -1,7 +1,7 @@
 # The workflows: what each does, what it costs, and what has and has not run
 
 Planning step 209 (PORT-11), the eleventh step of the platform program; section 9 was added at planning step 211 (2026-11-03). **Status, plainly: step 209 wrote three workflows (`ci.yml`, `release.yml`,
-`android-emulator.yml`) and edited `apple.yml`. On 2026-11-03 `release.yml` was dispatched twice on GitHub (section 9): the first run failed in its `windows` job, and the second ran all six jobs to success.
+`android-emulator.yml`) and edited `apple.yml`. On 2026-11-03 `release.yml` was dispatched three times on GitHub (section 9): the first run failed in its `windows` job, and the second ran all six jobs to success.
 `ci.yml` and `android-emulator.yml` HAVE NEVER BEEN DISPATCHED, and no sentence in this repository says that a step of either of them works on GitHub.** `apple.yml` ran twice, green, on 2026-10-25 in the form it
 had then (`docs/apple.md` section 4b), and its two jobs that `release.yml` calls succeeded in both of that workflow's runs. What step 209 did instead of a dispatch is listed in section 6, with the tool that did it:
 a checker for the rules every workflow keeps, `actionlint` (with `shellcheck`) over the four files, the commands of two Linux jobs rehearsed in the Linux subsystem from a clean clone, and tests that edit copies
@@ -40,7 +40,7 @@ lightweight tag (no peeled `^{}` line), and each is the commit the floating `v4`
 
 ## 2. How the owner starts one, and what it costs
 
-Actions, the workflow's name, *Run workflow*, the branch, the inputs. **Dispatching any of them is the owner's decision.** `release.yml` was dispatched twice on 2026-11-03 (section 9); `ci.yml` and `android-emulator.yml` have not been dispatched. A dispatch needs nothing but the repository: no
+Actions, the workflow's name, *Run workflow*, the branch, the inputs. **Dispatching any of them is the owner's decision.** `release.yml` was dispatched three times on 2026-11-03 (section 9); `ci.yml` and `android-emulator.yml` have not been dispatched. A dispatch needs nothing but the repository: no
 secret, no key, no game data. The results are the run's artifacts (7 days; the release programs 30) and its logs.
 
 **Cost.** The repository is private, so a dispatch spends the account's Actions minutes. The usual published multipliers are 1 for a Linux minute, 2 for a Windows minute and 10 for a macOS minute; **the account's
@@ -194,3 +194,5 @@ beside `LICENSE`, `NOTICE.md` and a `SHA256SUMS.txt` made with `sha256sum`, beca
 
 **NOT KNOWN, after these runs.** `ci.yml` and `android-emulator.yml` have never been dispatched, so nothing about their steps is known on GitHub. Nobody has started the Windows program that CI built, on any PC: it was read as bytes. The minutes of each job of `release.yml` were not collected from the API, and the second run's total is not recorded here (the first run's 15 min 8 s ended in a failure).
 Nothing has run on a 32-bit ARM device. The Linux program of the artifact was built on Ubuntu 22.04 and not started on it (its glibc ceiling, 2.35, was read with `objdump -T`); where the Linux archive of the release was started, and what nobody has started, is in `docs/platforms.md`.
+
+**The third dispatch (2026-11-03, planning step 212), for the second release: run 41707657824 at commit 6638612 (engine 4261485): all six jobs succeeded, `collect` included.** The programs of the artifact: `windows/MagicPortals.exe` sha256 `4c758e3bbf1cc2a823112f97619c2e64c156d62283c4a43ae4e2746791ca4748` (`check-program` ok, version information at the project's version in its four fields), `linux/MagicPortals` sha256 `ea7a5dfba3a1b09cbcda29e073db0e2cf970869a76d39e90e67d0bcb05623407` (`check-program --max-glibc 2.35` ok). The Android libraries of that release's APK were NOT built by CI: they were built on the maker's PC (NDK r28, no warning) from the same commit, with the original's launcher icon and the maker's key, because the key and the original's files are not on a runner. The same things stay not known: nobody has started the Windows program, and CI's APK is a debug-signed shell without the game that is never released.

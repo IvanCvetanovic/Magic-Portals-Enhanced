@@ -1688,6 +1688,13 @@ work no step of §7 owns, and the owner's calls:
       opening hold (`data/portals.json`'s guessed `hold_time_s` is gone). The lag is still the port's `_guess`
       (`follow_lag_s` 0.12, against the original's `Follower(1000, 100)`; step 138's deviations).*
 - [ ] Portal timings `FIRST_PORTAL_MIN_TIME`, `NEXT_PORTAL_MIN_TIME`, collision radius, transit — decode or frame-step.
+- [ ] **Level 1-04 (`level3`): the walk off the bridge's left end onto the plate with two crystals** (the owner, 2026-11-04: in the original the character lands on it, which
+      makes gold with two portals reachable; here it slides down the end face and falls past it). investigated in step 212, NOT changed. The port's numbers (ticks 223-246, the bridge's flat top y 242, the plate's top
+      y 288, 26 units across and 46 down) are in step 212; what the original does there is NOT established. Candidates: the original's ground flag is about two frames stale
+      (`manageFeet` runs after the physics step) and `dark_mage.ent` has friction 0.9 where the port forces 0; or the original's air brake is `min(1, fps/60 x 0.86)` of the device's frame rate
+      (a 90 or 120 Hz phone has none). Neither alone lands the plate, the pair does, and then 6 of the 128 recorded routes fail (11b, 14a, 19b, 21b, 2b, 8a) and other levels'
+      ledge walks change (a geometry screen: 1-06, 1-21, 2-32, 3-01, 3-04, 3-05, 3-12, 3-13, 3-18, 3-32). NEXT: record the original's bridge walk in the emulator rig (docs/parity.md
+      sections 1-2), learn the owner's phone and refresh rate, then fix with every route checked, and add a route that asserts gold (`test_mp_routes` asserts only a win).
 
 ## 5. Final check
 
