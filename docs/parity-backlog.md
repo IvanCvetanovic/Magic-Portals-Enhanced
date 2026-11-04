@@ -1695,6 +1695,9 @@ work no step of §7 owns, and the owner's calls:
       (a 90 or 120 Hz phone has none). Neither alone lands the plate, the pair does, and then 6 of the 128 recorded routes fail (11b, 14a, 19b, 21b, 2b, 8a) and other levels'
       ledge walks change (a geometry screen: 1-06, 1-21, 2-32, 3-01, 3-04, 3-05, 3-12, 3-13, 3-18, 3-32). NEXT: record the original's bridge walk in the emulator rig (docs/parity.md
       sections 1-2), learn the owner's phone and refresh rate, then fix with every route checked, and add a route that asserts gold (`test_mp_routes` asserts only a win).
+      MEASURED 2026-11-04 (step 213 not started; DEVLOG session 72): the original in the emulator lands on the plate in 5 of 6 identical replays of the recorded shots and walk (the sixth slips past like the port), at about 26 fps; the recorded
+      route is bronze (0 crystals), not gold. In a scratch copy the port reaches all 5 crystals and gold only with BOTH the ground flag read 2 ticks late AND the player body's friction 0.9; lag alone 4 crystals, friction alone 3, and the crude
+      friction fails 30 routes (both: 32). A faithful version must explain why the original's walk is not slowed by that friction. Needs the owner's phone and refresh rate; this rig cannot run the original at 60 Hz or above.
 
 ## 5. Final check
 
