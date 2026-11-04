@@ -166,8 +166,8 @@ translation unit that is given neither those two nor a suite's own declaration, 
 | `MAGICPORTALS_WIN_GUI` | OFF | the Windows release program (below) | **ON** on Windows, with MSVC; a configure with it ON on anything else stops |
 | `MAGICPORTALS_ICON` | empty | an `.ico` for the release program (nothing is committed: `tools/art/make_app_icon.py` draws one) | the file that tool writes, or the owner's own; used only with `MAGICPORTALS_WIN_GUI` |
 
-The version is `project(MagicPortals VERSION 0.1.1 ...)` in the top-level `CMakeLists.txt`: **one definition**, and the Windows file properties
-(`FileVersion`, `ProductVersion` 0.1.1.0) are made from it. 0.1.0 began as a pre-release placeholder and is the number of the files of the first release (section 8); 0.1.1 is the second release's (planning step 212: the loading screen's portal, the credits' closing card, the sides of the menu pictures and the original's icon); whether a public release keeps the numbering is the owner's.
+The version is `project(MagicPortals VERSION 0.1.2 ...)` in the top-level `CMakeLists.txt`: **one definition**, and the Windows file properties
+(`FileVersion`, `ProductVersion` 0.1.2.0) are made from it. 0.1.0 began as a pre-release placeholder and is the number of the files of the first release (section 8); 0.1.1 is the second release's (planning step 212: the loading screen's portal, the credits' closing card, the sides of the menu pictures and the original's icon); 0.1.2 is the third's (planning step 214: a body off the floor keeps all its x velocity, which makes level 1-04's gold and 2-30's designed leap reachable); whether a public release keeps the numbering is the owner's.
 
 **The Windows release, exactly** (from a shell where MSVC is on `PATH`, e.g. after `vcvars64.bat`; use a build folder of its own that is
 gitignored, such as `out/build-release` (`/out/` is ignored), and not `build-play/`, which is the owner's play build
