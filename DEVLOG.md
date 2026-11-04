@@ -4832,3 +4832,16 @@ again, which is not a thing a quiet afternoon fixes.
 **Numbers:** 3 programs + 1 content package + 1 signed APK; 6 files in the draft, 6 of 6 byte-equal; 5 auditors, 962 k tokens; 81 of 81 suites at 32 bits; 0 files published.
 **Inferred mood:** a guess - eager ('make the new release pls'); he has been waiting for a build of the 1-04 fix since the morning.
 **Where it stands / next:** committed and pushed with this entry (docs only). Next, on the owner's word: publish the draft (`gh release edit v0.1.2 --draft=false --latest`), repeat the download check through the public `releases/latest/download/` links, and a docs-only entry for it.
+
+### 2026-11-04 22:45 - Session 74, addendum: 0.1.2 PUBLISHED on the owner's word - Step 214
+**Built:** nothing new. The owner asked 'did you release 0.1.2?', was told it was a draft held because the repository is public, and answered 'publish'. The unchanged draft (still a draft, 6 assets, target 638676a) was published with `--latest`.
+**Evidence that ran:** after the publish, with no login: `git ls-remote` shows the tag v0.1.2 at 638676a; the releases API says latest v0.1.2 (6 assets, not a draft or a pre-release); `releases/latest/download/` for all six names answers 200 and each download equals the local file byte for byte; `sha256sum -c` of the downloaded sums passes. v0.1.1 and v0.1.0 stay listed.
+**Broke / dead ends:** none in this step.
+**Not verified, NOT KNOWN:** as in the entry above: nobody has played 1-04's gold by hand, the APK was not installed anywhere, no program built by MSVC was run.
+**Assets check:** yes - the public-download copies were deleted at once; nothing from `reference/` or `out/` staged.
+**Left for the owner:** the hand-play of 1-04 with the APK of the release on his 120 Hz phone (and the update in place over 0.1.1), the repository's visibility and the workflows' triggers, and Step 211's list.
+**[CLIP] --:--** - none.
+**[BROLL]** - none.
+**Numbers:** 1 release published, 6 of 6 assets equal to the local files; 0 files committed beyond two docs.
+**Inferred mood:** a guess - impatient and clear ('publish'); two questions in a row about the same release.
+**Where it stands / next:** pushed with this entry (docs only). Next, if the owner says so: his report from the phone.
