@@ -27,8 +27,9 @@
     "NOT MEASURED ON THE ORIGINAL: the slot hop's ray passes 15 and 19 units from the two polygon corners that bound the opening (platform_ent_914's underside and double_block_plat_776's top) and rests on R23's ray and the port's colliders;",
     "the passage under the rising lift (18 units of head room at the narrowest) rests on the port's door body; the final comparison should replay this level on the emulator."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved taps[3].tick 314 -> 334, taps[6].tick 774 -> 771 (largest move 20 ticks) and it wins on tick 852 with win_by 900. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level12",
-  "win_by": 865,
+  "win_by": 900,
   "holds": [
     {"walk": "right", "from": 150, "to": 182},
     {"walk": "left", "from": 200, "to": 232},
@@ -40,10 +41,10 @@
     {"tick": 29, "at": [215, 150]},
     {"tick": 72, "at": [240, 149]},
     {"tick": 272, "at": [322, 440]},
-    {"tick": 314, "at": [175.6, 458.4]},
+    {"tick": 334, "at": [175.6, 458.4]},
     {"tick": 674, "at": [360, 262]},
     {"tick": 740, "at": [454.8, 458.4]},
-    {"tick": 774, "at": [392, 204]},
+    {"tick": 771, "at": [392, 204]},
     {"tick": 818, "at": [360, 317.4]}
   ]
 }

@@ -1,33 +1,28 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "2-30 (R1 fix 2; re-authored in 3b-1's round 2 on the wave's timing build; this note corrected in R3b fix 2). A STOP-GAP THAT STANDS ON A PORT ARTIFACT, NOT THE ORIGINAL'S SOLUTION, and",
-    "not measured against the original. antiportal_917 (68, 127), scale 5, refuses within 160 px, which holds the door, fire_agent_ent_918 (142, 198; burns within 32 px of the player's centre) and",
-    "the seesaw's left end. THE DESIGNED WAY is the counterweight leap: stone on the seesaw's RIGHT arm (it holds the plank left-up), walk up the plank and off its raised left end over the flame.",
-    "At the shipped air brake it dies: the carry after a leave is capped at 2.4 x (0.86 + 0.86^2 + ...) = 14.74 u (G10-2, clock.json matched_hz 60, which the owner has NOT ruled on), 31.6 of the 32 u",
-    "needed, and the player is burned on tick 270; the same walk (round 1's taps (370, 130) on 89 and (245, 40) on 129, walk left 200-330) wins on tick 284 with air_decay 1.0 or air_decay_fps 45 or 30,",
-    "and dies on 270 at 0.93 and 0.90 (R3b fix 2's diagnostic edits of data/player.json, restored; kept in out/parity/program/R3b/fix2/). Five earlier rounds (thousands of traced runs) found no leap and no ramp that does not lean on the creep.",
-    "THIS ROUTE: stand on the seesaw's right arm (the walk is let go on 76, x 268.8). A portal at (232, 150) over the left arm, 165 px from the ring's centre, and one at (247, 40) at the rolling",
-    "stone's left (the stone-side point may be anywhere from x 240.5 to 254.5 and y 20 to 55): the stone goes through on tick 158 and drops onto the left arm, which tips left-down under it; the stone",
-    "rolls down the arm and along the floor past the flame and meets the left wall at x 32.8 by tick 229. THE CREEP IT LEANS ON: the stone then creeps back along the floor at 0.087 to 0.098 u a tick.",
-    "Cause (R3b fix 1, by a data edit of the run): the HELD friction's traction. materials.json builds the stone at held_friction 1 (friction_applied is false: the engine's solver cannot carry the decoded",
-    "friction), and a stone that arrives at the wall spinning turns its spin into a drift away from it. With the stone's own decoded friction (0.025, combined 0.158 against the held floor) it rests at",
-    "x 30.1 for 1,100 ticks and this route fails (the player is burned on tick 1346, the walk reaching the flame with no stone to cross); of the 86 routes only 2-30 and 3-12 then fail, 2-07 wins a tick",
-    "earlier and 1-09 two later (R3b fix 2's census). So the route is to be replaced when the engine's friction step turns friction_applied on, or when the owner settles G10-2 (rows R3-2, G10-14).",
-    "Meanwhile the plank, free of the stone, returns to left-up under the player waiting on its right arm (his y is 167.4 from tick 280). The stone comes to the raised left end's face at x 113.4 on tick 1212",
-    "and stays there, 19.5 u left of the end (x 132.9), its top at y 164. Then the walk left (from tick 1300; every start from 1040 to 1680, the range scanned, wins) goes up the plank, over its end onto the",
-    "stone's right shoulder and top and down its far side to the door: the player's centre is never nearer the flame than 54.5 u (tick 1367, at (122.9, 147)). Won on tick 1386. Also leans on the",
-    "stone-side portal's tolerance above and on the plank's return to left-up under a standing player (step 153's capsule mass 0.104 against the plank's 1.42, step 154's platforms). No tap off the view,",
-    "no refused shot, two portals (medal 3)."
+    "2-30, THE DESIGNED WAY (R1 fix 2; re-adopted in planning step 213 once the owner ruled the air brake, G10-2). antiportal_917 (68, 127), scale 5, refuses within",
+    "160 px at 32 x scale, which holds the door, fire_agent_ent_918 (142, 198; burns within 32 px of the player's centre) and the seesaw's left end. Walk left onto the seesaw's RIGHT arm",
+    "and stop there (the walk is let go on 70; the player stands at x about 262, 6 px right of the pivot at 256, and waits until tick 200); a portal over the seesaw's right end at (370, 130),",
+    "302 px from the ring's centre, and one at the rolling stone's left at (245, 40), 197 px: the stone goes through and drops onto the right arm, which holds the plank left-up. Walk left up",
+    "the plank and off its raised left end, over the flame and into the door: the counterweight leap. Won on tick 284 with two portals, medal 3, which the file pins.",
+    "THE LEAP clears the flame by under a pixel: the nearest the player's centre comes to it is 32.9 px (tick 270, at (110.2, 189.6)) against the burn radius of 32 around (142, 198); the",
+    "stone-side aim is good for x 243 to 250. WHY IT WAS A STOP-GAP FROM STEP 155 TO STEP 213. The leap is 32 units across; at the 0.86 a tick the matched 60 Hz gave the air brake the carry",
+    "after the leave was capped at 14.74 units (31.6 of the 32 needed) and the player was burned on tick 270. The owner's ruling of 2026-11-04 (player.json movement.air_decay_rate_hz 120: a",
+    "body off the floor keeps all its x velocity, as the original does from about 70 frames a second) lets this same walk win, as R3b fix 2's diagnostic edits had shown (air_decay 1.0,",
+    "air_decay_fps 45 or 30). The route that stood here, with the stone creeping back along the floor (a port artifact: the held friction's traction) and won on tick 1386, is gone.",
+    "Leans on the port's traversal by body overlap (the stone's centre 39 px from the portal it goes through, as 3-22's stone and 2-32's crate), the port's seesaw and stone masses (not measured",
+    "against the original), G10 (the walk is held through the fall) and G4 (shot speed)."
   ],
   "level": "level29a",
-  "win_by": 1420,
+  "win_by": 330,
+  "medal": 3,
   "holds": [
-    {"walk": "left", "from": 1, "to": 76},
-    {"walk": "left", "from": 1300, "to": 1400}
+    {"walk": "left", "from": 1, "to": 70},
+    {"walk": "left", "from": 200, "to": 330}
   ],
   "taps": [
-    {"tick": 90, "at": [232, 150]},
-    {"tick": 125, "at": [247, 40]}
+    {"tick": 89, "at": [370, 130]},
+    {"tick": 129, "at": [245, 40]}
   ]
 }

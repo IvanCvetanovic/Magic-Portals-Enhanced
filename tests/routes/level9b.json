@@ -43,10 +43,11 @@
     "walk and the turn 16 or more, and the least are 6, on the first walk's start (28 within 20 to 34) and end (196 within 190 to 204),",
     "which set where he stands on the lift, as in the old route."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[0].from 28 -> 30 (largest move 2 ticks) and it wins on tick 938 with win_by 980. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level9b",
-  "win_by": 956,
+  "win_by": 980,
   "holds": [
-    {"walk": "left", "from": 28, "to": 196},
+    {"walk": "left", "from": 30, "to": 196},
     {"walk": "left", "from": 650, "to": 776},
     {"walk": "right", "from": 777, "to": 956}
   ],

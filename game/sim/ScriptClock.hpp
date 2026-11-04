@@ -68,7 +68,8 @@ unsigned FloorMs(double frameMs);
 // layer, which owns the engine's tick, builds the two apart.
 //
 // `simS` is what the original's physics world advances in the frame this tick stands for, and
-// `fps` what GetFPSRate answers. A bare float, and the two-length form, are a tick whose
+// `fps` what GetFPSRate answers (the player's air share no longer reads it: since planning step 213 the one rate the
+// air brake is evaluated at is player.json's movement.air_decay_rate_hz). A bare float, and the two-length form, are a tick whose
 // physics is one length with the tick's (simS = physicsS: SimRatio 1) at the frame rate the
 // tick implies: the pure suites' reading, which TickStep replaces with the decode's.
 struct Step {

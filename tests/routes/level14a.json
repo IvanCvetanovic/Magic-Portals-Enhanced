@@ -18,17 +18,18 @@
     "last walk start 445 to 454). Leans on the port's traversal by body overlap for the barrel",
     "(its centre is 22.5 px from that portal), on G4 (shot speed), G10 (the walk and fall) and the carrancas' timing (startStride 1500 / 0, stride 3000 / 2000)."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[1].to 143 -> 163, holds[2].from 160 -> 159, holds[2].to 163 -> 172, holds[3].from 336 -> 331, holds[4].from 450 -> 464, taps[0].tick 164 -> 166 (largest move 20 ticks) and it wins on tick 513 with win_by 560. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. A shot now lands inside a walk, so a player needs the walk finger and the aim finger at once: taps[0] (tick 166) now falls inside holds[2]. SINGLE-TICK WINNER: taps[0].tick = 166 wins at that tick only, not at its neighbours +-1 or +-2 - the first key to look at if a build on another compiler or a 32-bit build differs. The search had left holds[1] (left to 163) and holds[2] (right from 159) overlapping on ticks 159-163, where the layer sums opposite walks to nothing: written without the overlap (holds[1].to 158, holds[2].from 164) the player stands still for the same 5 ticks.",
   "level": "level14a",
-  "win_by": 520,
+  "win_by": 560,
   "holds": [
     {"walk": "right", "from": 1, "to": 75},
-    {"walk": "left", "from": 90, "to": 143},
-    {"walk": "right", "from": 160, "to": 163},
-    {"walk": "right", "from": 336, "to": 412},
-    {"walk": "right", "from": 450, "to": 560}
+    {"walk": "left", "from": 90, "to": 158},
+    {"walk": "right", "from": 164, "to": 172},
+    {"walk": "right", "from": 331, "to": 412},
+    {"walk": "right", "from": 464, "to": 560}
   ],
   "taps": [
-    {"tick": 164, "at": [110, 295]},
+    {"tick": 166, "at": [110, 295]},
     {"tick": 199, "at": [366, 168]},
     {"tick": 292, "at": [150, 310]},
     {"tick": 336, "at": [53, 188]}

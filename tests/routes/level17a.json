@@ -23,7 +23,8 @@
     "clears the carranca's top corner (x_s above 305 at the floor); the shot on 822 at (88, 80) kills it on 886 and the ring goes. A shot at (60, 60) on 888 opens",
     "at (60, 62) on ~970 (the pair (230, 136) and (250, 82) is recycled: the budget is two), and the player's own point on 971 takes it through, to the",
     "door room and down onto the door on 983, 26 ticks before the fireball spat on 941 would reach the button (burned at 1009). Won on tick 983. The 400 ms spacing (26 ticks)",
-    "and the hourglass hold every release from the next shot's landing."
+    "and the hourglass hold every release from the next shot's landing.",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level17a",
   "win_by": 1010,

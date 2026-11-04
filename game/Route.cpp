@@ -27,6 +27,7 @@ namespace Json = Supersonic::Json;
 namespace Key {
 constexpr const char* kLevel = "level";
 constexpr const char* kWinBy = "win_by";
+constexpr const char* kMedal = "medal";
 constexpr const char* kHolds = "holds";
 constexpr const char* kTaps = "taps";
 constexpr const char* kWalk = "walk";
@@ -118,7 +119,7 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
         error = path + ": not an object";
         return false;
     }
-    if (!OnlyKeys(root, {Key::kLevel, Key::kWinBy, Key::kHolds, Key::kTaps}, path, error)) return false;
+    if (!OnlyKeys(root, {Key::kLevel, Key::kWinBy, Key::kMedal, Key::kHolds, Key::kTaps}, path, error)) return false;
 
     Plan plan;
     plan.file = path;
@@ -128,6 +129,13 @@ bool Load(const std::string& path, Plan& out, std::string& error) {
     }
     plan.level = root[Key::kLevel].AsString();
     if (!Whole(root, Key::kWinBy, 1, plan.winBy, path, error)) return false;
+    if (root.Has(Key::kMedal)) {
+        if (!Whole(root, Key::kMedal, 1, plan.medal, path, error)) return false;
+        if (plan.medal > 3) {
+            error = path + ": \"medal\" is not 1 (bronze), 2 (silver) or 3 (gold)";
+            return false;
+        }
+    }
 
     if (root.Has(Key::kHolds)) {
         if (!root[Key::kHolds].IsArray()) {

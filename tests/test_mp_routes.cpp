@@ -1,8 +1,9 @@
 // Every level a win route wins, won by it.
 //
 // A route (game/Route.hpp) is a hand-authored tests/routes/<level>.json: walks held
-// over spans of the layer's ticks, taps at points of the level on stated ticks, and
-// the tick by which the level must be won. This suite finds every file there at run
+// over spans of the layer's ticks, taps at points of the level on stated ticks, the
+// tick by which the level must be won and, where the file says so (`"medal": 3`), the
+// medal the door must give. This suite finds every file there at run
 // time - a track adds a route without touching this code - and plays each through
 // the layer as the game does: attached to a bare registry, the app's physics step
 // before each of its ticks, its frame after, the pointer published over a 1280x720
@@ -14,6 +15,13 @@
 // point the view did not show. Each route's line gives its shots' largest aim drift:
 // how far the point under a finger was from the point the file names, where the
 // camera moved while the finger was down (Route.hpp).
+//
+// THE DISPLAY RATES (planning step 213). The game plays the same on every phone: its simulation advances only on the engine's fixed tick (1/60 s) and
+// reads nothing of the display. A route is therefore played again through the engine's own tick pump (SupersonicApp.cpp's accumulator, its 5-tick and
+// 0.10 s clamps, the interpolation around each tick, the layer's frame once per DISPLAY frame) at 30, 90, 120 and 144 Hz, with a 120 Hz that jitters 20 % and a
+// 90 Hz that hitches 85 ms every 97th frame, and every tick's record (and the raw bits of the player's position and velocity), the win tick, the medal,
+// the game time and the unlocks must be those of the same pump at 60 Hz. By default four short routes are checked; `--display <hz,hz,...>` checks every
+// route played, at those rates (the jitter and the hitch go with it).
 //
 // For writing a route, the same binary replays one and says what it did:
 //   test_mp test_mp_routes --only <level or file> [--trace <every n ticks>]
@@ -45,8 +53,10 @@
 
 #include "core/Components.hpp"
 #include "core/Input.hpp"
+#include "core/InterpolationSystem.hpp"
 #include "core/Json.hpp"
 #include "core/PhysicsSystem.hpp"
+#include "core/TransformSystem.hpp"
 #include "core/ViewportInfo.hpp"
 
 #include "sim/Chapters.hpp"
@@ -58,12 +68,16 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -98,6 +112,7 @@ struct Options {
     std::optional<std::string> controls;  // --controls <classic|modern>: the controls census (planning step 182)
     bool classicClaims = false;           // --classic-claims: with modern, only the variant that claims classic
     std::optional<Controls::Arrows> arrows; // --arrows <split|grouped>: the arrangement of the walk arrows the census plays (planning step 186); none: the data's, split
+    std::vector<double> displayHz;          // --display <hz,hz,...>: every route played is replayed through the tick pump at these display rates (step 213)
     std::optional<bool> twoContacts;        // --contacts <one|two>: whether the modern run reads a second finger (planning step 191); none: the data's (input.two_contacts)
 };
 
@@ -596,6 +611,153 @@ Outcome Play(const Route::Plan& plan, const Options& options, const std::string&
     return out;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// THE DISPLAY RATES. One route played through the engine's tick pump at a given display frame length.
+
+// The raw float bits of the player's transform and velocity folded into `bits` (FNV-1a): twelve digits cannot hide a ulp.
+void FoldPlayerBits(const MagicPortalsLayer& layer, entt::registry& registry, std::uint64_t& bits) {
+    const MagicPortals::Game::Level* level = layer.SimLevel();
+    if (level == nullptr || level->player == entt::null || !registry.valid(level->player)) return;
+    const auto fold = [&bits](float value) {
+        std::uint32_t word;
+        std::memcpy(&word, &value, sizeof word);
+        for (int b = 0; b < 4; ++b) {
+            bits ^= (word >> (8 * b)) & 0xFFu;
+            bits *= 1099511628211ull;
+        }
+    };
+    const auto& transform = registry.get<TransformComponent>(level->player);
+    fold(transform.position.x);
+    fold(transform.position.y);
+    fold(transform.position.z);
+    if (const auto* body = registry.try_get<RigidBodyComponent>(level->player)) {
+        fold(body->velocity.x);
+        fold(body->velocity.y);
+    }
+}
+
+struct Displayed {
+    std::vector<std::string> records;
+    std::uint64_t bits = 14695981039346656037ull;
+    int wonTick = 0;
+    int frames = 0;
+    int medal = -1;
+    double gameTimeMs = 0.0;
+    std::size_t unlocks = 0;
+    std::vector<std::string> problems;
+};
+
+// SupersonicApp.cpp's loop, as the app runs it: the frame's delta clamped to 0.10 s into a float accumulator, at most 5 ticks a frame (the remainder dropped), each tick
+// the interpolation's BeginTick, the physics step, the game's tick with the route's input, the route's own tick and the interpolation's EndTick; then the
+// interpolation's Apply(alpha) and the layer's frame once per DISPLAY frame - a slow display runs two ticks a frame, a fast one runs none in some.
+Displayed PlayDisplayed(const Route::Plan& plan, const std::function<double(int)>& displayDelta) {
+    Displayed out;
+    entt::registry registry;
+    PublishViewport(registry);
+    MagicPortalsLayer layer(RoutePaths(), plan.level);
+    layer.OnAttach(registry);
+    Route::Driver driver(plan);
+    driver.Begin(layer);
+    constexpr float kTick = MagicPortalsLayer::kTick;
+    float accumulator = 0.0f;
+    while (!driver.Finished() && out.frames < 400000) {
+        const float delta = std::clamp(static_cast<float>(displayDelta(out.frames)), 0.0f, 0.10f);
+        accumulator += delta;
+        int steps = 0;
+        while (accumulator >= kTick && steps < 5 && !driver.Finished()) {
+            InterpolationSystem::BeginTick(registry);
+            PhysicsSystem::Update(registry, kTick);
+            Input::TickInput input;
+            input.mousePosition = kRest;
+            Input::BeginReplayedTick(input);
+            layer.OnFixedUpdate(registry, kTick);
+            Input::EndReplayedTick();
+            driver.AfterTick(layer);
+            InterpolationSystem::EndTick(registry);
+            out.records.push_back(RecordOf(layer, registry));
+            FoldPlayerBits(layer, registry, out.bits);
+            accumulator -= kTick;
+            ++steps;
+        }
+        if (steps == 5 && accumulator > 0.0f) accumulator = 0.0f;
+        InterpolationSystem::Apply(registry, std::clamp(accumulator / kTick, 0.0f, 1.0f));
+        layer.OnUpdate(registry, delta);
+        TransformSystem::UpdateWorldTransforms(registry);
+        ++out.frames;
+    }
+    out.wonTick = driver.WonTick();
+    out.unlocks = layer.Unlocks().size();
+    if (layer.LastDoorPlay()) {
+        out.medal = layer.LastDoorPlay()->medal;
+        out.gameTimeMs = layer.LastDoorPlay()->gameTimeMs;
+    }
+    out.problems = driver.Problems();
+    layer.OnDetach(registry);
+    return out;
+}
+
+// Why two runs differ, or empty where they do not.
+std::string DifferenceBetween(const Displayed& reference, const Displayed& other) {
+    const std::size_t n = std::min(reference.records.size(), other.records.size());
+    for (std::size_t i = 0; i < n; ++i) {
+        if (reference.records[i] != other.records[i]) {
+            return "tick " + std::to_string(i + 1) + ": " + reference.records[i] + "  !=  " + other.records[i];
+        }
+    }
+    if (reference.records.size() != other.records.size()) {
+        return "the run is " + std::to_string(other.records.size()) + " ticks, the reference " + std::to_string(reference.records.size());
+    }
+    if (reference.bits != other.bits) return "the raw bits of the player's position and velocity differ";
+    if (reference.wonTick != other.wonTick) return "won on tick " + std::to_string(other.wonTick) + ", the reference on " + std::to_string(reference.wonTick);
+    if (reference.medal != other.medal) return "medal " + std::to_string(other.medal) + ", the reference " + std::to_string(reference.medal);
+    if (reference.gameTimeMs != other.gameTimeMs) return "game time differs";
+    if (reference.unlocks != other.unlocks) return "unlocks differ";
+    if (reference.problems != other.problems) return "problems differ";
+    return std::string();
+}
+
+// The routes checked at the display rates when the run names none: short ones, a gold medal's among them.
+const char* const kDisplayRoutes[] = {"level0", "level2", "level3", "level14"};
+
+bool DisplayChecked(const Options& options, const Route::Plan& plan) {
+    if (!options.displayHz.empty()) return true;
+    if (!options.only.empty() || options.controls) return false;
+    return std::any_of(std::begin(kDisplayRoutes), std::end(kDisplayRoutes), [&](const char* name) { return plan.level == name; });
+}
+
+int g_displayChecked = 0; // routes the display check ran on, so a run of the default set cannot drop out silently
+
+void CheckDisplayRates(const Route::Plan& plan, const Options& options, const std::string& label, int plainWonTick) {
+    ++g_displayChecked;
+    const Displayed reference = PlayDisplayed(plan, [](int) { return 1.0 / 60.0; });
+    struct Timeline {
+        std::string name;
+        std::function<double(int)> delta;
+    };
+    std::vector<Timeline> timelines;
+    const std::vector<double> rates = options.displayHz.empty() ? std::vector<double>{30.0, 90.0, 120.0, 144.0} : options.displayHz;
+    for (const double hz : rates) timelines.push_back({std::to_string(static_cast<int>(hz)) + " Hz", [hz](int) { return 1.0 / hz; }});
+    std::mt19937 engine(12345);
+    std::uniform_real_distribution<double> jitter(-0.20, 0.20);
+    std::vector<double> jittered;
+    for (int i = 0; i < 400000; ++i) jittered.push_back(1.0 / 120.0 * (1.0 + jitter(engine)));
+    timelines.push_back({"120 Hz with 20 % jitter", [&jittered](int i) { return jittered[static_cast<std::size_t>(i)]; }});
+    timelines.push_back({"90 Hz with an 85 ms hitch every 97th frame", [](int i) { return i % 97 == 96 ? 0.085 : 1.0 / 90.0; }});
+    // A frame past the engine's 0.10 s clamp: it runs the 5-tick cap and drops the rest, and the simulation must not notice.
+    timelines.push_back({"60 Hz with a 150 ms frame every 211th (the clamp and the dropped remainder)", [](int i) { return i % 211 == 210 ? 0.15 : 1.0 / 60.0; }});
+    CHECK_MSG(reference.wonTick > 0, label + " " + plan.level + ": the 60 Hz pump wins it");
+    CHECK_MSG(reference.wonTick == plainWonTick, label + " " + plan.level + ": the pump at 60 Hz wins on the tick the plain run did: " + std::to_string(reference.wonTick) + " against " + std::to_string(plainWonTick));
+    for (const Timeline& timeline : timelines) {
+        const Displayed run = PlayDisplayed(plan, timeline.delta);
+        const std::string why = DifferenceBetween(reference, run);
+        CHECK_MSG(why.empty(), label + " " + plan.level + " at " + timeline.name + " is not the 60 Hz run: " + why);
+    }
+    std::string rateText;
+    for (const double hz : rates) rateText += (rateText.empty() ? "" : ", ") + std::to_string(static_cast<int>(hz));
+    std::printf("  %s %s plays the same at %zu display timelines (%s Hz, jitter, a hitch, a clamped frame): %zu ticks\n", label.c_str(), plan.level.c_str(),
+                timelines.size(), rateText.c_str(), reference.records.size());
+}
+
 std::vector<std::filesystem::path> Discover() {
     std::vector<std::filesystem::path> files;
     std::error_code ec;
@@ -849,6 +1011,29 @@ void ReportCensus(const Options& options, const CensusTable& table) {
     }
 }
 
+// The route format's optional `medal`: a whole 1, 2 or 3, and nothing else.
+void TheMedalKeyIsHeldToOneTwoOrThree() {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-routes-format";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const auto load = [&](const std::string& medal, std::string& error) {
+        const std::filesystem::path file = dir / "level3.json";
+        std::ofstream(file) << "{\"level\": \"level3\", \"win_by\": 400" << (medal.empty() ? "" : ", \"medal\": " + medal) << "}";
+        Route::Plan plan;
+        error.clear();
+        return Route::Load(file.string(), plan, error) ? plan.medal : -1;
+    };
+    std::string error;
+    CHECK_EQ(load("", error), 0);   // no key: the route only has to win
+    CHECK_EQ(load("1", error), 1);
+    CHECK_EQ(load("2", error), 2);
+    CHECK_EQ(load("3", error), 3);
+    for (const char* bad : {"0", "4", "-1", "2.5", "\"3\"", "null", "true"}) {
+        CHECK_MSG(load(bad, error) == -1 && error.find("medal") != std::string::npos, std::string("a medal of ") + bad + " is refused, naming the key: " + error);
+    }
+    std::filesystem::remove_all(dir, ec);
+}
+
 void RunRoutes(const Options& options) {
     MagicPortals::Chapters::Table chapters;
     std::string error;
@@ -908,9 +1093,23 @@ void RunRoutes(const Options& options) {
         CHECK_MSG(outcome.problems.empty(), label + " " + plan.level + ": " + problems);
         CHECK_MSG(outcome.wonTick > 0 && outcome.wonTick <= plan.winBy,
                   label + " " + plan.level + " is won by tick " + std::to_string(plan.winBy));
+        // A route that names its medal is pinned to it: the win alone said nothing of the crystals and the portals (1-04's route
+        // won with a bronze for as long as the walk off its bridge missed the plate, and nothing noticed).
+        if (plan.medal > 0) {
+            const std::string got = outcome.door.has_value() ? std::to_string(outcome.door->medal) : std::string("none (no door result)");
+            CHECK_MSG(outcome.door.has_value() && outcome.door->medal == plan.medal,
+                      label + " " + plan.level + " earns medal " + std::to_string(plan.medal) + ", got " + got);
+        }
+        if (DisplayChecked(options, plan)) CheckDisplayRates(plan, options, label, outcome.wonTick);
         if (options.controls) CensusRoute(plan, options, label, reference, outcome, table);
     }
     if (options.controls && *options.controls == "modern") ReportCensus(options, table);
+    // The default set of the display check ran on every route it names (a renamed or removed file would drop one out silently).
+    if (options.only.empty() && options.displayHz.empty() && !options.controls) {
+        CHECK_MSG(g_displayChecked == static_cast<int>(std::size(kDisplayRoutes)),
+                  "the display check ran on " + std::to_string(g_displayChecked) + " routes, not the " + std::to_string(std::size(kDisplayRoutes)) + " it names");
+        TheMedalKeyIsHeldToOneTwoOrThree();
+    }
 }
 
 } // namespace
@@ -929,6 +1128,17 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
                 std::printf("test_mp_routes: --controls wants classic or modern, not '%s'\n", options.controls->c_str());
                 return 2;
             }
+        } else if (arg == "--display" && i + 1 < argc) {
+            std::stringstream list(argv[++i]);
+            std::string item;
+            while (std::getline(list, item, ',')) {
+                const double hz = std::atof(item.c_str());
+                if (!(hz >= 20.0 && hz <= 1000.0)) {
+                    std::printf("test_mp_routes: --display wants rates in hertz between 20 and 1000, not '%s'\n", item.c_str());
+                    return 2;
+                }
+                options.displayHz.push_back(hz);
+            }
         } else if (arg == "--classic-claims") {
             options.classicClaims = true;
         } else if (arg == "--arrows" && i + 1 < argc) {
@@ -945,7 +1155,7 @@ MP_SUITE_MAIN_ARGS("test_mp_routes", argc, argv) {
             }
             options.twoContacts = which == Controls::TuningKey::kContactsTwo;
         } else {
-            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--controls <classic|modern> [--classic-claims] [--arrows <split|grouped>] [--contacts <one|two>]]\n");
+            std::printf("test_mp test_mp_routes [--only <level or route file>]... [--trace <every n ticks>] [--display <hz,hz,...>] [--controls <classic|modern> [--classic-claims] [--arrows <split|grouped>] [--contacts <one|two>]]\n");
             return 2;
         }
     }

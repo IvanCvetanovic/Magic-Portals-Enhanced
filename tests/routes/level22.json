@@ -22,7 +22,8 @@
     "at the player's 328.6), one on the player (477): onto the floor. A shot up through the window between the column and the post to",
     "(618, 50) (505, 28 after; placed 553), one on the player (555): out above the post's right side, down and right into the door. Won on tick 597.",
     "The kill leans on the port's sampled position along the shot (G4); the stone push on the port's own solver (a pushed stone keeps",
-    "the player's 2.4 u a tick). Every tap and the last walk are good for +-2 ticks (12 variants wins on 595 to 599)."
+    "the player's 2.4 u a tick). Every tap and the last walk are good for +-2 ticks (12 variants wins on 595 to 599).",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level22",
   "win_by": 630,

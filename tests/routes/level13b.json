@@ -51,33 +51,34 @@
     "The walk's ends: left 840 starts 820-851 and ends 885-929, left 910 starts 880-923 (the last one wins on 1100 at its edge, the",
     "others between 1064 and 1091)."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[2].to 572 -> 552, holds[4].from 840 -> 826, holds[4].to 899 -> 898, taps[0].tick 26 -> 25, taps[1].tick 60 -> 54, taps[2].tick 86 -> 90, taps[4].tick 202 -> 203, taps[9].tick 578 -> 580, taps[14].tick 796 -> 793, taps[16].tick 906 -> 886 (largest move 20 ticks) and it wins on tick 1064 with win_by 1110. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. A shot now lands inside a walk, so a player needs the walk finger and the aim finger at once: taps[15] (tick 832) now falls inside holds[4]; taps[16] (tick 886) now falls inside holds[4]. SINGLE-TICK WINNER: taps[0].tick = 25 wins at that tick only, not at its neighbours +-1 or +-2 - the first key to look at if a build on another compiler or a 32-bit build differs.",
   "level": "level13b",
-  "win_by": 1100,
+  "win_by": 1110,
   "holds": [
     {"walk": "left", "from": 62, "to": 86},
     {"walk": "right", "from": 324, "to": 404},
-    {"walk": "left", "from": 512, "to": 572},
+    {"walk": "left", "from": 512, "to": 552},
     {"walk": "left", "from": 582, "to": 590},
-    {"walk": "left", "from": 840, "to": 899},
+    {"walk": "left", "from": 826, "to": 898},
     {"walk": "left", "from": 910, "to": 1160}
   ],
   "taps": [
-    {"tick": 26, "at": [250, 50]},
-    {"tick": 60, "at": [226, 160]},
-    {"tick": 86, "at": [59.4, 12]},
+    {"tick": 25, "at": [250, 50]},
+    {"tick": 54, "at": [226, 160]},
+    {"tick": 90, "at": [59.4, 12]},
     {"tick": 136, "at": [45, 50]},
-    {"tick": 202, "at": [237.3, 160]},
+    {"tick": 203, "at": [237.3, 160]},
     {"tick": 230, "at": [250, 45]},
     {"tick": 304, "at": [45, 160]},
     {"tick": 386, "at": [280, 120]},
     {"tick": 474, "at": [476, 112]},
-    {"tick": 578, "at": [465, 390]},
+    {"tick": 580, "at": [465, 390]},
     {"tick": 636, "at": [175, 262]},
     {"tick": 690, "at": [330, 262]},
     {"tick": 734, "at": [270, 400]},
     {"tick": 762, "at": [432, 236]},
-    {"tick": 796, "at": [330, 284]},
+    {"tick": 793, "at": [330, 284]},
     {"tick": 832, "at": [470, 265]},
-    {"tick": 906, "at": [446, 392]}
+    {"tick": 886, "at": [446, 392]}
   ]
 }

@@ -5,7 +5,7 @@
 // A route is a hand-authored file, tests/routes/<level>.json: the walks held over
 // spans of the layer's ticks, the taps pressed at points of the level on stated
 // ticks, and the tick by which the level must be WON - goals.completed, reached by
-// play. Nothing else: no PutPlayer, no DEV flag, no portal placed by hand. The
+// play (and, where a file names it, the MEDAL the door must give: `"medal": 3`, step 213). Nothing else: no PutPlayer, no DEV flag, no portal placed by hand. The
 // program's definition of done (docs/parity-backlog.md, section 6) asks for one per
 // level, and step 113 of the remaster record built this to hold them.
 //
@@ -90,6 +90,9 @@ struct Plan {
     std::string file;
     std::string level; // as chapters.json names it
     int winBy = 0;     // the layer's tick by which goals.completed must be set
+    // The medal the door must give the route (1 bronze, 2 silver, 3 gold), pinned where a route's point is the medal and not the win
+    // (1-04's gold needs both the bridge's crystals and the plate's under it with two portals); 0: the route only has to win.
+    int medal = 0;
     std::vector<Hold> holds;
     std::vector<Tap> taps; // by tick, each up before the next goes down
 };

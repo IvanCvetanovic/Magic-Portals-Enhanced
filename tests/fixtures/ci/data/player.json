@@ -43,9 +43,21 @@
     "_elapsed_cap_ms": "applyForces ins 15, PshC4 66: min(66, the script's frame ms). The 66 is twice the 33.33 step; no 60 Hz frame reaches it (16 ms).",
     "air_decay": 0.86,
     "air_decay_fps": 60.0,
+    "air_decay_rate_hz": 120.0,
+    "_air_decay_rate_hz": [
+      "THE OWNER'S RULING, 2026-11-04 (planning step 213; it answers G10-2's open question and R3-2): the formula above is EVALUATED at 120 Hz, his phone's,",
+      "where min(1, 120 / 60 x 0.86) = 1: a body off the floor keeps ALL its x velocity, the share the original keeps from about 70 frames a second (every",
+      "phone of 90 Hz and up). Why: the original's air brake depends on the phone's frame rate and the port plays the same on every phone (its tick is fixed",
+      "and the simulation reads no display delta or alpha: test_mp_routes --display replays recorded input through the engine's tick pump at 30 to 144 Hz and finds every tick identical; the device-to-tick input path, a second finger under about 25 ms at 90 Hz and above, is NOT covered), so ONE rate has to be chosen. At the matched 60 Hz (0.86) the port's",
+      "walk off 1-04's bridge falls about 3 units short of the plate under it (the gold medal's two crystals) and 2-30's designed walk 0.4 units short of the",
+      "flame's edge (the backlog's R3-2: it wins at 1.0), while the original reaches the plate at about 26 frames a second (MEASURED on the emulator rig: 5 of 6",
+      "identical replays of the recorded shots and walk land on it, the sixth slips past as the port did every time). NOT a measurement of the original at",
+      "60 Hz or above: the rig cannot run it there, and a model of it (step 213's research) says the original's own jump needs about 30 frames a second.",
+      "The decoded 0.86 and 60 stay as the formula's immediates; Player::AirShareAt takes any rate and the tests pin it at 60, 30, 17 and 120."
+    ],
     "_air_decay": [
-      "applyForces ins 75-79. The factor is min(1, GetFPSRate() / 60 x 0.86), evaluated at the matched 60 Hz: 0.86 (the spec's ruling, step",
-      "CK's clock). GetFPSRate is the video's frames counted over a window just over a second long, times that window (GLES2Video.cpp",
+      "DECODED FORMULA (applyForces ins 75-79): min(1, GetFPSRate() / 60 x 0.86). The port evaluates it at `air_decay_rate_hz` above (the owner's ruling, planning step 213), where it is 1; at the",
+      "matched 60 Hz it was 0.86 (the spec's ruling, step CK's clock) from step 148 to step 213. GetFPSRate is the video's frames counted over a window just over a second long, times that window (GLES2Video.cpp",
       "ComputeFPSRate, :878-889: frameCount x interval, an initial 30 for the first second), so a real 60 Hz device reads about 60-63 and the",
       "factor 0.86-0.90; an emulator at 17 fps reads 17 and the factor 0.24: the air brake depends on the frame rate, as the original's physics step does."
     ]

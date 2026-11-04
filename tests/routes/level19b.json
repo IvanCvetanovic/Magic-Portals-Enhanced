@@ -36,23 +36,24 @@
     "sensor is the whole 128 x 16 shape), G1 (the knight hears at 302 and neither sees nor shoots), G10 (air brake), G3 (the",
     "seesaw is a body here), G4 (shot speed) and CMP-2 (the plank's pose)."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots and walks; a shot target moved only where this note says so) moved holds[1].from 125 -> 132, holds[1].to 168 -> 171, holds[3].from 298 -> 307, holds[3].to 317 -> 316, taps[0].at [305, 200] -> [314, 200], taps[2].at [253, 40] -> [253, 36], taps[4].tick 392 -> 386 (largest tick move 9) and it wins on tick 555 with win_by 600. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level19b",
-  "win_by": 570,
+  "win_by": 600,
   "holds": [
     {"walk": "right", "from": 1, "to": 44},
-    {"walk": "right", "from": 125, "to": 168},
+    {"walk": "right", "from": 132, "to": 171},
     {"walk": "left", "from": 175, "to": 238},
-    {"walk": "right", "from": 298, "to": 317},
+    {"walk": "right", "from": 307, "to": 316},
     {"walk": "left", "from": 334, "to": 338},
     {"walk": "right", "from": 376, "to": 384},
     {"walk": "left", "from": 422, "to": 700}
   ],
   "taps": [
-    {"tick": 89, "at": [305, 200]},
+    {"tick": 89, "at": [314, 200]},
     {"tick": 119, "at": [211.9, 202.3]},
-    {"tick": 254, "at": [253, 40]},
+    {"tick": 254, "at": [253, 36]},
     {"tick": 301, "at": [280, 204]},
-    {"tick": 392, "at": [200, 204]},
+    {"tick": 386, "at": [200, 204]},
     {"tick": 420, "at": [281.1, 202.3]}
   ]
 }

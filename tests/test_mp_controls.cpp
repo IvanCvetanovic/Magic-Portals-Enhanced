@@ -287,7 +287,8 @@ void TheEndByteIsThePulsesByte() {
     }
     // And the two ends the step-178 pins worked out by hand from ui.json's literals (a 300 ms stride, a flat 120, the odd
     // strides run down, truncated, a variation of 90 in the tutorial and 40 elsewhere), equal to the game's own log.
-    // 1-01's door on tick 217: 3456 ms is 11 strides and 156 ms, run down: bias 1 - 0.52, uint(0.48 x 90) = 43.
+    // 1-01's door on tick 217 (213 since planning step 213, which test_mp_layer pins at 3392 ms and the byte 182): 3456 ms is 11 strides and
+    // 156 ms, run down: bias 1 - 0.52, uint(0.48 x 90) = 43 - the function's own arithmetic, kept at the age it was pinned at.
     CHECK_EQ(Controls::ClassicWalkAlphaByte(rules, 3456.0, true), 163);
     // 2-10's death on tick 80: 1264 ms is 4 strides and 64 ms, run up: bias 0.2133, uint(0.2133 x 40) = 8.
     CHECK_EQ(Controls::ClassicWalkAlphaByte(rules, 1264.0, false), 128);

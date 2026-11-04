@@ -27,7 +27,8 @@
     "player (1118): onto the step block, where the key is within 26 of the keyhole and the yellow door goes. A",
     "portal at (250, 120) (1146) and one on the player (1172): into the left room; left into the door. Won on",
     "tick 1262; any stretch of it can start 8 ticks later and every aim has 4 units to give except on one",
-    "side of (150, 20), (252, 40) and (296, 165) (R3 round 3's scans). The knight never moves from its post."
+    "side of (150, 20), (252, 40) and (296, 165) (R3 round 3's scans). The knight never moves from its post.",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level30c",
   "win_by": 1310,

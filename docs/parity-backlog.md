@@ -1688,7 +1688,7 @@ work no step of §7 owns, and the owner's calls:
       opening hold (`data/portals.json`'s guessed `hold_time_s` is gone). The lag is still the port's `_guess`
       (`follow_lag_s` 0.12, against the original's `Follower(1000, 100)`; step 138's deviations).*
 - [ ] Portal timings `FIRST_PORTAL_MIN_TIME`, `NEXT_PORTAL_MIN_TIME`, collision radius, transit — decode or frame-step.
-- [ ] **Level 1-04 (`level3`): the walk off the bridge's left end onto the plate with two crystals** (the owner, 2026-11-04: in the original the character lands on it, which
+- [x] **Level 1-04 (`level3`): the walk off the bridge's left end onto the plate with two crystals** - *CLOSED by step 213 (the owner's ruling of 2026-11-04: the air brake off, player.json `air_decay_rate_hz` 120; `tests/routes/level3.json` is now the gold route, 2 portals and all 5 crystals, medal 3 pinned by the route's `medal` key, and each key alone holds: the turn and the left end +-2 ticks, either shot +-1, the tail +-10, 19 of 19 variants gold). Closed for the port; a hand-play on a phone is still pending (step 213's G10). The record is below and in step 213.* (the owner, 2026-11-04: in the original the character lands on it, which
       makes gold with two portals reachable; here it slides down the end face and falls past it). investigated in step 212, NOT changed. The port's numbers (ticks 223-246, the bridge's flat top y 242, the plate's top
       y 288, 26 units across and 46 down) are in step 212; what the original does there is NOT established. Candidates: the original's ground flag is about two frames stale
       (`manageFeet` runs after the physics step) and `dark_mage.ent` has friction 0.9 where the port forces 0; or the original's air brake is `min(1, fps/60 x 0.86)` of the device's frame rate
@@ -1698,6 +1698,12 @@ work no step of §7 owns, and the owner's calls:
       MEASURED 2026-11-04 (step 213 not started; DEVLOG session 72): the original in the emulator lands on the plate in 5 of 6 identical replays of the recorded shots and walk (the sixth slips past like the port), at about 26 fps; the recorded
       route is bronze (0 crystals), not gold. In a scratch copy the port reaches all 5 crystals and gold only with BOTH the ground flag read 2 ticks late AND the player body's friction 0.9; lag alone 4 crystals, friction alone 3, and the crude
       friction fails 30 routes (both: 32). A faithful version must explain why the original's walk is not slowed by that friction. Needs the owner's phone and refresh rate; this rig cannot run the original at 60 Hz or above.
+      *Step 213 (the answer): the friction half of that read is WRONG - the original's walk was filmed on 1-01's ledge in the emulator at 142.7 u/s (about 26 frames a second), the frictionless decode, not the 130-135 the friction model gives; the
+      scratch 'lag + friction = gold' was the port's own contact code at the plate's corner. The original's 5-of-6 landing at 26 fps is its frame rate (the walk is larger per frame, the ground flag two frames late); a model of it says the jump
+      needs about 30 frames a second and fails from 90 (not measurable here: the rig cannot run above 60). The owner chose to drop the air slowdown at the port's fixed pace (see G10-2).*
+- [ ] **G10-15. The ground flag is two frames late in the original; the port reads it at once** (decoded in step 213: `docs/ethanon-formats.md`, 'The ground flag is two frames late'). NOT built: with the air brake off the lag (2 ticks) takes 1-04's gold back out of reach
+      (4 crystals, no gold, in the scratch run) and breaks 17 recorded routes (5 with the brake on). F13's 1-06 walk-off cannot tell lag 1 from 2. Open: needs the engine's contact at a chamfered corner (the engine stops a closing body about 2 units
+      before a vertex as a speculative contact - the trace of tick 237: the capsule's lower end 11.1 units from the vertex, its radius 9.1 - `PhysicsSystem.cpp:1642, 1691`, pinned by `test_physics.cpp:3913-3930`; Box2D has no contact there) or a rig that runs the original at 60 frames a second.
 
 ## 5. Final check
 
@@ -2910,7 +2916,7 @@ on). The 19 CTL baselines are unchanged by the step (none is a 2-29 capture): th
       touches and its friction solve walks a resting box, G10-14), no damping, and Box2D's clamp on every body. The routes: 62 of 86
       win (84 before). *The first build applied the decoded frictions and its verifier failed it (13 resting crates and barrels walked
       at a constant 5.65 to 8.78 units a second); this is the fixed row.*
-- [ ] **G10-2. `GetFPSRate` is the matched 60** (the original's is frames x interval, 60-63 on a 60 Hz device, 30 for the first second, 17 on the
+- [x] **G10-2. `GetFPSRate` is the matched 60** - *RULED by the owner on 2026-11-04 (planning step 213): the air brake's formula is evaluated at 120 Hz, his phone's, where it is 1 (player.json `movement.air_decay_rate_hz`; `Player::AirShareAt` is the decoded formula at any rate); the pace, the walk and the clock stay at the matched 60 Hz. 2-30's designed leap and 1-04's gold both win on it; 20 recorded routes were re-timed. The rest of this row (the 140 u/s recoil, the 4000 u/s^2 fall and the 144 u/s walk that rest on `matched_hz` 60) is NOT ruled: it stays with CMP18-6 and R4c2-3.* (the original's is frames x interval, 60-63 on a 60 Hz device, 30 for the first second, 17 on the
       emulator): the air brake's one rate-dependent number. The owner's call on the rate. **The verifier (medium) widens it: the 140 u/s
       recoil, the 4000 u/s^2 fall, the 0.86 brake and the 144 u/s walk all rest on `matched_hz` = 60, which no clip shows (F10 ran 17-19
       frames a second, F13 about 30; at 30 the same decode gives 70, 1000, 0.43 and 148.5).** Put to the owner as its own question
@@ -3210,7 +3216,7 @@ on). The 19 CTL baselines are unchanged by the step (none is a 2-29 capture): th
       replayed it with `--trace 30` and read it as designed. The platform's phase is the port's tick-1 convention, not the
       original's (the bucket clock is not modelled, G3-2), and the route's notes say so; the library stills fit the block and the
       horizontal agent to one phase at 1.75 u rms (G3's fit, 1-11 only).*
-- [ ] **R3-2. 2-30 is not won by a route** (`level29a`; the player is burned on tick 259 by fire_agent_ent_918). The air carry is
+- [x] **R3-2. 2-30 is not won by a route** - *CLOSED by step 213: the owner's ruling on G10-2 (the air brake off) lets the designed counterweight leap win on tick 284 with two portals and medal 3, and `tests/routes/level29a.json` is that route (medal pinned); the creep stop-gap is gone.* (`level29a`; the player is burned on tick 259 by fire_agent_ent_918). The air carry is
       capped at 14.74 u (AirShare 0.86 at the matched 60 Hz), the plank sags once the stone leaves its arm (INFERRED: G10-1 time
       base, G10-4 capsule mass). Needs the owner's rulings on G10-2 / G10-1 / G10-4 and a source step or two, then every route
       re-timed. (planning step 151, deviation 2) *Step 152 (WT) built G10-1 and the mass half of G10-4: the route still dies, on

@@ -912,15 +912,18 @@ void OneTwentyOneTeachesTheDrag() {
 
 void Level8FromTheSpawnWithTapsAndWalking() {
     // 1-9 played through as a player would, tapping only what the screen shows.
-    // test_mp_demolish plays the same route through Game::Tick.
+    // test_mp_demolish played the same route through Game::Tick until planning step 213, which re-aimed it (the near portal to the player's LEFT);
+    // this play still shoots the near portal to the player's right.
     //  - A shot from the spawn to behind the stone meets the stone, so the player
     //    walks right onto the slope first and lets go.
     //  - From there, once the camera shows it, a shot over the stone to
     //    (30, 30), and then one just ahead of the player.
     //  - Right is held. The player walks into the near portal and comes out of
-    //    the far one, behind the stone. It pushes the stone off the ledge, and
-    //    the stone rolls into breakable_wall_625 and breaks it. The player walks
-    //    on to the exit.
+    //    the far one flying right, over the stone (until planning step 213 the air
+    //    braked him and he dropped behind it and pushed it off the ledge). The play
+    //    still breaks breakable_wall_625 and walks on to the exit; what moves the
+    //    stone is no longer the player's push, which this test does not study: its
+    //    subject is the layer's flow.
     // Reaching the exit clears level8 and loads level9. The route waits for what
     // the screen shows, not for how long the camera holds, which is a guess.
     //
@@ -939,8 +942,8 @@ void Level8FromTheSpawnWithTapsAndWalking() {
 
     // THE TWO CRYSTALS ON THE SHELF - (83, 32) and (144, 48), high over the floor the walk keeps to - are not
     // on this solve's path any more. They were picked on the way out of the far portal, by steering in the
-    // air; the original's player cannot steer there (applyForces ignores the pad off the ground and keeps
-    // 0.86 of its x velocity a frame), so the exit falls straight down at x 31. The case takes them with the
+    // air; the original's player cannot steer there (applyForces ignores the pad off the ground; it kept
+    // 0.86 of its x velocity a frame until planning step 213 and keeps all of it since), so the exit used to fall straight down at x 31. The case takes them with the
     // player put on each, and puts it back on its spawn: the medal counter below is the case's subject, and
     // it counts three. Whether the level's designed solve takes them another way is the route phase's
     // (planning step 148, LEFT FOR THE OWNER).
@@ -24343,10 +24346,10 @@ void TheClearButtonIsFlatWhileRestartAndPauseSlideIn() {
 // uint(a x 0.98) merges neighbouring bytes (158 and 159 both end at 77 thirty ticks on), so the byte itself is read at the tick.
 void TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath() {
     if (!OriginalArtIsThere("TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath")) return;
-    // 1-01, the tutorial, at its door: tick 217 (the game's own log, "door reached on tick 217, pads at 163"), so the age the
-    // byte is made at is 216 ticks = 3456 ms = 11 strides and 156 ms; 11 is odd, so bias = 1 - 156/300 = 0.48; uint(0.48 x 90) =
-    // uint(43.2) = 43; 120 + 43 = 163. The neighbours a mistake gives: 158 (the age after the tick, 3472 ms: 0.4267 x 90 = 38.4),
-    // 139 (the variation of 40 instead of the tutorial's 90) and the flat 120.
+    // 1-01, the tutorial, at its door: tick 213 (it was 217, with the byte 163, until planning step 213, when the owner's ruling of the air brake let the
+    // walk out of the first portal carry 4 ticks further), so the age the byte is made at is 212 ticks = 3392 ms
+    // = 11 strides and 92 ms; 11 is odd, so bias = 1 - 92/300 = 0.6933; uint(0.6933 x 90) = uint(62.4) = 62; 120 + 62 = 182. The neighbours a mistake
+    // gives: 177 (the age after the tick, 3408 ms: bias 0.64 x 90 = 57.6), 147 (the variation of 40 instead of the tutorial's 90: 27.7) and the flat 120.
     {
         entt::registry registry;
         publishViewport(registry);
@@ -24357,9 +24360,9 @@ void TheEndPadByteIsThePulsesByteAtTheDoorAndAtADeath() {
             return;
         }
         const int door = WalkLevel0IntoItsDoor(layer, registry);
-        CHECK_MSG(door == 217, "holding right reaches level0's door on tick 217: " + std::to_string(door));
-        CHECK_MSG(NearD(layer.LevelAgeMs(), 3472.0, 1e-9), "the level is 3472 ms old after that tick: " + PtrNum(layer.LevelAgeMs()));
-        CHECK_MSG(layer.EndPadAlphaByte() == 163, "the pads' end byte at 1-01's door is 163 (the pulse at 3456 ms): " +
+        CHECK_MSG(door == 213, "holding right reaches level0's door on tick 213: " + std::to_string(door));
+        CHECK_MSG(NearD(layer.LevelAgeMs(), 3408.0, 1e-9), "the level is 3408 ms old after that tick: " + PtrNum(layer.LevelAgeMs()));
+        CHECK_MSG(layer.EndPadAlphaByte() == 182, "the pads' end byte at 1-01's door is 182 (the pulse at 3392 ms): " +
                                                       std::to_string(layer.EndPadAlphaByte()));
         layer.OnDetach(registry);
     }
@@ -26677,20 +26680,20 @@ void TheModernEndByteDecaysFromTheSameByte() {
         MdRun run(TestPaths(), "level0", "TheModernEndByteDecaysFromTheSameByte: classic", glm::vec2(1280.0f, 720.0f), false, Controls::Style::Classic);
         if (!run.ok) return;
         const int door = WalkLevel0IntoItsDoor(run.layer, run.registry);
-        CHECK_MSG(door == 217, "classic: holding right reaches level0's door on tick 217: " + std::to_string(door));
+        CHECK_MSG(door == 213, "classic: holding right reaches level0's door on tick 213: " + std::to_string(door));
         classic.push_back(run.layer.EndPadAlphaByte());
         for (int tick = 0; tick < 30; ++tick) {
             tickWith(run.layer, run.registry, kRest, {}, {});
             classic.push_back(run.layer.EndPadAlphaByte());
         }
-        CHECK_MSG(classic.front() == 163 && classic.back() < classic.front(), "classic: the end byte is 163 at the door and decays: " + std::to_string(classic.back()));
+        CHECK_MSG(classic.front() == 182 && classic.back() < classic.front(), "classic: the end byte is 182 at the door and decays: " + std::to_string(classic.back()));
     }
     MdRun run(MdPaths(), "level0", "TheModernEndByteDecaysFromTheSameByte", glm::vec2(1280.0f, 720.0f), false);
     if (!run.ok) return;
     MagicPortalsLayer& layer = run.layer;
     entt::registry& registry = run.registry;
     const int door = WalkLevel0IntoItsDoor(layer, registry);
-    CHECK_MSG(door == 217, "modern: holding right reaches level0's door on tick 217: " + std::to_string(door));
+    CHECK_MSG(door == 213, "modern: holding right reaches level0's door on tick 213: " + std::to_string(door));
     int same = 0;
     int drawnAs = 0;
     for (std::size_t tick = 0; tick < classic.size(); ++tick) {

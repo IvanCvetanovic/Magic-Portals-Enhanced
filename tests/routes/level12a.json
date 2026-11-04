@@ -14,17 +14,18 @@
     "along the floor under the second fireball's start (503), to the door.",
     "Re-authored on the time-base build (wave 3b-1): won on tick 501."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[0].from 1 -> 10, holds[1].to 175 -> 179, taps[0].tick 79 -> 65, taps[2].tick 215 -> 209 (largest move 14 ticks) and it wins on tick 501 with win_by 550. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. A shot now lands inside a walk, so a player needs the walk finger and the aim finger at once: taps[0] (tick 65) now falls inside holds[0].",
   "level": "level12a",
-  "win_by": 545,
+  "win_by": 550,
   "holds": [
-    {"walk": "right", "from": 1, "to": 70},
-    {"walk": "right", "from": 155, "to": 175},
+    {"walk": "right", "from": 10, "to": 70},
+    {"walk": "right", "from": 155, "to": 179},
     {"walk": "left", "from": 380, "to": 545}
   ],
   "taps": [
-    {"tick": 79, "at": [256, 206]},
+    {"tick": 65, "at": [256, 206]},
     {"tick": 105, "at": [345, 110]},
-    {"tick": 215, "at": [180, 200]},
+    {"tick": 209, "at": [180, 200]},
     {"tick": 267, "at": [387, 110]}
   ]
 }

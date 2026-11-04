@@ -19,7 +19,8 @@
     "the lift door's opening into the room, aimed 5.3 px off (the camera moved while the finger was down), to (329.2, 94.7) (tick 414, placed 438).",
     "Down the shaft onto single_block_plat_ent_827 (tick 436), where he stands; one on the player (tick 443): out of the room's portal at",
     "(329.2, 96.7) and along the shelf to the door. Won on tick 498. The room shot's tick is good for -1 to +3, the first walk-off (400-403)",
-    "and the shots 359 and 386 for +-1 or 2; the walk 342-358 is the knife-edge it always was (its end -2 or its start -1 walks off the block)."
+    "and the shots 359 and 386 for +-1 or 2; the walk 342-358 is the knife-edge it always was (its end -2 or its start -1 walks off the block).",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level20",
   "win_by": 540,

@@ -45,8 +45,9 @@
     "tick 838 (step 127: 747). Every tap and walk edge 3 ticks either way wins except the two-tick walk on 429-430 that puts",
     "the player at x 249.4 for the pit shot, which is exact to the tick, as it always was."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots and walks; a shot target moved only where this note says so) moved taps[1].at [617, 42.3] -> [615, 42.3], taps[2].at [245, 100] -> [244, 100], taps[3].tick 342 -> 341 (largest tick move 1) and it wins on tick 838 with win_by 880. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. SINGLE-TICK WINNER: taps[3].tick = 341 wins at that tick only, not at its neighbours +-1 or +-2 - the first key to look at if a build on another compiler or a 32-bit build differs.",
   "level": "level8b",
-  "win_by": 860,
+  "win_by": 880,
   "holds": [
     {"walk": "right", "from": 429, "to": 430},
     {"walk": "right", "from": 464, "to": 476},
@@ -55,9 +56,9 @@
   ],
   "taps": [
     {"tick": 178, "at": [450, 150]},
-    {"tick": 242, "at": [617, 42.3]},
-    {"tick": 272, "at": [245, 100]},
-    {"tick": 342, "at": [450, 202.3]},
+    {"tick": 242, "at": [615, 42.3]},
+    {"tick": 272, "at": [244, 100]},
+    {"tick": 341, "at": [450, 202.3]},
     {"tick": 373, "at": [24, 100]},
     {"tick": 440, "at": [295, 197]},
     {"tick": 512, "at": [450, 150]},

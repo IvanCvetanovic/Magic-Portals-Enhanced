@@ -13,7 +13,8 @@
     "Two shots, none failed or wasted; medal 2 (2 portals, 16.0 s); no chapter achievement; the only sighting is knight D's, on its own death tick. Every tap and walk edge was moved 1 to 4 ticks and all win (most also 8 and 12); the three places with less room are the ones that wait on the knights' cycles:",
     "the drop (215-290) must come while A is at its right end (A is at x 431 on ~295-480 and ~820-1000), the descent to E (the left walk's end near 420 puts the player on E's right-end hold, 305-480; E walks left to x 71 on 280-340 and 560-620), and the approach to D (it holds at x 38.6 from ~655 to ~830).",
     "The player is never outside the 455 x 256 view (the pit camera sits at y 384). Leans on G10's walk (a step off a ledge carries about 15 units), G4's flight, R23's tap-time ray (the shot ends in free air at the tap), G1a and G1b (the knights see only along their facing in their own 128-unit row, and none shoots),",
-    "the shock diamond (Diamonds.cpp: 30 px, spent on its strike, picked up one tick before it can strike) and a key's carry through a portal and its 26 px unlock (Keys.cpp). Not measured on the original: the diamond's strike on a knight that has its back turned, and the 194-unit fall onto wall04."
+    "the shock diamond (Diamonds.cpp: 30 px, spent on its strike, picked up one tick before it can strike) and a key's carry through a portal and its 26 px unlock (Keys.cpp). Not measured on the original: the diamond's strike on a knight that has its back turned, and the 194-unit fall onto wall04.",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level16b",
   "win_by": 1015,

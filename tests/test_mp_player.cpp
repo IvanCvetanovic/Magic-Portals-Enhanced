@@ -2,7 +2,7 @@
 // decode (planning step 148, program wave 3a, G10): data/player.json, sim/Player, and the
 // original's physics second the script clock carries (clock.json physics_step_s).
 //
-//   the numbers   speed 3, the elapsed cap 66, the air factor 0.86 at 60, the world's gravity 10
+//   the numbers   speed 3, the elapsed cap 66, the air factor 0.86 at 60 (evaluated at the file's 120 since step 213), the world's gravity 10
 //                 and the body's gravity scale 2 - each a number of the listing (player.json cites
 //                 it), and a file that holds none of them, or a zero, is refused.
 //   the walk      SET OUTRIGHT: speed x min(66, the script's ms) / the physics step's ms, a tick of
@@ -10,7 +10,9 @@
 //                 dead stop with no pad held - through the engine's own solver on a floor.
 //   the air       off the floor the pad is ignored and the body keeps min(1, fps / 60 x 0.86) of its
 //                 x velocity a tick: 0.86 at 60 Hz, the brake the original's footage shows (F13's
-//                 walk off 1-06's block stops in the air).
+//                 walk off 1-06's block stops in the air). The port evaluates it at player.json's
+//                 air_decay_rate_hz, 120 since the owner's ruling of step 213: 1, no brake; the
+//                 brake's own arithmetic is pinned at a file of 60.
 //   the fall      10 x 2 m/s^2 of the original's physics, which steps 1/30 s a frame: 1.111 units a
 //                 frame squared, 4000 units a second squared at a 60 Hz frame - through the solver,
 //                 and the speed it lands at as the original's begin-contact callback reads it
@@ -125,7 +127,7 @@ std::string TuningText(const std::string& speed = "3", const std::string& scale 
                                                  "\"probe_line_tol_px\": 0.05}",
                        const std::string& body = kBody) {
     return "{\"movement\": {\"speed\": " + speed + ", \"elapsed_cap_ms\": 66, \"air_decay\": 0.86, "
-           "\"air_decay_fps\": 60}, \"gravity\": {\"world_m_s2\": " + world + ", \"scale\": " + scale +
+           "\"air_decay_fps\": 60, \"air_decay_rate_hz\": 120}, \"gravity\": {\"world_m_s2\": " + world + ", \"scale\": " + scale +
            ", \"max_translation_m\": 2, \"reference_px_per_unit\": 2.8125}, \"body\": " + body + ", "
            "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"offset_box_share\": 0.5, \"touch_px\": 0.5}, "
            "\"hold\": " + hold + "}";
@@ -167,6 +169,7 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     CHECK_EQ(tuning.elapsedCapMs, 66.0);      // applyForces ins 15: PshC4 66
     CHECK_EQ(tuning.airDecay, 0.86);          // applyForces ins 77: MULIf 0.86f (the float is 0.8600000143)
     CHECK_EQ(tuning.airDecayFps, 60.0);       // applyForces ins 75: 60f
+    CHECK_EQ(tuning.airRateHz, 120.0);        // the owner's ruling (planning step 213): the formula is evaluated at 120 Hz
     CHECK_EQ(tuning.worldGravity, 10.0);      // Game::preLoop ins 417: scale(10)
     CHECK_EQ(tuning.gravityScale, 2.0);       // SideScrollerCharacter ctor ins 58: SetGravityScale(2)
     CHECK_EQ(tuning.maxTranslationM, 2.0);       // b2_maxTranslation (b2Settings.h:101)
@@ -197,6 +200,18 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     Player::Tuning out;
     std::string error;
     CHECK_MSG(Load(TuningText(), out, error), error);
+    // A file without the air brake's rate, or with a rate of nothing, describes another game: refused, naming the key.
+    {
+        const std::string text = TuningText();
+        const std::string key = "\"air_decay_rate_hz\": 120";
+        CHECK_MSG(text.find(key) != std::string::npos, "the test's own file names the key");
+        for (const char* bad : {"\"air_decay_rate_hz\": 0", "\"air_decay_rate_hz\": -60", "\"air_decay_rate_hz_\": 120", "\"air_decay_rate_hz\": \"x\""}) {
+            std::string broken = text;
+            broken.replace(broken.find(key), key.size(), bad);
+            CHECK_MSG(!Load(broken, out, error) && error.find("air_decay_rate_hz") != std::string::npos,
+                      std::string("refused, naming the key: ") + bad + " -> " + error);
+        }
+    }
     // A walk of nothing, a gravity scale of nothing or a world without gravity describes another game.
     CHECK(!Load(TuningText("0"), out, error));
     CHECK(!Load(TuningText("3", "0"), out, error));
@@ -303,22 +318,32 @@ void TheWalkIsSetOutrightAndStopsDead() {
     CHECK_WITHIN(scene.AtPx().x, stoppedX, 0.01);
 }
 
-void InTheAirThePadIsIgnoredAndTheXVelocityDecays() {
+void InTheAirThePadIsIgnoredAndTheXVelocityKeepsTheAirShare() {
     const Player::Tuning tuning = ReadTuning();
     const ScriptClock::Rules rules = ReadRules();
     const ScriptClock::Step step = ScriptClock::TickStep(rules, kTick);
-    // min(1, GetFPSRate() / 60 x 0.86).
-    CHECK_WITHIN(Player::AirShare(tuning, step), 0.86, 1e-12);
-    CHECK_WITHIN(Player::AirShare(tuning, ScriptClock::Step(0.033, kTick, rules.physicsStepS, 30.0)), 0.43, 1e-12);
-    CHECK_WITHIN(Player::AirShare(tuning, ScriptClock::Step(0.017, kTick, rules.physicsStepS, 17.0)), 0.86 * 17.0 / 60.0,
-                 1e-12);
+    // The original's formula, min(1, GetFPSRate() / 60 x 0.86), at any rate.
+    CHECK_WITHIN(Player::AirShareAt(tuning, 60.0), 0.86, 1e-12);
+    CHECK_WITHIN(Player::AirShareAt(tuning, 30.0), 0.43, 1e-12);
+    CHECK_WITHIN(Player::AirShareAt(tuning, 17.0), 0.86 * 17.0 / 60.0, 1e-12);
     // From 70 frames a second it is 1: the min.
-    CHECK_WITHIN(Player::AirShare(tuning, ScriptClock::Step(0.008, kTick, rules.physicsStepS, 120.0)), 1.0, 1e-12);
-    CHECK_WITHIN(Player::AirShare(tuning, ScriptClock::Step(0.014, kTick, rules.physicsStepS, 70.0)), 1.0, 1e-12);
+    CHECK_WITHIN(Player::AirShareAt(tuning, 120.0), 1.0, 1e-12);
+    CHECK_WITHIN(Player::AirShareAt(tuning, 70.0), 1.0, 1e-12);
+    CHECK_WITHIN(Player::AirShareAt(tuning, 69.0), 0.86 * 69.0 / 60.0, 1e-12);
+    // What the port uses is the formula at the file's rate (the owner's ruling, 120 Hz), whatever the tick's own: 1, at the
+    // matched 60 Hz tick and at the steps of any other rate a test hands it.
+    CHECK_WITHIN(Player::AirShare(tuning, step), 1.0, 1e-12);
+    CHECK_WITHIN(Player::AirShare(tuning, ScriptClock::Step(0.033, kTick, rules.physicsStepS, 30.0)), 1.0, 1e-12);
+    CHECK_WITHIN(Player::AirShare(tuning, ScriptClock::Step(0.017, kTick, rules.physicsStepS, 17.0)), 1.0, 1e-12);
+    // A file that ruled 60 Hz would give the decoded 0.86 back: the brake itself still works, and is pinned below.
+    Player::Tuning at60 = tuning;
+    at60.airRateHz = 60.0;
+    CHECK_WITHIN(Player::AirShare(at60, step), 0.86, 1e-12);
 
     // The same, through Steer on a body with no floor under it, and the pad held either way or not at all.
     for (const float pad : {-1.0f, 0.0f, 1.0f}) {
         Scene scene(false, -300.0);
+        scene.tuning.airRateHz = 60.0; // the brake's own arithmetic, at the decoded 0.86: the shipped file rules 120 Hz (no brake), pinned above
         scene.Rigid().velocity.x = 2.88f;
         CHECK_MSG(!Player::Grounded(scene.registry, scene.player, scene.tuning), "nothing under the feet");
         double expected = 2.88;
@@ -636,7 +661,9 @@ void AnIdlePlayerIsPressedAlongTheGroundsNormalAndAWalkingOneIsNot() {
     Scene air(false, -300.0);
     air.Rigid().velocity.x = 2.88f;
     Player::Steer(air.registry, air.player, air.tuning, 0.0f, air.step);
-    CHECK_WITHIN(air.Rigid().velocity.x, 2.88 * 0.86, 1e-5);
+    // What it keeps is the air share (1 under the owner's ruling of 120 Hz, planning step 213; 0.86 at 60 Hz): not zero, which a hold would give.
+    CHECK_WITHIN(air.Rigid().velocity.x, 2.88 * Player::AirShare(air.tuning, air.step), 1e-5);
+    CHECK_WITHIN(air.Rigid().velocity.x, 2.88, 1e-5);
 }
 
 void AnIdlePlayerStandsStillOnASlope() {
@@ -1127,7 +1154,7 @@ void runTests() {
     TheNumbersAreTheListingsAndAFileWithoutThemIsRefused();
     TheWalkIsTwoPointFourUnitsATick();
     TheWalkIsSetOutrightAndStopsDead();
-    InTheAirThePadIsIgnoredAndTheXVelocityDecays();
+    InTheAirThePadIsIgnoredAndTheXVelocityKeepsTheAirShare();
     TheBodyIsDarkMagesTwoCirclesAndTheCapsuleIsTheirHull();
     TheFeetAreAnOctagonFourteenWideAndAWalkerLeavesTheGroundSevenClear();
     AMinionsBodyIsGroundAsACrateAndAPlatformAre();

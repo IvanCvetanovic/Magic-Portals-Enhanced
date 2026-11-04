@@ -49,6 +49,7 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         {"movement", "elapsed_cap_ms", &Tuning::elapsedCapMs},
         {"movement", "air_decay", &Tuning::airDecay},
         {"movement", "air_decay_fps", &Tuning::airDecayFps},
+        {"movement", "air_decay_rate_hz", &Tuning::airRateHz},
         {"gravity", "world_m_s2", &Tuning::worldGravity},
         {"gravity", "scale", &Tuning::gravityScale},
         {"gravity", "max_translation_m", &Tuning::maxTranslationM},
@@ -119,9 +120,14 @@ double WalkCarried(const Tuning& tuning, const ScriptClock::Step& step) {
     return ScriptClock::CarriedVelocity(WalkOriginal(tuning, step), step);
 }
 
-double AirShare(const Tuning& tuning, const ScriptClock::Step& step) {
+double AirShareAt(const Tuning& tuning, double fps) {
     // applyForces #71-84: min(1, GetFPSRate() / 60 x 0.86), the 60 and the 0.86 immediates.
-    return std::min(1.0, tuning.airDecay * step.fps / tuning.airDecayFps);
+    return std::min(1.0, tuning.airDecay * fps / tuning.airDecayFps);
+}
+
+double AirShare(const Tuning& tuning, const ScriptClock::Step& step) {
+    (void)step; // the rate is the file's ruling, not the tick's: player.json movement._air_decay_rate_hz
+    return AirShareAt(tuning, tuning.airRateHz);
 }
 
 double FallPerTick(const Tuning& tuning, const ScriptClock::Step& step) {
@@ -259,7 +265,8 @@ void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, 
             }
         }
     } else {
-        // #63-84: the pad is ignored and the body keeps min(1, GetFPSRate() / 60 x 0.86) of its x.
+        // #63-84: the pad is ignored and the body keeps min(1, GetFPSRate() / 60 x 0.86) of its x - evaluated at the file's
+        // air_decay_rate_hz (120: all of it, planning step 213), not at the tick's rate.
         rigid.velocity.x *= static_cast<float>(AirShare(tuning, step));
     }
 

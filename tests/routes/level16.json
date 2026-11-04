@@ -34,13 +34,14 @@
     "still at every tap but the seventh (402: the walk ended 16 ticks before, the aim's drift 0.28 px) and the last (0.57 px, the",
     "camera is catching up with the walk). No knight, stone or fire is in the level."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[1].to 124 -> 130, holds[3].from 480 -> 481 (largest move 6 ticks) and it wins on tick 591 with win_by 640. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level16",
-  "win_by": 606,
+  "win_by": 640,
   "holds": [
     {"walk": "left", "from": 5, "to": 40},
-    {"walk": "right", "from": 60, "to": 124},
+    {"walk": "right", "from": 60, "to": 130},
     {"walk": "right", "from": 350, "to": 386},
-    {"walk": "right", "from": 480, "to": 521},
+    {"walk": "right", "from": 481, "to": 521},
     {"walk": "right", "from": 533, "to": 600}
   ],
   "taps": [

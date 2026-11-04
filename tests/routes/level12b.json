@@ -20,96 +20,28 @@
     "830 lands on (240, 466) after the head-height retry, 832 without it; any from 829 to 848 wins), one on the player (tap 884, through on 886): left past keyhole_ent_1197 (the yellow door goes) to the door.",
     "Windows (the others fixed, win kept): the first walk's start 1-8 (its end 84-97), the right walk 494-538, the left walk 522-552, the wait for the",
     "stone's fall 829-848 for tap 836, the walk to the door 880-905 (end 1050-1090); the taps 248-266, 286-299, 401-420, 542-563, 581-604, 829-848, 872-900.",
-    "Won on tick 1043."
+    "Won on tick 1043.",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[5].to 756 -> 754 (largest move 2 ticks) and it wins on tick 1043 with win_by 1090. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level12b",
-  "win_by": 1057,
+  "win_by": 1090,
   "holds": [
-    {
-      "walk": "left",
-      "from": 1,
-      "to": 90
-    },
-    {
-      "walk": "right",
-      "from": 99,
-      "to": 112
-    },
-    {
-      "walk": "left",
-      "from": 119,
-      "to": 262
-    },
-    {
-      "walk": "right",
-      "from": 506,
-      "to": 526
-    },
-    {
-      "walk": "left",
-      "from": 534,
-      "to": 545
-    },
-    {
-      "walk": "left",
-      "from": 738,
-      "to": 756
-    },
-    {
-      "walk": "left",
-      "from": 892,
-      "to": 1072
-    }
+    {"walk": "left", "from": 1, "to": 90},
+    {"walk": "right", "from": 99, "to": 112},
+    {"walk": "left", "from": 119, "to": 262},
+    {"walk": "right", "from": 506, "to": 526},
+    {"walk": "left", "from": 534, "to": 545},
+    {"walk": "left", "from": 738, "to": 754},
+    {"walk": "left", "from": 892, "to": 1072}
   ],
   "taps": [
-    {
-      "tick": 260,
-      "at": [
-        70,
-        70
-      ]
-    },
-    {
-      "tick": 292,
-      "at": [
-        380,
-        178
-      ]
-    },
-    {
-      "tick": 408,
-      "at": [
-        9.8,
-        170.3
-      ]
-    },
-    {
-      "tick": 552,
-      "at": [
-        310,
-        360
-      ]
-    },
-    {
-      "tick": 592,
-      "at": [
-        100,
-        298
-      ]
-    },
-    {
-      "tick": 836,
-      "at": [
-        240,
-        466
-      ]
-    },
-    {
-      "tick": 884,
-      "at": [
-        367.6,
-        458.5
-      ]
-    }
+    {"tick": 260, "at": [70, 70]},
+    {"tick": 292, "at": [380, 178]},
+    {"tick": 408, "at": [9.8, 170.3]},
+    {"tick": 552, "at": [310, 360]},
+    {"tick": 592, "at": [100, 298]},
+    {"tick": 836, "at": [240, 466]},
+    {"tick": 884, "at": [367.6, 458.5]}
   ]
 }

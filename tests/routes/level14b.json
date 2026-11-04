@@ -41,115 +41,28 @@
     "Each tap's window to win_by 1010 (the others as they are; a + is past the 8 ticks tried): 86-96, 132-137, 161-164, 189-198+,",
     "367-383+, 462-476, 647-657, 704-707, 732-734, 760-762."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[4].from 487 -> 488 (largest move 1 tick) and it wins on tick 996 with win_by 1040. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. SINGLE-TICK WINNER: holds[4].from = 488 wins at that tick only, not at its neighbours +-1 or +-2 - the first key to look at if a build on another compiler or a 32-bit build differs.",
   "level": "level14b",
-  "win_by": 1010,
+  "win_by": 1040,
   "holds": [
-    {
-      "walk": "left",
-      "from": 1,
-      "to": 100
-    },
-    {
-      "walk": "left",
-      "from": 210,
-      "to": 225
-    },
-    {
-      "walk": "right",
-      "from": 245,
-      "to": 365
-    },
-    {
-      "walk": "left",
-      "from": 380,
-      "to": 447
-    },
-    {
-      "walk": "right",
-      "from": 487,
-      "to": 622
-    },
-    {
-      "walk": "left",
-      "from": 740,
-      "to": 750
-    },
-    {
-      "walk": "right",
-      "from": 795,
-      "to": 1100
-    }
+    {"walk": "left", "from": 1, "to": 100},
+    {"walk": "left", "from": 210, "to": 225},
+    {"walk": "right", "from": 245, "to": 365},
+    {"walk": "left", "from": 380, "to": 447},
+    {"walk": "right", "from": 488, "to": 622},
+    {"walk": "left", "from": 740, "to": 750},
+    {"walk": "right", "from": 795, "to": 1100}
   ],
   "taps": [
-    {
-      "tick": 94,
-      "at": [
-        150,
-        110
-      ]
-    },
-    {
-      "tick": 135,
-      "at": [
-        19.4,
-        161.1
-      ]
-    },
-    {
-      "tick": 163,
-      "at": [
-        175,
-        100
-      ]
-    },
-    {
-      "tick": 190,
-      "at": [
-        195,
-        92
-      ]
-    },
-    {
-      "tick": 375,
-      "at": [
-        470,
-        100
-      ]
-    },
-    {
-      "tick": 470,
-      "at": [
-        248.8,
-        204.3
-      ]
-    },
-    {
-      "tick": 655,
-      "at": [
-        829,
-        28
-      ]
-    },
-    {
-      "tick": 706,
-      "at": [
-        760,
-        202
-      ]
-    },
-    {
-      "tick": 733,
-      "at": [
-        728,
-        191
-      ]
-    },
-    {
-      "tick": 760,
-      "at": [
-        810.3,
-        162.9
-      ]
-    }
+    {"tick": 94, "at": [150, 110]},
+    {"tick": 135, "at": [19.4, 161.1]},
+    {"tick": 163, "at": [175, 100]},
+    {"tick": 190, "at": [195, 92]},
+    {"tick": 375, "at": [470, 100]},
+    {"tick": 470, "at": [248.8, 204.3]},
+    {"tick": 655, "at": [829, 28]},
+    {"tick": 706, "at": [760, 202]},
+    {"tick": 733, "at": [728, 191]},
+    {"tick": 760, "at": [810.3, 162.9]}
   ]
 }

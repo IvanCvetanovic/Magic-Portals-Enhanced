@@ -2665,6 +2665,22 @@ the shipped script's listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce
   v5{1;-0.6} v6{1;0.6} v7{0.6;1}`. `ETHBeginContactCallback_char_feet` and `ETHEndContactCallback_char_feet` (bytes 361966..362396) add 1 and -1 to `numTouches`
   for every other fixture `shouldBeIgnoredByFeet` (bytes 361584..361843) does not refuse: a sensor, `isCharacter`, `fireball.ent` and a name beginning
   `anti_sight_wall` (`prefixMatches`, bytes 361843..361966). `dark_mage.ent`'s body is two circles (`posY = -0.5` and `0.5`, radius 1.3 of its 14 x 36 box).
+- **The ground flag is two frames late (decoded 2026-11-04, planning step 213; NOT built in the port).** One frame of the original is `[S][E][U]`: (S) `ETHScene::Update` steps
+  the physics (`ETHScene.cpp:464`; a fixed 1/30 s because the game's script turns the fixed step on, above, which `ETHPhysicsSimulator.cpp:156-162` then honours): `b2World::Step` runs `Collide` (`b2World.cpp:912`) before `Solve` (`:920`), and the end-contact
+  callbacks are stacked and run right after the step (`ETHContactListener.cpp:139-167`, `:182-203`); (E) the entities take their bodies' new positions (`ETHSpriteEntity.cpp:453-458`,
+  `ETHPhysicsEntityController.cpp:73-90`); (U) the scripts: `onSceneUpdate` -> the controllers -> `MainCharacter::update` -> `SideScrollerCharacter::update` (bytes 153242..153396) runs
+  `applyForces` (ins 29) and THEN `manageFeet` (ins 32). So `manageFeet` in frame k places the sensor at the body's position after step k with `b2Body::SetTransform` at once
+  (`ETHPhysicsEntityController.cpp:98-107`, the `SetTransform` call on `:102`; `b2Body.cpp:402-426` makes new contacts but fires no Begin), but Box2D tests the overlap only in the NEXT step's `Collide`
+  (`b2Contact.cpp:174-178`), at that old place, before the body moves again; and it copies `numTouches` into `isTouchingGround` after `applyForces` has already read it. The flag
+  `applyForces` reads in frame k is therefore the octagon's test at the body's position of frame k-2, against the world of frame k-2: **N = 2 frames**, for a walk off a ledge and for a
+  landing alike; a walk-off keeps the pad's full velocity for two more moves (4.8 units at the 60 Hz walk, 11.4 at the emulator's 26 frames a second, 2.4 at 120), a landing keeps
+  the air brake and ignores the pad for two more. The port reads the flag at once (N = 0): not built, because with the air brake off (the owner's ruling, player.json `air_decay_rate_hz`)
+  the lag takes 1-04's gold out of reach again (4 crystals, no gold, in the scratch run of step 213) - the open row in the backlog.
+- **Friction does not slow the walk (MEASURED 2026-11-04, planning step 213).** `dark_mage.ent`'s friction of 0.9 mixes (square root) with every floor, and a Box2D model of the original
+  (the reference source, `b2ContactSolver.cpp:327-328`: friction capped at mu x the accumulated normal impulse) says a velocity set outright each frame would lose 20-31 % at 60 Hz. The
+  walk was filmed on 1-01's ledge in the emulator (a screen recording, every frame with its timestamp, a template match of the character against the static camera): 171.0 px in 0.426 s
+  = 401.5 px/s = **142.7 units/s at about 26 frames a second**, where the frictionless decode gives 147-150 (150 x floor(frame ms) / frame ms at the clip's 38-42 ms frames) and the friction model about 130-135, so the walk is 3-5 % under the frictionless number and about 10 % over the friction model's;
+  F13's clip (29.5 frames a second) gave 144.4. The walk is not slowed, whatever the model says: the port's body friction of 0 (`Player::kFriction`) stands.
 - **Facing.** `PortalManager::managePortalInsertion` (bytes 143178..144166) ins 101-124, on a tap taken with no `projectile.ent` alive, calls
   `character.setDirection(1)` where the character's x is above the tap's, else `setDirection(2)`; `GameCharacter::setDirection` (bytes 120269..120337) stores it, and
   the next update with no walk draws that row (`SideScrollerCharacter::updateFrame`, bytes 130241..130614, ins 88-102).

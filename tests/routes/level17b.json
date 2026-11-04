@@ -13,10 +13,11 @@
     "the first tap is good from 30 to ~65, the pan from 105 to ~135, the shot to (214, 100) from 150 to 230 or later (it lives 20 s) and the self tap from 316 to ~350. The player is outside the 455 x 256 view for 5 ticks at most (the portal arrival, 322-326). Leans on G4's flight, R23's tap-time ray",
     "(the shots end in free air, no contact), the camera's drag pan (step 138), the knights' sight and shot (A is dead before it fires), G10's walk (a step off the ceiling's end falls into the shaft), the shock diamond (30 px, spent on its strike, Diamonds.cpp) and a key following its carrier through a portal (Keys.cpp)."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[0].from 1 -> 3 (largest move 2 ticks) and it wins on tick 520 with win_by 560. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level17b",
-  "win_by": 535,
+  "win_by": 560,
   "holds": [
-    {"walk": "left", "from": 1, "to": 20},
+    {"walk": "left", "from": 3, "to": 20},
     {"walk": "right", "from": 270, "to": 312},
     {"walk": "right", "from": 345, "to": 600}
   ],

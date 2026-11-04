@@ -17,8 +17,9 @@
     "Every tap 3 ticks either way wins (4 does not, either way: the 400 ms on one side, a shot still flying",
     "on the other)."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved taps[4].tick 671 -> 665 (largest move 6 ticks) and it wins on tick 766 with win_by 810. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level7a",
-  "win_by": 790,
+  "win_by": 810,
   "holds": [
     {"walk": "right", "from": 605, "to": 620},
     {"walk": "left", "from": 645, "to": 655},
@@ -29,7 +30,7 @@
     {"tick": 58, "at": [236, 79]},
     {"tick": 89, "at": [448, 212]},
     {"tick": 153, "at": [478, 199]},
-    {"tick": 671, "at": [110, 155]},
+    {"tick": 665, "at": [110, 155]},
     {"tick": 735, "at": [322, 218]}
   ]
 }

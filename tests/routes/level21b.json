@@ -37,20 +37,21 @@
     "the stone (its centre is 38 px from that portal), G1a and G1b (the knight's look and gate), G10 (the walk) and G4 (a shot flies 10 to 60",
     "ticks)."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[2].to 884 -> 883, holds[3].from 929 -> 949, taps[1].tick 95 -> 93, taps[4].tick 764 -> 758, taps[5].tick 846 -> 845 (largest move 20 ticks) and it wins on tick 1216 with win_by 1260. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level21b",
-  "win_by": 1255,
+  "win_by": 1260,
   "holds": [
     {"walk": "left", "from": 140, "to": 170},
     {"walk": "right", "from": 839, "to": 846},
-    {"walk": "right", "from": 864, "to": 884},
-    {"walk": "right", "from": 929, "to": 1540}
+    {"walk": "right", "from": 864, "to": 883},
+    {"walk": "right", "from": 949, "to": 1540}
   ],
   "taps": [
     {"tick": 29, "at": [170, 40]},
-    {"tick": 95, "at": [388, 34.3]},
+    {"tick": 93, "at": [388, 34.3]},
     {"tick": 125, "at": [285, 40]},
     {"tick": 215, "at": [258, 205]},
-    {"tick": 764, "at": [285, 105]},
-    {"tick": 846, "at": [165, 225]}
+    {"tick": 758, "at": [285, 105]},
+    {"tick": 845, "at": [165, 225]}
   ]
 }

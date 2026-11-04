@@ -17,20 +17,21 @@
     "the right walk's start 540-603. THE KNIFE-EDGE is the floor walk, as in the route this replaces: its start 31-32 and end 40-42 are one or two ticks, because outside them he stands at x 47.6 or more (49.2-49.5 at the edges) instead of 45.2, and the stone falling at x ~88 strikes him there (tick 204-206, the stone kill). Unlocks no achievement (3-12 is not a stealth level; step 161's unlock census has no 3-12).",
     "Taps: (132,113) x 125-147, y 111-127; (351,116) x 344-360, y 111-127; (420,60) x 411-460, y 20-93; (125,213) x 105-145, y 195-253; the floor shot as before (20,200) x 1-25."
   ],
+  "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[0].to 20 -> 11, holds[1].from 32 -> 33, holds[1].to 40 -> 44, holds[4].from 580 -> 579, taps[3].tick 150 -> 147 (largest move 9 ticks) and it wins on tick 646 with win_by 690. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. SINGLE-TICK WINNER: holds[0].to = 11 wins at that tick only, not at its neighbours +-1 or +-2 - the first key to look at if a build on another compiler or a 32-bit build differs.",
   "level": "level11b",
-  "win_by": 651,
+  "win_by": 690,
   "holds": [
-    {"walk": "right", "from": 1, "to": 20},
-    {"walk": "left", "from": 32, "to": 40},
+    {"walk": "right", "from": 1, "to": 11},
+    {"walk": "left", "from": 33, "to": 44},
     {"walk": "right", "from": 340, "to": 348},
     {"walk": "left", "from": 480, "to": 498},
-    {"walk": "right", "from": 580, "to": 700}
+    {"walk": "right", "from": 579, "to": 700}
   ],
   "taps": [
     {"tick": 32, "at": [20, 200]},
     {"tick": 61, "at": [196, 164]},
     {"tick": 103, "at": [132, 113]},
-    {"tick": 150, "at": [351, 116]},
+    {"tick": 147, "at": [351, 116]},
     {"tick": 250, "at": [45.2, 238.4]},
     {"tick": 282, "at": [420, 60]},
     {"tick": 322, "at": [125, 213]}

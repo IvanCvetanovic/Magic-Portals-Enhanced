@@ -1021,14 +1021,22 @@ void Level8WithTwoShots() {
     // spawn to anywhere up there low enough for the player to come out of. So
     // the player walks right onto the slope first. From there a shot to (30, 30)
     // passes about 40 px from the stone's centre, over its 30 px. Then one more
-    // portal just ahead: walking right through it comes out behind the stone,
-    // into the gap between it and the level's edge, and walking on pushes it off
+    // portal just ahead: walking through it comes out behind the stone,
+    // into the gap between it and the level's edge, and walking right pushes it off
     // the ledge.
     //
     // PLANNING STEP 175 (GAMEPLAY): this play used to break the wall and finish the level (4.87 s). The stone it pushes off the
     // ledge comes down the ramp and reaches the wall at 0.70 m/s of the original's physics, under ETHBeginContactCallback_
     // breakable_wall's 1.5 (#16-33), and the original calls that callback once, at the begin: the wall stands and the level is
     // not finished by this play. The wave's route phase finds 1-09 a way that breaks it at speed.
+    //
+    // PLANNING STEP 213 (GAMEPLAY): the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x
+    // velocity. Walking RIGHT into the near portal now carries the player out of the far one flying right at 144 units a second, so in this rig he lands on the stone's
+    // top-left and walks over it, and the stone is never pushed (it only creeps). The play is re-aimed: the near portal is placed to the player's LEFT and he walks
+    // LEFT into it, so he comes out of the far portal flying left, meets the level's edge, drops into the gap behind the stone and, holding right from tick 30,
+    // pushes it along the ledge and down the ramp: it reaches the wall at 3.78 m/s of the original's physics, over the gate of 1.5, the wall breaks at the begin and
+    // the level is finished (5.00 s) - what this play did before step 175. The slow touch that leaves a wall standing is held by the tests above
+    // (AStoneThatTouchesSlowlyBreaksNothingEvenWhenItFallsAlongTheWallAfter, TheWallsGateIsTheCallbacks).
     Run run;
     if (!Begin("level8", run)) return;
     g_seen.clear();
@@ -1040,28 +1048,30 @@ void Level8WithTwoShots() {
     const bool far = ShootAndLand(run, glm::dvec2(30.0, 30.0));
     CHECK_MSG(far, "the far shot, from " + Px(PxOf(run, run.level.player)) + ", stopped at " +
                        run.level.portals.lastFailure);
-    const bool near = ShootAndLand(run, PxOf(run, run.level.player) + glm::dvec2(40.0, 0.0));
+    const bool near = ShootAndLand(run, PxOf(run, run.level.player) + glm::dvec2(-40.0, 0.0));
     CHECK_MSG(near, "the near shot stopped at " + run.level.portals.lastFailure);
     CHECK_EQ(run.level.portals.shotsFailed, 0);
     std::string trace;
     int tick = 0;
     for (; tick < 900 && !run.level.goals.completed && !run.level.hazards.playerDied; ++tick) {
-        Tick(run, 1.0f);
+        // Left into the near portal (the first 30 ticks), then right, behind the stone.
+        Tick(run, tick < 30 ? -1.0f : 1.0f);
         if (tick % 30 == 0) {
             trace += " " + std::to_string(tick) + ":" + Px(PxOf(run, run.level.player)) + Px(PxOf(run, stone)) +
                      std::to_string(run.level.demolish.Broken());
         }
     }
-    std::printf("  level8 with two shots, holding right: %s after %.2f s, the wall %s\n",
+    std::printf("  level8 with two shots, left through the portal then right: %s after %.2f s, the wall %s\n",
                 run.level.goals.completed ? "completed" : "NOT completed", tick * kStep,
                 run.level.demolish.Broken() == 1 ? "broken" : "standing");
     CHECK_MSG(!g_seen.empty(), "the pushed stone begins to touch the wall: tick:player/stone/broken" + trace);
+    // The begin the original's callback reads, once: the stone comes at the wall over the gate, and the wall breaks at it.
     for (const Demolish::Contact& contact : g_seen) {
-        CHECK_MSG(!contact.broke && contact.speedMs < run.data.demolish.wallBreaksAboveMs,
-                  "read " + std::to_string(contact.speedMs) + " m/s at the begin: under the gate");
+        CHECK_MSG(contact.broke && contact.speedMs >= run.data.demolish.wallBreaksAboveMs,
+                  "read " + std::to_string(contact.speedMs) + " m/s at the begin: over the gate, and the wall breaks");
     }
-    CHECK_MSG(run.level.demolish.Broken() == 0, "the wall stands: tick:player/stone/broken" + trace);
-    CHECK_MSG(!run.level.goals.completed, "and the level is not finished by this play");
+    CHECK_MSG(run.level.demolish.Broken() == 1, "the wall is broken: tick:player/stone/broken" + trace);
+    CHECK_MSG(run.level.goals.completed, "and the level is finished by this play");
 }
 
 void runTests() {

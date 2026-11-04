@@ -14,7 +14,8 @@
 //     second of the original's physics, which that step carries 3 x 16 / 1000 metres a
 //     frame - 2.4 units a tick, 144 units a second.
 //   - AIR (isTouchingGround not set): the pad is ignored and x is the body's own x times
-//     min(1, GetFPSRate() / 60 x 0.86): 0.86 a frame at 60 Hz, an exponential brake.
+//     min(1, GetFPSRate() / 60 x 0.86): 0.86 a frame at 60 Hz, an exponential brake. The port evaluates it at
+//     player.json's air_decay_rate_hz (the owner's ruling of planning step 213: 120 Hz, where it is 1): no brake.
 //   - GRAVITY is Box2D's: the world's scale(10) m/s^2 times the body's SetGravityScale(2),
 //     with no cap but Box2D's own b2_maxTranslation, 2 m a step, which a level's height
 //     never reaches and a hidden, dead body falling on does (Steer applies it).
@@ -71,6 +72,7 @@ struct Tuning {
     double elapsedCapMs = 0.0;  // movement.elapsed_cap_ms: applyForces' min(66, the script's frame)
     double airDecay = 0.0;      // movement.air_decay: the x velocity kept a frame off the floor...
     double airDecayFps = 0.0;   // movement.air_decay_fps: ...at this GetFPSRate (the 60 of fps / 60)
+    double airRateHz = 0.0;     // movement.air_decay_rate_hz: the GetFPSRate the port EVALUATES the formula at (the owner's ruling, planning step 213)
     double worldGravity = 0.0;  // gravity.world_m_s2: the world's scale(10)
     double gravityScale = 0.0;  // gravity.scale: SetGravityScale(2)
     double maxTranslationM = 0.0;       // gravity.max_translation_m: b2_maxTranslation, Box2D metres a step
@@ -150,8 +152,13 @@ double WalkOriginal(const Tuning& tuning, const ScriptClock::Step& step);
 // decode's 60 Hz, which is what the original's step covers in its frame (3 x 16 ms).
 double WalkCarried(const Tuning& tuning, const ScriptClock::Step& step);
 
-// The share of its x velocity a body off the floor keeps a frame: min(1, GetFPSRate() / 60 x 0.86),
-// 0.86 at 60 Hz, 0.43 at 30, 1 from 70 frames a second.
+// The share of its x velocity a body off the floor keeps a frame, the original's own formula at a GetFPSRate of `fps`:
+// min(1, fps / 60 x 0.86) - 0.86 at 60, 0.43 at 30, 1 from 70 frames a second.
+double AirShareAt(const Tuning& tuning, double fps);
+
+// The share the port uses a tick: the formula at movement.air_decay_rate_hz, NOT at the tick's own rate. The original's brake
+// depends on the phone's frame rate and the port plays the same on every phone, so one rate has to be chosen; the owner chose
+// 120 Hz (his phone's, planning step 213), where it is 1 and a body off the floor keeps all its x velocity. `step` is not read.
 double AirShare(const Tuning& tuning, const ScriptClock::Step& step);
 
 // The velocity a tick of the player's gravity adds going down, as the port carries it, in metres a

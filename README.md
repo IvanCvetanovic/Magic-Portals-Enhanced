@@ -458,8 +458,8 @@ them. Convert the levels (step 3) before running them. Without the converted lev
 
 **Winning the levels.** `test_mp_routes` replays every file in `tests/routes/`: a level won by
 play from its start to its door - walks held over spans of ticks, taps at points of the level,
-and the tick by which the level must be won (`game/Route.hpp` has the format). A route is added
-by adding its file; the suite finds it. For writing one, the same suite replays a single route
+and the tick by which the level must be won (`game/Route.hpp` has the format; a route may also name the medal its door must give). A route is added
+by adding its file; the suite finds it, and replays four of them through the engine's tick pump at display rates from 30 to 144 Hz (`--display <hz,...>` does every route). For writing one, the same suite replays a single route
 and prints what it did every n ticks and on every tap:
 
 ```bash
