@@ -14,7 +14,7 @@
     "",
     "WHAT THE PORT DOES: on the ticks a stone is within reach of the player his body's friction is raised so that the engine's mix of him and that stone is 0.15. The engine moves a body before it solves its contacts and",
     "Steer sets his x outright, so he is NOT held in a cone as Box2D's model says; the stone gets the reaction, which is the half that lasts. Measured on Linux (test_mp_play, a 30-unit rolling_stone.ent on level30's floor, the",
-    "player dropped on it with no input, 600 ticks): he stays on it 2.6 to 3.3 times as long and the stone moves 3.7 to 6 times less than with the pair at 0 (the old build; corrected in the repository after release 0.1.3 shipped this file with 4 to 6).",
+    "player dropped on it with no input, 600 ticks): he stays on it 2.6 to 3.3 times as long and the stone moves 3.7 to 6 times less than with the pair at 0 (the old build; the release that first shipped this file said 4 to 6, corrected here afterwards).",
     "Because friction is per BODY, every other contact of his on those ticks mixes with the raised value too (a held-1 floor at 0.15, where it was 0).",
     "",
     "THE OWNER SAID (2026-11-05, verbatim): \"For stage 9, it is kinda hard to balance on the rolling stone. It was easier in the original.\" What he does on that stone is not established (stands on it, rides it down the ramp, lands on it from a portal).",
