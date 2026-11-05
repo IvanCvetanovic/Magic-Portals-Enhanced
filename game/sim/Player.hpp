@@ -42,7 +42,9 @@
 //     solver has no snap, and without gravity the player would hover over a lift going
 //     down, since a contact only holds what presses into it. On the floor the contact
 //     takes the gravity back out.
-//   - It grips nothing: kFriction is 0. The original's body has friction 0.9
+//   - It grips nothing but a rolling stone: kFriction is 0, and sim/StoneGrip raises rigid.friction on the
+//     ticks a stone is within reach (planning step 216: the decoded pair 0.15, the reaction on the stone).
+//     The original's body has friction 0.9
 //     (dark_mage.ent), but its script sets the velocity every update; measured, a
 //     gripping player fights its own steering in the port: at friction 1 the contact takes
 //     back most of each tick's walk, and the notch where level30's first two platforms meet

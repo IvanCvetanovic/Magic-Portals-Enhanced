@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <string>
@@ -1777,6 +1778,215 @@ void AFallThroughAPairRisesAsHighAsItFell() {
               "he rose " + std::to_string(rose) + " units after falling " + std::to_string(fell));
 }
 
+// STEP 216: the friction between the player and a rolling stone (sim/StoneGrip, game/data/stone_grip.json).
+
+void TheGripMixesToTheDecodedPairFriction() {
+    // dark_mage.ent 0.9 and rolling_stone.ent 0.025 mix, as Box2D does (and the engine, per contact), to sqrt(0.9 x 0.025) = 0.150.
+    // The numbers are read back against materials.json's decoded ones, so the two files cannot drift apart.
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    const auto& grip = g_data.stoneGrip;
+    CHECK_MSG(std::fabs(grip.playerFriction - LevelBuilder::MaterialOf(play.registry, "dark_mage").decodedFriction) < 1e-6,
+              "the player's friction is dark_mage's decoded one");
+    CHECK_MSG(std::fabs(grip.stoneFriction - LevelBuilder::MaterialOf(play.registry, "rolling_stone.ent").decodedFriction) < 1e-6,
+              "the stone's is rolling_stone's decoded one");
+    CHECK_MSG(std::fabs(grip.Mix() - 0.15) < 1e-9, "the pair mixes to 0.150, not " + std::to_string(grip.Mix()));
+    // And what the engine makes of the friction the player is given against a stone built at the held 1.
+    const double raised = grip.Mix() * grip.Mix() / 1.0;
+    CHECK_MSG(std::fabs(Supersonic::PhysicsSystem::CombineFriction(static_cast<float>(raised), 1.0f) - 0.15f) < 1e-6,
+              "the engine's mix of the raised friction and a stone at 1 is 0.15");
+}
+
+struct Stand {
+    int landed = -1;
+    int off = -1; // the tick he is no longer on the stone, or -1
+    double stoneMovedPx = 0.0;
+    int gripTicks = 0;
+    float frictionAfter = -1.0f;
+    bool ok = false;
+};
+
+// A 30-unit stone from rolling_stone.ent at rest on level30's floor, the player dropped on its top from 8 units over it, with no
+// input, for 600 ticks. (Level30's floating block00 hangs just up and to the left of the stone: from higher his capsule is inside it
+// and is pushed 6.85 units off the crown before he falls, which made an earlier version of this test drop every case at the same place;
+// from 8 units it still clips block00's lower right chamfer by about 2.5 units at offset 0 and the engine nudges him a little, so
+// "offset" is where he is put, not where he lands. What is compared is the same drop with and without the grip.) How long he stays on
+// it, and how far it is pushed from under him: how long he stays on it, and how far it is pushed from under him. `withGrip` false is the build before step 216 (the mix 0).
+Stand StandOnAStone(double offsetPx, bool withGrip) {
+    Stand result;
+    const double shipped = g_data.stoneGrip.playerFriction;
+    if (!withGrip) g_data.stoneGrip.playerFriction = 0.0;
+    Play play;
+    std::string error;
+    if (!StartLevel30(play, true, error)) {
+        g_data.stoneGrip.playerFriction = shipped;
+        CHECK_MSG(false, error);
+        return result;
+    }
+    for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+    const entt::entity stone = LevelBuilder::BuildRigidCircle(play.registry, "test_rolling_stone", glm::dvec2(290.0, 190.0), 30.0,
+                                                              PortOptions(), "rolling_stone.ent");
+    play.demolish.stones.push_back(Demolish::Stone{"test_rolling_stone", stone, false});
+    for (int tick = 0; tick < 60; ++tick) Tick(play, 0.0f); // the stone settles on the floor
+    const glm::dvec2 rest = BodyPx(play, stone);
+    auto& transform = play.registry.get<TransformComponent>(play.player);
+    auto& rigid = play.registry.get<RigidBodyComponent>(play.player);
+    const glm::vec3 start = Units::ToWorld(rest.x + offsetPx, rest.y - 30.0 - 18.1 - 8.0);
+    transform.position = glm::vec3(start.x, start.y, transform.position.z);
+    rigid.velocity = glm::vec3(0.0f, 0.0f, rigid.velocity.z);
+    for (int tick = 1; tick <= 600; ++tick) {
+        Tick(play, 0.0f);
+        const glm::dvec2 p = PlayerPx(play);
+        const glm::dvec2 s = BodyPx(play, stone);
+        const bool above = p.y < s.y - 20.0 && std::fabs(p.x - s.x) < 30.0;
+        if (result.landed < 0 && above && p.y > s.y - 49.5) result.landed = tick;
+        if (result.landed >= 0 && result.off < 0 && !above) result.off = tick;
+    }
+    result.stoneMovedPx = BodyPx(play, stone).x - rest.x;
+    result.gripTicks = play.stoneGrip.ticks;
+    result.frictionAfter = play.registry.get<RigidBodyComponent>(play.player).friction;
+    result.ok = true;
+    g_data.stoneGrip.playerFriction = shipped;
+    return result;
+}
+
+void AStandingPlayerKeepsHisStoneBetterWithTheGrip() {
+    // The owner's report on 1-09: "kinda hard to balance on the rolling stone, easier in the original". Before step 216 the
+    // pair had no friction at all and the stone was shoved out from under a player who stood still; with the decoded 0.15 the
+    // engine gives the stone the friction's reaction, and he stays on it longer while it moves far less.
+    for (const double offset : {0.0, 3.0, 5.0}) {
+        const std::string how = "dropped " + std::to_string(offset) + " units off the crown: ";
+        const Stand without = StandOnAStone(offset, false);
+        const Stand with = StandOnAStone(offset, true);
+        if (!without.ok || !with.ok) return;
+        std::printf("  stone: %swithout the grip he is off on tick %d and the stone moved %.1f; with it off on %d, moved %.1f (%d ticks of grip)\n",
+                    how.c_str(), without.off, without.stoneMovedPx, with.off, with.stoneMovedPx, with.gripTicks);
+        CHECK_MSG(without.landed > 0 && with.landed > 0, how + "he landed on the stone both ways");
+        CHECK_MSG(without.gripTicks == 0 && with.gripTicks > 0, how + "the grip was on only in the second run");
+        // off -1 is he stayed the whole window: the best outcome.
+        CHECK_MSG(without.off > 0 && (with.off < 0 || with.off > without.off + without.off / 2),
+                  how + "he stays at least half as long again with the grip: " + std::to_string(with.off) + " ticks against " +
+                      std::to_string(without.off));
+        CHECK_MSG(std::fabs(with.stoneMovedPx) < 0.5 * std::fabs(without.stoneMovedPx),
+                  how + "the stone moves less than half as far: " + std::to_string(with.stoneMovedPx) + " against " +
+                      std::to_string(without.stoneMovedPx));
+    }
+}
+
+void TheGripIsSetAndPutBackByApply() {
+    // StoneGrip::Apply on its own, with the bodies put at known gaps and nothing stepped: the friction it gives the player, that it
+    // saves what he had and puts exactly that back, how far it reaches, and which stone wins when two are near.
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+    auto& rigid = play.registry.get<RigidBodyComponent>(play.player);
+    const glm::dvec2 at = PlayerPx(play);
+    const double radius = g_tuning.widthPx * 0.5;
+    constexpr double kStoneRadius = 30.0;
+    constexpr double kStep60 = 1.0 / 60.0;
+    // A stone with its centre level with his and its surface `gapPx` from his side.
+    const auto stoneAt = [&](double gapPx, double frictionOfStone) {
+        const entt::entity stone = LevelBuilder::BuildRigidCircle(play.registry, "test_rolling_stone", at + glm::dvec2(radius + kStoneRadius + gapPx, 0.0),
+                                                                  kStoneRadius, PortOptions(), "rolling_stone.ent");
+        play.registry.get<RigidBodyComponent>(stone).friction = static_cast<float>(frictionOfStone);
+        return stone;
+    };
+    const double mix = g_data.stoneGrip.Mix();
+    StoneGrip::State state;
+    rigid.friction = 0.7f; // a value of his own, which must come back and not be zeroed
+    rigid.velocity = glm::vec3(0.0f);
+
+    const entt::entity nearStone = stoneAt(0.4, 1.0);
+    CHECK_MSG(StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {nearStone}, kStep60, state) && state.on && state.ticks == 1,
+              "a stone 0.4 units off his side is one he is on");
+    CHECK_MSG(std::fabs(rigid.friction - mix * mix / 1.0) < 1e-6, "his friction is mix^2 over the stone's: " + std::to_string(rigid.friction));
+    CHECK_MSG(std::fabs(Supersonic::PhysicsSystem::CombineFriction(rigid.friction, 1.0f) - mix) < 1e-6, "which the engine mixes with the stone's 1 to the decoded 0.150");
+    CHECK_MSG(StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {nearStone}, kStep60, state) && state.ticks == 2 &&
+                  state.savedFriction == 0.7f,
+              "a second tick on it saves nothing again: what he had stays 0.7, not the raised value");
+
+    // The stone moves away: his own friction comes back, exactly.
+    play.registry.get<TransformComponent>(nearStone).position.x += Units::ToMetres(40.0);
+    CHECK_MSG(!StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {nearStone}, kStep60, state) && !state.on && rigid.friction == 0.7f,
+              "20 units off, it is put back to 0.7 and the grip is off");
+    CHECK_MSG(!StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {nearStone}, kStep60, state) && rigid.friction == 0.7f && state.ticks == 2,
+              "and a tick with no stone near him writes nothing");
+
+    // Reach: 5 units off is out at rest, in when he is closing on it fast enough to cover the gap in this step.
+    const entt::entity apart = stoneAt(5.0, 1.0);
+    CHECK_MSG(!StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {apart}, kStep60, state), "5 units off and at rest is out of reach");
+    rigid.velocity = glm::vec3(6.0f, 0.0f, 0.0f); // 6 m/s x 1/60 s x 50 px/m = 5 units in the step
+    CHECK_MSG(StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {apart}, kStep60, state), "the same stone is in reach when he closes 5 units in the step");
+    rigid.velocity = glm::vec3(0.0f);
+    CHECK_MSG(!StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {apart}, kStep60, state) && rigid.friction == 0.7f, "and out again at rest, put back");
+
+    // Two stones in reach: the one that needs the most. A stone built at 0.5 needs 0.0225 / 0.5 = 0.045, one at 1 needs 0.0225.
+    const entt::entity grippy = stoneAt(0.2, 1.0);
+    const entt::entity slippery = stoneAt(0.3, 0.5);
+    CHECK_MSG(StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {grippy, slippery}, kStep60, state) &&
+                  std::fabs(rigid.friction - mix * mix / 0.5) < 1e-6,
+              "of two stones the larger friction wins: " + std::to_string(rigid.friction));
+    CHECK_MSG(StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {slippery, grippy}, kStep60, state) &&
+                  std::fabs(rigid.friction - mix * mix / 0.5) < 1e-6,
+              "whichever way round they are listed");
+
+    // A stone with no friction of its own is no stone to grip, and nothing near him is nothing.
+    play.registry.get<RigidBodyComponent>(grippy).friction = 0.0f;
+    play.registry.get<RigidBodyComponent>(slippery).friction = 0.0f;
+    CHECK_MSG(!StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {grippy, slippery}, kStep60, state) && rigid.friction == 0.7f,
+              "stones at friction 0 are skipped (and no divide by zero)");
+    CHECK_MSG(!StoneGrip::Apply(play.registry, play.player, g_data.stoneGrip, {}, kStep60, state) && rigid.friction == 0.7f, "no stones, no grip");
+}
+
+void NoStoneNearHimLeavesTheGripOff() {
+    // The grip is for a stone and for nothing else: a player walking level30's floor, with a stone out of reach, is stepped
+    // exactly as before (his friction untouched, no tick counted).
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    // On the open floor at the far left of level30 (x 10 to 70, clear of the button at 94), 140 units behind a player who walks right.
+    const entt::entity stone = LevelBuilder::BuildRigidCircle(play.registry, "test_rolling_stone", glm::dvec2(40.0, 190.0), 30.0,
+                                                              PortOptions(), "rolling_stone.ent");
+    play.demolish.stones.push_back(Demolish::Stone{"test_rolling_stone", stone, false});
+    for (int tick = 0; tick < 90; ++tick) Tick(play, tick < 30 ? 0.0f : 1.0f);
+    CHECK_MSG(BodyPx(play, stone).x < 100.0 && PlayerPx(play).x > 200.0, "the stone stayed at the left and he walked off to the right");
+    CHECK_MSG(play.stoneGrip.ticks == 0 && !play.stoneGrip.on, "no tick of grip with the stone far away");
+    CHECK_MSG(play.registry.get<RigidBodyComponent>(play.player).friction == 0.0f, "his friction is still the port's own, 0");
+}
+
+void TheGripRulesAreReadStrictly() {
+    const auto write = [](const std::string& name, const std::string& text) {
+        const std::filesystem::path path = std::filesystem::temp_directory_path() / ("supersonic-test-mp-play-" + name);
+        std::ofstream(path, std::ios::binary) << text;
+        return path.string();
+    };
+    StoneGrip::Rules rules;
+    std::string error;
+    CHECK_MSG(StoneGrip::LoadRules(write("grip-good.json", R"({"grip": {"player_friction": 0.9, "stone_friction": 0.025, "touch_px": 0.5}})"),
+                                   rules, error) &&
+                  std::fabs(rules.Mix() - 0.15) < 1e-9,
+              "a good file is read: " + error);
+    const StoneGrip::Rules untouched = rules;
+    CHECK_MSG(!StoneGrip::LoadRules(write("grip-gap.json", R"({"grip": {"player_friction": 0.9, "touch_px": 0.5}})"), rules, error) &&
+                  error.find("stone_friction") != std::string::npos,
+              "a missing key is refused, and named: " + error);
+    CHECK_MSG(!StoneGrip::LoadRules(write("grip-text.json", R"({"grip": {"player_friction": "0.9", "stone_friction": 0.025, "touch_px": 0.5}})"),
+                                    rules, error) &&
+                  error.find("player_friction") != std::string::npos,
+              "a string where a number goes is refused: " + error);
+    CHECK_MSG(!StoneGrip::LoadRules(write("grip-zero.json", R"({"grip": {"player_friction": 0.9, "stone_friction": 0, "touch_px": 0.5}})"),
+                                    rules, error),
+              "a stone with no friction is refused (the player's friction is the pair's square over it)");
+    CHECK_MSG(!StoneGrip::LoadRules(write("grip-none.json", R"({"other": {}})"), rules, error) && error.find("grip") != std::string::npos,
+              "a file with no grip block is refused: " + error);
+    CHECK_MSG(rules.playerFriction == untouched.playerFriction && rules.stoneFriction == untouched.stoneFriction,
+              "and a refused file leaves what was read alone");
+}
+
 void runTests() {
     Level30HasTheRolesItsPuzzleNeeds();
     TheMoversAreKinematic();
@@ -1818,6 +2028,11 @@ void runTests() {
     ABodyAlreadyInAPortalGoesWhenItsPartnerOpens();
     TwoBodiesInThePairSwap();
     AFallThroughAPairRisesAsHighAsItFell();
+    TheGripMixesToTheDecodedPairFriction();
+    TheGripIsSetAndPutBackByApply();
+    AStandingPlayerKeepsHisStoneBetterWithTheGrip();
+    NoStoneNearHimLeavesTheGripOff();
+    TheGripRulesAreReadStrictly();
 }
 
 } // namespace

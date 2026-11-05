@@ -2782,6 +2782,19 @@ md5 `48fe65ce`).
   patrols, `out/parity/footage/work/F9/an/p3_capes.json`, at about 30 frames a second: the first over frames #336-#359, 24 frames, the second over #330-#359, 30 frames - its 24 frames
   #336-#359 give 62.8): 63.2 and 62.3 units a second (177.7 and 175.3 px/s at 2.8125 px a unit, fit residuals 4.3 and 3.8 px). The knight (`ETHCallback_dragon_knight` ins 513-532) is the same with scale(1.7): 85 units a second at any frame rate up to 66 ms, 81.6 at the 16 ms floor (40.8 of the original's physics second, carried at 2).
 
+- **No script ever changes a friction, so the player and a rolling stone are 0.150 for the whole game (planning step 216).** A body's friction is its `<Entity friction=...>` attribute, read by
+  `ETHEntityProperties.cpp:259` and handed to every fixture of the body by `ETHPhysicsSimulator.cpp:102-111` (`GetFriction(idx)`, `ETHEntity.cpp:561-569`); a compound's circles carry no friction key
+  of their own (`ETHCompoundShape.cpp:89-106` returns the entity's), so both circles of `dark_mage.ent` are 0.9, and `rolling_stone.ent` is 0.025 (the inline block of all 27 stones the 128 scenes place
+  says 0.025 too). Box2D mixes a pair as `sqrt(frictionA x frictionB)` when the contact is made (`b2Contact.h:37-40`, `b2Contact.cpp:148`; restitution by the larger), so **sqrt(0.9 x 0.025) = 0.150**, and a stone
+  against 1-09's `bridge01` (0.5) is sqrt(0.025 x 0.5) = 0.112. The compiled script has NO call that changes it: the `sys:ETHPhysicsController` calls in the listing (`out/parity/asbc/all_functions.txt`) are
+  `GetLinearVelocity` 18, `SetLinearVelocity` 11, `SetAwake` 8, `IsSensor` 6, `SetGravityScale` 2, `GetShape` 2, `SetAngularVelocity` 1 and `GetRevoluteJoint` 1 - `SetFriction` exists
+  (`ETHPhysicsController.cpp:192-196`, the first fixture only) and is never called, there is no `PreSolve` callback and no `DisableNextContact`. The one stone callback that meets the player
+  (`ETHBeginContactCallback_rolling_stone`, bytes 346486..347456) reads the stone's own speed (kills a character above hitIntensity 2.5) and changes no friction, force or spin; the feet count a stone as ground
+  (`shouldBeIgnoredByFeet`). WHAT THE FRICTION DOES, by Box2D's own order (`b2Island.cpp`: gravity into the velocities, the velocity constraints with friction solved BEFORE the normal, `b2ContactSolver.cpp:196,308-335`, then the
+  positions): on the player at most 0.15 x 2g x h = 5 units a second of x velocity a step, which `SetLinearVelocity` erases the next frame; on the stone the equal and opposite impulse, which stays and brakes its
+  roll. That is a MODEL: no clip of the original with a player on a stone exists (`out/parity/footage`, 155 files, searched), and the decoded 0.9 does not predict the original's walk on floors either (the entry above:
+  142.7 units a second measured where friction says 130-135), so the effective grip may differ. The port: `game/sim/StoneGrip.cpp`, `game/data/stone_grip.json`.
+
 ## 17. The player's body, its feet and the clamp's screen (planning step 153)
 
 Found while giving the player the original's collision shape (CAP, G10-3, G10-4, G10-6); read from the engine's source (`reference/ethanon`), Box2D's (`reference/ethanon/toolkit/Source/src/box2d`) and the shipped script's

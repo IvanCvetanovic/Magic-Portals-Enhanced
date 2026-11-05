@@ -52,6 +52,7 @@
 #include "sim/Resting.hpp"
 #include "sim/ScriptClock.hpp"
 #include "sim/Roles.hpp"
+#include "sim/StoneGrip.hpp"
 #include "sim/Torch.hpp"
 #include "sim/Tscn.hpp"
 #include "sim/Turrets.hpp"
@@ -109,6 +110,7 @@ struct Data {
     Hazards::Rules hazards;       // and hazards.json, which is what the role table got wrong
     Resting::Rules resting;       // and resting.json: the piles the original shows at rest, put to sleep at the start
     ContactOrder::Rules contactOrder; // and contact_order.json: the bodies the engine steps in Box2D's order (move after the solve)
+    StoneGrip::Rules stoneGrip;       // and stone_grip.json: the friction between the player and a rolling stone (0.15, decoded)
     std::string levelName;        // the level's file name without its extension, which resting.json and contact_order.json are keyed by
     std::filesystem::path prisms; // where LevelBuilder writes the platforms' prisms
 };
@@ -145,6 +147,7 @@ struct Level {
     // the stone came toward the wall since it last met or left something. The layer's own watch holds the same stones for its
     // shakes; this one is the simulation's, so a suite with no layer reads the same.
     Impacts::Watch stoneWatch;
+    StoneGrip::State stoneGrip; // whether the player's friction is raised for a stone this tick (sim/StoneGrip)
     Launchers::State launchers;
     Portals::State portals;
     Boss::State boss;

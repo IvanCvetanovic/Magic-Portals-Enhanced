@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step216": "planning step 216: the player has the original's friction against a rolling stone now (0.15, sim/StoneGrip): what he pushes or walks over is braked a little, and this route (2-07) still wins, on 1122 where it won on 1123; no key moved. The ticks quoted in the notes below are the earlier build's: the walls that break and the knocks come a few ticks apart from them.",
   "_about": [
     "2-07, walking only (max_portals 0). Re-authored in step 140 (G2): a lift waits on its marker a until a touch inside it sends it (ETHCallback_lift), at 60 units a second, and the touch fires no shot (\"shot\": false), where step 114's route",
     "boarded lift_ent_883 as the port brought it back on its own. Onto the lift at its marker a; a touch (200)",

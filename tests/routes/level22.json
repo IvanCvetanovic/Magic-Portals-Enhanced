@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step216": "planning step 216: the player has the original's friction against a rolling stone now (0.15, sim/StoneGrip): what he pushes or walks over is braked a little, and this route (1-23) still wins, on 596 where it won on 597; no key moved. The ticks quoted in the notes below are the earlier build's: the walls that break and the knocks come a few ticks apart from them.",
   "_about": [
     "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1, on the time-base group's build, wave 3b-1 round 1, and in",
     "wave 3b-2's route phase on the build with R23's tap rules): the player can no longer reach the pillar by walking off the hanging",

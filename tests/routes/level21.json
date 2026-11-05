@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step216": "planning step 216: the player has the original's friction against a rolling stone now (0.15, sim/StoneGrip): what he pushes or walks over is braked a little, and this route (1-22) still wins, on 657 where it won on 656; no key moved. The ticks quoted in the notes below are the earlier build's: the walls that break and the knocks come a few ticks apart from them.",
   "_about": [
     "1-22, re-flown for wave 4c-2 (the route phase, round 1) after step 175 (WALL): a stone breaks a breakable_wall only if it BEGINS to touch it faster than 75 u/s (1.5 m/s), and a destroyable stone dies with the first wall it breaks.",
     "Two breakable walls (719 at x 300 and 755 at x 332, y 99 to 225, side by side) shut the way to the door, and two destroyable stones (753 and 727) sit on a platform (x 70 to 234, top y 82) that the player, on the floor below it, cannot reach. So he is put on it:",

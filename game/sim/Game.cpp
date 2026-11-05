@@ -204,6 +204,8 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Resting::LoadRules(portDataDirectory + "/resting.json", read.resting, error)) return false;
     // The bodies stepped in Box2D's order, by the same name (sim/ContactOrder).
     if (!ContactOrder::LoadRules(portDataDirectory + "/contact_order.json", read.contactOrder, error)) return false;
+    // The friction between the player and a rolling stone (sim/StoneGrip).
+    if (!StoneGrip::LoadRules(portDataDirectory + "/stone_grip.json", read.stoneGrip, error)) return false;
     read.levelName = std::filesystem::path(levelPath).stem().string();
     // The entities a boss adds that no level places (sim/Restock): read beside the
     // level, whose root lighting the table's scene takes, and built by no one until
@@ -475,6 +477,12 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // level30's seam through it at friction 0 and 1 and prints both.
     if (level.player != entt::null && !level.noGravity) {
         Player::Steer(registry, level.player, data.tuning, direction, step);
+        // The friction a stone has against him, for the step about to be taken (sim/StoneGrip): after Steer, which does
+        // not read it, and before the clamp and the stones' watch, which do not either.
+        std::vector<entt::entity> stones;
+        stones.reserve(level.demolish.stones.size());
+        for (const Demolish::Stone& stone : level.demolish.stones) stones.push_back(stone.body);
+        StoneGrip::Apply(registry, level.player, data.stoneGrip, stones, step.physicsS, level.stoneGrip);
     }
     // And last, what every writer above has made of every body's velocity, held to Box2D's limit.
     ClampTranslations(registry, data.tuning, step);

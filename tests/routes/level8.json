@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step216": "planning step 216: the player has the original's friction against a rolling stone now (0.15, sim/StoneGrip): what he pushes or walks over is braked a little, and this route (1-09) still wins, on 401 where it won on 397; no key moved. The ticks quoted in the notes below are the earlier build's: the walls that break and the knocks come a few ticks apart from them.",
   "_about": [
     "1-09: test_mp_layer's Level8FromTheSpawnWithTapsAndWalking as a route. Right onto the slope and let go; a shot over",
     "the stone to (30, 30), one just ahead of the player; right held again. The player walks into the near portal, comes",

@@ -1,0 +1,35 @@
+{
+  "_about": [
+    "THE GRIP BETWEEN THE PLAYER AND A ROLLING STONE (planning step 216; game/sim/StoneGrip.{hpp,cpp} says what the code does with it).",
+    "",
+    "DECODED. The original builds the player from dark_mage.ent and every stone from rolling_stone.ent, and a body's friction is its <Entity friction=...> attribute,",
+    "the same on every fixture of a compound (ETHPhysicsSimulator.cpp:102-111, ETHCompoundShape.cpp:89-106; no .ent compound has a per-fixture friction). Box2D mixes a",
+    "pair's friction as sqrt(friction A x friction B) when the contact is made (b2MixFriction, b2Contact.h:37-40, b2Contact.cpp:148); the engine of the port mixes the same way (engine/src/core/PhysicsSystem.cpp",
+    "combineFriction :104, read per contact per step from each body's own rigid.friction :1634-1651). Nothing in the original's script ever changes a friction: the listing",
+    "(out/parity/asbc/all_functions.txt) has no SetFriction call, no PreSolve callback and no DisableNextContact. So the pair is sqrt(0.9 x 0.025) = 0.150 for the whole game.",
+    "",
+    "A BOX2D MODEL OF THE ORIGINAL (not measured; planning step 216 has the reasoning): by Box2D's own order (friction solved before the normal, positions moved with the solved velocity) the friction acts on the PLAYER by at most",
+    "0.15 x 2g x h = 5 units a second of x velocity per step of 1/30 s, which the script's SetLinearVelocity erases the next frame; on the STONE the equal and opposite impulse, which is kept: it brakes the stone's roll and its speed while",
+    "someone stands on it, and holds a player at rest within a cone of about atan(0.15) = 8.5 degrees round the crown.",
+    "",
+    "WHAT THE PORT DOES: on the ticks a stone is within reach of the player his body's friction is raised so that the engine's mix of him and that stone is 0.15. The engine moves a body before it solves its contacts and",
+    "Steer sets his x outright, so he is NOT held in a cone as Box2D's model says; the stone gets the reaction, which is the half that lasts. Measured on Linux (test_mp_play, a 30-unit rolling_stone.ent on level30's floor, the",
+    "player dropped on it with no input, 600 ticks): he stays on it 2.6 to 3.3 times as long and the stone moves 4 to 6 times less than with the pair at 0 (the old build).",
+    "Because friction is per BODY, every other contact of his on those ticks mixes with the raised value too (a held-1 floor at 0.15, where it was 0).",
+    "",
+    "THE OWNER SAID (2026-11-05, verbatim): \"For stage 9, it is kinda hard to balance on the rolling stone. It was easier in the original.\" What he does on that stone is not established (stands on it, rides it down the ramp, lands on it from a portal).",
+    "",
+    "NOT DECODED / NOT MEASURED. No clip of the original with a player on a stone exists, so how much easier it is there is a model, not a measurement. The decoded 0.9 does not predict the original's",
+    "walk on floors either (docs/ethanon-formats.md:2679-2683: 142.7 units a second measured against 130-135 for friction), so the effective grip against a stone may be above or below 0.15.",
+    "Left for the owner: a clip of the original on 1-09 (the player walks onto the stone, then stands)."
+  ],
+  "grip": {
+    "player_friction": 0.9,
+    "_player_friction": "dark_mage.ent <Entity friction=\"0.900000\"> (reference/extracted/assets/entities/dark_mage.ent, UTF-16), the same on both circles of the compound; = game/data/materials.json group dark_mage friction.",
+    "stone_friction": 0.025,
+    "_stone_friction": "rolling_stone.ent and rolling_stone_no_emissive.ent <Entity friction=\"0.025000\">, and the inline block of all 27 stones the 128 scenes place (reference/extracted/assets/scenes/*.esc: no override); = game/data/materials.json group rolling_stone friction.",
+    "touch_px": 0.5,
+    "_touch_px": "_guess, the port's own safety margin and not a decoded number: how far past touching a stone still counts as the one the player is on, in pixels, on top of the distance the two could close in the step (|relative velocity| x the step). A circle against a circle has no skin in Box2D (earthquake.json impacts.circle_touch_px 0: b2CollideCircles has a point only while they overlap); the engine's own contact set decides what the friction is applied to, this only decides on which ticks his friction is raised.",
+    "_guess_touch_px": true
+  }
+}

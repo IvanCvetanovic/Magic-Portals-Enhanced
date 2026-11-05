@@ -81,6 +81,7 @@ add_library(MagicPortalsSim STATIC
     Sounds.cpp
     Sprites.cpp
     StartChecks.cpp
+    StoneGrip.cpp
     Switches.cpp
     Tiers.cpp
     Trigger.cpp

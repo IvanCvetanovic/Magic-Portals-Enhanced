@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step216": "re-timed in planning step 216, when the player began to have the original's friction against a rolling stone (0.15, sim/StoneGrip): the walk over the resting stone now drags it, so the second left walk starts on 405 instead of 425 (holds[3].from); nothing else moved, still won (on 541, it was 542), win_by 565 stands. Found by a search over the route's ticks (out/parity/step213_tools/repair_route.py). The notes below describe the earlier timing: where they differ, this note and the keys are right.",
   "_about": [
     "2-04. Over the block by portal (taps 1-2) into the niche under carranca_677; then",
     "crate_no_emissive_ent_804, the crate plugging the hole at the right end, sent to the block top by a",
@@ -27,7 +28,7 @@
     {"walk": "right", "from": 1, "to": 40},
     {"walk": "right", "from": 95, "to": 126},
     {"walk": "left", "from": 332, "to": 398},
-    {"walk": "left", "from": 425, "to": 496},
+    {"walk": "left", "from": 405, "to": 496},
     {"walk": "right", "from": 502, "to": 565}
   ],
   "taps": [
