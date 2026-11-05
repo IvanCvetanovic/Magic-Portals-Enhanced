@@ -1,36 +1,24 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
-  "_step216": "planning step 216: the player has the original's friction against a rolling stone now (0.15, sim/StoneGrip): what he pushes or walks over is braked a little, and this route (1-22) still wins, on 657 where it won on 656; no key moved. The ticks quoted in the notes below are the earlier build's: the walls that break and the knocks come a few ticks apart from them.",
   "_about": [
-    "1-22, re-flown for wave 4c-2 (the route phase, round 1) after step 175 (WALL): a stone breaks a breakable_wall only if it BEGINS to touch it faster than 75 u/s (1.5 m/s), and a destroyable stone dies with the first wall it breaks.",
+    "1-22 (level21), the designers' own solution, GOLD: 2 portals and all 5 crystals, medal 3 (planning step 218). It replaces the 4-portal route (medal 2) that was written around a port gap in the wall's first look; that route stays in git history.",
     "Two breakable walls (719 at x 300 and 755 at x 332, y 99 to 225, side by side) shut the way to the door, and two destroyable stones (753 and 727) sit on a platform (x 70 to 234, top y 82) that the player, on the floor below it, cannot reach. So he is put on it:",
-    "a portal in the air over the platform's right end at (232, 60) (tap 36, placed 78) and one on the player (tap 92, through on 94): he lands on the block's end on 97. He walks left (97-212) behind stone 727, which he pushes into stone 753 (crystal at (172, 64) on 153), and stops at x 176:",
-    "the stones go on rolling by themselves, at about 0.2 u a tick (observed after the walk stops; its cause is not established here), 753 off the platform's left end about tick 247 and 727 about 525, and each lands on the ramp (x 0 to 256) and rolls down it.",
-    "753 reaches wall 719 on 318 and reads 3.17 m/s at the wall's first look (the margin), so the wall breaks and the stone dies with it. He walks back right (302-340), off the platform's right end (about tick 328), and falls 144 units to the ramp's foot (landing on 342 at x 257, impact 10.0: it does not kill him), long after the wall is gone.",
-    "THE SECOND WALL IS BROKEN WITH A PORTAL PAIR, NOT BY THE ROLLING STONE: a shot onto the ramp's line at (210, 183) (tap 368, placed 379; any x from 110 to 240 and y from 148 to 214 does: a pair takes a body whose centre comes within about 44 = 14 + 30 of it) and a shot into the corridor where wall 719 stood, at (304, 150) (tap 424, placed 442;",
-    "x 292 to 316 and y 104 to 188 do: the stone must come out within reach of wall 755, whose left face is x 317, after one step of its turned-back velocity, so not left of x 292). Stone 727 rolls on, comes within 44 of the first portal on 580 at 3.3 m/s, is put at the second with its velocity inverted (the original's own transit, transit.json: 'invert')",
-    "and on the next tick the wall's first look finds it within a pixel of wall 755 at 3.28 m/s (a put body carries no earlier velocity, so the history is the exit one): the wall breaks on 581 and the stone is destroyed with it. The pair is spent. He walks right from 604 along the floor (crystals at (300, 210) on 613 and (332, 210) on 626) to the door: won on tick 666.",
-    "Four portals, three of five crystals: medal 2 (the golden score is 2 portals and all five crystals). No achievement. Leans on: the player's push of two stones along a platform and their coast (R3-2), 753's reading at wall 719 off the ramp's lip, a portal pair carrying a stone, the wall's first-look rule of step 175 and a fall of 144 units.",
-    "WHY NOT THE ROLLING STONE (the designers' own solution is almost certainly 2 portals and all 5 crystals: push both stones off the left end, step off after them past the crystal at (54, 98), walk the ramp and the floor to the door; it wins on this build on tick 449 with medal 3, 2 portals, 5 crystals, taps (232, 60) on 40 and (255, 205) on 86, walk left 92-283, right 314-):",
-    "the second stone arrives at wall 755 off the ramp's lip, in the air for 5 ticks, and the engine's solver brakes a closing pair a step or two before it meets, so it stops 2 to 4 units short of the wall (outside the 1-pixel margin) and only creeps up to it after it has landed, which clears the history: the wall's first look then reads 0.12 m/s and the wall HOLDS.",
-    "Whether it breaks depends on where the stone's last free step ends (within 1 unit of the wall), which moves with the third decimal of everything before it: 3 to 5 in 10 of the inputs scanned win, in no cell wider than 0.3 of a unit in the first tap, and the walk's start must be 0 or 1 tick after the landing; 1 tick or 0.1 of a unit away it loses, so that is not a route. It is a PORT GAP",
-    "(INFERRED, not measured on the original: Box2D's step does not brake a closing pair early, so its callback would read the stone at its roll speed), written up in R4c2/round1_1-22.md; this route does not lean on it.",
-    "Margins (each input moved alone from this file's value, all others kept): the first tap from tick 25 to 51 and the second from 78 to 105, the walk left's start from 84 to 107 and its end from 190 to 227 (228 and later dies: the second stone comes before the pair is placed; 189 and some values below it, 753 comes to wall 719 at a creep and the wall holds, the lip's own phase; 167 and below, 753 kills him at the ramp's foot),",
-    "the walk back's start from 285 to 318 and its end from 326 to 354, the ramp portal's tap from tick 346 to 391 and the corridor one's from 396 to 480, the last walk's start from 556 to 616 (the stone goes through on 580; the starts before 580 wait under the corridor and win earlier, on 621 and up) and its end 665 or later.",
-    "No stone touches him (the pair takes 727 on the ramp at about x 175 and puts it 76 units from him, and is gone the tick after); he is never outside the camera's view. The portals stand 54 and 76 units from him at x 257, outside their reach of him (14 + his radius), so neither takes him.",
-    "NOT MEASURED ON THE ORIGINAL: that a stone put at a portal against a breakable_wall breaks it (the callback reads the stone's whole velocity at its begin of contact, ETHBeginContactCallback_breakable_wall #16-33, which the put body has after SetPositionXY and the inverted velocity; no clip shows it), and the reading 3.28 m/s (the port's watch's, about twice the gate)."
+    "a portal in the air over the platform's right end at (232, 60) (tap 40) and one on the player (tap 86, at (255, 205)): he lands on the platform. He walks left (92-283) behind stone 727, pushes it into stone 753 and takes the crystals along the platform; the stones roll off the left end onto the ramp and down it,",
+    "and he steps off after them past the crystal at (54, 98), walks the ramp and the floor and takes the last crystals. Each stone reaches a wall at about 3 m/s and breaks it, and a destroyable stone dies with the wall it breaks: 753 breaks wall 719 and 727 breaks wall 755. He walks right (314-) to the door. Won on tick 455.",
+    "WHY THIS WAS NOT A ROUTE BEFORE (the owner's report of 2026-11-05, 'the first ball destroys the wall, the second one just rams into the wall but does not destroy it'): the engine moves a body and then solves its contacts, and brakes a pair that stands inside the two bodies' travel in the step, so a stone that rolls at a wall ends the step 1 to 6 units from it with its velocity taken out; the wall's first look needed the stone within 1 unit (demolish.json contact.margin_px), so it never saw the contact at speed, and the creep that finally closed the gap read 0.1 m/s (the wall held).",
+    "Box2D takes the position first too and finds the pair touching at the START of the next step with the velocity the stone still carries, so the callback reads the stone at its roll speed. Demolish::State::Tick now reads a stone whose incoming approach reaches the wall within the step (the log says 'held short of the wall by the engine's brake'). Before it, 11 of 117 neighbours of this route won (the first tap's point scanned over x 226-238, y 56-64); now 115 do.",
+    "Margins (each input moved alone, all others kept; the units are ticks, or level units for a point): of 52 variants 50 still win and 35 still earn gold. The two that do not win: the second tap 8 ticks earlier (the shot is refused) and the first tap 8 ticks later (the second stone comes before the pair is placed). The 15 that win with medal 2 miss the crystal at (54, 98) on the way down: the walk's start 1 to 8 ticks later, the walk's end 2 to 20 earlier, the second tap 2 to 8 later or 4 earlier, the first tap's point 1 to 4 units right or 4 down.",
+    "NOT MEASURED ON THE ORIGINAL: that the original breaks the second wall with the stone at its roll speed (no clip shows a stone breaking a wall; the decode is ETHBeginContactCallback_breakable_wall #16-33 and Box2D's order, planning step 218). Nobody has done this by hand in this version."
   ],
   "level": "level21",
-  "win_by": 678,
+  "win_by": 500,
+  "medal": 3,
   "holds": [
-    {"walk": "left", "from": 97, "to": 212},
-    {"walk": "right", "from": 302, "to": 340},
-    {"walk": "right", "from": 604, "to": 678}
+    {"walk": "left", "from": 92, "to": 283},
+    {"walk": "right", "from": 314, "to": 500}
   ],
   "taps": [
-    {"tick": 36, "at": [232, 60]},
-    {"tick": 92, "at": [255, 205]},
-    {"tick": 368, "at": [210, 183]},
-    {"tick": 424, "at": [304, 150]}
+    {"tick": 40, "at": [232, 60]},
+    {"tick": 86, "at": [255, 205]}
   ]
 }

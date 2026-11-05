@@ -35,6 +35,7 @@
 #include <vector>
 
 using namespace MagicPortals;
+using Supersonic::BoxColliderComponent;
 using Supersonic::RigidBodyComponent;
 using Supersonic::SphereColliderComponent;
 using Supersonic::TransformComponent;
@@ -333,6 +334,136 @@ void TheMarginIsTheEdge() {
         CHECK(registry.valid(wall) != within);
         CHECK(registry.valid(stone));
     }
+}
+
+// ---- planning step 218: a stone the engine's brake stopped short of the wall --------------
+
+void AStoneTheEnginesBrakeStoppedShortStillStrikesTheWall() {
+    // 1-22's second wall (the owner: "the second one just rams into wall but does not destroy it"). The engine moves a body and
+    // then solves its contacts, and brakes a closing pair inside the two bodies' travel in the step, so a stone that rolls at a wall
+    // ends the step 1 to 6 units from it with its velocity taken out - and never again comes within the margin until it creeps up at
+    // 0.1 m/s. Box2D finds the pair touching at the START of the next step with the velocity the stone still carries and the callback
+    // reads that. The rig stops the stone where the step would have left it (gap `gapPx` from the wall's face, its velocity taken
+    // out after BeforeStep read it) and asks the wall's first look.
+    Demolish::Rules rules;
+    std::string error;
+    CHECK_MSG(Demolish::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/demolish.json", rules, error), error);
+    constexpr double kRadiusPx = 30.0;
+    constexpr double kStepS = 1.0 / 60.0; // the rig's bare tick: SimRatio 1, so the original's step is this long
+    struct Case {
+        const char* what;
+        double gapPx;
+        double vx; // m/s of the original's physics (the rig's velocityScale is 1), +x toward the wall
+        double vy;
+        bool strikes;  // the wall is looked at (a first look is recorded)
+        bool breaks;   // and it breaks
+    };
+    // 3.0 m/s is 150 px/s: 2.5 px a step. The reach is the margin (1 px, demolish.json) and that.
+    const Case cases[] = {
+        {"fast, stopped 2 px short", 2.0, 3.0, 0.0, true, true},
+        {"fast, stopped at the edge of its step (3.4 px)", 3.4, 3.0, 0.0, true, true},
+        {"fast, stopped 3.7 px short: more than its step from the wall", 3.7, 3.0, 0.0, false, false},
+        {"slow (1 m/s), within its step: looked at, under the gate", 1.5, 1.0, 0.0, true, false},
+        {"fast, moving along the wall and not at it", 2.0, 0.0, 3.0, false, false},
+        {"fast, moving away from the wall", 2.0, -3.0, 0.0, false, false},
+        {"at rest, 2 px short", 2.0, 0.0, 0.0, false, false},
+    };
+    for (const Case& c : cases) {
+        for (const bool withStep : {true, false}) {
+            entt::registry registry;
+            Demolish::State state;
+            state.rules = rules;
+            const entt::entity stone = registry.create();
+            registry.emplace<TransformComponent>(stone).position = Units::ToWorld(0.0, 0.0);
+            registry.emplace<SphereColliderComponent>(stone).radius = Units::ToMetres(kRadiusPx);
+            auto& rigid = registry.emplace<RigidBodyComponent>(stone);
+            rigid.velocity = glm::vec3(static_cast<float>(c.vx), static_cast<float>(c.vy), 0.0f);
+            state.stones.push_back(Demolish::Stone{"stone", stone, true});
+            const entt::entity wall = registry.create();
+            Demolish::Breakable breakable;
+            breakable.name = "wall";
+            breakable.wall = true;
+            breakable.body = wall;
+            const glm::vec3 centre = Units::ToWorld(kRadiusPx + c.gapPx + 15.0, 0.0);
+            breakable.box.centre = glm::vec2(centre.x, centre.y);
+            breakable.box.half = glm::vec2(Units::ToMetres(15.0), Units::ToMetres(63.0));
+            state.breakables.push_back(breakable);
+            // The brake's reach is measured from the wall's SHAPE, which a body of the rig needs a collider to have.
+            registry.emplace<TransformComponent>(wall).position = centre;
+            registry.emplace<BoxColliderComponent>(wall).size = glm::vec3(Units::ToMetres(30.0), Units::ToMetres(126.0), 1.0f);
+
+            Impacts::Watch watch;
+            Impacts::Watched watched;
+            watched.body = stone;
+            watched.kind = Impacts::Kind::Stone;
+            watch.BeforeStep(registry, {watched});
+            rigid.velocity = glm::vec3(0.0f); // the step's solve took the approach out
+            const std::string how = std::string(c.what) + (withStep ? ", with the step given: " : ", with no step given: ");
+            state.Tick(registry, watch, {}, withStep ? kStepS : 0.0);
+            const bool broke = state.breakables.front().broken;
+            const bool looked = !state.contactsNow.empty();
+            if (!withStep) {
+                // The touch rule as it was: nothing is looked at from 1.5 px or more away.
+                CHECK_MSG(!broke && !looked, how + "the touch rule alone looks at nothing from this far");
+                continue;
+            }
+            CHECK_MSG(looked == c.strikes, how + (looked ? "it was looked at" : "it was not looked at"));
+            CHECK_MSG(broke == c.breaks, how + (broke ? "the wall broke" : "the wall stood"));
+            if (c.strikes && looked) {
+                CHECK_MSG(state.contactsNow.front().braked && state.contactsNow.front().atMargin,
+                          how + "and the contact says the engine's brake held it short");
+                if (c.breaks) {
+                    CHECK_MSG(state.contactsNow.front().speedMs > 2.9 && state.contactsNow.front().speedMs < 3.1,
+                              how + "it read its carried 3 m/s, not the creep: " + std::to_string(state.contactsNow.front().speedMs));
+                    CHECK_MSG(!registry.valid(stone), how + "and the destroyable stone went with the wall");
+                }
+            }
+        }
+    }
+}
+
+void AStoneThatHeldTheWallStaysHeld() {
+    // A slow stone looked at from short of the wall and a fast push after it: the pair has had its begin (Box2D calls the callback
+    // once), so the push, at a gap the margin covers, breaks nothing - the rule the first look always kept.
+    Demolish::Rules rules;
+    std::string error;
+    CHECK_MSG(Demolish::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/demolish.json", rules, error), error);
+    constexpr double kRadiusPx = 30.0;
+    constexpr double kStepS = 1.0 / 60.0;
+    entt::registry registry;
+    Demolish::State state;
+    state.rules = rules;
+    const entt::entity stone = registry.create();
+    registry.emplace<TransformComponent>(stone).position = Units::ToWorld(0.0, 0.0);
+    registry.emplace<SphereColliderComponent>(stone).radius = Units::ToMetres(kRadiusPx);
+    auto& rigid = registry.emplace<RigidBodyComponent>(stone);
+    state.stones.push_back(Demolish::Stone{"stone", stone, false});
+    const entt::entity wall = registry.create();
+    Demolish::Breakable breakable;
+    breakable.name = "wall";
+    breakable.wall = true;
+    breakable.body = wall;
+    const glm::vec3 centre = Units::ToWorld(kRadiusPx + 1.5 + 15.0, 0.0);
+    breakable.box.centre = glm::vec2(centre.x, centre.y);
+    breakable.box.half = glm::vec2(Units::ToMetres(15.0), Units::ToMetres(63.0));
+    state.breakables.push_back(breakable);
+    registry.emplace<TransformComponent>(wall).position = centre;
+    registry.emplace<BoxColliderComponent>(wall).size = glm::vec3(Units::ToMetres(30.0), Units::ToMetres(126.0), 1.0f);
+    Impacts::Watch watch;
+    Impacts::Watched watched;
+    watched.body = stone;
+    watched.kind = Impacts::Kind::Stone;
+    // A slow touch: looked at, held.
+    rigid.velocity = glm::vec3(1.0f, 0.0f, 0.0f);
+    watch.BeforeStep(registry, {watched});
+    rigid.velocity = glm::vec3(0.0f);
+    state.Tick(registry, watch, {}, kStepS);
+    CHECK_MSG(!state.breakables.front().broken && state.contactsNow.size() == 1, "the slow stone was looked at and the wall held");
+    // Then pushed fast, still where the margin covers it: no second begin.
+    rigid.velocity = glm::vec3(3.0f, 0.0f, 0.0f);
+    watch.BeforeStep(registry, {watched});
+    state.Tick(registry, watch, {}, kStepS);
+    CHECK_MSG(!state.breakables.front().broken && state.contactsNow.empty(), "a fast push after the slow touch breaks nothing");
 }
 
 // ---- planning step 115: one owner of a breakable's breaking --------------------
@@ -1083,6 +1214,8 @@ void runTests() {
     AStoneWhereTheLevelPutsItBreaksNothing();
     ThePlayerBreaksNothing();
     TheMarginIsTheEdge();
+    AStoneTheEnginesBrakeStoppedShortStillStrikesTheWall();
+    AStoneThatHeldTheWallStaysHeld();
     ABlastGrabsByTheFlag();
     BreakAndRestoreByName();
     AStoneKillsThePlayerAboveTwoAndAHalfAndNotAtIt();

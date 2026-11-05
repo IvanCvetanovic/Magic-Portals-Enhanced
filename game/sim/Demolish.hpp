@@ -112,6 +112,8 @@ struct Contact {
     bool stoneDied = false; // and the stone was destroyable
     bool atMargin = false;  // the stone came within reach of the wall on this tick
     bool atSkin = false;    // and/or the watch found the pair begun on this tick
+    bool braked = false;    // the first look was the engine's brake: the stone stood short of the wall but its incoming approach would have
+                            // reached it in the step (see Tick's `simS`); not within the margin
     double historyMs = 0.0; // the history's reading at the margin (0 when not atMargin)
     double replayMs = 0.0;  // the watch's begin's reading (0 when not atSkin)
     bool freeFlight = false; // that begin was read as a free flight (replayed)
@@ -168,7 +170,18 @@ struct State {
     // watch reads the same contact so, on the same step. A second look only ever breaks a wall the first held. Any other
     // breakable keeps the touch rule. The wall's body goes and its handle is kept, which the layer's impact watch matches the
     // stone's contact by. Returns the bodies of the stones destroyed, for the caller's Forget.
-    std::vector<entt::entity> Tick(entt::registry& registry, const Impacts::Watch& watch, const std::vector<Impacts::Begin>& begins);
+    //
+    // `simS` is what the original's physics world advances in the step this tick stands for (ScriptClock::Step::simS), and with it the
+    // first look also takes a stone the engine's brake stopped SHORT of the wall (planning step 218). The engine moves a body and then
+    // solves its contacts, and a pair apart but inside the two bodies' travel in the step is braked, so a stone that rolls at a wall
+    // ends the step 1 to 6 units from it with its velocity taken out: it never comes within contactMarginPx, and the creep that
+    // finally does reads 0.1 m/s, so a wall that Box2D's step would have broken at the stone's full speed held (1-22's second wall).
+    // Box2D takes the position first too, and finds the pair touching at the START of the next step with the velocity the stone
+    // still carries: so a stone whose incoming approach along the line to the wall, over this step, reaches the wall's reach
+    // (contactMarginPx) from where the step left it is read now, a step before Box2D would, by what it carried. 0 (the default) is
+    // the touch rule as it was, which the suites' rigs that step nothing keep.
+    std::vector<entt::entity> Tick(entt::registry& registry, const Impacts::Watch& watch, const std::vector<Impacts::Begin>& begins,
+                                   double simS = 0.0);
 
     // A script's deletion, now: the torch's light wall and the dark dragon's wall.
     // The body goes and the handle is cleared. Returns the body taken, for the

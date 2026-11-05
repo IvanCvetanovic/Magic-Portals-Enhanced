@@ -13600,7 +13600,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         // The wall's callback (ETHBeginContactCallback_breakable_wall, planning step 175), as Game::AfterStep judged it: read at the
         // margin (the history) and/or at the watch's begin (the free flight's replay), the larger reading judging.
         for (const Demolish::Contact& contact : m_level.demolish.contactsNow) {
-            std::string read = contact.atMargin ? "first look at the margin, the history reads " + std::to_string(contact.historyMs) + " m/s"
+            std::string read = contact.atMargin ? std::string(contact.braked ? "first look, held short of the wall by the engine's brake, the history reads " : "first look at the margin, the history reads ") + std::to_string(contact.historyMs) + " m/s"
                                                 : std::string("second look, at the watch's begin");
             if (contact.atSkin) {
                 read += "; the watch's begin reads " + std::to_string(contact.replayMs) + " m/s" +

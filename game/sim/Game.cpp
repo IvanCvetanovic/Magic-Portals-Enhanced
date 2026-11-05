@@ -528,7 +528,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
     level.turrets.Tick(registry, level.player, step.scriptS);
     // A stone that breaks a breakable_wall above the callback's speed, and is destroyable (every one a launcher throws, and 12 a
     // level places), goes with it: the portals forget it as they forget any body the level takes away.
-    for (const entt::entity gone : level.demolish.Tick(registry, level.stoneWatch, stoneBegins)) Forget(level, gone);
+    for (const entt::entity gone : level.demolish.Tick(registry, level.stoneWatch, stoneBegins, step.simS)) Forget(level, gone);
     // The fire agents, what is burning down, and the bombs - before the portals,
     // which move things. What it takes away goes through Forget as a thrown body
     // does: a crate is teleportable, so a burning one can be in portals.travellers.

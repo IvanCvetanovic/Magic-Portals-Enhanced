@@ -138,7 +138,7 @@ bool State::HitPlayer(const std::string& stone, double hitIntensity) {
 }
 
 std::vector<entt::entity> State::Tick(entt::registry& registry, const Impacts::Watch& watch,
-                                      const std::vector<Impacts::Begin>& begins) {
+                                      const std::vector<Impacts::Begin>& begins, double simS) {
     contactsNow.clear();
     takenNow.clear();
     const float margin = Units::ToMetres(rules.contactMarginPx);
@@ -168,7 +168,22 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, const Impacts::W
             // The first look: the stone comes within reach of the wall. A pair that stood within reach after the last Tick has
             // had its begin: a slow touch followed by a fast push breaks nothing.
             bool atMargin = false;
-            if (Trigger::Overlaps(registry, stone.body, reach)) {
+            bool braked = false;
+            bool within = Trigger::Overlaps(registry, stone.body, reach);
+            if (!within && simS > 0.0 && registry.valid(breakable.body)) {
+                // Stopped short by the engine's brake: where the stone's incoming approach (the velocity it carried into this step,
+                // along the line to the wall) would take it within one step of where the step left it.
+                Impacts::Shape stoneShape;
+                Impacts::Shape wallShape;
+                Impacts::Begin carried;
+                if (Impacts::ShapeOf(registry, stone.body, stoneShape) && Impacts::ShapeOf(registry, breakable.body, wallShape) &&
+                    watch.Carried(stone.body, carried)) {
+                    const Impacts::Gap gap = Impacts::Between(stoneShape, wallShape);
+                    const double approachPx = glm::dot(carried.velocityPx, gap.normal) * simS;
+                    within = braked = approachPx > 0.0 && gap.px <= rules.contactMarginPx + approachPx;
+                }
+            }
+            if (within) {
                 const Pair pair(breakable.body, stone.body);
                 now.push_back(pair);
                 atMargin = std::find(touching.begin(), touching.end(), pair) == touching.end();
@@ -184,6 +199,7 @@ std::vector<entt::entity> State::Tick(entt::registry& registry, const Impacts::W
             contact.wall = breakable.name;
             contact.atMargin = atMargin;
             contact.atSkin = atSkin;
+            contact.braked = atMargin && braked;
             if (atMargin) {
                 // #16-33: the whole velocity's length, the fastest the stone came along the line to the wall (Impacts::Begin). The
                 // watch's velocities are the original's own (px/s over SimRatio): a stone it does not hold reads as at rest.
