@@ -211,8 +211,8 @@ Without a device (all run):
 
 ```
 tools/build_android.sh --abi all --package-only --data out/dist/content            (packages, then prints every check below)
-python tools/package/android_package.py inspect out/android/MagicPortals-0.1.2-debug.apk --sdk <sdk>
-python tools/package/android_package.py compare out/android/MagicPortals-0.1.2-debug.apk --package out/dist/content
+python tools/package/android_package.py inspect out/android/MagicPortals-0.1.3-debug.apk --sdk <sdk>
+python tools/package/android_package.py compare out/android/MagicPortals-0.1.3-debug.apk --package out/dist/content
 <build-tools>/aapt2 dump badging <apk>;  <build-tools>/zipalign -c -P 16 -v 4 <apk>;  java -jar <build-tools>/lib/apksigner.jar verify --print-certs <apk>
 ```
 
