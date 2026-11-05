@@ -1028,7 +1028,67 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
         return nullptr;
     };
 
+    // THE PLACED PAIR IS ASKED EVERY TICK, NOT WHEN SOMETHING ENTERS (planning step 215).
+    //
+    // PortalManager::doTeleporting (bytes 139692..140259, #5-117) runs every frame: isThereAnythingInPortal
+    // takes the ONE object in each placed portal (getObjectInPortal: the preferred entity, else the grabber's
+    // first, #1-63 of it), and with a pair open - maxPortals 2, a partner to go to - it moves them. That is
+    // level-triggered, where a body_entered is an edge, and it matters in two ways the edge got wrong:
+    //   - a body ALREADY in a portal when the partner opens goes at once. A crate the first portal opened on
+    //     (1-16's tutorial taps the crate first, then the button) never entered anything, so it stayed;
+    //   - two bodies, one in each portal, SWAP: the second portal's object goes first, to the first portal's
+    //     point, with killPortals false (#66-98), and then the first portal's to the second's, killing both
+    //     (#99-117). The edge sent the one that entered and spent the pair under the other.
+    // Both destinations are read before anything moves, so the swap is exact. One object a portal: the rest
+    // stay, as they do in the original (the pair is gone). A body in both circles goes once (#78-79: the
+    // ids are compared). Nothing here is for a static end, the one-placement path or a fireball.
+    //
+    // NOT MODELLED: the preferred entity (the body the tap's ray ended on, computePortalFinalPos'
+    // preferedTeleportEntity) - the first of the portal's travellers goes - and getObjectInPortal's
+    // grabber order, which is the engine's buckets'.
+    const bool pairIsOpen = rules.consumeOnTraverse && placed.size() >= static_cast<std::size_t>(kPairSize);
+    if (pairIsOpen) {
+        const auto occupant = [&registry](const Placed& portal) {
+            for (const entt::entity body : portal.inside) {
+                if (registry.valid(body)) return body;
+            }
+            return entt::entity{entt::null};
+        };
+        Placed& firstEnd = placed[0];
+        Placed& secondEnd = placed[1];
+        entt::entity inFirst = occupant(firstEnd);
+        entt::entity inSecond = occupant(secondEnd);
+        if (inSecond == inFirst) inSecond = entt::null;
+        if (inFirst != entt::null || inSecond != entt::null) {
+            const int attempts = (inFirst != entt::null ? 1 : 0) + (inSecond != entt::null ? 1 : 0);
+            // teleportToOther's own refusals: a platform at any placed portal (#36-42) stops every
+            // object, each of the two asks; the lockout stands in for isActive (#43-50).
+            if (PlatformInAnyPortal(registry)) {
+                transitsHeld += attempts;
+            } else if (lockoutS <= 0.0f) {
+                const glm::dvec2 firstPx = firstEnd.atPx;
+                const glm::dvec2 secondPx = secondEnd.atPx;
+                const auto carry = [&](entt::entity body, const glm::dvec2& fromPx, const glm::dvec2& toPx) {
+                    const glm::dvec2 travellerPx = Units::ToPixels(registry.get<TransformComponent>(body).position);
+                    Teleport(registry, body, toPx, rules.transit, body == shooter);
+                    transits.push_back(Traversal{travellerPx, fromPx, toPx});
+                };
+                if (inSecond != entt::null) carry(inSecond, secondPx, firstPx);
+                if (inFirst != entt::null) carry(inFirst, firstPx, secondPx);
+                ++traversals;
+                firstEnd.teleported = true;
+                secondEnd.teleported = true;
+                lockoutS = static_cast<float>(rules.transit.reentryLockoutS);
+                // Both ends of a pair go (:270-282, killPortal on each).
+                placed.erase(placed.begin(), placed.begin() + kPairSize);
+            }
+        }
+    }
+
     for (const Entry& entry : entries) {
+        // The placed pair's own ends were asked above, level-triggered; what is left here is a static end
+        // and the one placement that pairs with a static portal.
+        if (pairIsOpen && !entry.end.isStatic) continue;
         // portal_system.gd:183-191: an end a traversal before it spent leads
         // nowhere, and neither does a portal with no partner; and nothing goes
         // through while the lockout runs (below, after the platform gate).

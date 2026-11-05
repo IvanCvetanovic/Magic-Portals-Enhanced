@@ -1646,6 +1646,137 @@ void AStoneEntersTheCircleTheHoverPutThere() {
     }
 }
 
+// A stone put down at a point, a traveller of the pair as a crate or a rolling stone is.
+entt::entity PutStone(Play& play, const std::string& name, const glm::dvec2& at) {
+    const entt::entity stone = LevelBuilder::BuildRigidCircle(play.registry, name, at, 2.0, LevelBuilder::Options{});
+    play.portals.travellers.push_back(stone);
+    return stone;
+}
+
+glm::dvec2 BodyPx(Play& play, entt::entity body) {
+    return Units::ToPixels(play.registry.get<TransformComponent>(body).position);
+}
+
+void ABodyAlreadyInAPortalGoesWhenItsPartnerOpens() {
+    // PortalManager::doTeleporting asks EVERY frame what is in the placed portals (bytes 139692..140259), so a
+    // crate the FIRST portal opened on goes the moment the second one exists. The port took only an entry (a
+    // body_entered), and a crate already inside the first portal never entered anything: 1-16's tutorial taps
+    // the crate first and then the button, and nothing moved (planning step 215).
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+    CHECK_MSG(play.portals.TryPlace(glm::dvec2(300.0, 100.0)), "the first portal opens");
+    if (play.portals.placed.size() != 1u) return;
+    const entt::entity stone = PutStone(play, "test_stone", play.portals.placed.front().atPx);
+    Tick(play, 0.0f);
+    Tick(play, 0.0f);
+    CHECK_MSG(play.portals.traversals == 0 && play.portals.placed.size() == 1u,
+              "alone in a portal with no partner it goes nowhere");
+    CHECK_MSG(play.portals.TryPlace(glm::dvec2(460.0, 100.0)) && play.portals.placed.size() == 2u,
+              "the second portal opens");
+    if (play.portals.placed.size() != 2u) return;
+    const glm::dvec2 exitPx = play.portals.placed.back().atPx;
+    Tick(play, 0.0f);
+    CHECK_MSG(play.portals.traversals == 1 && play.portals.placed.empty(),
+              "the stone went, and the pair is spent: " + std::to_string(play.portals.traversals) + " traversals");
+    CHECK_MSG(glm::distance(BodyPx(play, stone), exitPx) < 3.0,
+              "it is at the second portal: " + Px(BodyPx(play, stone)) + " for " + Px(exitPx));
+}
+
+void TwoBodiesInThePairSwap() {
+    // The same decode: the second portal's object goes first, to the first portal's point, and then the first
+    // portal's to the second's, killing both (#66-117), with both points read before either body moves. The
+    // edge sent only the body that entered and spent the pair under the other: 1-13's stone and the player
+    // could not change places.
+    for (const bool playerInTheFirst : {false, true}) {
+        const std::string how = playerInTheFirst ? "a portal on the player, then one on a stone: " : "two stones: ";
+        Play play;
+        std::string error;
+        CHECK_MSG(StartLevel30(play, true, error), error);
+        if (play.player == entt::null) return;
+        for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+        const glm::dvec2 playerBefore = PlayerPx(play);
+        CHECK_MSG(play.portals.TryPlace(playerInTheFirst ? playerBefore : glm::dvec2(300.0, 100.0)),
+                  how + "the first portal opens");
+        if (play.portals.placed.size() != 1u) return;
+        const glm::dvec2 firstPx = play.portals.placed.front().atPx;
+        const entt::entity first = playerInTheFirst ? play.player : PutStone(play, "test_stone_a", firstPx);
+        Tick(play, 0.0f);
+        CHECK_MSG(play.portals.traversals == 0, how + "nothing goes through a portal with no partner");
+        CHECK_MSG(play.portals.TryPlace(glm::dvec2(460.0, 100.0)) && play.portals.placed.size() == 2u,
+                  how + "the second portal opens");
+        if (play.portals.placed.size() != 2u) return;
+        const glm::dvec2 secondPx = play.portals.placed.back().atPx;
+        const entt::entity second = PutStone(play, "test_stone_b", secondPx);
+        Tick(play, 0.0f);
+        CHECK_MSG(play.portals.traversals == 1 && play.portals.placed.empty(),
+                  how + "one carry, and the pair is spent: " + std::to_string(play.portals.traversals));
+        CHECK_MSG(play.portals.transits.size() == 2u, how + "two bodies went through");
+        CHECK_MSG(glm::distance(BodyPx(play, first), secondPx) < 3.0,
+                  how + "the first portal's body is at the second: " + Px(BodyPx(play, first)) + " for " + Px(secondPx));
+        CHECK_MSG(glm::distance(BodyPx(play, second), firstPx) < 3.0,
+                  how + "the second's is at the first: " + Px(BodyPx(play, second)) + " for " + Px(firstPx));
+    }
+}
+
+void AFallThroughAPairRisesAsHighAsItFell() {
+    // The portal's launch: Portal::ExitVelocity turns a character's y back and keeps his x
+    // (invertLinearVelocity), so a body that fell d units into one end comes out of the other moving up as fast
+    // as it came in and rises about d units above the exit. Levels such as 1-11 are built on it (a drop for the
+    // speed, then a climb out of a floor portal to a ledge); this pins that the port gives the height back.
+    // In the free air over level30's floor at x 300, so nothing but the portals and gravity act.
+    constexpr double kFallStartY = 40.0;
+    constexpr double kEntryY = 120.0;
+    constexpr double kExitY = 200.0;
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    for (int tick = 0; tick < 30; ++tick) Tick(play, 0.0f);
+    CHECK_MSG(play.portals.TryPlace(glm::dvec2(300.0, kEntryY)) && play.portals.TryPlace(glm::dvec2(300.0, kExitY)) &&
+                  play.portals.placed.size() == 2u,
+              "the pair opens");
+    if (play.portals.placed.size() != 2u) return;
+    auto& transform = play.registry.get<TransformComponent>(play.player);
+    auto& rigid = play.registry.get<RigidBodyComponent>(play.player);
+    const glm::vec3 start = Units::ToWorld(300.0, kFallStartY);
+    transform.position = glm::vec3(start.x, start.y, transform.position.z);
+    rigid.velocity = glm::vec3(0.0f, 0.0f, rigid.velocity.z);
+
+    const double exitPx = play.portals.placed.back().atPx.y;
+    double apex = 1.0e9;
+    int wentOn = -1;
+    for (int tick = 1; tick <= 240; ++tick) {
+        Tick(play, 0.0f);
+        if (wentOn < 0 && play.portals.traversals == 1) wentOn = tick;
+        if (wentOn >= 0) apex = std::min(apex, PlayerPx(play).y);
+    }
+    CHECK_MSG(wentOn > 0, "the player fell into the entry");
+
+    // The same drop with no portals, for the same number of ticks: how far gravity takes him in the time he fell.
+    Play control;
+    CHECK_MSG(StartLevel30(control, true, error), error);
+    if (control.player == entt::null) return;
+    for (int tick = 0; tick < 30; ++tick) Tick(control, 0.0f);
+    auto& controlTransform = control.registry.get<TransformComponent>(control.player);
+    auto& controlRigid = control.registry.get<RigidBodyComponent>(control.player);
+    controlTransform.position = glm::vec3(start.x, start.y, controlTransform.position.z);
+    controlRigid.velocity = glm::vec3(0.0f, 0.0f, controlRigid.velocity.z);
+    for (int tick = 1; tick <= wentOn; ++tick) Tick(control, 0.0f);
+    const double fell = PlayerPx(control).y - kFallStartY;
+    const double rose = exitPx - apex;
+    std::printf("  launch: the player fell %.1f units in %d ticks into the entry, and rose %.1f above the exit (%.1f%%)\n",
+                fell, wentOn, rose, 100.0 * rose / fell);
+    // A fall of n ticks and a climb of the same n are not mirror images in discrete time: the climb is
+    // (n - 1) / (n + 1) of the fall (0.90 for 19 ticks), and 86.4% is what the port measures (the original, with
+    // a step twice as coarse, has fewer ticks and loses more). So: never higher than he fell, and not more than
+    // 20% short - a launch that gave back much less is a lost momentum, and the level's ledge is out of reach.
+    CHECK_MSG(rose <= fell && rose >= 0.80 * fell,
+              "he rose " + std::to_string(rose) + " units after falling " + std::to_string(fell));
+}
+
 void runTests() {
     Level30HasTheRolesItsPuzzleNeeds();
     TheMoversAreKinematic();
@@ -1684,6 +1815,9 @@ void runTests() {
     APlacedPairPerishesAndTheLevelPlaysOn();
     APortalPerishesUnderThePlayer();
     AStoneEntersTheCircleTheHoverPutThere();
+    ABodyAlreadyInAPortalGoesWhenItsPartnerOpens();
+    TwoBodiesInThePairSwap();
+    AFallThroughAPairRisesAsHighAsItFell();
 }
 
 } // namespace

@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step215": "re-timed in planning step 215, when a placed pair began to carry what was ALREADY inside a portal when its partner opened (PortalManager::doTeleporting asks every frame; the port took only an entry): the barrel in the pocket portal B_f no longer waits for the fireball, it goes when A_f opens, so the blast comes from the barrel's own carry and the wall breaks on 512 (it was 678) with 7 portals (it was 8; medal 2 still). Keys moved by search, shapes and targets unchanged: holds[0] 205-262 -> 211-242, holds[2] 421-495 -> 421-515, taps[3] 357 -> 359, taps[4] 420 -> 424, taps[5] 500 -> 486; still won on 784 (the last two shots and the walk are unchanged). The ticks and the story below are the OLD route's: where they differ, this note and the keys are right.",
   "_about": [
     "2-29 (re-flown in planning step 197, CMP-18, after the stone and its plank were stepped in Box2D's order by game/data/contact_order.json). The door's room (the top of platform_no_emissive_ent_879, y 116) is shut by breakable_wall_883 (x 131 to 161) and by door_lift_823 (x 163 to 193, which button_827 at (482, 220) raises 102.4 u), and the player cannot climb to it.",
     "THE LEVEL'S OWN CLOCK (nothing here touches it; out/parity/program/CMP18/fix/route/mech.md has the table): rolling_stone_892 creeps left along anchor_885 from tick ~5 at 1.0 u a tick, leaves it at ~105, slides down spinning_platform_no_emissive_ent_890 and falls (fast, above the wall's 2.5 u a tick, only on ticks 111 to 133), lands at x ~270 on 131, rolls left at 2.0 and meets barrel_bomb_ent_884 on ~191, pushing it 1.8 u, to rest at (151.7, 193.9) from ~195 (asleep on 235).",
@@ -17,9 +18,9 @@
   "level": "level28a",
   "win_by": 800,
   "holds": [
-    {"walk": "left", "from": 205, "to": 262},
+    {"walk": "left", "from": 211, "to": 242},
     {"walk": "right", "from": 400, "to": 416},
-    {"walk": "left", "from": 421, "to": 495},
+    {"walk": "left", "from": 421, "to": 515},
     {"walk": "right", "from": 520, "to": 590},
     {"walk": "left", "from": 738, "to": 800}
   ],
@@ -27,9 +28,9 @@
     {"tick": 26, "at": [482, 175]},
     {"tick": 266, "at": [151.7, 193.9]},
     {"tick": 312, "at": [178, 64]},
-    {"tick": 357, "at": [107.2, 205.4]},
-    {"tick": 420, "at": [180, 97]},
-    {"tick": 500, "at": [372, 66]},
+    {"tick": 359, "at": [107.2, 205.4]},
+    {"tick": 424, "at": [180, 97]},
+    {"tick": 486, "at": [372, 66]},
     {"tick": 680, "at": [178, 64]},
     {"tick": 732, "at": [282.7, 205]}
   ]

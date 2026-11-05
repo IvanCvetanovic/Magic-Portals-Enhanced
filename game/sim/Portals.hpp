@@ -28,11 +28,15 @@
 //   inline crate says 0. And a fireball, which has no body here (Turrets.hpp): it
 //   goes through a placed pair once, turned back, and the pair stays
 //   (CarryFireball).
-// - Entries are per portal and per body, like an Area2D's body_entered. So a
-//   portal placed over a crate sees the crate come in on the next tick, and a
-//   traveller put down inside its exit does not go back until it has left.
+// - A PLACED PAIR IS ASKED EVERY TICK, as PortalManager::doTeleporting asks it
+//   (planning step 215): the one traveller inside each end goes to the other
+//   end, whether it came in this tick or was there before its partner opened, and
+//   two travellers, one in each end, change places. The pair is then spent.
+//   A static end and the one placement that pairs with it are still entries, per
+//   portal and per body, like an Area2D's body_entered: a traveller put down inside
+//   its exit does not go back until it has left.
 // - Nothing goes through a placed pair while a moving platform or a lift is at
-//   any placed portal (Rules::gate, planning step 136): the entry is held, and
+//   any placed portal (Rules::gate, planning step 136): the carry is held, and
 //   offered again every tick until the platform has gone or the traveller has.
 
 #include "sim/LevelBuilder.hpp"

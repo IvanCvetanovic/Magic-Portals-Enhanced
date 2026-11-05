@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step215": "re-aimed in planning step 215, when a placed pair began to carry what was ALREADY inside a portal when its partner opened and to swap two bodies (PortalManager::doTeleporting asks every frame; the port took only an entry): the first pair now puts the small crate where the player stood and he goes where it was, so the pile falls another way and two aims moved: taps[2] (372, 40) -> (372, 60) and taps[3] (255, 178) -> (235, 178); same ticks, still won on 228. Found by a search over the route's ticks and aims (out/parity/step213_tools/repair_route.py --coords). The collapse described below is the OLD one: NOT MEASURED ON THE ORIGINAL, as it never was.",
   "_about": [
     "1-30 (wave 4a, round 1). The door sits high on the right, over block00_ent_910 and _911, and the way to it is walled by a pile",
     "of crates: the 28-unit double_block_plat_ent_896 on the floor (the player cannot step up it), two columns of small crates on it,",
@@ -28,7 +29,7 @@
   "taps": [
     {"tick": 30, "at": [208, 181]},
     {"tick": 71, "at": [70, 203]},
-    {"tick": 105, "at": [372, 40]},
-    {"tick": 200, "at": [255, 178]}
+    {"tick": 105, "at": [372, 60]},
+    {"tick": 200, "at": [235, 178]}
   ]
 }

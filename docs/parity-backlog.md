@@ -6739,7 +6739,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       nothing): a traveller entering the exit within about 10 ticks of a fireball coming out of it differs; the
       shortest carranca stride is 90 ticks and no route has one. (2) One object per portal per frame
       (`getObjectInPortal`) and the second portal's first (`doTeleporting` #37-98) are not modelled: a fireball and
-      another traveller in a pair's two ends on one tick differ; no route has one. (3) *Closed by step 136*:
+      another traveller in a pair's two ends on one tick differ; no route has one. *Closed for the placed pair by step 215, for every traveller but a fireball: one object per placed portal is asked every tick, a body already inside a portal when its partner opens goes at once, and two bodies, one in each end, swap; what stays open is `preferedTeleportEntity` (the body the tap's ray ended on) and the grabber's own order, the first traveller in the portal going in their place.* (3) *Closed by step 136*:
       `hasMovingPlatformInAnyPortal` is built for every traveller, a fireball included, and 2-06's route replays with
       nothing held. (4) The static portals' callback and the one-placement
       path carry a fireball with no once test and no turn, and are not built for it: no level places a fireball
@@ -6757,7 +6757,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       (player.json, a guess; R25; since step 153 the hull of the original's two circles, 18.2 x 36.2), not the original's character body, and Box2D's polygon skin (`b2_polygonRadius`)
       is not added: a first overlap kills, not a touch. (3) A held entry is the port's per-traveller
       entry offered again each tick; the original's `isThereAnythingInPortal` takes one object per portal per frame
-      (step 135, deviation 2), which differs only with two travellers at one portal on one tick. (4) The reachability
+      (step 135, deviation 2), which differs only with two travellers at one portal on one tick *(step 215: a placed pair is asked every tick, one object a portal, so a held carry is simply asked again)*. (4) The reachability
       flood cannot see either change (the row above). (5) A gate body turned or scaled is refused by `Portals::Find`
       (the grabber's corner planes do not turn); none of the 29 is.
       *(1)'s G2 half: lifts wait and are sent since step 140, and no route is held on the merged build (1-28's route

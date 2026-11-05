@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step215": "planning step 215: a placed pair now carries what is ALREADY inside a portal when its partner opens, and swaps two bodies (PortalManager::doTeleporting asks every frame), so the statement below that a body is carried only when it ENTERS, and that the near portal has to be the second, is the OLD rule. This route opens the far portal first and the near one over the stone second, which both rules carry, and it wins on the same tick.",
   "_about": [
     "1-13 (wave 4a, round 1, on the build with R23's tap rules, G9, G1, the stones and WAKE): the door stands on platform_ent_914 (top y 256, x 380 to 512), beyond the wall of platform_ent_651 and 655 (x 256 to 288, y 14 to 398).",
     "The only ways round the wall are under its foot (y 398), through the lift door at x 355 to 385 and up through a slot in the room beyond; the player cannot jump, so the level is four portal pairs, 8 shots, none failed:",

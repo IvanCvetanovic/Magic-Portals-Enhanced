@@ -1,5 +1,6 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_step215": "re-aimed in planning step 215, when a placed pair began to carry what was ALREADY inside a portal when its partner opened (PortalManager::doTeleporting asks every frame; the port took only an entry): tap 1's spare portal sat in the gap between the two crates (256, 233.5) and, with tap 3's portal over the button as its partner, sent a crate to the button on 121, a door cycle early (player dead on 442). The same shot, on the same line from the player (238, 190) but 20.5 units out instead of 47.1, opens in free air at (245.8, 208.9): the recoil is the same (same direction), nothing is inside it, and tap 5's portal replaces it as before; still won on 661. The story below says the crates 'never enter': that was the port's old rule, not the original's.",
   "_about": [
     "4-19, weightless, won through the red key (planning step 118; re-authored in round 3 on the timing group's build). Every tap pushes the player 140 u/s (2.33 units a tick) away from it and nothing slows it, the shot flies 3.2 units a tick, shock_agent_2506 kills within 66 of (336, 128) and the wells at (62, 62) and (208, 48) pull what enters them, so the old chain of five taps within 100 ticks (the player left drifting down) no longer fits: the route keeps the player over the floor between the wells, cancels each push with the next, and sends the last portal at the crate.",
     "Taps 1, 2 and 4 are there for their recoil. Taps 2 and 4 are aimed at the ceiling (platform_no_emissive_ent_2497 and double_block_plat_no_emissive_ent_2659) and their shots fail there; tap 1's lands in the 6 px gap between the two crates (256, 235) as a spare portal, which tap 5's replaces (the crates inside it never enter: only an entry from a placed pair moves a body). Tap 1 (tick 25) pushes the player up and left; tap 2 (51), from (214.8, 133.9), stops the climb dead; tap 3 (87), a portal over button_2515 at (62, 185), pushes it right (its shot lands on 121); tap 4 (123) brings it down and back; tap 5 (159), from (243.8, 172.4), opens the portal over crate_2495 at (235, 215): the crate goes through to the button (pressed on 167), gravity_agent_2439 leaves it there ~15 ticks, and door_lift_2498 rises all the way (500 ms) and falls from fully raised on 199 (it latches, step 133).",
@@ -10,7 +11,7 @@
   "holds": [
   ],
   "taps": [
-    {"tick": 25, "at": [256.0, 233.5]},
+    {"tick": 25, "at": [245.8, 208.9]},
     {"tick": 51, "at": [214.8, 25.0]},
     {"tick": 87, "at": [62.0, 185.0]},
     {"tick": 123, "at": [267.4, 25.5]},
