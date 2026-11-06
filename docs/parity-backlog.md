@@ -4128,6 +4128,10 @@ steps 171-175, each in its own block above). **No level is without a route and n
       is unmeasured on the original**) and **depends on stones coasting at about 0.21 u/tick once the player stops pushing** (observed, cause not established): the engine's
       friction step (G10-14) would re-time it. Next: read the callback's velocity at the stone's last free step where the brake stops a pair short (the wall's second look), or a
       wall margin of 4 units (a `_guess`), or the owner's rig clip of a stone rolling and falling into a breakable wall (settles this, WALL-3 and WALL-5 together).
+      **PORT GAP CLOSED by Step 218 (shipped in 0.1.4, 2026-11-06; the owner found it by hand on 1-22): the first look takes a stone the engine's brake held within one
+      step's travel of the wall, judged by the speed it carried (`Demolish::State::Tick`, `simS`); `tests/routes/level21.json` is now the designers' 2-portal gold play (tick 455).
+      STILL OPEN here: that the original breaks the wall at the stone's roll speed is read from the decode and Box2D's order, not seen (the clip above); the pair-fed stone
+      against a wall, and the coast the old route depended on, are no longer the shipped play's concern but stay unmeasured on the original.**
 - [ ] **R4c2-3. 4-21 is a knife-edge in its aim, on the owner's 60 Hz** (medium; the verifier's second problem; step 176's deviation 2; `round1_4-21.md`). A stone can only be fast
       against that wall from under it: the gravity agent's pull (`gravitywell.json`, 0.5 m/s a reference frame) beats gravity only within about 190 units of the agent, so a stone set
       above the wall is lifted away. The exit pair's aim wins for y 198.5 to 200.5 at x 395 (x 392 to 401 at y 199.5; speeds 1.5 to 2.2; a stone set a little lower reads 0.36 to 0.54 m/s
