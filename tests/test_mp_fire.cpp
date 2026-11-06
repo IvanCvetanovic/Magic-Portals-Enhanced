@@ -415,23 +415,22 @@ void AWallOutOfReachStands() {
     std::printf("  %s: %d blast(s) far from breakable_wall_1040, which stands\n", kBombLevel, run.level.fire.blasts);
 }
 
-// The port breaks the walls alone. 2-18's barrel_bomb_ent_1151 stands 54 units
-// above carranca_right_1075, a flagged breakable the blast grabs with a clear
-// line; the original's carrancaCallback (#128-183) would then delete it. The port
-// leaves it to Turrets, which is not built (demolish.json blast._not_built), so
-// it stands and goes on firing - pinned so that building it moves this line.
-void ABlastLeavesACarrancaStanding() {
+// The blast takes a carranca (planning step 223; it left one standing before). 2-18's barrel_bomb_ent_1151 stands 54 units
+// above carranca_right_1075, a flagged breakable the blast grabs with a clear line; the original's carrancaCallback (#123-157)
+// then deletes it on the same frame, as the wall's callback does a wall.
+void ABlastTakesACarranca() {
     Run run;
     if (!Begin("level17a", run)) return;
     const Demolish::Breakable* carranca = BreakableNamed(run, "carranca_right_1075");
-    CHECK_MSG(carranca != nullptr && carranca->flagged && !carranca->blastBreaks,
-              "a carranca is a flagged breakable, and not one the port's blast breaks");
+    CHECK_MSG(carranca != nullptr && carranca->flagged && carranca->blastBreaks,
+              "a carranca is a flagged breakable, and one the port's blast breaks");
     if (carranca == nullptr || run.level.fire.bombs.empty()) return;
+    const entt::entity body = carranca->body;
     run.level.fire.bombs.front().requested = true;
     Tick(run);
     CHECK_EQ(run.level.fire.blasts, 1);
-    CHECK_MSG(Grabbed(run, carranca->body), "the grab reaches it, as the original's does");
-    CHECK_MSG(!carranca->broken && run.registry.valid(carranca->body), "and it stands");
+    CHECK_MSG(Grabbed(run, body), "the grab reaches it, as the original's does");
+    CHECK_MSG(carranca->broken && !run.registry.valid(body), "and its callback takes it on the same frame");
 }
 
 // THE LAVA (ETHBeginContactCallback_lava, listing L68416, #1-30; planning step
@@ -646,7 +645,7 @@ void runTests() {
     ABlastBreaksTheWallItReachesOnItsTick();
     AWallBehindRockStands();
     AWallOutOfReachStands();
-    ABlastLeavesACarrancaStanding();
+    ABlastTakesACarranca();
     TheLavaSetsOffABarrelThatFallsIn();
     AShotThroughTheFlameBecomesAFireball();
     AShotThatMissesTheFlameFliesOn();

@@ -41,9 +41,10 @@
 // its grab reaches with a clear line, and ETHCallback_breakable_wall (L68771)
 // #1-86 reads it and deletes the wall. The grab takes a breakable by its FLAG
 // (isBreakable, L67923: GetUInt('breakable') != 0), never by name, and only the
-// entities demolish.json `blast.entities` lists read the datum here: a carranca,
-// a light wall, a shock agent and a minion read it too in the original, and are
-// left to their own modules (demolish.json `blast._not_built`).
+// entities demolish.json `blast.entities` lists read the datum here (the breakable walls
+// and, since planning step 223, the carrancas): a light wall, a shock agent and a minion
+// read it too in the original, and are left to their own modules (demolish.json
+// `blast._not_built`).
 
 #include "sim/Impacts.hpp"
 #include "sim/LevelBuilder.hpp"

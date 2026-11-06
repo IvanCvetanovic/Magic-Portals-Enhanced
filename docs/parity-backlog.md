@@ -6474,7 +6474,7 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       #294, `ETHCallback_minion` L87616 #1478) and a light wall (`ETHCallback_light_wall` L98075 #32). The port's blast
       breaks walls alone (`demolish.json` `blast._not_built`); each needs its own module's death. *Step 146 draws
       `carranca_destroy.ent` wherever the port takes a carranca (only its stone rule, the row below); the blast's
-      taking stays unbuilt (step 146, deviation 3).* **GOLD PILOT, step 220 (2026-11-06): this row BLOCKS 2-15's gold.** The
+      taking stays unbuilt (step 146, deviation 3).* **CARRANCA BUILT by step 223 (2026-11-06): a blast now takes a carranca (`demolish.json` `blast.entities`) and a taken carranca stops firing (`Turrets::State::Fire`); its earthquake, and the shock agent, minion and light wall, stay unbuilt.** **GOLD PILOT, step 220 (2026-11-06): this row BLOCKED 2-15's gold (before step 223).** The
       level has 5 crystals (not 3); two of them hang inside the two breakable carrancas' colliders (crystal 1140 in
       `carranca_1071`, 1141 in `carranca_right_1075`), the designers' 2-portal play blows each carranca with a barrel (the blasts
       land 30 and 40 u from them, radius 80), and in the port neither dies (`Demolish.cpp:291-301`, `:415`; `demolish.json`

@@ -96,10 +96,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
-std::vector<Fireball> State::Fire(double dt) {
+std::vector<Fireball> State::Fire(const entt::registry& registry, double dt) {
     std::vector<Fireball> now;
     const double ms = static_cast<double>(dt) * 1000.0;
     for (Turret& turret : turrets) {
+        // Taken: its entity is deleted, so there is no stride to run (a turret LevelBuilder
+        // built no body for has none to lose and fires as before).
+        if (turret.body != entt::null && !registry.valid(turret.body)) continue;
         turret.elapsedMs += ms;
         // PASSES the stride, as carrancaCallback's CMPu does, rather than
         // reaching it.

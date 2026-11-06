@@ -265,6 +265,7 @@ std::vector<entt::entity> State::Contacts(entt::registry& registry, entt::entity
 
 State::Turn State::Tick(entt::registry& registry, entt::entity player, const std::vector<entt::entity>& stones,
                         double dt) {
+    droppedNow.clear();
     Turn turn;
     flySpikes(registry, player, dt);
     if (!beholder || beholder->gone) return turn;
@@ -352,6 +353,7 @@ State::Turn State::Tick(entt::registry& registry, entt::entity player, const std
         b.rockClockMs += ms;
         if (b.rockClockMs >= rules.rockStrideMs) {
             turn.dropped.push_back(drop(registry, glm::dvec2(playerPx.x, rules.rockHeightPx)));
+            droppedNow.push_back(turn.dropped.back().atPx);
             b.rockClockMs = 0.0;
             ++b.rocksThrown;
         }

@@ -194,6 +194,7 @@ struct Rules {
     Rule suck;     // vanishEffect's suck_effect.ent, at the entry portal
     Rule sparkles; // vanishEffect's sparkles.ent, where the traveller stood
     Rule appear;   // appearEffect's appear_effect.ent, at the exit portal
+    Rule bossRockAppear; // the beholder's spawnStone: the same .ent at a dropped rock, z 0 and 1.5 x
     // addFireball's fireball.ent, which every fireball in the game is: what a
     // carranca spits, what a fire diamond turns a portal shot into, and what both
     // dragons breathe. It is added at the point it is fired from and then follows
@@ -411,6 +412,10 @@ Spawn Sparkles(const Rules& rules, const glm::dvec2& travellerPx, const glm::dve
 
 // appearEffect(exitPortalPx): at the exit portal.
 Spawn Appear(const Rules& rules, const glm::dvec2& exitPortalPx);
+
+// The beholder's spawnStone (L74566 #5-22): AddScaledEntity('appear_effect.ent', vector3(pos, 0), g_scale.scale(1.5)) where the rock
+// is dropped - the cue of where the stones fall from (planning step 223; the owner's note on 1-32).
+Spawn BossRockAppear(const Rules& rules, const glm::dvec2& rockPx);
 
 // addFireball(pos, dir, killMainCharacter, fireballScale): the entity, at the
 // point it is fired from. The three arguments the row does not carry are not the

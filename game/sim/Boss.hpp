@@ -193,6 +193,10 @@ struct State {
     // Where ETHCallback_rolling_stone adds rolling_stone_destroy.ent; written for
     // the picture, and nothing in the simulation reads it.
     std::vector<Launchers::StoneGone> brokenNow;
+    // Where each rock was dropped on this tick (Tick empties it first): spawnStone's `pos`, at which the original adds
+    // appear_effect.ent (L74566, #5-22) - the cue of where the rock comes from. For the layer's picture; nothing in the
+    // simulation reads it (planning step 223).
+    std::vector<glm::dvec2> droppedNow;
     // Of those, each rock Contacts broke on something static this tick, and on
     // what (Contacts empties it first). For the layer's sound and shake; nothing
     // in the simulation reads it.

@@ -119,6 +119,23 @@
     ]
   },
 
+  "boss_rock_appear": {
+    "entity": "appear_effect.ent",
+    "offset_units": 0,
+    "z": {"value": 0, "scaled": false},
+    "angle": 0,
+    "scale": 1.5,
+    "_source": [
+      "The beholder's spawnStone (Beholder.angelscript, bytes 373491..373647, listing L74566), called by",
+      "overTimeEntityAdder (L74442 #110-114) with the dropped rock's position the moment the rock is added:",
+      "#1-3 playStoneAppearSound, then #5-22 AddScaledEntity('appear_effect.ent', vector3(pos, 0), g_scale.scale(1.5)):",
+      "the z a bare 0 (PshC4 0), the scale 1.5 g_scale.scale()s (PshC4 1069547520 = 1.5f), no angle. It is the ring a portal",
+      "exit shows (appear_effect above, z 2 and scale 1), drawn bigger where each rock comes from: the cue the owner",
+      "named on 2026-11-06 ('there should be a visual cue where the stones are falling from, at least that is how it is",
+      "in the original'). Planning step 223."
+    ]
+  },
+
   "fireball": {
     "entity": "fireball.ent",
     "offset_units": 0,

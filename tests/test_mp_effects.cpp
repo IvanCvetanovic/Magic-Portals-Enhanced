@@ -373,6 +373,13 @@ void AVanishLandsWhereTheScriptPutsIt() {
     CHECK_MSG(appear.atPx == exit, "the flash at " + At(appear.atPx));
     CHECK_MSG(appear.angleDeg == 0.0f && appear.z == 2.0 && !appear.zScaled && appear.scale == 1.0,
               "unturned, at a bare z 2, scale 1");
+
+    // The same .ent where the beholder's rock is dropped (spawnStone #5-22, planning step 223): a bare z 0, 1.5 times the size, unturned.
+    const glm::dvec2 rockAt(400.0, -32.0);
+    const Effects::Spawn rockCue = Effects::BossRockAppear(rules, rockAt);
+    CHECK_MSG(rockCue.entity == "appear_effect.ent" && rockCue.atPx == rockAt, "the rock's cue: appear_effect.ent where it is dropped");
+    CHECK_MSG(rockCue.angleDeg == 0.0f && rockCue.z == 0.0 && !rockCue.zScaled && rockCue.scale == 1.5,
+              "unturned, at a bare z 0, scale 1.5");
 }
 
 // The four ways a traveller can stand from its portal, in Ethanon's angle

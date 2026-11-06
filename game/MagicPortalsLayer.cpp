@@ -11370,6 +11370,15 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const Sc
     // adds the puff where the step left it (planning step 175).
     for (const Demolish::Taken& taken : m_level.demolish.takenNow) stoneGone(Launchers::StoneGone{taken.stone.name, taken.atPx}, "a wall it broke");
     for (const Launchers::StoneGone& gone : m_level.boss.brokenNow) stoneGone(gone, "the beholder's level");
+    // THE CUE OF WHERE A BOSS ROCK COMES FROM (effects.json boss_rock_appear, planning step 223): spawnStone adds appear_effect.ent
+    // at the rock's point the moment overTimeEntityAdder adds the rock, with playStoneAppearSound (latched elsewhere).
+    for (const glm::dvec2& at : m_level.boss.droppedNow) {
+        const Effects::Spawn cue = Effects::BossRockAppear(m_effectRules, at);
+        m_effectQueue.push_back(effectAdd(cue));
+        SUPERSONIC_LOG_INFO("Magic Portals") << "boss rock dropped on tick " << m_ticks << ": " << cue.entity << " at ("
+                                             << cue.atPx.x << ", " << cue.atPx.y << ") z " << cue.z << " x " << cue.scale
+                                             << std::endl;
+    }
 
     // THE TRAIL A WEIGHTLESS PLAYER LEAVES (effects.json movement_trail):
     // MainCharacter::addTrail, from its update - which runs unpaused and not once

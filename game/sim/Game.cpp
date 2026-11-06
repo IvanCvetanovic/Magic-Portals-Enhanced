@@ -460,7 +460,7 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // And what the carrancas spit. A fireball is a point and a radius with no
     // entity, so nothing here hands it to the portals as a thrown stone is
     // handed: AfterStep carries it through a pair itself (CarryFireball).
-    level.turrets.Fire(step.scriptS);
+    level.turrets.Fire(registry, step.scriptS);
     // The minions walk before the step, as the player is steered before it: what
     // sets a velocity belongs on this side, what judges a position on the other.
     level.minions.Tick(registry, step, SensesOf(data, registry, level));

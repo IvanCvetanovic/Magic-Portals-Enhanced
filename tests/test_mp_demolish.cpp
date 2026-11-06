@@ -24,6 +24,7 @@
 #include "sim/Demolish.hpp"
 #include "sim/Game.hpp"
 #include "sim/Impacts.hpp"
+#include "sim/Turrets.hpp"
 #include "sim/Units.hpp"
 
 #include <algorithm>
@@ -476,9 +477,9 @@ void ABlastGrabsByTheFlag() {
     Demolish::Rules rules;
     std::string error;
     CHECK_MSG(Demolish::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/demolish.json", rules, error), error);
-    CHECK_MSG(rules.blastEntities.size() == 2 && rules.blastEntities[0] == "breakable_wall" &&
-                  rules.blastEntities[1] == "breakable_wall.ent",
-              "blast.entities is breakable_wall in both spellings");
+    CHECK_MSG(rules.blastEntities == (std::vector<std::string>{"breakable_wall", "breakable_wall.ent", "carranca", "carranca.ent",
+                                                                 "carranca_right", "carranca_right.ent"}),
+              "blast.entities is breakable_wall and, since planning step 223, carranca and carranca_right, in both spellings");
 
     Run flagless;
     if (!Begin("level3a", flagless)) return;
@@ -504,6 +505,43 @@ void ABlastGrabsByTheFlag() {
     CHECK(!flagged.registry.valid(body) && wall->body == entt::null);
     CHECK_MSG(!flagged.level.demolish.Grab(body, "another"), "and a broken wall is grabbed no more");
     CHECK(flagged.level.demolish.Destroyed(flagged.registry).empty());
+}
+
+// PLANNING STEP 223 (the owner's 2-15: "I dont know where the other 2 are"). Two of 2-15's five crystals lie inside the colliders of its two
+// carrancas (carranca_1071 over crystal 1140, carranca_right_1075 over 1141), and the designers' barrels free them: explode sets `destroy` on a
+// flagged breakable it reaches (L67590 #111-122) and carrancaCallback takes the entity (L85350 #123-157). The port took neither before.
+// A carranca the blast grabs is taken by Destroyed like a wall, and a taken carranca spits no more (its entity is deleted before the stride arm).
+void ABlastTakesACarrancaAndItSpitsNoMore() {
+    Run control;
+    if (!Begin("level14a", control)) return;
+    Run taken;
+    if (!Begin("level14a", taken)) return;
+    const Demolish::Breakable* carranca = taken.level.demolish.FindBreakable("carranca_1071");
+    const Demolish::Breakable* other = taken.level.demolish.FindBreakable("carranca_right_1075");
+    CHECK_MSG(carranca != nullptr && other != nullptr && carranca->flagged && carranca->blastBreaks && other->flagged && other->blastBreaks,
+              "2-15's two carrancas are flagged breakables a blast takes");
+    if (carranca == nullptr || other == nullptr) return;
+    const entt::entity body = carranca->body;
+    CHECK(taken.level.demolish.Grab(body, "barrel_bomb_ent_1072"));
+    const std::vector<entt::entity> gone = taken.level.demolish.Destroyed(taken.registry);
+    CHECK_MSG(gone.size() == 1 && gone.front() == body && carranca->broken && carranca->brokenBy == "barrel_bomb_ent_1072" &&
+                  !taken.registry.valid(body),
+              "the blast's datum takes the carranca, naming the barrel");
+    CHECK_MSG(!other->broken && taken.registry.valid(other->body), "and only the one it reached");
+
+    const auto fired = [](const Run& run, const char* name) {
+        for (const Turrets::Turret& turret : run.level.turrets.turrets) {
+            if (turret.name == name) return turret.fired;
+        }
+        return -1;
+    };
+    for (int tick = 0; tick < 600; ++tick) {
+        Game::Tick(control.data, control.registry, control.level, 0.0f, kStep);
+        Game::Tick(taken.data, taken.registry, taken.level, 0.0f, kStep);
+    }
+    CHECK_MSG(fired(control, "carranca_1071") > 0, "left alone, the carranca spits within ten seconds");
+    CHECK_MSG(fired(taken, "carranca_1071") == 0, "once taken it spits not one fireball");
+    CHECK_MSG(fired(taken, "carranca_right_1075") > 0, "while the other, left standing, still does");
 }
 
 // A script's deletion and the way back, as the torch's and the dark dragon's are:
@@ -1217,6 +1255,7 @@ void runTests() {
     AStoneTheEnginesBrakeStoppedShortStillStrikesTheWall();
     AStoneThatHeldTheWallStaysHeld();
     ABlastGrabsByTheFlag();
+    ABlastTakesACarrancaAndItSpitsNoMore();
     BreakAndRestoreByName();
     AStoneKillsThePlayerAboveTwoAndAHalfAndNotAtIt();
     AStonesKillIsFoldedIntoHazardsAndTheBeholdersRocksAreLeftToBoss();

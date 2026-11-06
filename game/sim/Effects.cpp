@@ -272,7 +272,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     std::string why;
     if (!root.IsObject() || !ReadRule(root, "suck_effect", read.suck, why) ||
         !ReadRule(root, "sparkles", read.sparkles, why) || !ReadRule(root, "appear_effect", read.appear, why) ||
-        !ReadRule(root, "fireball", read.fireball, why) ||
+        !ReadRule(root, "boss_rock_appear", read.bossRockAppear, why) || !ReadRule(root, "fireball", read.fireball, why) ||
         !ReadRule(root, "small_explosion", read.smallExplosion, why) ||
         !ReadRule(root, "explosion_large", read.largeExplosion, why) ||
         !ReadRule(root, "portal_summon_effect", read.summon, why) || !ReadRule(root, "portal", read.portal, why) ||
@@ -438,6 +438,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         const char* name;
         const Rule* rule;
     } pointOnly[] = {{"appear_effect", &read.appear},
+                     {"boss_rock_appear", &read.bossRockAppear},
                      {"fireball", &read.fireball},
                      {"small_explosion", &read.smallExplosion},
                      {"explosion_large", &read.largeExplosion},
@@ -503,6 +504,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     } unshifted[] = {{"suck_effect", &read.suck},
                      {"sparkles", &read.sparkles},
                      {"appear_effect", &read.appear},
+                     {"boss_rock_appear", &read.bossRockAppear},
                      {"fireball", &read.fireball},
                      {"small_explosion", &read.smallExplosion},
                      {"explosion_large", &read.largeExplosion},
@@ -927,6 +929,10 @@ Spawn Sparkles(const Rules& rules, const glm::dvec2& travellerPx, const glm::dve
 Spawn Appear(const Rules& rules, const glm::dvec2& exitPortalPx) {
     // appearEffect has no direction: its row's offset is 0 and its angle a literal.
     return SpawnOf(rules.appear, exitPortalPx, glm::dvec2(0.0));
+}
+
+Spawn BossRockAppear(const Rules& rules, const glm::dvec2& rockPx) {
+    return SpawnOf(rules.bossRockAppear, rockPx, glm::dvec2(0.0));
 }
 
 Spawn Fireball(const Rules& rules, const glm::dvec2& atPx) {

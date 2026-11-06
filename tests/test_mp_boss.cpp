@@ -239,8 +239,15 @@ void UnderItItThrowsRocks() {
         bool shut = true;
         bool bobbed = true;
         bool overThePlayer = true;
+        bool cueHeld = true;
         for (tick = 1; tick <= 600 && b.phase == Boss::Phase::ThrowRock; ++tick) {
             const Boss::State::Turn turn = TickRig(rig);
+            // PLANNING STEP 223: spawnStone adds appear_effect.ent where each rock appears, so the state names the point on that tick
+            // (and only that tick): one entry per rock, at the rock's point, the layer draws the cue from it.
+            cueHeld = cueHeld && rig.boss.droppedNow.size() == turn.dropped.size();
+            for (std::size_t i = 0; i < turn.dropped.size() && i < rig.boss.droppedNow.size(); ++i) {
+                cueHeld = cueHeld && glm::distance(rig.boss.droppedNow[i], glm::dvec2(400.0, -32.0)) < 1e-3;
+            }
             for (const Boss::Rock& rock : turn.dropped) {
                 drops.push_back(tick);
                 overThePlayer =
@@ -255,6 +262,7 @@ void UnderItItThrowsRocks() {
         for (const int d : drops) got += " " + std::to_string(d);
         CHECK_MSG(drops == want, "round " + std::to_string(round) + " dropped on ticks" + got);
         CHECK_MSG(overThePlayer, "every rock at (400, -32): over the player, high up");
+        CHECK_MSG(cueHeld, "and the tick of each drop names that point for the appear cue, and only that tick");
         CHECK_MSG(shut, "its eye shut throughout");
         CHECK_MSG(bobbed, "bobbing within 4 px");
     }
