@@ -8308,8 +8308,8 @@ void MagicPortalsLayer::syncDrawables(entt::registry& registry) {
         placeBox(registry, m_agents[i], agents[i].CentreNowPx(), glm::dvec2(sizePx), kZoneZ, kZoneDepth, 0.0f);
     }
 
-    // Hazards at their box: a destroyier's 16 px trigger, a death area's polygon
-    // bounds (it kills on the polygon itself, Hazards.hpp).
+    // Hazards at their box: lava's 16 px trigger, a death area's polygon
+    // bounds (it kills on the polygon itself, Hazards.hpp). A destroyier is no hazard.
     const std::vector<Hazards::Hazard>& hazards = m_level.hazards.hazards;
     for (std::size_t i = 0; i < m_hazards.size() && i < hazards.size(); ++i) {
         glm::dvec2 centrePx, sizePx;

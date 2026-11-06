@@ -51,9 +51,9 @@
 // sound exactly when the thing it hit is named enemy_killer.
 //
 // Its box is the shape the level gives it (LevelBuilder::ShapeBoundsPx), not the
-// 16 px fallback Trigger::FromNode would hand back, which a destroyier still kills
-// in (a death area kills on its own polygon since planning step 136, as the
-// original's sensor does). A kill floor shrunk to 16 px would miss everything that
+// 16 px fallback Trigger::FromNode would hand back, which a destroyier despawns a
+// stone in (a death area kills on its own polygon since planning step 136, as the
+// original's sensor does; a destroyier kills no player since step 221). A kill floor shrunk to 16 px would miss everything that
 // fell past it.
 //
 // SIGHT, built in planning step 158 (G1a; out/parity/program/G1a/decode.md has the whole state machine). A knight looks

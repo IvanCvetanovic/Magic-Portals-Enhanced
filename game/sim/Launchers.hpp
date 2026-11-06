@@ -17,7 +17,8 @@
 // - A launcher's min/max is a cull box, which is the Godot project's reading
 //   (entity_roles.json). A thrown body whose centre leaves the box is removed.
 //   So is one that touches an entity launchers.json names as a despawner: that
-//   is destroyier.ent, in the box the port gives it as a hazard (Hazards.hpp).
+//   is destroyier.ent, in the 16 px box Trigger::FromNode gives it. It is no hazard: it
+//   kills no player (planning step 221).
 // - Only thrown bodies are removed. A stone a level places is never culled.
 
 #include "sim/LevelBuilder.hpp"

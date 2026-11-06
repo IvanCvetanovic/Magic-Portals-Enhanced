@@ -1,10 +1,10 @@
 // Hazards: what kills the player, and where.
 //
-// Pinned exactly, because the files say it: chapter 1's four hazards. A DEATH AREA
+// Pinned exactly, because the files say it: chapter 1's two death areas. A DEATH AREA
 // KILLS ON ITS WHOLE SHAPE (planning step 136, hazards.json `death_area`, decoded):
-// level5's is its 60 x 16 octagon and level25a's its 52 x 16. The destroyiers carry no
-// trigger_size, so each still kills in LevelRuntime's 16 px fallback box at its node
-// (Hazards.hpp). What happens is judged on the tick: the player dies entering the
+// level5's is its 60 x 16 octagon and level25a's its 52 x 16. The destroyiers are NOT
+// hazards (planning step 221): a player in their 16 px box lives (Hazards.hpp). What
+// happens is judged on the tick: the player dies entering the
 // octagon anywhere - beside the old box too - and lives past its cut corner, inside
 // its bounds. Only the player can die - the characters are the player alone
 // (isCharacter), and Hazards::State::Tick is given it and nothing else.
@@ -67,23 +67,32 @@ void ChapterOnesFourHazards() {
         const char* level;
         const char* name;
         glm::dvec2 at;
+        bool insideTheLevel; // level24's lies BELOW the level's extent: there the edge's own death (a fall) applies, not the box's
     };
     const Expected expected[] = {
-        {"level23", "destroyier_ent_1051", {448.0, 344.0}},
-        {"level23", "destroyier_ent_1074", {64.0, 390.0}},
-        {"level24", "destroyier_ent_1195", {448.0, 504.0}},
+        {"level23", "destroyier_ent_1051", {448.0, 344.0}, true},
+        {"level23", "destroyier_ent_1074", {64.0, 390.0}, true},
+        {"level24", "destroyier_ent_1195", {448.0, 504.0}, false},
     };
+    // PLANNING STEP 221 (the owner died entering 1-24's door, which stands on destroyier_ent_1051): a destroyier is NO hazard. The
+    // listing's only reader of destroyier.ent is the stone's callback (L68589 #73-105), which destroys the STONE; nothing harms a
+    // player on it. So each is absent from the hazards, and a player put down in its box, and put down in it for a whole tick,
+    // lives; the stone despawn is launchers.json's and is pinned in test_mp_launchers.
     for (const Expected& hazard : expected) {
         Run run;
         if (!Begin(hazard.level, run)) continue;
-        const Hazards::Hazard* found = run.level.hazards.FindHazard(hazard.name);
-        CHECK_MSG(found != nullptr, std::string(hazard.level) + " has " + hazard.name);
-        if (found == nullptr) continue;
-        const glm::dvec2 centre = Units::ToPixels(glm::vec3(found->box.centre, 0.0f));
-        const glm::dvec2 size = glm::dvec2(found->box.half) * 2.0 * Units::kPixelsPerMetre;
-        CHECK_MSG(glm::distance(centre, hazard.at) < 1e-3 && std::fabs(size.x - 16.0) < 1e-3 &&
-                      std::fabs(size.y - 16.0) < 1e-3,
-                  std::string(hazard.name) + ": the 16 px fallback at its node");
+        CHECK_MSG(run.level.hazards.FindHazard(hazard.name) == nullptr,
+                  std::string(hazard.level) + ": " + hazard.name + " is not a hazard");
+        CHECK_MSG(run.level.hazards.hazards.empty(), std::string(hazard.level) + " has no hazard at all");
+        PutPlayer(run, hazard.at);
+        run.level.hazards.Tick(run.registry, run.level.player);
+        CHECK_MSG(run.level.hazards.killedBy != hazard.name, std::string(hazard.level) + ": " + hazard.name + " kills no player");
+        CHECK_MSG(!hazard.insideTheLevel || !run.level.hazards.playerDied,
+                  std::string(hazard.level) + ": a player in " + hazard.name + "'s box lives");
+        Game::Tick(run.data, run.registry, run.level, 0.0f, kStep);
+        CHECK_MSG(run.level.hazards.killedBy != hazard.name, std::string(hazard.level) + ": nor through a tick in " + hazard.name);
+        CHECK_MSG(!hazard.insideTheLevel || !run.level.hazards.playerDied,
+                  std::string(hazard.level) + ": and lives through a whole tick in " + hazard.name + "'s box");
     }
     // The two death areas, on their own octagons: the level's per-instance collision
     // size (60 x 16 and 52 x 16) about the node, the eight points death_area.ent gives.

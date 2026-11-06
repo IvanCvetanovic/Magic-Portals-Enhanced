@@ -68,11 +68,13 @@
     "hazard": {
       "_note": [
         "Kills on contact - ETHBeginContactCallback_death_area in the bytecode. sensor=1.",
-        "Only one placement in chapter 1 (an early level), many more in later worlds."
+        "Only one placement in chapter 1 (an early level), many more in later worlds.",
+        "destroyier.ent is NOT here (planning step 221, the owner's report of 2026-11-06: he died entering 1-24's door, which stands on one).",
+        "The listing has no callback that harms a player on it; its only reader is ETHBeginContactCallback_rolling_stone (L68589 #73-105), which destroys the STONE that touches it.",
+        "It stays a stone despawner: launchers.json `despawners` finds it by name, not through this role."
       ],
       "names": [
         "death_area.ent",
-        "destroyier.ent",
         "lava",
         "enemy_killer"
       ]

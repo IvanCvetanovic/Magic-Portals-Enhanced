@@ -2820,6 +2820,8 @@ listing (`out/parity/asbc/all_functions.txt`, md5 `48fe65ce`).
   touches the capsule it is moved to. The ten `.ent` files that say `sensor="1"` are `anti_sight_wall`, `button`, `char_feet`, `dark_dragon`, `death_area`, `destroyier`, `destroyier_`, `fireball`, `ghost` and
   `shock_agent`; the 128 converted levels place six names of them 90 times (anti_sight_wall 17, button 46, death_area 2, destroyier 4, shock_agent 21) and **every one is an `Area2D`**, which the port
   builds as a trigger the sensor never sees (`test_mp_player`, `NoSensorOfTheOriginalIsBuiltAsASolidBody`; `out/parity/program/CAP/sensor_audit.py`).
+  **A `destroyier` harms no player** (planning step 221): the listing (`out/parity/asbc/all_functions.txt`) names `destroyier.ent` once, in `ETHBeginContactCallback_rolling_stone` (L68589, #73-105: `other.GetEntityName() == 'destroyier.ent'` destroys the STONE
+  and shakes the screen), and has no `ETHBeginContactCallback_destroyier`; a player touching its sensor gets nothing. Level 1-24's door (447, 294) stands on one (448, 344), so a kill there would make the finish door a death: the owner died entering it on 2026-11-06.
 - **Where Box2D leaves a body at rest.** `b2PolygonShape` has a skin `m_radius = b2_polygonRadius` (`b2Settings.h:76`, 2 x `b2_linearSlop`, 0.005 m: `:67`), a circle's `m_radius` is its own, and the
   position solver (`b2ContactSolver.cpp:628-649`, `:712`) drives each contact's `separation` (the distance between the shapes less the two radii) to `-b2_linearSlop`: **a circle rests on a polygon
   0.01 - 0.005 = 0.005 m = 0.25 units ABOVE its surface, a polygon on a polygon 2 x 0.01 - 0.005 = 0.75 above, a circle on a circle 0.25 INTO the other** (no skin). The Supersonic engine's solver rests the

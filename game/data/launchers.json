@@ -28,9 +28,10 @@
   "despawners": {
     "_note": [
       "Entities whose box removes a thrown body on contact. destroyier.ent is the Godot project's",
-      "reading (hazards.gd:420-422): an invisible sensor under a launcher's drop, which the",
-      "owner confirmed on 11 September also kills the player. Its box is the one the port",
-      "gives it as a hazard."
+      "reading (hazards.gd:420-422): an invisible sensor under a launcher's drop. It kills no",
+      "player (planning step 221: the listing's only reader is the stone's own callback, L68589",
+      "#73-105, and the owner died entering 1-24's door, which stands on one); it is a despawner",
+      "and nothing else. Its box is the 16 px one Trigger::FromNode gives a node with no trigger_size."
     ],
     "names": ["destroyier.ent"]
   },

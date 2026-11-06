@@ -1,31 +1,50 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
-    "1-24, authored for wave 4a (round 1) on the build with the portal tap, stone and wake rules. The player never moves: he stands",
-    "on the ramp where he lands (256, 143); the launcher at (74, -42) throws a stone down the open left side every 90 ticks (the first on tick 90), and",
-    "the breakable wall at (448, 177) is the floor over the door room. The level's own pair, which is its golden score of 2: a portal",
-    "over the wall at (448, 110) (tap 40, placed 95) and one in the stones' fall line at (74, 90) (tap 110, placed 163). The second",
-    "stone (thrown on 180) goes in on 206 and breaks the wall on 245 at stone hit 6.67 (the original's gate is a stone above 1.5); the first,",
-    "thrown while only the far portal stood, fell past.",
-    "THE DOOR CANNOT BE WALKED TO IN THIS PORT: dropped through the hole he lands on the door's platform at x 405 and walking right",
-    "he is killed on tick 366 at x 432 (PLAYER DIED: destroyier_ent_1051), because destroyier.ent's 16 px killing box at (448, 344)",
-    "(x 440 to 456, y 336 to 352) stands on the platform's top across the door's trigger (x 443 to 451, y 319 to 343) and his body",
-    "meets the box 3 to 5 units before the trigger from either side (STK-8: the listing has no callback that makes a destroyier",
-    "kill a player; the owner's testimony of 11 September says it does). So the route goes over it with a second pair: a portal",
-    "high over the door at (445, 100) (tap 262, placed 316) and one on the player (tap 322, 6 after the landing): he comes out at",
-    "(445, 102), falls 211 units and meets the door's trigger on tick 343 with his feet 5 units above the box. From the start the",
-    "ray reaches a target only down to y 118 (a tap at y 130 is stopped by the ramp's top-right corner at (384, 129)); every x",
-    "436 to 456 and every y 60 to 118 won, and the tap waits until 262, 17 ticks after the wall, because the falling stone is the",
-    "ray's end (the tap on 239 ended at (431.3, 103.1) on its surface, outside the door's x). Won on tick 343. Four portals and no",
-    "crystal (the ramp's timed one at (366, 118) goes by): medal 1; no achievement."
+    "1-24 (level23), the designers' own solution, GOLD: 2 portals and all 5 crystals, medal 3. Written for the gold-route pilot, round 2, on the build of planning step 221 (destroyier.ent no longer kills the player); it replaces the 4-portal, 0-crystal route (medal 1) that reached the door only by dropping onto it with a second pair, to avoid the killing box.",
+    "WHAT THE LEVEL IS: the player starts on a ramp (256, 143). To its left is an open drop with a launcher at (74, -42) that throws a rolling stone straight down every 90 ticks (the first on tick 90; each stone enters the line y 90 about 26 ticks later and is despawned by the destroyier at (64, 390)). To its right, 33 units below the ramp's top corner (384, 129), is the breakable wall (448, 177): x 385 to 511, y 162 to 192, the roof of the door room. Under it, in a room x 385 to 512, the door stands at (447, 294) on a platform whose top is y 342, and the destroyier at (448, 344) lies across the door's trigger. Five crystals: (144, 172) at the ramp's left foot (it goes at 6000 ms, tick 375), (366, 118) at the ramp's top (5000 ms, tick 313), (496, 144) on the wall (12000 ms) and (496, 208) and (496, 240) in the door room, both on the right wall's side of the door.",
+    "THE INTENDED PLAY, which the golden score of 2 says is ONE pair: a portal in the stones' fall line at (74, 90) and one over the wall's left half at (430, 90); a stone goes in on the left and falls out over the wall and breaks it. The player is put ON the wall first, at its right end (x 503, against the right wall), so the wall's breaking drops him straight down the right edge of the room through the crystals at (496, 208) and (496, 240), and he lands on the platform, walks left and enters the door from its RIGHT side (the way the owner played it). THE ORDER IS NOT A CONTORTION: the old route completed its pair early because its player never moved; here the pair is completed LAST, once he is standing on the wall, because the first stone that passes the left portal after the pair stands breaks the wall (the stones come every 90 ticks), and he must be at the wall's right end, with the crystals behind him, when that happens. The left portal can also be the last (checked: from the wall's end the ray is retried at head height and the shot flies 128 ticks to (74, 90), landing on tick 361, so the stone in on 393 does it, but nothing is gained), so the order is set by the stones' schedule, not by a port quirk. The exit's x hardly matters at the route's timing: 410, 420, 430, 440, 448, 456, 464 and 472 (y 90) all won with 5 crystals and medal 3; the route uses 430 only for distance from him (stone radius 30, so x 400 to 460, and he stands at 503), and the old route's 448 is as good. A first try that completed the pair on tick 156, with the exit at (449.8, 91), failed on TIMING, not x: the stone in on 206 came out while he was still walking right at x 482, pushed him to a stop at x 484.9, and killed him when it fell back on the wall on tick 245 (PLAYER DIED: entity_launcher_923#2, stone hit 3.59; the rule is demolish.json stone.kills_player_above 2.5, decoded from ETHBeginContactCallback_rolling_stone #107-129, applied by the port without a measurement, STK-1).",
+    "WHAT THE STONE DOES (read from the trace, ticks 300 to 338): it does NOT fall out of the exit, it is thrown up out of it. The port's transit.json (momentum_mode invert) is the original's PortalManager::teleportToOther, which puts the traveller on the partner portal and calls invertLinearVelocity (Portal.angelscript, bytes 360172..360571; docs/ethanon-formats.md 'Every velocity the script writes'): a body's velocity times -1, a character's times (1, -1). The stone goes in at (74, 90) falling at about 6 m/s and comes out at (430, 91.5) rising at 6 m/s (the trace: y 91.5, 73, 57, 43, 31, 22, 15, 10, 7, 6.5 at the top, about 85 units up, then 8, 12, 18, 26, 37, 50, 65, 82, 101 and the wall), so it strikes the wall at 6.3 m/s, 4 times the gate (1.5 m/s). Even a stone coming out at rest at (430, 91) would reach the wall at about 4 m/s by free fall (40 units at 500 units/s squared: my arithmetic, not a replay). THE GEOMETRY ALONE SUPPORTS PLANNING STEP 221 (destroyier.ent is not a player killer): the golden score is 2, ONE pair, and the pair is spent on the wall; the door's trigger (x 443 to 451, y 319 to 343) lies inside the destroyier's box (x 440 to 456, y 336 to 352) on the platform, so with a lethal destroyier, as I read the geometry, no walk and no drop reaches the door with one pair (the old route needed a second pair to drop onto the door from above, and won at 5 units from the box). That contradicts the owner's testimony of 11 September that a destroyier kills the player; the listing has no callback that does it (the only reader is the stone's, L68589 #73-105).",
+    "THE ROUTE: tap 34 a portal at (74, 90) from the ramp (the player is walking left; the shot lands on tick 77, long before a stone matters, and a lone portal does nothing). Walk left 20-62 down the ramp to the crystal at (144, 172) (taken on tick 54; the ramp's left foot is at x 128 and he falls into the pit from x 121 on, about tick 72, so the turn must come between ticks 54 and 70) and back right 63-330 up the ramp (crystal (366, 118) on tick 159), off its corner onto the wall (landing tick 187), along the wall (crystal (496, 144) on tick 214) to the right wall (x 503.8 on tick 230), where he waits. Tap 232 from there a portal at (430, 90): it lands on tick 255, the pair stands, the stone thrown on tick 270 goes in on tick 300, comes out at (430, 91) and hits the wall on tick 338 at 6.3 m/s (the gate is 1.5): the wall breaks and he falls, taking the crystals on ticks 346 and 349, lands on tick 356, walks left from 360 and is in the door on tick 378. Medal 3, 2 portals, 5 crystals, 6048 ms.",
+    "WHY NOT THE EARLIER STONE (the one on tick 180, in on 206): the player is still walking along the wall under the exit when it comes out (x 454 at tick 206 with the right walk started on 63; the stone, x 400 to 460, has its bottom 5 units above his head and reaches it in 1 tick). The pair completed before tick 206 still won with every second tap tried (120 to 170 won, medal 3), but only because he walks out from under it in time, which depends on the walk's timing, so it is not a margin to rely on; the clean window for the second tap, with him standing at the wall's end, is about 186 to 280 (the pair must complete after the stone in on 206 has gone by and before the one in on 300 is through the left portal; the shot lands 22 ticks after the tap from the wall's end; a scan in steps of 10 from 120 to 320 won with medal 3 up to 280, and with medal 2 from 290: the next stone comes 90 ticks later (won on 451), and the last walk, started on 360, has by then taken him off the wall's end: the crystals at x 496 are missed). About 95 ticks, 1.6 s.",
+    "MARGINS (each input moved alone, all others kept; ticks, or level units for a point): of 48 variants 47 still win and 44 still earn medal 3. Every tap tick +-2/+-8 and every tap point +-2/+-6 (x and y, both taps) gives medal 3. The walk variants: the first walk's end 2 ticks earlier or later, the right walk's start/end +-2 and the last walk's start/end -2/+2/+20/-20 all give 3. The four that do not: the first walk starting 20 ticks earlier (he walks off the ramp's left foot into the pit and dies on tick 92 - the legitimate boundary of the walk), the first walk starting 20 later or ending 20 earlier (it stops short of the crystal at (144, 172): medal 2), and the right walk starting 20 earlier (it overlaps the left walk, he stands still and stops short of the same crystal: medal 2). Holding left before the wall breaks (the last walk starting before tick 340) carries his velocity into the fall and misses a crystal at x 496: medal 2; holding it from the break on, or later, is free (the pad does nothing in the air, and he lands and walks at any time: starts 342 to 414 all won with 5 crystals). The right walk may end any time from 220 on (scanned 200 to 340 in steps of 10: ending on 200 he dies, on 210 he is short of the wall's end and loses the crystals at x 496 (medal 2), from 220 medal 3).",
+    "WINDOWS FOR A THUMB: the left portal anywhere from tick 26 (the 400 ms rule) to at least 128 (tap in the window between the shot and the crystal rush); the turn at the left crystal, ticks 54 to 70 (17 ticks, 0.28 s, but the crystal's disappearing on pickup is the cue and releasing the pad stops him at once: the walk sets his velocity outright); the second portal 186 to 278 (1.5 s); the walk left after the wall breaks, any time. 3 of the 5 crystals have clocks: (366, 118) by tick 312, (144, 172) by tick 374; the route has them by 159 and 54.",
+    "NOT MEASURED ON THE ORIGINAL (the route stands on these): (1) a thrown rolling stone traversing a portal pair at all (rolling_stone.ent carries teleportable 1: decoded, but no capture or clip shows a stone through a portal), and the velocity it leaves with (decoded, not captured: inverted, so up at 6 m/s; the wall's gate has a fourfold margin, and 2.7 times even for a stone at rest); (2) the wall breaking at the stone's speed (ETHBeginContactCallback_breakable_wall's gate of 1.5 is decoded; no clip shows a wall breaking); (3) the launcher's cadence (every 90 ticks, the first on 90) and the stone's path straight down x 74 (decoded stride 1500 ms, not captured); (4) the shot's flight time (21 ticks over 91 units, 41 over 155) and that a portal placed far away on the other side of the room stays there until a stone uses it; (5) the player standing on the breakable wall and falling when it goes (static body, then removed); (6) that the pad does nothing in the air (decoded: applyForces ins 58-91) and the wall-breaking drop's exact x (503.2): the crystals at x 496 are 28 wide (x 482 to 510) so a few units either way do not matter; (7) that the destroyier at (448, 344) does not hurt the player (planning step 221: the listing's only reader is the stone's callback) - he walks through it to the door; (8) the crystals' clocks 5000, 6000 ms against the port's 16 ms ticks (the original's own frames show both gone by 6.3 s, 1-24_h6.3.png). Nobody has done this by hand in this version."
   ],
   "level": "level23",
-  "win_by": 355,
-  "holds": [],
+  "win_by": 420,
+  "medal": 3,
+  "holds": [
+    {
+      "walk": "left",
+      "from": 20,
+      "to": 62
+    },
+    {
+      "walk": "right",
+      "from": 63,
+      "to": 330
+    },
+    {
+      "walk": "left",
+      "from": 360,
+      "to": 440
+    }
+  ],
   "taps": [
-    {"tick": 40, "at": [448, 110]},
-    {"tick": 110, "at": [74, 90]},
-    {"tick": 262, "at": [445, 100]},
-    {"tick": 322, "at": [250, 142]}
+    {
+      "tick": 34,
+      "at": [
+        74,
+        90
+      ]
+    },
+    {
+      "tick": 232,
+      "at": [
+        430,
+        90
+      ]
+    }
   ]
 }

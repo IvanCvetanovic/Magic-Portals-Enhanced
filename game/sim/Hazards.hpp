@@ -11,13 +11,13 @@
 //   still given the player and nothing else. Until that step the port killed only in
 //   the Godot project's 16 px fallback box at the node, as it still does for the rest.
 // - Every other hazard's trigger is the box LevelRuntime._attach_trigger builds for
-//   it: metadata/trigger_size, or the 16 px fallback (Trigger::FromNode). Neither
-//   destroyier nor lava carries a trigger_size, so each kills in the box at its node.
+//   it: metadata/trigger_size, or the 16 px fallback (Trigger::FromNode). Lava carries
+//   no trigger_size, so it kills in the box at its node.
 // - Only on entry, as a begin-contact and body_entered fire. So a player put down
 //   inside one dies on the first tick.
-// - destroyier.ent also despawns what a launcher throws (hazards.gd:420-422). The
-//   Godot project's launcher throws nothing, and the port's has not been built, so here
-//   a destroyier is a hazard and nothing more.
+// - destroyier.ent is NOT a hazard (planning step 221): the listing has no callback that
+//   harms a player on it, and the 16 px box it kills in was the Godot project's reading.
+//   It despawns what a launcher throws (Launchers.hpp), which finds it by name.
 
 #include "sim/Roles.hpp"
 #include "sim/Trigger.hpp"
