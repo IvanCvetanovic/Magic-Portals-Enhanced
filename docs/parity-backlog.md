@@ -6473,7 +6473,14 @@ step that builds a breaker adds its `BREAKERS` row and rewrites the pin (B1: a `
       #294, `ETHCallback_minion` L87616 #1478) and a light wall (`ETHCallback_light_wall` L98075 #32). The port's blast
       breaks walls alone (`demolish.json` `blast._not_built`); each needs its own module's death. *Step 146 draws
       `carranca_destroy.ent` wherever the port takes a carranca (only its stone rule, the row below); the blast's
-      taking stays unbuilt (step 146, deviation 3).*
+      taking stays unbuilt (step 146, deviation 3).* **GOLD PILOT, step 220 (2026-11-06): this row BLOCKS 2-15's gold.** The
+      level has 5 crystals (not 3); two of them hang inside the two breakable carrancas' colliders (crystal 1140 in
+      `carranca_1071`, 1141 in `carranca_right_1075`), the designers' 2-portal play blows each carranca with a barrel (the blasts
+      land 30 and 40 u from them, radius 80), and in the port neither dies (`Demolish.cpp:291-301`, `:415`; `demolish.json`
+      `blast.entities` line 140) and a taken carranca would keep firing (`Turrets::State::Fire`, `Turrets.cpp:98-123`, never asks
+      whether its body is gone). The best the port allows is medal 2. A fix is two edits (the four carranca names into
+      `blast.entities`; `Fire` skips a carranca Demolish has taken) and a re-run of 2-18's and 2-23's routes; the repros are
+      `out/parity/gold_pilot/results/2-15/repro_*.json`.
 - [ ] **A stone breaks a carranca in the port only** (step 115): `Demolish::Find` holds every flagged breakable,
       carrancas included, and a stone's touch breaks any of them; the original's stone callback,
       `ETHBeginContactCallback_breakable_wall` (L68341), is `breakable_wall`'s alone. And it breaks only above a speed
