@@ -286,8 +286,17 @@ game's own log every 5 seconds, **for a player's (a tester's) run only** (a capt
 arithmetic alone: nothing is read, no file of the original is opened, and the output is the same bytes on one machine twice. Into `out/dist/icons`
 by default: `icon_<1024 512 256 192 128 64 48 32 16>.png`, `magic_portals.ico` (16 to 256, PNG-compressed entries), `android/mipmap-*/ic_launcher.png`
 (48 72 96 144 192), `android/play_store_512.png` and `SHA256SUMS.txt`. It refuses to write inside the tracked tree. The colours are its own
-choice (the original's portals are blue and red; the orange is for legibility on a dark disc): the owner may want another.
+choice (the original's portals are blue and red; the orange is for legibility on a dark disc): the owner may want another. Since planning step 225 it also writes the
+adaptive icon's two layers, `android/mipmap-*/ic_launcher_{foreground,background}.png` at 108 dp (108 162 216 324 432 pixels): the background is the disc's colour field over
+the whole canvas, the foreground the two rings on transparent, scaled so that the disc's edge falls on the 72 dp circle a launcher shows (the rings stay inside the 66 dp
+that every mask shows).
 **The original's icon** (planning step 212). The owner asked for the original game's launcher icon on the phone. `python tools/package/original_icon.py --reference <reference folder> --out <folder>` reads the original APK's own icons from `<reference>/apk_work/decoded/res/drawable-{mdpi,hdpi,xhdpi}-v4/icon.png` (48, 72 and 96 pixels) and writes `android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png`: the first three are the original's files byte for byte, the 144 and 192 are made from the 96 by bicubic resampling on premultiplied alpha (the original has nothing larger). It writes only under `out/` or outside the repository (the content packager's rule) because the icon is the original's file; `tools/build_android.sh --icons <folder>` hands the set to the packager. The Windows program keeps the drawn icon, which CI builds into the program and which cannot be the original's there (no file of the original is on a runner).
+**Its adaptive layers** (planning step 225): the same tool also writes `android/mipmap-*/ic_launcher_foreground.png` and `ic_launcher_background.png` (108 dp: 108 162 216 324 432
+pixels). The original's 96 pixel tile has a 4 pixel silver bezel (8 along a diagonal) and transparent rounded corners, which a launcher would show as a shrunk picture on a
+white plate (the owner's Pixel 9 Pro XL, Android 17). The foreground is the tile's INTERIOR, source pixels 9 to 86 on both axes (78 of them, measured on the original's
+xhdpi icon: 9 clears the bezel on a diagonal), resampled to 78 dp in the middle of a transparent 108 dp canvas; the background is one flat colour, the mean of the outer three
+pixels of that interior. A tile that is not opaque inside those pixels is refused by name. The packager (`android_package.py`) takes an icon set only with the layers at
+the 108 dp pixel sizes and links them with `game/android/res/mipmap-anydpi-v26/ic_launcher.xml`.
 
 ## 7. The Apple layouts, and what adding the data to a macOS bundle costs
 

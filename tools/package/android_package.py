@@ -15,7 +15,10 @@ tools/build_android.sh is the front door: it finds the SDK and NDK, builds the l
 
 WHAT THE APK HOLDS, and where each part comes from (nothing is read from outside these):
   AndroidManifest.xml, resources     game/android/AndroidManifest.xml and the launcher icon set (tools/art/make_app_icon.py draws it at package
-                                     time into the work folder; nothing of the kind is committed), linked by aapt2. versionName is the project VERSION in the
+                                     time into the work folder; nothing of the kind is committed; --icons takes another, such as the original's from
+                                     tools/package/original_icon.py): the legacy ic_launcher.png of five densities AND the two layers of the ADAPTIVE icon
+                                     (ic_launcher_foreground.png and ic_launcher_background.png, 108 dp) that game/android/res/mipmap-anydpi-v26/ic_launcher.xml
+                                     joins (planning step 225: a legacy PNG alone is put on a white plate by a launcher), linked by aapt2. versionName is the project VERSION in the
                                      top-level CMakeLists.txt (the one definition) and versionCode is --version-code, else the rule of version.py
                                      (major*10000 + minor*100 + patch; planning step 208): aapt2 writes both in.
   classes.dex                        the engine's Java activity (engine/src/platform/android/java), javac then d8.
@@ -82,6 +85,12 @@ MIN_LOAD_ALIGN = {'arm64-v8a': 0x4000, 'x86_64': 0x4000, 'armeabi-v7a': 0x1000}
 
 # Stored, not deflated, in the APK: formats that are compressed already (aapt2's own list, shortened to what the game has).
 STORED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.mp3', '.ogg', '.wav'}
+# The launcher icon (planning step 225): the five densities, and the pixels of the 108 dp canvas of an adaptive icon's layers in each.
+ICON_DENSITIES = ('mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi')
+ICON_LAYER_PIXELS = {'mdpi': 108, 'hdpi': 162, 'xhdpi': 216, 'xxhdpi': 324, 'xxxhdpi': 432}
+ICON_FILES = (('legacy', 'ic_launcher.png'), ('foreground', 'ic_launcher_foreground.png'), ('background', 'ic_launcher_background.png'))
+ADAPTIVE_ICON_XML = os.path.join('res', 'mipmap-anydpi-v26', 'ic_launcher.xml')  # beside the manifest, in game/android
+ADAPTIVE_ICON_ENTRY = 'res/mipmap-anydpi-v26/ic_launcher.xml'                      # where aapt2 puts it in the APK
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)  # the earliest a zip can say: no clock enters the APK
 # The unpack list's format, which game/sim/Unpack.hpp spells too (kSizeSeparator, kMostSizeDigits, kMostStampChars; kMostListTextBytes and kBlockBytes below): the tie is TheListTie in
 # test_android_package.py, which reads those lines out of the header and holds these to them, and regenerates the list that test_mp_unpack parses.
@@ -822,8 +831,19 @@ def compile_java(tools, java_src, target_sdk, min_sdk, work):
     return out
 
 
+def png_size(path):
+    """(width, height) from a PNG's IHDR, or None when the file is not a PNG."""
+    with open(path, 'rb') as f:
+        head = f.read(24)
+    if head[:8] != b'\x89PNG\r\n\x1a\n' or head[12:16] != b'IHDR':
+        return None
+    return struct.unpack('>II', head[16:24])
+
+
 def make_icons(repo, work, override):
-    """{density: png path} of the launcher icon, and the 512 store icon. Drawn at package time by tools/art/make_app_icon.py, or taken from `override`."""
+    """({density: {'legacy', 'foreground', 'background': png path}}, the 512 store icon or None). Drawn at package time by tools/art/make_app_icon.py, or taken
+    from `override` (a folder of the same layout: tools/package/original_icon.py writes one). Every density needs the legacy icon AND the adaptive icon's two layers,
+    the layers at the pixels of a 108 dp canvas: an icon set from before planning step 225 has no layers, and is refused by name."""
     if override:
         base = os.path.abspath(override)
     else:
@@ -831,26 +851,57 @@ def make_icons(repo, work, override):
         shutil.rmtree(base, ignore_errors=True)
         run([sys.executable, os.path.join(repo, 'tools', 'art', 'make_app_icon.py'), '--out', base], 'tools/art/make_app_icon.py')
     icons = {}
-    for density in ('mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'):
-        path = os.path.join(base, 'android', 'mipmap-' + density, 'ic_launcher.png')
-        if not os.path.isfile(path):
-            raise PackError('missing launcher icon %s' % path)
-        with open(path, 'rb') as f:
-            if f.read(8) != b'\x89PNG\r\n\x1a\n':
+    for density in ICON_DENSITIES:
+        paths = {}
+        for kind, name in ICON_FILES:
+            path = os.path.join(base, 'android', 'mipmap-' + density, name)
+            if not os.path.isfile(path):
+                raise PackError('missing launcher icon %s%s' % (path, '' if kind == 'legacy' else ' (the adaptive icon\'s layers, which tools/package/original_icon.py and '
+                                                                  'tools/art/make_app_icon.py write since planning step 225: an icon set made before it has none; make it again)'))
+            size = png_size(path)
+            if size is None:
                 raise PackError('%s is not a PNG' % path)
-        icons[density] = path
+            if kind != 'legacy' and size != (ICON_LAYER_PIXELS[density],) * 2:
+                raise PackError('%s is %d x %d pixels; a %s layer of the adaptive icon (108 dp) is %d x %d' % (path, size[0], size[1], density, ICON_LAYER_PIXELS[density], ICON_LAYER_PIXELS[density]))
+            paths[kind] = path
+        icons[density] = paths
     store = os.path.join(base, 'android', 'play_store_512.png')
     return icons, store if os.path.isfile(store) else None
 
 
+def adaptive_icon_problems(names, badging):
+    """What is wrong with the launcher icon of a BUILT apk, from its zip entry names and `aapt2 dump badging`: it must be the adaptive icon (what a launcher masks to
+    its own shape), with both layers at every density. A legacy PNG alone is what a launcher puts on a white plate (planning step 225)."""
+    problems = []
+    names = set(names)
+    if ADAPTIVE_ICON_ENTRY not in names:
+        problems.append('the APK has no %s: the launcher icon would be a legacy picture on a white plate' % ADAPTIVE_ICON_ENTRY)
+    for density in ICON_DENSITIES:
+        for _, name in ICON_FILES:
+            entry = 'res/mipmap-%s-v4/%s' % (density, name)
+            if entry not in names:
+                problems.append('the APK has no %s' % entry)
+    icon = re.search(r"^application: label='[^']*' icon='([^']*)'", badging, re.M)
+    if icon is None or icon.group(1) != ADAPTIVE_ICON_ENTRY:
+        problems.append('the application\'s icon is %r, not the adaptive icon %s' % (icon.group(1) if icon else None, ADAPTIVE_ICON_ENTRY))
+    return problems
+
+
 def link_base(tools, manifest, icons, facts, version, version_code, debug, work):
-    """aapt2: the manifest and the icon, with versionName and versionCode written in. No assets here: they are added by this packager, entry by entry."""
+    """aapt2: the manifest and the icon, with versionName and versionCode written in. No assets here: they are added by this packager, entry by entry.
+    The icon is the legacy PNG of each density, its two adaptive layers, and the adaptive icon's XML that sits beside the manifest."""
     res = os.path.join(work, 'res')
     shutil.rmtree(res, ignore_errors=True)
-    for density, path in sorted(icons.items()):
+    for density, paths in sorted(icons.items()):
         d = os.path.join(res, 'mipmap-' + density)
         os.makedirs(d)
-        shutil.copyfile(path, os.path.join(d, 'ic_launcher.png'))
+        for kind, name in ICON_FILES:
+            shutil.copyfile(paths[kind], os.path.join(d, name))
+    xml = os.path.join(os.path.dirname(os.path.abspath(manifest)), ADAPTIVE_ICON_XML)
+    if not os.path.isfile(xml):
+        raise PackError('the adaptive icon\'s XML is missing: %s' % xml)
+    os.makedirs(os.path.join(res, 'mipmap-anydpi-v26'))
+    shutil.copyfile(xml, os.path.join(res, 'mipmap-anydpi-v26', 'ic_launcher.xml'))
     res_zip = os.path.join(work, 'res.zip')
     if os.path.exists(res_zip):
         os.remove(res_zip)
@@ -1033,6 +1084,9 @@ def inspect_apk(apk, tools, repo, release, keystore=None, pass_file=None, key_al
             problems.append('the zip entry %s is damaged' % bad_zip)
         libs = sorted(n for n in names if n.startswith('lib/'))
         lines.append('lib entries: %s' % ' '.join(libs))
+        icon_problems = adaptive_icon_problems(names, badging)
+        lines.append('launcher icon: %s' % ('the adaptive icon (%s), both layers in %d densities' % (ADAPTIVE_ICON_ENTRY, len(ICON_DENSITIES)) if not icon_problems else 'NOT adaptive'))
+        problems.extend(icon_problems)
         # No JAR (v1) signature: the minimum SDK is 26 and v2 begins at 24, so META-INF is dead weight (221,636 bytes in step 203's APKs, PORT5-9 (b)).
         jar_signature = sorted(n for n in names if n.startswith('META-INF/'))
         lines.append('META-INF entries: %s' % (' '.join(jar_signature) or 'none'))

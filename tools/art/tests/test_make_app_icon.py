@@ -153,6 +153,7 @@ class FilesTest(unittest.TestCase):
         expect = {f"icon_{s}.png" for s in (1024, 512, 256, 192, 128, 64, 48, 32, 16)}
         expect |= {icon.ICO_NAME, "SHA256SUMS.txt", "android/play_store_512.png"}
         expect |= {f"android/mipmap-{d}/ic_launcher.png" for d in ("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")}
+        expect |= {f"android/mipmap-{d}/ic_launcher_{layer}.png" for d in ("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi") for layer in ("foreground", "background")}
         self.assertEqual(set(self.files), expect)
 
     def test_the_android_set_has_the_sizes_of_its_densities(self):
@@ -163,6 +164,48 @@ class FilesTest(unittest.TestCase):
         width, height, _ = decode_png(self.files["android/play_store_512.png"])
         self.assertEqual((width, height), (512, 512))
         self.assertEqual(self.files["android/play_store_512.png"], self.files["icon_512.png"])
+
+    def test_the_adaptive_layers_are_the_108_dp_canvas_of_each_density(self):
+        # Planning step 225: a legacy icon alone is put on a white plate by a launcher. The adaptive icon's layers are 108 dp: 1, 1.5, 2, 3 and 4 pixels a dp.
+        for density, side in {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}.items():
+            for layer in ("foreground", "background"):
+                width, height, _ = decode_png(self.files[f"android/mipmap-{density}/ic_launcher_{layer}.png"])
+                self.assertEqual((width, height), (side, side), f"{density} {layer}")
+
+    def test_the_background_is_opaque_everywhere_and_the_foreground_is_not(self):
+        side = 216
+        _, _, background = decode_png(self.files["android/mipmap-xhdpi/ic_launcher_background.png"])
+        _, _, foreground = decode_png(self.files["android/mipmap-xhdpi/ic_launcher_foreground.png"])
+        self.assertTrue(all(pixel(background, side, x, y)[3] == 255 for y in range(0, side, 3) for x in range(0, side, 3)), "no hole for a launcher's white plate to show through")
+        corner = pixel(background, side, 0, 0)
+        self.assertEqual(corner[3], 255)
+        # the foreground's rings are drawn on nothing: the corners and the very middle are transparent, the rings are not
+        self.assertEqual(pixel(foreground, side, 0, 0)[3], 0)
+        self.assertEqual(pixel(foreground, side, side // 2, side // 2)[3], 0)
+        row = [pixel(foreground, side, x, side // 2) for x in range(side)]
+        self.assertTrue(any(b > 180 and b > r + 60 for r, g, b, a in row if a > 200), "the blue ring")
+        self.assertTrue(any(r > 180 and r > b + 90 for r, g, b, a in row if a > 200), "the orange ring")
+
+    def test_the_rings_lie_inside_the_66_dp_that_every_mask_shows(self):
+        # The visible circle of an adaptive icon is 72 dp of the 108 and the safe zone 66 dp: the rings themselves (not their glow) must be inside the 66.
+        side = 432
+        _, _, foreground = decode_png(self.files["android/mipmap-xxxhdpi/ic_launcher_foreground.png"])
+        safe_radius = side * 66 / 108 / 2
+        for y in range(side):
+            for x in range(side):
+                if pixel(foreground, side, x, y)[3] > 200:  # a ring pixel, not glow
+                    radius = math.hypot(x + 0.5 - side / 2, y + 0.5 - side / 2)
+                    self.assertLessEqual(radius, safe_radius, (x, y))
+
+    def test_the_background_runs_from_the_discs_centre_colour_to_its_edge_colour(self):
+        side = 216
+        _, _, background = decode_png(self.files["android/mipmap-xhdpi/ic_launcher_background.png"])
+        middle = pixel(background, side, side // 2, side // 2)
+        edge = pixel(background, side, 0, side // 2)
+        for got, want in zip(middle[:3], icon.DISC_CENTRE):
+            self.assertAlmostEqual(got, want, delta=2.5)
+        for got, want in zip(edge[:3], icon.DISC_EDGE):
+            self.assertAlmostEqual(got, want, delta=1.0)
 
     def test_the_ico_parses(self):
         data = self.files[icon.ICO_NAME]
@@ -216,7 +259,7 @@ class FilesTest(unittest.TestCase):
             names_one = sorted(p.relative_to(one).as_posix() for p in Path(one).rglob("*") if p.is_file())
             names_two = sorted(p.relative_to(two).as_posix() for p in Path(two).rglob("*") if p.is_file())
             self.assertEqual(names_one, names_two)
-            self.assertEqual(len(names_one), 17)
+            self.assertEqual(len(names_one), 27)
             for name in names_one:
                 self.assertEqual((Path(one) / name).read_bytes(), (Path(two) / name).read_bytes(), name)
                 self.assertEqual((Path(one) / name).read_bytes(), self.files[name], f"{name}: the files written are the files built")

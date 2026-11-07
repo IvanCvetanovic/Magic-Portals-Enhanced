@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The launcher icon as an ADAPTIVE icon (planning step 225). Two full-bleed layers of 108 dp that the launcher masks to its own shape (a circle, a squircle, a
+    rounded square: 72 dp of them show, and the middle 66 dp are safe from every mask). A plain ic_launcher.png alone is a LEGACY icon: from Android 8 on a launcher
+    puts one on a white plate and shrinks it, which is the white bars the owner saw on a Pixel 9 Pro XL.
+
+    The pictures are not here: tools/package/original_icon.py (the original's icon) or tools/art/make_app_icon.py (the drawn one) writes
+    ic_launcher_foreground.png and ic_launcher_background.png per density at package time, and tools/package/android_package.py links them with this file.
+    minSdk is 26, where adaptive icons begin, so this file is the icon on every device the game installs on; the legacy PNGs are the fallback a tool may still ask for.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

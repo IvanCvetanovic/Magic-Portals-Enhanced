@@ -34,7 +34,9 @@
 #   --version-code <n>   the APK's versionCode: a whole number that must go UP with every release, or Android refuses the update. Without it the packager
 #                        derives it from the version (major*10000 + minor*100 + patch; `python tools/package/version.py code` prints it), so that the number and the
 #                        version cannot disagree; give one to override it. versionName is the project VERSION in the top-level CMakeLists.txt, the one place it is written.
-#   --icons <folder>     the launcher icon set to use instead of the one tools/art/make_app_icon.py draws: android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png.
+#   --icons <folder>     the launcher icon set to use instead of the one tools/art/make_app_icon.py draws: android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png
+#                        AND the adaptive icon's two layers in the same folders, ic_launcher_foreground.png and ic_launcher_background.png at 108 dp (108 162 216 324 432 pixels):
+#                        a set without the layers is refused (planning step 225: a legacy PNG alone is put on a white plate by a launcher).
 #                        The original game's icon is such a set: `python tools/package/original_icon.py --reference <reference> --out <folder>` makes it from the
 #                        owner's own copy (the icon is the original's file, so it is never in the repository: docs/packaging.md, section 8)
 #   --config Release     the native build type (only Release is packaged)

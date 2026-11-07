@@ -13,6 +13,17 @@ WHAT IT READS: <reference>/apk_work/decoded/res/drawable-{mdpi,hdpi,xhdpi}-v4/ic
 (RGBA, 8 bits). WHAT IT WRITES: android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png. The first three are the original's files, BYTE FOR
 BYTE. The original has nothing larger than 96 pixels, so xxhdpi (144) and xxxhdpi (192) are made from the 96 by bicubic (Catmull-Rom) resampling
 on premultiplied alpha: they are as sharp as 96 pixels allow and no sharper. Standard library only; the same inputs give the same bytes.
+
+THE ADAPTIVE LAYERS (planning step 225). Those five are the LEGACY icon, and a legacy icon is a rounded tile with transparent corners and a silver bezel: from
+Android 8 on a launcher puts such a picture on a white plate and shrinks it, so on the owner's Pixel 9 Pro XL it showed white bars all round. An adaptive icon is
+two full-bleed layers of 108 dp that the launcher masks to its own shape (72 dp of them show; the middle 66 dp are safe from every mask). So this tool also
+writes, per density, android/mipmap-<d>/ic_launcher_foreground.png and ic_launcher_background.png at 108 dp (108, 162, 216, 324 and 432 pixels):
+  foreground  the tile's INTERIOR, the 78 source pixels inside the bezel and the rounded corners (INTERIOR below), scaled so that they are FOREGROUND_DP
+              (78 dp) across, in the middle of a transparent 108 dp canvas: every launcher mask (a circle of 72 dp is the smallest) lies inside that square, so no
+              corner, bezel or plate can show, and the gear (66 of those 78 pixels, 66 dp) stays inside the safe circle;
+  background  one flat colour, the mean of the outer three pixels of that interior (blue rays: the gear does not reach them), so that what a launcher's parallax
+              uncovers beside the square is the tile's own blue. It is never seen at rest.
+The picture is the original's, so the layers are the owner's data like the legacy set: only ever under out/.
 """
 
 from __future__ import annotations
@@ -33,6 +44,17 @@ PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
 SET = (('mdpi', 48, 'mdpi'), ('hdpi', 72, 'hdpi'), ('xhdpi', 96, 'xhdpi'), ('xxhdpi', 144, None), ('xxxhdpi', 192, None))
 SOURCE_FOLDER = 'drawable-%s-v4'
 SOURCE_NAME = 'icon.png'
+# The adaptive layers: density -> pixels of the 108 dp canvas (1, 1.5, 2, 3 and 4 pixels a dp).
+ADAPTIVE_DP = 108
+FOREGROUND_DP = 78
+ADAPTIVE = (('mdpi', 108), ('hdpi', 162), ('xhdpi', 216), ('xxhdpi', 324), ('xxxhdpi', 432))
+# The tile's interior in the 96 pixel original, as source pixels [first, past the last) on both axes. MEASURED on the original's xhdpi icon: the silver bezel
+# is 4 pixels at the middle of an edge and 8 along a diagonal (the corners are rounded and transparent), so 9 clears both; 87 is the mirror of 9 about the
+# tile's centre (47.5 + 38.5 = 86 is the last pixel). The gear spans about pixels 17 to 83 of the 96.
+INTERIOR = (9, 87)
+BORDER = 3  # the width of the ring of the interior whose mean colour is the background
+FOREGROUND_NAME = 'ic_launcher_foreground.png'
+BACKGROUND_NAME = 'ic_launcher_background.png'
 
 
 class IconError(Exception):
@@ -157,6 +179,54 @@ def resize(width, height, rows, size):
     return result
 
 
+def interior_of(rows):
+    """The tile's interior, INTERIOR on both axes, as rows of RGBA. A pixel that is not opaque there means the file is not the tile this tool was measured on."""
+    first, past = INTERIOR
+    crop = [bytearray(row[first * 4:past * 4]) for row in rows[first:past]]
+    for y, row in enumerate(crop):
+        for x in range(past - first):
+            if row[x * 4 + 3] != 255:
+                raise IconError('the icon is not opaque at pixel (%d, %d) inside the bezel: it is not the tile the adaptive layers were measured on' % (x + first, y + first))
+    return crop
+
+
+def border_colour(crop):
+    """The mean colour of the outer BORDER pixels of the interior, rounded half up: the colour of the tile's rays where no gear is."""
+    side = len(crop)
+    total = [0, 0, 0]
+    count = 0
+    for y in range(side):
+        for x in range(side):
+            if min(x, y, side - 1 - x, side - 1 - y) < BORDER:
+                for c in range(3):
+                    total[c] += crop[y][x * 4 + c]
+                count += 1
+    return tuple((total[c] * 2 + count) // (count * 2) for c in range(3))
+
+
+def face_pixels(canvas):
+    """The foreground square's side on a canvas of `canvas` pixels: FOREGROUND_DP of ADAPTIVE_DP, rounded down to an even number so it centres on whole pixels."""
+    return (canvas * FOREGROUND_DP // ADAPTIVE_DP) // 2 * 2
+
+
+def adaptive_layers(rows):
+    """{density: (foreground png bytes, background png bytes)} from the rows of the 96 pixel icon."""
+    crop = interior_of(rows)
+    side = len(crop)
+    colour = border_colour(crop)
+    layers = {}
+    for density, canvas in ADAPTIVE:
+        face = face_pixels(canvas)
+        offset = (canvas - face) // 2
+        scaled = resize(side, side, crop, face)
+        foreground = [bytearray(canvas * 4) for _ in range(canvas)]
+        for y in range(face):
+            foreground[offset + y][offset * 4:(offset + face) * 4] = scaled[y]
+        flat = bytes(colour + (255,)) * canvas
+        layers[density] = (write_png(canvas, canvas, foreground), write_png(canvas, canvas, [bytearray(flat) for _ in range(canvas)]))
+    return layers
+
+
 def build(reference, out, repo):
     reference = os.path.abspath(reference)
     out = os.path.abspath(out)
@@ -185,12 +255,15 @@ def build(reference, out, repo):
             data = sources[density][0]
         else:
             data = write_png(size, size, resize(96, 96, largest, size))
-        written[density] = data
+        written['android/mipmap-%s/ic_launcher.png' % density] = data
+    for density, (foreground, background) in adaptive_layers(largest).items():
+        written['android/mipmap-%s/%s' % (density, FOREGROUND_NAME)] = foreground
+        written['android/mipmap-%s/%s' % (density, BACKGROUND_NAME)] = background
     os.makedirs(out, exist_ok=True)
-    for density, data in written.items():
-        folder = os.path.join(out, 'android', 'mipmap-' + density)
-        os.makedirs(folder, exist_ok=True)
-        with open(os.path.join(folder, 'ic_launcher.png'), 'wb') as f:
+    for name, data in written.items():
+        path = os.path.join(out, *name.split('/'))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
             f.write(data)
     return written
 
@@ -206,8 +279,8 @@ def main(argv=None):
     except IconError as e:
         print('original_icon: %s' % e, file=sys.stderr)
         return 2
-    for density, data in written.items():
-        print('android/mipmap-%s/ic_launcher.png: %d bytes' % (density, len(data)))
+    for name, data in written.items():
+        print('%s: %d bytes' % (name, len(data)))
     print('written to %s' % os.path.abspath(args.out))
     return 0
 

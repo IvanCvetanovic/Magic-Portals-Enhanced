@@ -13,6 +13,8 @@ WHAT IT WRITES into --out:
   icon_<size>.png       1024 512 256 192 128 64 48 32 16, each DRAWN at its own size (not shrunk from a larger one), RGBA 8-bit
   magic_portals.ico     one file with the sizes Windows asks for: 16 32 48 64 128 256, PNG-compressed entries (Vista and later)
   android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png     48 72 96 144 192, the Android launcher set a later step reuses
+  android/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher_{foreground,background}.png
+                                                                      the ADAPTIVE icon's two 108 dp layers: 108 162 216 324 432 (planning step 225)
   android/play_store_512.png                                          the store listing's 512
   SHA256SUMS.txt        the hash of every file above, in `sha256sum -c` form
 
@@ -54,6 +56,13 @@ GLOW_ALPHA = 0.42
 ICON_SIZES = (1024, 512, 256, 192, 128, 64, 48, 32, 16)
 ICO_SIZES = (16, 32, 48, 64, 128, 256)      # ICO's directory has one byte for a side, 0 meaning 256: nothing larger fits
 ANDROID_MIPMAPS = (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192))
+# THE ADAPTIVE ICON (planning step 225). The legacy PNGs above are a disc with transparent corners, and a launcher from Android 8 on puts such a picture on a
+# white plate (white bars all round). An adaptive icon is two full-bleed layers of 108 dp, masked by the launcher to its own shape, of which the middle 72 dp
+# show and the middle 66 dp are safe from every mask. The layers keep the drawing, scaled so that the disc's own edge falls on the 72 dp circle:
+# the background is the disc's colour field over the whole canvas, the foreground the two rings with their glow on transparent.
+ANDROID_ADAPTIVE = (("mdpi", 108), ("hdpi", 162), ("xhdpi", 216), ("xxhdpi", 324), ("xxxhdpi", 432))
+ADAPTIVE_CANVAS_DP = 108.0
+ADAPTIVE_VISIBLE_DP = 72.0
 STORE_SIZE = 512
 ICO_NAME = "magic_portals.ico"
 
@@ -118,6 +127,61 @@ def render(size: int) -> bytes:
             out[at + 3] = int(disc * 255.0 + 0.5)
             at += 4
     return bytes(out)
+
+
+def render_adaptive(size: int) -> tuple[bytes, bytes]:
+    """The adaptive icon's (foreground, background) at `size` x `size` as straight-alpha RGBA bytes: the 108 dp canvas. Everything of render()'s drawing is
+    scaled by one factor, `fit`, that puts the disc's edge (DISC_RADIUS) on the visible circle's (72 dp of 108): rings and glow keep their places on the disc."""
+    if size < 8:
+        raise ValueError("an icon smaller than 8 pixels is not drawn")
+    half = size / 2.0
+    fit = (ADAPTIVE_VISIBLE_DP / ADAPTIVE_CANVAS_DP) / DISC_RADIUS
+    # As in render(): never thinner than a pixel and a bit.
+    half_width = max(HALF_WIDTH * fit, 0.9 / half)
+    glow_reach = GLOW_REACH * fit
+    foreground = bytearray(size * size * 4)
+    background = bytearray(size * size * 4)
+    at = 0
+    for y in range(size):
+        py = (y + 0.5 - half) / half
+        py2 = py * py
+        for x in range(size):
+            px = (x + 0.5 - half) / half
+            r = math.sqrt(px * px + py2)
+            blend = r / (DISC_RADIUS * fit)
+            blend *= blend
+            if blend > 1.0:
+                blend = 1.0
+            background[at] = int(DISC_CENTRE[0] + (DISC_EDGE[0] - DISC_CENTRE[0]) * blend + 0.5)
+            background[at + 1] = int(DISC_CENTRE[1] + (DISC_EDGE[1] - DISC_CENTRE[1]) * blend + 0.5)
+            background[at + 2] = int(DISC_CENTRE[2] + (DISC_EDGE[2] - DISC_CENTRE[2]) * blend + 0.5)
+            background[at + 3] = 255
+            # premultiplied accumulation over transparent, the outer ring first and the inner over it, as render() paints them
+            pr = pg = pb = pa = 0.0
+            for radius, colour in ((OUTER_RADIUS * fit, BLUE), (INNER_RADIUS * fit, ORANGE)):
+                edge = abs(r - radius) - half_width      # < 0 inside the ring, in units
+                if edge < glow_reach:
+                    if edge > 0.0:
+                        t = 1.0 - edge / glow_reach
+                        glow = GLOW_ALPHA * t * t
+                        pr = colour[0] * glow + pr * (1.0 - glow)
+                        pg = colour[1] * glow + pg * (1.0 - glow)
+                        pb = colour[2] * glow + pb * (1.0 - glow)
+                        pa = glow + pa * (1.0 - glow)
+                    cover = _clamp01(0.5 - edge * half)
+                    if cover > 0.0:
+                        pr = colour[0] * cover + pr * (1.0 - cover)
+                        pg = colour[1] * cover + pg * (1.0 - cover)
+                        pb = colour[2] * cover + pb * (1.0 - cover)
+                        pa = cover + pa * (1.0 - cover)
+            if pa > 0.0:
+                # the accumulation above blended COLOUR as if over an opaque base of 0, so pr..pb are already the straight colour weighted by coverage
+                foreground[at] = int(min(pr / pa, 255.0) + 0.5)
+                foreground[at + 1] = int(min(pg / pa, 255.0) + 0.5)
+                foreground[at + 2] = int(min(pb / pa, 255.0) + 0.5)
+                foreground[at + 3] = int(pa * 255.0 + 0.5)
+            at += 4
+    return bytes(foreground), bytes(background)
 
 
 # ---- the files ---------------------------------------------------------------------------------------------------------------------------
@@ -191,6 +255,10 @@ def build(out: Path) -> dict[str, bytes]:
     files[ICO_NAME] = ico_bytes([(size, png(size)) for size in ICO_SIZES])
     for density, size in ANDROID_MIPMAPS:
         files[f"android/mipmap-{density}/ic_launcher.png"] = png(size)
+    for density, size in ANDROID_ADAPTIVE:
+        foreground, background = render_adaptive(size)
+        files[f"android/mipmap-{density}/ic_launcher_foreground.png"] = png_bytes(size, foreground)
+        files[f"android/mipmap-{density}/ic_launcher_background.png"] = png_bytes(size, background)
     files["android/play_store_512.png"] = png(STORE_SIZE)
     sums = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in sorted(files.items()))
     files["SHA256SUMS.txt"] = sums.encode("ascii")

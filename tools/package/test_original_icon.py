@@ -139,7 +139,8 @@ class TheSet(unittest.TestCase):
         ref = Reference(self, src)
         out = self.out_folder()
         written = oi.build(ref.folder, out, REPO)
-        self.assertEqual(list(written), ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'])
+        self.assertEqual([n for n in written if n.endswith('/ic_launcher.png')],
+                         ['android/mipmap-%s/ic_launcher.png' % d for d in ('mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi')])
         for density in ('mdpi', 'hdpi', 'xhdpi'):
             with open(os.path.join(out, 'android', 'mipmap-' + density, 'ic_launcher.png'), 'rb') as f:
                 self.assertEqual(f.read(), src[density], density)
@@ -154,6 +155,7 @@ class TheSet(unittest.TestCase):
         oi.build(ref.folder, out, REPO)
         icons, store = ap.make_icons(REPO, out, out)
         self.assertEqual(sorted(icons), ['hdpi', 'mdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'])
+        self.assertEqual(sorted(icons['xhdpi']), ['background', 'foreground', 'legacy'], 'the adaptive icon\'s two layers come with the legacy picture (planning step 225)')
         self.assertIsNone(store)
 
     def test_an_output_folder_in_the_tracked_tree_is_refused_and_nothing_is_written(self):
@@ -190,6 +192,140 @@ class TheSet(unittest.TestCase):
     def test_the_command_says_what_went_wrong_and_exits_2(self):
         ref = Reference(self, {})
         self.assertEqual(oi.main(['--reference', ref.folder, '--out', self.out_folder()]), 2)
+
+
+def tile(size=96, interior=(30, 120, 220), bezel=(200, 200, 205)):
+    """The original's shape, measured on its xhdpi icon: a silver bezel 4 pixels wide at the middle of an edge, the corners rounded (transparent while x + y from
+    the corner is under 8, bezel under 16 along the diagonal: the diagonal's alpha is 0 for 0..3, 91 at 4, the bezel from 5 to 7, blue from 8), a flat interior."""
+    def pixel(x, y):
+        edge = min(x, size - 1 - x, y, size - 1 - y)
+        corner = min(x, size - 1 - x) + min(y, size - 1 - y)
+        if corner < 8:
+            return (0, 0, 0, 0)
+        if edge < 4 or corner < 16:
+            return bezel + (255,)
+        return interior + (255,)
+    return pixel
+
+
+class TheAdaptiveLayers(unittest.TestCase):
+    """Planning step 225. A launcher puts a legacy icon (a rounded tile with transparent corners) on a white plate: the owner saw white bars. The adaptive icon is a
+    foreground of the tile's interior in the middle of a 108 dp canvas and a flat background, which a launcher's mask (72 dp of the 108) can never show past."""
+    DENSITIES = (('mdpi', 108), ('hdpi', 162), ('xhdpi', 216), ('xxhdpi', 324), ('xxxhdpi', 432))
+
+    def rows(self, **kw):
+        return picture(96, tile(**kw))
+
+    def decode(self, data):
+        width, height, rows = oi.read_png(data, 'layer')
+        self.assertEqual(width, height)
+        return width, rows
+
+    def test_the_foreground_is_a_square_of_78_dp_in_the_middle_of_a_transparent_canvas(self):
+        layers = oi.adaptive_layers(self.rows())
+        self.assertEqual(sorted(layers), sorted(d for d, _ in self.DENSITIES))
+        for density, canvas in self.DENSITIES:
+            side, rows = self.decode(layers[density][0])
+            self.assertEqual(side, canvas, density)
+            face = oi.face_pixels(canvas)
+            self.assertEqual((canvas - face) % 2, 0, 'it centres on whole pixels: ' + density)
+            self.assertAlmostEqual(face / canvas, 78 / 108, delta=2.0 / canvas, msg=density)
+            offset = (canvas - face) // 2
+            for y in range(canvas):
+                for x in range(canvas):
+                    inside = offset <= x < offset + face and offset <= y < offset + face
+                    alpha = rows[y][x * 4 + 3]
+                    self.assertEqual(alpha, 255 if inside else 0, '%s (%d, %d)' % (density, x, y))
+
+    def test_the_square_is_the_interior_alone_no_bezel_and_no_corner_shows_in_it(self):
+        # The bezel here is light grey and the interior blue: not one pixel of the foreground may be the bezel's colour, and every corner of the square is the interior's.
+        layers = oi.adaptive_layers(self.rows())
+        for density, canvas in self.DENSITIES:
+            _, rows = self.decode(layers[density][0])
+            face = oi.face_pixels(canvas)
+            offset = (canvas - face) // 2
+            seen = {bytes(rows[y][x * 4:x * 4 + 4]) for y in range(offset, offset + face) for x in range(offset, offset + face)}
+            self.assertEqual(seen, {bytes((30, 120, 220, 255))}, density)
+
+    def test_the_square_covers_every_mask_a_launcher_applies(self):
+        # Android shows the middle 72 dp of the 108: a circle of that diameter, or a rounded square inside it. The square must contain the whole 72 dp.
+        for density, canvas in self.DENSITIES:
+            face = oi.face_pixels(canvas)
+            visible = canvas * 72 / 108
+            self.assertGreaterEqual(face, visible, density)
+            self.assertLessEqual(face, canvas, density)
+
+    def test_the_background_is_flat_opaque_and_the_mean_of_the_interiors_border(self):
+        # Not flat: a ring of 3 pixels of one colour and a middle of another, so that the mean is the ring's alone.
+        def pixel(x, y):
+            base = tile()(x, y)
+            if base[3] == 255 and base[:3] == (30, 120, 220) and min(x - 9, 86 - x, y - 9, 86 - y) >= oi.BORDER:
+                return (250, 20, 20, 255)  # the gear
+            return base
+        layers = oi.adaptive_layers(picture(96, pixel))
+        for density, canvas in self.DENSITIES:
+            side, rows = self.decode(layers[density][1])
+            self.assertEqual(side, canvas)
+            self.assertEqual({bytes(r[x * 4:x * 4 + 4]) for r in rows for x in range(side)}, {bytes((30, 120, 220, 255))}, density)
+
+    def test_the_border_colour_is_a_mean_rounded_half_up(self):
+        crop = [bytearray(b'\x00\x00\x00\xff' * 10) for _ in range(10)]
+        # one border pixel at 1 in the red channel of 36 border pixels (10x10 less the 4x4 middle): mean 1/36 -> 0; four of them: 4/36 -> 0; 18 of them: 0.5 -> 1
+        border = [(x, y) for y in range(10) for x in range(10) if min(x, y, 9 - x, 9 - y) < oi.BORDER]
+        self.assertEqual(len(border), 100 - 16)
+        for x, y in border[:42]:
+            crop[y][x * 4] = 1
+        self.assertEqual(oi.border_colour(crop), (1, 0, 0))
+        for x, y in border[:41]:
+            crop[y][x * 4] = 1
+        for x, y in border[41:]:
+            crop[y][x * 4] = 0
+        self.assertEqual(oi.border_colour(crop), (0, 0, 0))
+
+    def test_a_tile_that_is_not_opaque_inside_the_bezel_is_refused(self):
+        rows = self.rows()
+        rows[40][40 * 4 + 3] = 0  # a hole in the middle of the picture
+        with self.assertRaisesRegex(oi.IconError, r'not opaque at pixel \(40, 40\)'):
+            oi.adaptive_layers(rows)
+        rows = self.rows()
+        rows[oi.INTERIOR[0]][oi.INTERIOR[0] * 4 + 3] = 128  # the corner of the interior: the bezel's rounded corner leaks in
+        with self.assertRaisesRegex(oi.IconError, 'not the tile the adaptive layers were measured on'):
+            oi.adaptive_layers(rows)
+
+    def test_the_layers_are_deterministic(self):
+        a = oi.adaptive_layers(self.rows())
+        b = oi.adaptive_layers(self.rows())
+        self.assertEqual(a, b)
+
+    def test_the_measured_interior_clears_the_bezel_of_a_tile_shaped_like_the_originals(self):
+        # tile(): bezel 4 pixels at an edge's middle and 8 along the diagonal; INTERIOR must lie wholly inside what is left.
+        first, past = oi.INTERIOR
+        self.assertEqual((first, past), (9, 87))
+        self.assertEqual(first + past - 1, 95, 'the interior is centred on the tile: 9 from one edge, 9 from the other')
+        pixel = tile()
+        for y in range(first, past):
+            for x in range(first, past):
+                self.assertEqual(pixel(x, y), (30, 120, 220, 255), (x, y))
+        self.assertGreater(first, 8, 'the bezel is 8 pixels along a diagonal in the original')
+
+    def test_the_written_set_carries_both_layers_at_every_density_and_the_legacy_icon_unchanged(self):
+        folder = tempfile.mkdtemp(prefix='original_icon_ref_')
+        self.addCleanup(shutil.rmtree, folder, True)
+        for density, size in (('mdpi', 48), ('hdpi', 72), ('xhdpi', 96)):
+            os.makedirs(os.path.join(folder, 'apk_work', 'decoded', 'res', 'drawable-%s-v4' % density))
+            with open(os.path.join(folder, 'apk_work', 'decoded', 'res', 'drawable-%s-v4' % density, 'icon.png'), 'wb') as f:
+                f.write(png_bytes(size, picture(size, tile(size))))
+        out = os.path.join(REPO, 'out', 'dist', 'test_original_icon_layers_%d' % os.getpid())
+        self.addCleanup(shutil.rmtree, out, True)
+        written = oi.build(folder, out, REPO)
+        for density, canvas in self.DENSITIES:
+            for name in ('ic_launcher_foreground.png', 'ic_launcher_background.png'):
+                path = os.path.join(out, 'android', 'mipmap-' + density, name)
+                with open(path, 'rb') as f:
+                    data = f.read()
+                self.assertEqual(data, written['android/mipmap-%s/%s' % (density, name)])
+                self.assertEqual(oi.read_png(data, path)[:2], (canvas, canvas), path)
+        self.assertEqual(len(written), 5 + 10)
 
 
 if __name__ == '__main__':

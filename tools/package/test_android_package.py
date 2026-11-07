@@ -24,7 +24,9 @@ import struct
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -701,11 +703,12 @@ class TheInspectLine(ManifestVariants):
     BADGING = ("package: name='com.ivancvetanovic.magicportals' versionCode='1' versionName='%s'\nsdkVersion:'26'\ntargetSdkVersion:'35'\n"
                "uses-feature: name='android.hardware.vulkan.version' version='4198400'\nuses-feature-not-required: name='android.hardware.touchscreen'\n"
                "uses-feature-not-required: name='android.hardware.gamepad'\nuses-feature: name='android.hardware.screen.landscape'\napplication-debuggable\n"
-               "native-code: %s\napplication-label:'%s'\n")
+               "native-code: %s\napplication-label:'%s'\napplication: label='Magic Portals Enhanced' icon='res/mipmap-anydpi-v26/ic_launcher.xml'\n")
     ALL_THREE = {'arm64-v8a': make_elf(machine=183), 'armeabi-v7a': make_elf(machine=40, width=32), 'x86_64': make_elf()}
 
-    def inspect(self, label='Magic Portals Enhanced', tree_extra='', repo_manifest=None, libs=None, native=None):
-        """`libs`: {ABI: library bytes} the APK holds (default: x86_64 alone); `native`: the ABIs aapt2's badging says (default: the keys of `libs`, as aapt2 prints them)."""
+    def inspect(self, label='Magic Portals Enhanced', tree_extra='', repo_manifest=None, libs=None, native=None, icon=True):
+        """`libs`: {ABI: library bytes} the APK holds (default: x86_64 alone); `native`: the ABIs aapt2's badging says (default: the keys of `libs`, as aapt2 prints them);
+        `icon`: False leaves the adaptive icon out of the APK and its badging, as an APK built from a legacy set only would be (planning step 225)."""
         libs = libs if libs is not None else {'x86_64': make_elf()}
         native = sorted(libs) if native is None else native
         apk = self.path('MagicPortals-0.1.0-debug.apk')
@@ -713,11 +716,19 @@ class TheInspectLine(ManifestVariants):
             for abi, data in libs.items():
                 z.writestr('lib/%s/libMagicPortals.so' % abi, data)
             z.writestr('assets/gamedata.list', ap.make_list([])[1])
+            if icon:
+                z.writestr(ap.ADAPTIVE_ICON_ENTRY, b'binary-xml')
+                for density in ap.ICON_DENSITIES:
+                    for _, name in ap.ICON_FILES:
+                        z.writestr('res/mipmap-%s-v4/%s' % (density, name), b'\x89PNG')
         mask = 0
         for bit in range(32):
             mask |= 1 << bit
         tree = 'E: manifest\n  A: screenOrientation(0x0101001e)=0\n  A: configChanges(0x0101001f)=0x%x\n%s' % (mask, tree_extra)
-        answers = {'aapt2 dump badging': self.BADGING % (ap.read_version(REPO), ' '.join("'%s'" % a for a in native), label), 'aapt2 dump xmltree': tree, 'zipalign -c': 'Verification successful\n',
+        badging = self.BADGING % (ap.read_version(REPO), ' '.join("'%s'" % a for a in native), label)
+        if not icon:
+            badging = badging.replace("icon='res/mipmap-anydpi-v26/ic_launcher.xml'", "icon='res/mipmap-xxxhdpi-v4/ic_launcher.png'")
+        answers = {'aapt2 dump badging': badging, 'aapt2 dump xmltree': tree, 'zipalign -c': 'Verification successful\n',
                    'apksigner verify': 'Verifies\nVerified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate DN: CN=Android Debug\n'}
         repo = self.path('repo')
         os.makedirs(os.path.join(repo, 'game', 'android'), exist_ok=True)  # exist_ok: a test may inspect more than one APK
@@ -738,6 +749,16 @@ class TheInspectLine(ManifestVariants):
         lines, problems = self.inspect()
         self.assertIn("the crash report will call the game: Magic Portals Enhanced (from the application's android:label)", lines)
         self.assertEqual(problems, [])
+
+    def test_the_line_names_the_adaptive_icon_and_an_apk_without_it_is_a_problem(self):
+        # Planning step 225: a legacy ic_launcher.png alone is what a launcher puts on a white plate (the owner's Pixel 9 Pro XL).
+        lines, problems = self.inspect()
+        self.assertIn('launcher icon: the adaptive icon (res/mipmap-anydpi-v26/ic_launcher.xml), both layers in 5 densities', lines)
+        self.assertEqual(problems, [])
+        lines, problems = self.inspect(icon=False)
+        self.assertIn('launcher icon: NOT adaptive', lines)
+        self.assertTrue(any('white plate' in p for p in problems), problems)
+        self.assertTrue(any('not the adaptive icon' in p for p in problems), problems)
 
     def test_a_key_is_the_name_and_a_string_in_the_apk_passes(self):
         manifest = self.manifest_with('Portals Deluxe')
@@ -1202,6 +1223,137 @@ class TheRealElf32(TempCase):
         self.assertEqual((facts['rwx'], facts['textrel'], facts['exec_stack']), (0, False, False), 'a toolchain library has none of the three')
         self.assertEqual([p for p in problems if '16 KB' not in p], [], 'whatever else it is, it is not wrong in these ways (its 4 KB alignment, if it has it, is the NDK default for 32-bit)')
         self.assertTrue(any('wants a 64-bit one' in p for p in ap.check_elf(found, 'arm64-v8a')[1]), 'and it is not an arm64-v8a library')
+
+
+# ---- the launcher icon -------------------------------------------------------------------------------------------------------------------
+
+def tiny_png(width, height, colour=(30, 120, 220, 255)):
+    """A real, valid RGBA PNG of one flat colour (aapt2 decodes what it compiles)."""
+    raw = b''.join(b'\x00' + bytes(colour) * width for _ in range(height))
+    def chunk(kind, body):
+        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body) & 0xFFFFFFFF)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+
+def write_icon_set(root, skip=None, layer_size=None, real=False):
+    """android/mipmap-<density>/ic_launcher{,_foreground,_background}.png under `root`: the legacy icon at its own size and both layers at the 108 dp canvas's pixels.
+    `skip` names one (density, file name) to leave out; `layer_size` overrides the layers' side."""
+    legacy = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+    for density in ap.ICON_DENSITIES:
+        for kind, name in ap.ICON_FILES:
+            if skip == (density, name):
+                continue
+            side = legacy[density] if kind == 'legacy' else (layer_size or ap.ICON_LAYER_PIXELS[density])
+            if real:
+                data = tiny_png(side, side)
+            else:  # make_icons reads only the 24 bytes up to the size
+                data = b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>II', side, side) + b'\x08\x06\x00\x00\x00'
+            put(os.path.join(root, 'android', 'mipmap-' + density, name), data)
+    return root
+
+
+class TheLauncherIcon(TempCase):
+    """Planning step 225: the launcher icon is an ADAPTIVE icon. A legacy ic_launcher.png alone is a picture with transparent corners that a launcher puts on a
+    white plate and shrinks (the owner's Pixel 9 Pro XL showed white bars all round); the adaptive icon is two full-bleed layers of 108 dp that the launcher masks."""
+    XML = os.path.join(REPO, 'game', 'android', 'res', 'mipmap-anydpi-v26', 'ic_launcher.xml')
+    MANIFEST = os.path.join(REPO, 'game', 'android', 'AndroidManifest.xml')
+
+    def test_the_committed_adaptive_icon_names_the_two_layers_the_packager_writes(self):
+        root = ET.parse(self.XML).getroot()
+        self.assertEqual(root.tag, 'adaptive-icon')
+        ns = '{http://schemas.android.com/apk/res/android}drawable'
+        layers = {child.tag: child.get(ns) for child in root}
+        files = {kind: os.path.splitext(name)[0] for kind, name in ap.ICON_FILES}
+        self.assertEqual(layers, {'background': '@mipmap/' + files['background'], 'foreground': '@mipmap/' + files['foreground']})
+        # the manifest's icon is the one name the XML and the legacy PNGs share
+        with open(self.MANIFEST, encoding='utf-8') as f:
+            self.assertIn('android:icon="@mipmap/%s"' % files['legacy'], f.read())
+
+    def test_the_xml_sits_where_the_packager_looks_for_it(self):
+        self.assertEqual(os.path.normpath(os.path.join(os.path.dirname(self.MANIFEST), ap.ADAPTIVE_ICON_XML)), os.path.normpath(self.XML))
+        self.assertTrue(os.path.isfile(self.XML))
+
+    def test_a_full_set_is_taken_and_names_every_file_of_every_density(self):
+        icons, store = ap.make_icons(REPO, self.tmp, write_icon_set(self.path('set')))
+        self.assertEqual(sorted(icons), sorted(ap.ICON_DENSITIES))
+        for density, paths in icons.items():
+            self.assertEqual(sorted(paths), ['background', 'foreground', 'legacy'], density)
+            for kind, name in ap.ICON_FILES:
+                self.assertEqual(os.path.basename(paths[kind]), name)
+        self.assertIsNone(store)
+
+    def test_a_set_without_the_layers_is_refused_by_name_and_says_why(self):
+        for density in ap.ICON_DENSITIES:
+            for _, name in ap.ICON_FILES[1:]:
+                root = write_icon_set(self.path('set-%s-%s' % (density, name)), skip=(density, name))
+                with self.assertRaisesRegex(ap.PackError, r'missing launcher icon .*%s.*planning step 225' % re.escape(name)):
+                    ap.make_icons(REPO, self.tmp, root)
+        root = write_icon_set(self.path('set-no-legacy'), skip=('xhdpi', 'ic_launcher.png'))
+        with self.assertRaisesRegex(ap.PackError, 'missing launcher icon'):
+            ap.make_icons(REPO, self.tmp, root)
+
+    def test_a_layer_of_the_wrong_size_is_refused_a_legacy_icon_is_not_measured(self):
+        root = write_icon_set(self.path('wrong'))  # a good set with ONE layer, hdpi's foreground, at 216 pixels where a hdpi layer is 162
+        put(os.path.join(root, 'android', 'mipmap-hdpi', 'ic_launcher_foreground.png'),
+            b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>II', 216, 216) + b'\x08\x06\x00\x00\x00')
+        with self.assertRaisesRegex(ap.PackError, '216 x 216 pixels; a hdpi layer of the adaptive icon \\(108 dp\\) is 162 x 162'):
+            ap.make_icons(REPO, self.tmp, root)
+        root = write_icon_set(self.path('legacy-any-size'))
+        put(os.path.join(root, 'android', 'mipmap-mdpi', 'ic_launcher.png'),
+            b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>II', 33, 33) + b'\x08\x06\x00\x00\x00')
+        ap.make_icons(REPO, self.tmp, root)  # accepted: the legacy picture is the original's own size
+        root = write_icon_set(self.path('not-a-png'))
+        put(os.path.join(root, 'android', 'mipmap-xxhdpi', 'ic_launcher_background.png'), b'GIF89a' + bytes(30))
+        with self.assertRaisesRegex(ap.PackError, 'is not a PNG'):
+            ap.make_icons(REPO, self.tmp, root)
+
+    def test_the_built_apk_check_wants_the_adaptive_icon_and_every_layer(self):
+        names = [ap.ADAPTIVE_ICON_ENTRY] + ['res/mipmap-%s-v4/%s' % (d, n) for d in ap.ICON_DENSITIES for _, n in ap.ICON_FILES]
+        badging = "package: name='x'\napplication: label='Magic Portals Enhanced' icon='%s'\n" % ap.ADAPTIVE_ICON_ENTRY
+        self.assertEqual(ap.adaptive_icon_problems(names, badging), [])
+        self.assertTrue(any('white plate' in p for p in ap.adaptive_icon_problems([n for n in names if n != ap.ADAPTIVE_ICON_ENTRY], badging)))
+        for gone in ('res/mipmap-xxhdpi-v4/ic_launcher_foreground.png', 'res/mipmap-mdpi-v4/ic_launcher_background.png'):
+            self.assertEqual(ap.adaptive_icon_problems([n for n in names if n != gone], badging), ['the APK has no %s' % gone])
+        # a legacy PNG as the application's icon is the bug: the entries may all be there and the manifest still point at the picture
+        legacy = "application: label='Magic Portals Enhanced' icon='res/mipmap-xxxhdpi-v4/ic_launcher.png'\n"
+        self.assertTrue(any('not the adaptive icon' in p for p in ap.adaptive_icon_problems(names, legacy)))
+        self.assertTrue(any('None' in p for p in ap.adaptive_icon_problems(names, 'package: name=\'x\'\n')))
+
+    def test_aapt2_links_the_set_into_an_apk_whose_icon_is_the_adaptive_one(self):
+        found = find_aapt2()
+        if found is None:
+            skip_loudly(self, 'no Android SDK with aapt2 and platform android-35 here: the icon was NOT linked by the real aapt2')
+        aapt2, jar = found
+        class Tools:
+            pass
+        tools = Tools()
+        tools.aapt2 = aapt2
+        tools.android_jar = lambda target: jar
+        icons, _ = ap.make_icons(REPO, self.tmp, write_icon_set(self.path('set'), real=True))
+        work = self.path('work')
+        os.makedirs(work)
+        base = ap.link_base(tools, self.MANIFEST, icons, {'targetSdk': 35}, '0.1.5', 105, True, work)
+        with zipfile.ZipFile(base) as z:
+            names = z.namelist()
+        badging = ap.run([aapt2, 'dump', 'badging', base], 'aapt2 dump badging').replace('\r', '')
+        self.assertEqual(ap.adaptive_icon_problems(names, badging), [], names)
+        tree = ap.run([aapt2, 'dump', 'xmltree', '--file', ap.ADAPTIVE_ICON_ENTRY, base], 'aapt2 dump xmltree')
+        self.assertIn('adaptive-icon', tree)
+        self.assertIn('background', tree)
+        self.assertIn('foreground', tree)
+
+    def test_a_missing_xml_is_a_packager_error_not_a_white_plate(self):
+        found = find_aapt2()
+        if found is None:
+            skip_loudly(self, 'no Android SDK with aapt2 here')
+        icons, _ = ap.make_icons(REPO, self.tmp, write_icon_set(self.path('set')))
+        manifest = self.path('game', 'android', 'AndroidManifest.xml')
+        os.makedirs(os.path.dirname(manifest))
+        shutil.copyfile(self.MANIFEST, manifest)
+        class Tools:
+            aapt2 = found[0]
+        with self.assertRaisesRegex(ap.PackError, "adaptive icon's XML is missing"):
+            ap.link_base(Tools(), manifest, icons, {'targetSdk': 35}, '0.1.5', 105, True, self.path('work'))
 
 
 # ---- the zip -----------------------------------------------------------------------------------------------------------------------------

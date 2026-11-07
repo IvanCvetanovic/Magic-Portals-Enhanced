@@ -100,6 +100,18 @@ that is ignored), strips them, and calls the packager, which writes `out/android
   (planning step 212): `python tools/package/original_icon.py --reference <reference> --out <folder>` writes the original's launcher icons (48, 72 and 96 pixels, the
   original's files byte for byte; 144 and 192 resampled from the 96, because the original has nothing larger) into a folder under `out/`, and
   `tools/build_android.sh --icons <folder>` (`android_package.py build --icons`) uses that set. It is the original's file, so it is only ever in `out/`.
+  **The icon is ADAPTIVE** (planning step 225; releases 0.1.0 to 0.1.5 carried only the legacy PNGs). The owner's Pixel 9 Pro XL (Android 17) showed white bars all
+  round it: a legacy `ic_launcher.png`, here a rounded tile with transparent corners and a silver bezel, is put by a launcher on a white plate and shrunk. Since
+  step 225 the APK also has `res/mipmap-anydpi-v26/ic_launcher.xml` (`game/android/res/`, committed text: an `<adaptive-icon>` of two layers) and, in five densities,
+  `ic_launcher_foreground.png` and `ic_launcher_background.png`, the two full-bleed 108 dp layers (108, 162, 216, 324, 432 pixels) that a launcher masks to its own
+  shape (72 dp of them show; the middle 66 dp are safe from every mask). Both icon tools write them: `original_icon.py` makes the foreground from the tile's interior
+  (the 78 source pixels inside the bezel, 78 dp across in the middle of the canvas, so that no mask can reach a corner or the bezel) and the background as the flat
+  colour of that interior's rim; `make_app_icon.py` draws the rings as the foreground and the disc's colour field as the background. The packager refuses an icon set
+  without the layers (an `--icons` folder made before step 225), and `inspect` refuses an APK whose launcher icon is not the adaptive XML or lacks a layer.
+  minSdk is 26, where adaptive icons begin, so the XML is the icon on every device the game installs on; the legacy PNGs stay for tools that ask for them.
+  NOT built: a `<monochrome>` layer (Android 13's themed icons). Android 13 to 15 show the colour icon when a layer is missing; what the Pixel launcher of Android 16 and 17 does
+  with such an icon (it may derive a one-colour one from the foreground, which here is an opaque square) is NOT KNOWN: ask the owner whether Themed icons is on.
+  Seen in a real Pixel Launcher on the API 33 emulator (a circle mask): the legacy icon was a small tile on a white plate, the adaptive one fills the circle; NOT seen on the owner's phone.
 * **The variants.** A *player's* APK has `MAGICPORTALS_DEV_TOOLS` OFF: none of the developer's flags (`--route`, `--tap`, ...) exist in it.
   `--verification` builds the other kind (DEV_TOOLS ON, trees `out/build/android-<abi>-verification`, APK `MagicPortals-<version>-VERIFICATION-debug.apk`)
   **for driving an emulator run with `files/magicportals_args.txt`; it is never signed with a release key** and must never be mistaken for the shipped file.
@@ -111,7 +123,7 @@ that is ignored), strips them, and calls the packager, which writes `out/android
 
 | Entry | From |
 |---|---|
-| `AndroidManifest.xml`, `resources.arsc`, `res/mipmap-*/ic_launcher.png` | aapt2, from the manifest and the drawn icon |
+| `AndroidManifest.xml`, `resources.arsc`, `res/mipmap-*-v4/ic_launcher{,_foreground,_background}.png`, `res/mipmap-anydpi-v26/ic_launcher.xml` | aapt2, from the manifest, `game/android/res/` and the icon set (drawn, or the original's via `--icons`; the legacy PNG and the adaptive icon's two layers of each density: planning step 225) |
 | `classes.dex` | the engine's Java (`engine/src/platform/android/java`): javac for Java 8 bytecode, then d8 |
 | `lib/<abi>/libMagicPortals.so` | the stripped libraries, each checked as an ELF file (machine, only these NEEDED libraries: `libandroid`, `liblog`, `libvulkan`, `libaaudio`, `libc`, `libm`, `libdl`; every LOAD segment aligned to 16 KB; no executable-and-writable segment; no text relocation) |
 | `assets/gamedata.list` | the list the first-run unpack reads (below) |
