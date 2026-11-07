@@ -544,6 +544,43 @@ void ABlastTakesACarrancaAndItSpitsNoMore() {
     CHECK_MSG(fired(taken, "carranca_right_1075") > 0, "while the other, left standing, still does");
 }
 
+// PLANNING STEP 227 (the beta tester's "the gas canisters don't explode", 2026-11-06: his video shows 2-15 and 2-23, every barrel he touched blowing and
+// every statue left standing, which is what the last release did). 2-23 has the same two crystals inside its two carrancas (crystal_ent_1211 inside carranca_1200,
+// crystal_ent_1210 inside carranca_right_1201) and the same designers' barrels: the one on carranca_1200's head, the other dropped onto carranca_right_1201's
+// when its crate burns. Step 223's pin is 2-15's; this is 2-23's, so that the second level of the tester's video is held as well.
+void ABlastTakesBothStatuesOf2_23() {
+    Run control;
+    if (!Begin("level22a", control)) return;
+    Run taken;
+    if (!Begin("level22a", taken)) return;
+    const Demolish::Breakable* right = taken.level.demolish.FindBreakable("carranca_1200");
+    const Demolish::Breakable* left = taken.level.demolish.FindBreakable("carranca_right_1201");
+    CHECK_MSG(right != nullptr && left != nullptr && right->flagged && right->blastBreaks && left->flagged && left->blastBreaks,
+              "2-23's two carrancas are flagged breakables a blast takes");
+    if (right == nullptr || left == nullptr) return;
+    const entt::entity rightBody = right->body;
+    const entt::entity leftBody = left->body;
+    CHECK(taken.level.demolish.Grab(rightBody, "barrel_bomb_ent_1135"));
+    CHECK(taken.level.demolish.Grab(leftBody, "barrel_bomb_ent_1132"));
+    const std::vector<entt::entity> gone = taken.level.demolish.Destroyed(taken.registry);
+    CHECK_MSG(gone.size() == 2 && right->broken && left->broken && right->brokenBy == "barrel_bomb_ent_1135" && left->brokenBy == "barrel_bomb_ent_1132" &&
+                  !taken.registry.valid(rightBody) && !taken.registry.valid(leftBody),
+              "the blasts of the two barrels take the two statues, naming each barrel");
+
+    const auto fired = [](const Run& run, const char* name) {
+        for (const Turrets::Turret& turret : run.level.turrets.turrets) {
+            if (turret.name == name) return turret.fired;
+        }
+        return -1;
+    };
+    for (int tick = 0; tick < 600; ++tick) {
+        Game::Tick(control.data, control.registry, control.level, 0.0f, kStep);
+        Game::Tick(taken.data, taken.registry, taken.level, 0.0f, kStep);
+    }
+    CHECK_MSG(fired(control, "carranca_1200") > 0 && fired(control, "carranca_right_1201") > 0, "left alone, both statues spit within ten seconds");
+    CHECK_MSG(fired(taken, "carranca_1200") == 0 && fired(taken, "carranca_right_1201") == 0, "once taken, neither spits a fireball");
+}
+
 // A script's deletion and the way back, as the torch's and the dark dragon's are:
 // Break takes the body and says which, once; Restore stands it again.
 void BreakAndRestoreByName() {
@@ -1256,6 +1293,7 @@ void runTests() {
     AStoneThatHeldTheWallStaysHeld();
     ABlastGrabsByTheFlag();
     ABlastTakesACarrancaAndItSpitsNoMore();
+    ABlastTakesBothStatuesOf2_23();
     BreakAndRestoreByName();
     AStoneKillsThePlayerAboveTwoAndAHalfAndNotAtIt();
     AStonesKillIsFoldedIntoHazardsAndTheBeholdersRocksAreLeftToBoss();
