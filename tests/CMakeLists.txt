@@ -289,6 +289,8 @@ add_mp_test(test_mp_lightmap_bake)
 # and a census of what the converted levels place, which is skipped without them
 # and never with 77.
 add_mp_test(test_mp_sky)
+# The sky on a window wider than its content, from the pictures' own pixels: reads the converted levels and their art, so it exits 77 without them.
+add_mp_test(test_mp_sky_levels IN_SOURCE test_mp_sky SKIPS_WITH_77)
 # The pixel-centre rule at the frame's edge: edge_cover.json and sim/EdgeCover's snap, strips and uv,
 # pure arithmetic and files the suite writes: it runs anywhere.
 add_mp_test(test_mp_edgecover)

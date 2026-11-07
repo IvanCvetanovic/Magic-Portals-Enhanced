@@ -8634,6 +8634,99 @@ void TheSceneHasFourBlackBarsInFrontOfEverything() {
     CHECK_MSG(left == 0, "the bars go with the level");
 }
 
+// ---- a sky on a window wider than its content (sky.json wide_view; Enhanced's own) -----------------------------
+//
+// Read off the frame, as the renderer will draw it: the sky quad a level places and, of it, the picture's CONTENT - not the
+// black columns the artist left in the fullhd file - measured from the pixels of the file the quad draws, never from
+// sky.json. On 1280 x 720 the quad is the original's: one view tall and the picture's own width, whatever wide_view says.
+// On 2340 x 1080 (the owner's tester's phone), 2400 x 1080 and 2560 x 1080 the content runs past both sides of the frame
+// and the quad past its top and bottom. Without the layer's growth (or with wide_view off, or a table entry that says the
+// file has no padding) the content stops 21 to 50 u short of a side and this fails.
+void AWideWindowIsFilledWithTheSkysContent() {
+    if (!OriginalArtIsThere("AWideWindowIsFilledWithTheSkysContent")) return;
+    struct Row {
+        const char* level;
+        const char* file;
+        double widthUnits;
+    };
+    // 1-01 (sky.ent), 1-03 (icy), 1-05 (red), 1-24 (purple), 2-01 (dark_sky, the one with a cover) and 3-01 (satellite_sky); and the
+    // two kinds of space sky, 4-01 (satellite_sky.png as its space sky) and 4-02 (space_bg.png), whose pictures have no black columns.
+    const Row rows[] = {{"level0", "sky.png", 512.0},        {"level2", "icy_sky.png", 512.0}, {"level4", "red_sky.png", 512.0},
+                        {"level23", "sky_purple.png", 512.0}, {"level0a", "dark_sky.png", 455.0}, {"level0b", "satellite_sky.png", 512.0},
+                        {"level0c", "satellite_sky.png", 512.0}, {"level1c", "space_bg.png", 512.0}};
+    for (const Row& row : rows) {
+        for (const glm::vec2& window : {glm::vec2(1280.0f, 720.0f), glm::vec2(2340.0f, 1080.0f), glm::vec2(2400.0f, 1080.0f),
+                                        glm::vec2(2560.0f, 1080.0f)}) {
+            const std::string where = std::string(row.level) + " in " + std::to_string(static_cast<int>(window.x)) + " x " +
+                                      std::to_string(static_cast<int>(window.y));
+            entt::registry registry;
+            publishViewport(registry, window);
+            MagicPortalsLayer layer(TestPaths(), row.level);
+            layer.OnAttach(registry);
+            if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+                CHECK_MSG(false, where + ": " + layer.LoadError() + layer.ArtError());
+                continue;
+            }
+            CloseTheLevelStartPopup(layer, registry);
+            for (int tick = 0; tick < 3; ++tick) {
+                tickWith(layer, registry, kRest, {}, {});
+                layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+            }
+            entt::entity sky = entt::null;
+            std::string path;
+            for (auto [entity, tag, material] : registry.view<TagComponent, MaterialComponent>().each()) {
+                if (tag.tag == "Magic Portals Sprite" && EndsWith(material.albedoTexturePath, std::string("/") + row.file)) {
+                    sky = entity;
+                    path = material.albedoTexturePath;
+                }
+            }
+            CHECK_MSG(sky != entt::null, where + ": draws " + row.file);
+            if (sky == entt::null) {
+                layer.OnDetach(registry);
+                continue;
+            }
+            // The columns of the file the quad draws that are black or transparent from each side.
+            int w = 0, h = 0, channels = 0;
+            stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &channels, 4);
+            CHECK_MSG(pixels != nullptr, where + ": " + path + " is read");
+            if (pixels == nullptr) {
+                layer.OnDetach(registry);
+                continue;
+            }
+            const auto black = [&](int x) {
+                for (int y = 0; y < h; ++y) {
+                    const stbi_uc* p = pixels + (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)) * 4;
+                    if (p[3] != 0 && (p[0] != 0 || p[1] != 0 || p[2] != 0)) return false;
+                }
+                return true;
+            };
+            int blackLeft = 0, blackRight = 0;
+            while (blackLeft < w && black(blackLeft)) ++blackLeft;
+            while (blackRight < w - blackLeft && black(w - 1 - blackRight)) ++blackRight;
+            stbi_image_free(pixels);
+
+            // Where it falls on the frame: screenRectOf maps the frame, whatever its shape, to 0..1280 and 0..720.
+            const auto [x, y] = screenRectOf(registry, sky);
+            const double span = x.hi - x.lo;
+            const double contentLo = x.lo + span * static_cast<double>(blackLeft) / static_cast<double>(w);
+            const double contentHi = x.hi - span * static_cast<double>(blackRight) / static_cast<double>(w);
+            if (window.x == 1280.0f) {
+                // 16:9, the original's frame: the picture's own width (2.8125 px a unit) and one view tall, the fix idle.
+                CHECK_MSG(std::fabs(span - row.widthUnits * 1280.0 / (256.0 * 16.0 / 9.0)) < 1e-2 && std::fabs(y.lo) < 1e-2 &&
+                              std::fabs(y.hi - 720.0) < 1e-2 && std::fabs((x.lo + x.hi) * 0.5 - 640.0) < 1e-2,
+                          where + ": the original's frame: " + std::to_string(x.lo) + " to " + std::to_string(x.hi) + " across, " +
+                              std::to_string(y.lo) + " to " + std::to_string(y.hi) + " down");
+            } else {
+                // Covered, and not by more than the 0.5 u overscan plus a pixel: a growth 1.5 times too large would pass the lower bounds alone.
+                CHECK_MSG(contentLo <= 1e-2 && contentHi >= 1280.0 - 1e-2 && contentLo >= -3.0 && contentHi <= 1283.0 && y.lo <= 1e-2 && y.hi >= 720.0 - 1e-2,
+                          where + ": the content " + std::to_string(contentLo) + " to " + std::to_string(contentHi) + " of 0 to 1280, the quad " +
+                              std::to_string(y.lo) + " to " + std::to_string(y.hi) + " of 0 to 720");
+            }
+            layer.OnDetach(registry);
+        }
+    }
+}
+
 // ---- a sky narrower than the view (sky.json pixel_cover, step 145) ------------------
 //
 // dark_sky.png has no fullhd twin, so 2-01's sky (level0a) is 455 u across the view's
@@ -34493,6 +34586,7 @@ void runTests() {
     TheF14RouteLandsOnTheBlock();
     TheSceneHasFourBlackBarsInFrontOfEverything();
     ADarkSkyIsCoveredToTheFramesEdges();
+    AWideWindowIsFilledWithTheSkysContent();
     APictureAtTheFramesEdgeIsDrawnOutToIt();
     TwoOhFivesWallIsDrawnOutToTheFrame();
     TheComplementaryHalfDrawsAnInwardEdgeWholeAndLeavesOutASliver();

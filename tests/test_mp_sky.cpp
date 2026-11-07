@@ -41,12 +41,15 @@
 #include "sim/Tiers.hpp"
 #include "sim/Tscn.hpp"
 
+#include <stb_image.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -928,6 +931,247 @@ void EveryLevelsSpaceSky() {
     CHECK_MSG(tintedAt.rfind("level0c 0.6", 0) == 0, "4-01's spiral at 0.6: " + tintedAt);
 }
 
+// ---- THE SKY ON A WINDOW WIDER THAN ITS CONTENT (sky.json wide_view; ENHANCED'S OWN) -------------------------------
+//
+// scaleSky sizes a sky by the screen's height alone (listing 30116-30225, #35-39 and #41-50), so on a window wider than
+// 16:9 the picture's CONTENT - 455 u in every sky there is, the fullhd ones padded to 512 u with black columns - ends
+// short of the view's sides and the black clear shows there wherever a level's art has an opening. The original does the
+// same on such a screen (its app.enml has no fixedWidth or fixedHeight outside ios, so the backbuffer is the screen); the
+// port grows the sky. What is pinned: the content covers the view at every window shape, centred, with the overscan to
+// spare, and 16:9 and every narrower window are the original's frame, scale 1 and shift 0, to the bit.
+
+// What a view `viewW` wide sees of a picture, as the layer draws it: the content's edges from the view's centre
+// (a still sky's quad is centred on it), and the quad's half height. The fit is the code's; the content is the caller's.
+struct WideSeen {
+    double scale = 1.0;
+    double shiftX = 0.0;
+    double contentLo = 0.0;
+    double contentHi = 0.0;
+    double halfHeight = 0.0;
+};
+
+WideSeen WideSeenBy(const Sky::Rules& rules, const Sky::Layer& layer, double fromUnits, double toUnits, double viewW) {
+    const Sky::Fit fit = Sky::WideFit(rules, layer, viewW);
+    const double quadW = layer.imagePx.x * layer.scale;
+    WideSeen seen;
+    seen.scale = fit.scale;
+    seen.shiftX = fit.shiftXPx;
+    seen.contentLo = fit.shiftXPx + (fromUnits * layer.scale - quadW * 0.5) * fit.scale;
+    seen.contentHi = fit.shiftXPx + (toUnits * layer.scale - quadW * 0.5) * fit.scale;
+    seen.halfHeight = layer.imagePx.y * layer.scale * 0.5 * fit.scale;
+    return seen;
+}
+
+// Window shapes: 4:3, 16:10, 16:9, 456 u of view (the tolerance's edge for a 455 u content), 2:1, the tester's
+// 2340 x 1080, 20:9, 21:9 and 32:9.
+constexpr double kWideAspects[] = {4.0 / 3.0, 16.0 / 10.0, 16.0 / 9.0, 57.0 / 32.0, 2.0, 2340.0 / 1080.0, 20.0 / 9.0, 21.0 / 9.0, 32.0 / 9.0};
+
+// Pure arithmetic over the shapes the pictures have, and over two they do not: with margins that are not equal, a shift
+// that is right only for a centred content (a * (1 - scale) instead of -a * scale) passes the first three and fails the last two.
+void AWideViewIsCoveredByTheSkysContent() {
+    const Sky::Rules rules = TheRules();
+    CHECK_MSG(rules.wide.enabled, "wide_view is on: a sky is grown on a window wider than its content");
+    struct Shape {
+        const char* what;
+        double width, from, to;
+    };
+    const Shape shapes[] = {{"a fullhd sky, 455 u in 512", 512.0, 28.5, 483.5},
+                            {"dark_sky.png", 455.0, 0.0, 455.0},
+                            {"satellite_sky.png", 512.0, 0.0, 512.0},
+                            {"content 10 to 483.5 of 512", 512.0, 10.0, 483.5},
+                            {"content 40 to 500 of 512", 512.0, 40.0, 500.0}};
+    for (const Shape& shape : shapes) {
+        Sky::Layer layer;
+        layer.imagePx = glm::dvec2(shape.width, 256.0);
+        layer.scale = 1.0;
+        layer.contentFromPx = shape.from;
+        layer.contentToPx = shape.to;
+        for (const double aspect : kWideAspects) {
+            const double viewW = 256.0 * aspect;
+            const WideSeen seen = WideSeenBy(rules, layer, shape.from, shape.to, viewW);
+            const std::string where = std::string(shape.what) + " at " + std::to_string(aspect) + ":1 (" + std::to_string(viewW) + " u)";
+            if (viewW > shape.to - shape.from + rules.wide.toleranceUnits) {
+                CHECK_MSG(seen.scale > 1.0, where + ": grown");
+                CHECK_MSG(seen.contentLo <= -viewW * 0.5 - rules.wide.overscanUnits + 1e-9 &&
+                              seen.contentHi >= viewW * 0.5 + rules.wide.overscanUnits - 1e-9,
+                          where + ": the content covers the view with the overscan to spare: " + std::to_string(seen.contentLo) + " to " +
+                              std::to_string(seen.contentHi));
+                CHECK_MSG(std::fabs(seen.contentLo + seen.contentHi) < 1e-9, where + ": and is centred on it");
+                CHECK_MSG(seen.halfHeight >= 128.0, where + ": the quad is at least one view tall");
+            } else {
+                CHECK_MSG(seen.scale == 1.0 && seen.shiftX == 0.0, where + ": the original's frame, scale 1 and no shift");
+            }
+        }
+    }
+    // The tolerance's own edge: 456 u of view over 455 of content is not grown, a hair more is.
+    Sky::Layer edge;
+    edge.imagePx = glm::dvec2(512.0, 256.0);
+    edge.contentFromPx = 28.5;
+    edge.contentToPx = 483.5;
+    CHECK_MSG(Sky::WideFit(rules, edge, 455.0 + rules.wide.toleranceUnits).scale == 1.0, "at the tolerance: the original's frame");
+    CHECK_MSG(Sky::WideFit(rules, edge, 455.0 + rules.wide.toleranceUnits + 1e-6).scale > 1.0, "a hair past it: grown");
+    // 16:9 itself (455.11 u over 455) stays the original's.
+    CHECK_MSG(Sky::WideFit(rules, edge, 256.0 * 16.0 / 9.0).scale == 1.0, "16:9 is the original's frame");
+    // The numbers themselves, not only that the growth covers (every check above is a lower bound, and a growth 1.5 times too large passes them):
+    // the rule's own two values, and the tester's phone: 2340 x 1080 is 554.667 u across, so the content (455 u) is grown to 554.667 + 2 x 0.5.
+    CHECK_MSG(rules.wide.toleranceUnits == 1.0 && rules.wide.overscanUnits == 0.5, "sky.json's wide_view: tolerance 1 u, overscan 0.5 u");
+    const double phoneView = 256.0 * 2340.0 / 1080.0;
+    const Sky::Fit phone = Sky::WideFit(rules, edge, phoneView);
+    CHECK_MSG(std::fabs(phone.scale - (phoneView + 1.0) / 455.0) < 1e-9 && std::fabs(phone.scale - 1.221246) < 1e-6,
+              "the tester's 2340 x 1080 grows the sky 1.2212 times: " + std::to_string(phone.scale));
+    CHECK_MSG(std::fabs(1.0 / phone.scale - 0.8188) < 1e-3, "which shows 81.9 percent of its height");
+    CHECK_MSG(std::fabs((phoneView - 455.0) * 0.5 - 49.83) < 1e-2 && std::fabs((phoneView - 455.0) * 0.5 / phoneView - 0.0898) < 1e-4,
+              "of which the original's frame left 49.83 u, 8.98 percent of the width, bare at each side");
+    // Off is the original's frame at every shape.
+    Sky::Rules off = rules;
+    off.wide.enabled = false;
+    for (const double aspect : kWideAspects) {
+        const Sky::Fit fit = Sky::WideFit(off, edge, 256.0 * aspect);
+        CHECK_MSG(fit.scale == 1.0 && fit.shiftXPx == 0.0, "enabled false draws the original's frame");
+    }
+    // A picture with no content (a layer Build did not give one) is left alone.
+    Sky::Layer none;
+    none.imagePx = glm::dvec2(512.0, 256.0);
+    CHECK_MSG(Sky::WideFit(rules, none, 600.0).scale == 1.0, "no content, no growth");
+}
+
+// The file is strict, as pixel_cover's is.
+void AWideViewFileThatDoesNotSayIsRefused() {
+    const std::filesystem::path broken = std::filesystem::temp_directory_path() / "supersonic-test-mp-sky-wide.json";
+    const auto refused = [&broken](const std::string& wide, const std::string& key) {
+        {
+            std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+            out << R"({"static_sky": {"properties_entity": "properties", "space_bg_key": "space_bg",
+                  "entity_names": ["sky"], "satellite_name": "satellite", "scroll_key": "scroll",
+                  "screen_pitch": 0.5, "frame_cap_ms": 200.0, "pixel_cover": true)"
+                << wide << "}}";
+        }
+        Sky::Rules read;
+        std::string error;
+        const bool loaded = Sky::LoadRules(broken.string(), read, error);
+        CHECK_MSG(!loaded && error.find(key) != std::string::npos, key + " is refused: " + error);
+    };
+    refused("", "wide_view");
+    refused(R"(, "wide_view": {"enabled": true, "tolerance_units": -1.0, "overscan_units": 0.5, "pictures": []})", "tolerance_units");
+    refused(R"(, "wide_view": {"enabled": true, "tolerance_units": 1.0, "overscan_units": 0.5,
+             "pictures": [{"file": "a.png", "tier": "fullhd", "content_units": [30.0, 20.0]}]})", "content_units");
+    std::error_code ec;
+    std::filesystem::remove(broken, ec);
+}
+
+// ---- THE PICTURES' OWN PIXELS (the suite test_mp_sky_levels: it reads the converted levels and their art, and exits 77 without them) ----
+
+struct Columns {
+    int w = 0, h = 0, blackLeft = 0, blackRight = 0;
+    bool read = false;
+};
+
+// The columns at each side of a picture whose every pixel is (0, 0, 0) or has alpha 0: the padding the artist left,
+// found from the file the renderer reads, never from sky.json.
+Columns MeasureColumns(const std::string& path) {
+    Columns found;
+    int channels = 0;
+    stbi_uc* pixels = stbi_load(path.c_str(), &found.w, &found.h, &channels, 4);
+    if (pixels == nullptr) return found;
+    const auto black = [&](int x) {
+        for (int y = 0; y < found.h; ++y) {
+            const stbi_uc* p = pixels + (static_cast<std::size_t>(y) * static_cast<std::size_t>(found.w) + static_cast<std::size_t>(x)) * 4;
+            if (p[3] != 0 && (p[0] != 0 || p[1] != 0 || p[2] != 0)) return false;
+        }
+        return true;
+    };
+    while (found.blackLeft < found.w && black(found.blackLeft)) ++found.blackLeft;
+    if (found.blackLeft < found.w) {
+        while (black(found.w - 1 - found.blackRight)) ++found.blackRight;
+    }
+    found.read = true;
+    stbi_image_free(pixels);
+    return found;
+}
+
+void EverySkyCoversEveryWindowFromItsOwnPixels() {
+    const Sky::Rules rules = TheRules();
+    const Tiers::Rules tiers = TheTiers();
+    Sky::Rules off = rules;
+    off.wide.enabled = false;
+    std::map<std::string, Columns> measured;  // by the file the level draws
+    int skies = 0, bareWithoutTheFix = 0, growing = 0;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(kLevels, ec)) {
+        if (entry.path().extension() != ".tscn") continue;
+        const std::string level = entry.path().stem().string();
+        Tscn::Scene scene;
+        std::vector<Sprites::Sprite> sprites;
+        std::string error;
+        if (!Tscn::Load(entry.path().string(), scene, error) || !Sprites::Find(scene, kLevels + "/..", tiers, sprites, error)) {
+            CHECK_MSG(false, level + ": " + error);
+            continue;
+        }
+        Sky::Controller sky;
+        CHECK_MSG(Sky::Build(rules, scene, sprites, kViewHeight, sky, error), level + ": " + error);
+        for (const Sky::Layer& layer : sky.skies) {
+            const auto sprite = std::find_if(sprites.begin(), sprites.end(), [&layer](const Sprites::Sprite& s) { return s.node == layer.node; });
+            CHECK_MSG(sprite != sprites.end(), level + ": the sky's picture");
+            if (sprite == sprites.end()) continue;
+            ++skies;
+            auto at = measured.find(sprite->texture);
+            if (at == measured.end()) at = measured.emplace(sprite->texture, MeasureColumns(sprite->texture)).first;
+            const Columns& columns = at->second;
+            CHECK_MSG(columns.read, level + ": " + sprite->texture + " is read");
+            if (!columns.read) continue;
+            const double fromUnits = static_cast<double>(columns.blackLeft) / static_cast<double>(sprite->density);
+            const double toUnits = static_cast<double>(columns.w - columns.blackRight) / static_cast<double>(sprite->density);
+            // The table against the picture: what Build took for the content is what the pixels say.
+            CHECK_MSG(std::fabs(layer.contentFromPx - fromUnits) < 1e-9 && std::fabs(layer.contentToPx - toUnits) < 1e-9,
+                      level + ": " + sprite->texture + "'s content is " + std::to_string(fromUnits) + " to " + std::to_string(toUnits) +
+                          " in its pixels, and sky.json has " + std::to_string(layer.contentFromPx) + " to " + std::to_string(layer.contentToPx));
+            for (const double aspect : kWideAspects) {
+                const double viewW = 256.0 * aspect;
+                const WideSeen seen = WideSeenBy(rules, layer, fromUnits, toUnits, viewW);
+                if (viewW > toUnits - fromUnits + rules.wide.toleranceUnits) {
+                    CHECK_MSG(seen.contentLo <= -viewW * 0.5 + 1e-9 && seen.contentHi >= viewW * 0.5 - 1e-9 && seen.halfHeight >= 128.0 - 1e-9,
+                              level + " at " + std::to_string(aspect) + ":1: the sky's content covers the view (" + std::to_string(seen.contentLo) +
+                                  " to " + std::to_string(seen.contentHi) + " of +-" + std::to_string(viewW * 0.5) + ")");
+                    ++growing;
+                } else {
+                    CHECK_MSG(seen.scale == 1.0 && seen.shiftX == 0.0, level + " at " + std::to_string(aspect) + ":1: the original's frame");
+                }
+                if (aspect == 2340.0 / 1080.0) {
+                    // The same measurement without the fix finds the strip, on every sky: the check bites.
+                    const WideSeen bare = WideSeenBy(off, layer, fromUnits, toUnits, viewW);
+                    if (bare.contentLo > -viewW * 0.5 + 1e-9 || bare.contentHi < viewW * 0.5 - 1e-9) ++bareWithoutTheFix;
+                }
+            }
+        }
+    }
+    CHECK_MSG(skies > 0, "the levels place skies");
+    CHECK_MSG(bareWithoutTheFix == skies, "without wide_view every sky leaves a bare strip at 2340 x 1080: " + std::to_string(bareWithoutTheFix) +
+                                              " of " + std::to_string(skies));
+    CHECK_MSG(growing > 0, "and some are grown");
+    // The pictures themselves: the four fullhd skies hold 57 black texels each side (columns 0 to 56 and 967 to 1023), nothing else holds any.
+    for (const auto& [file, columns] : measured) {
+        const std::string name = std::filesystem::path(file).filename().string();
+        const bool padded = file.find("/fullhd/") != std::string::npos &&
+                            (name == "sky.png" || name == "icy_sky.png" || name == "red_sky.png" || name == "sky_purple.png");
+        CHECK_MSG(columns.blackLeft == (padded ? 57 : 0) && columns.blackRight == (padded ? 57 : 0),
+                  file + " has " + std::to_string(columns.blackLeft) + " and " + std::to_string(columns.blackRight) + " black columns");
+    }
+}
+
+constexpr int kSkippedExit = 77;  // SKIPS_WITH_77, ctest's SKIP_RETURN_CODE (tests/test_mp.cpp)
+
+int skyLevelsEntry(int, char**) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(kLevels, ec) || !std::filesystem::is_regular_file(kLevels + "/../assets/entities/dark_sky.png", ec)) {
+        std::printf("test_mp_sky_levels: SKIPPED - needs the converted levels and their art at %s (no check was run)\n"
+                    "  They live outside this repository; configure with -DSUPERSONIC_MAGICPORTALS_LEVELS=...\n",
+                    kLevels.c_str());
+        return kSkippedExit;
+    }
+    EverySkyCoversEveryWindowFromItsOwnPixels();
+    return ::test::summary("test_mp_sky_levels", 500);
+}
+
 } // namespace
 
 MP_SUITE_MAIN("test_mp_sky") {
@@ -943,6 +1187,8 @@ MP_SUITE_MAIN("test_mp_sky") {
     ALoneScrollingSkyIsBothEnds();
     AFullhdSkyIsWiderAndStillCentred();
     ThePixelCoverIsWhatThePixelCentresDraw();
+    AWideViewIsCoveredByTheSkysContent();
+    AWideViewFileThatDoesNotSayIsRefused();
     TheSpaceRulesAreSkyJsons();
     ASpaceLevelBuildsSpaceSky();
     SpaceSkyIsPinnedToTheCamera();
@@ -960,3 +1206,7 @@ MP_SUITE_MAIN("test_mp_sky") {
     EveryLevelsSpaceSky();
     return ::test::summary("test_mp_sky", 70);
 }
+
+// The part that reads the converted levels and their art is a suite of its own that exits 77 without them (planning step 209),
+// so that a run without the data reports it SKIPPED and not passed: tests/CMakeLists.txt, test_mp_sky_levels.
+static const ::MpSuite::Registration skyLevelsRegistration("test_mp_sky_levels", &skyLevelsEntry);

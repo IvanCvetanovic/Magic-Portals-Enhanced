@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -103,6 +104,46 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.pixelCover = block["pixel_cover"].AsBool();
+
+    // Enhanced's own wide-window rule (wide_view), strictly: a file that does not say whether the
+    // sky grows on a wide window is refused, as pixel_cover's is, and so is a number that would
+    // grow it where the original's frame stands (a negative tolerance) or draw it short of the view.
+    const Json::Value& wide = block["wide_view"];
+    if (!wide.Has("enabled") || !wide["enabled"].IsBool()) {
+        error = path + ": static_sky.wide_view.enabled is missing or not true or false";
+        return false;
+    }
+    read.wide.enabled = wide["enabled"].AsBool();
+    for (const char* key : {"tolerance_units", "overscan_units"}) {
+        if (!wide.Has(key) || !wide[key].IsNumber() || wide[key].AsNumber() < 0.0) {
+            error = path + ": static_sky.wide_view." + key + " is missing, not a number or below zero";
+            return false;
+        }
+    }
+    read.wide.toleranceUnits = wide["tolerance_units"].AsNumber();
+    read.wide.overscanUnits = wide["overscan_units"].AsNumber();
+    if (!wide.Has("pictures") || !wide["pictures"].IsArray()) {
+        error = path + ": static_sky.wide_view.pictures is missing or not an array";
+        return false;
+    }
+    for (const Json::Value& one : wide["pictures"].AsArray()) {
+        const Json::Value& contentUnits = one["content_units"];
+        if (!one["file"].IsString() || one["file"].AsString().empty() || !one["tier"].IsString() || !contentUnits.IsArray() ||
+            contentUnits.AsArray().size() != 2 || !contentUnits.AsArray()[0].IsNumber() || !contentUnits.AsArray()[1].IsNumber()) {
+            error = path + ": static_sky.wide_view.pictures holds an entry without a file, a tier and two content_units";
+            return false;
+        }
+        WidePicture picture;
+        picture.file = one["file"].AsString();
+        picture.tier = one["tier"].AsString();
+        picture.contentFromUnits = contentUnits.AsArray()[0].AsNumber();
+        picture.contentToUnits = contentUnits.AsArray()[1].AsNumber();
+        if (!(picture.contentFromUnits >= 0.0) || !(picture.contentToUnits > picture.contentFromUnits)) {
+            error = path + ": static_sky.wide_view.pictures: " + picture.file + "'s content_units must run from 0 or more to above that";
+            return false;
+        }
+        read.wide.pictures.push_back(std::move(picture));
+    }
     out = std::move(read);
     return true;
 }
@@ -138,6 +179,17 @@ bool Build(const Rules& rules, const Tscn::Scene& scene, const std::vector<Sprit
             Layer sky;
             sky.node = node.name;
             sky.imagePx = sprite->sizePx;
+            // Its content: the whole file, unless wide_view knows black columns in it (found by the
+            // file's name and the tier folder it was drawn from; a sprite with neither is all content).
+            sky.contentFromPx = 0.0;
+            sky.contentToPx = sprite->sizePx.x;
+            const std::string file = std::filesystem::path(sprite->texture).filename().string();
+            for (const WidePicture& known : rules.wide.pictures) {
+                if (known.file != file || known.tier != sprite->tier) continue;
+                sky.contentFromPx = known.contentFromUnits;
+                sky.contentToPx = known.contentToUnits;
+                break;
+            }
             sky.scrollValue = FloatOf(node, rules.scrollKey);
             built.skies.push_back(std::move(sky));
         }
@@ -203,6 +255,23 @@ glm::dvec2 DrawnCentrePx(const Rules& rules, const Controller& sky, std::size_t 
 glm::dvec2 DrawnSizePx(const Controller& sky, std::size_t t) {
     const Layer& layer = sky.skies[t];
     return layer.imagePx * layer.scale;
+}
+
+Fit WideFit(const Rules& rules, const Layer& layer, double viewWidthPx) {
+    Fit fit;
+    // The content across as drawn, and where the file's centre lies against the content's.
+    const double contentPx = (layer.contentToPx - layer.contentFromPx) * layer.scale;
+    if (!rules.wide.enabled || !(contentPx > 0.0) || !(viewWidthPx > contentPx + rules.wide.toleranceUnits)) return fit;
+    fit.scale = (viewWidthPx + 2.0 * rules.wide.overscanUnits) / contentPx;
+    // The quad grows about ITS OWN centre, which is the view's centre (a still sky is pinned there). Its content's centre lies `a`
+    // from that (the content's middle less the file's) and the growth moves it to a * scale; for the content to cover the view it has
+    // to be centred on the view, so the quad moves by -a * scale. a is 0 for the skies shipped, whose black columns are symmetric,
+    // so only a picture with unequal margins shows the difference: a shift of a * (1 - scale) instead leaves the content a from the
+    // view's centre and a bare strip of |a| less the overscan on one side.
+    const double contentMiddlePx = (layer.contentFromPx + layer.contentToPx) * 0.5 * layer.scale;
+    const double offsetPx = contentMiddlePx - layer.imagePx.x * layer.scale * 0.5;
+    fit.shiftXPx = -offsetPx * fit.scale;
+    return fit;
 }
 
 glm::dvec2 SatellitePx(const Controller& sky, const glm::dvec2& viewCentrePx, const glm::dvec2& viewPx) {

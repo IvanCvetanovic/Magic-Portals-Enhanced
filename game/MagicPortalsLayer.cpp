@@ -7279,6 +7279,13 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             ownerPx = Sky::PositionPx(m_skyRules, m_sky, t, m_follow.centrePx, view);
             centrePx += Sky::DrawnCentrePx(m_skyRules, m_sky, t, m_follow.centrePx, view) - sprite.atPx;
             sizePx = Sky::DrawnSizePx(m_sky, t);
+            // A WINDOW WIDER THAN THE SKY'S CONTENT (sky.json wide_view; Enhanced's own): the
+            // picture grown about the view's centre until its content covers the view, from the
+            // view as it is THIS tick (a window that changes shape, a phone turned, is followed;
+            // nothing is decided at build). Scale 1 and no shift at 16:9 and every narrower window.
+            const Sky::Fit fit = Sky::WideFit(m_skyRules, m_sky.skies[t], view.x);
+            sizePx *= fit.scale;
+            centrePx.x += fit.shiftXPx;
         } else if (drawn.satellite) {
             ownerPx = Sky::SatellitePx(m_sky, m_follow.centrePx, ViewPx());
             centrePx += ownerPx - sprite.atPx;
@@ -7289,9 +7296,18 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             // turned by what AddToAngle has added, about its own point (its pivot is 0).
             const glm::dvec2 view = ViewPx();
             switch (drawn.space) {
-            case SpaceRole::Sky:
+            case SpaceRole::Sky: {
                 ownerPx = Sky::SpaceSkyPx(m_spaceRules, m_follow.centrePx, view);
+                // A WINDOW WIDER THAN THE SPACE SKY (sky.json wide_view; Enhanced's own): the original draws this
+                // picture at its own 512 u, so beside it a window wider than 2:1 shows the black clear (21.3 u a side
+                // at 2340 x 1080). Its pictures have no padding, so the whole file is content: the same growth about
+                // the view's centre as StaticSky's, scale 1 and the original's frame at 2:1 and narrower.
+                Sky::Layer whole;
+                whole.imagePx = sprite.sizePx;
+                whole.contentToPx = sprite.sizePx.x;
+                sizePx *= Sky::WideFit(m_skyRules, whole, view.x).scale;
                 break;
+            }
             case SpaceRole::Spiral: {
                 ownerPx = Sky::SpiralPx(m_spaceRules, m_follow.centrePx, view);
                 sizePx = glm::dvec2(m_space.spiralSidePx);

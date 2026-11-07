@@ -45,6 +45,22 @@
 
 namespace MagicPortals::Sky {
 
+// A picture whose file has black columns at its sides: where its CONTENT is (sky.json wide_view).
+struct WidePicture {
+    std::string file;               // the file's name, sky.png
+    std::string tier;               // the density folder it is drawn from, fullhd
+    double contentFromUnits = 0.0;  // its content across, in the picture's own units from its left edge
+    double contentToUnits = 0.0;
+};
+
+// ENHANCED'S OWN (sky.json wide_view): a sky grown to cover a view wider than its content.
+struct WideView {
+    bool enabled = false;
+    double toleranceUnits = 0.0;  // nothing happens unless the view is wider than the content by more than this
+    double overscanUnits = 0.0;   // the content reaches this far past each side of the view
+    std::vector<WidePicture> pictures;
+};
+
 // The port's sky.json, static_sky.
 struct Rules {
     std::string propertiesEntity;       // properties: where space_bg is read
@@ -55,6 +71,7 @@ struct Rules {
     double screenPitch = 0.0;           // 0.5
     double frameCapMs = 0.0;            // 200: unitsPerSecond's min
     bool pixelCover = false;            // pixel_cover: a sky short of the frame filled to its pixels (PixelCover)
+    WideView wide;                      // wide_view: a sky on a window wider than 16:9
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
@@ -67,6 +84,8 @@ struct Layer {
     double scrollValue = 0.0;  // its `scroll`; 0 when it has none, as GetFloat answers
     double scrollX = 0.0;      // scrollPos.x; its y is never anything but 0
     double pivotX = 0.0;       // the pivot adjust a scrolling strip's ends take, in level px
+    double contentFromPx = 0.0; // where its picture's content starts across, in the picture's own units (0: the file's edge)
+    double contentToPx = 0.0;   // and ends (the file's width where it has no black columns)
 };
 
 struct Controller {
@@ -101,6 +120,22 @@ glm::dvec2 DrawnCentrePx(const Rules& rules, const Controller& sky, std::size_t 
 
 // Its picture's drawn size: the picture times its scale.
 glm::dvec2 DrawnSizePx(const Controller& sky, std::size_t t);
+
+// THE SKY ON A WINDOW WIDER THAN ITS CONTENT (sky.json wide_view; ENHANCED'S OWN). scaleSky sizes a sky by the
+// screen's height alone, so on a 20:9 phone the picture's content is 455 u across a view 554.67 u wide and the
+// black clear shows beside it wherever the level's art has an opening. `scale` multiplies BOTH axes of the
+// drawn size (the picture is not stretched; the view shows the middle 1 / scale of its height) about the view's
+// centre, and `shiftXPx` moves the picture's centre so that its CONTENT's centre is the view's centre, which is
+// what makes the content cover the view (0 for the skies shipped, whose black columns are symmetric, so only a
+// picture with unequal margins shows it). Scale 1
+// and shift 0 - the original's frame - when the switch is off, when the picture has no content, and when the
+// view is not wider than the content by more than tolerance_units: 16:9 and every narrower window.
+// `viewWidthPx` is the live view's width in level px, read every tick, never at build.
+struct Fit {
+    double scale = 1.0;
+    double shiftXPx = 0.0;
+};
+Fit WideFit(const Rules& rules, const Layer& layer, double viewWidthPx);
 
 // Where the satellite is drawn this frame: the camera's corner plus where the
 // level put it. Only meaningful when hasSatellite.

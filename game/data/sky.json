@@ -59,6 +59,37 @@
       "too in 97.4% (left) and 96.5% (right), from 48.1% and 32.2%; 0 pixels changed outside columns",
       "0 and 1279, and the 84 other levels byte-identical."
     ],
+    "wide_view": {
+      "enabled": true,
+      "tolerance_units": 1.0,
+      "overscan_units": 0.5,
+      "pictures": [
+        {"file": "sky.png",        "tier": "fullhd", "content_units": [28.5, 483.5]},
+        {"file": "icy_sky.png",    "tier": "fullhd", "content_units": [28.5, 483.5]},
+        {"file": "red_sky.png",    "tier": "fullhd", "content_units": [28.5, 483.5]},
+        {"file": "sky_purple.png", "tier": "fullhd", "content_units": [28.5, 483.5]}
+      ],
+      "_about": [
+        "ENHANCED'S OWN, not the original's (the original has no such rule; `enabled: false` draws its frame). THE SKY ON A WIDE",
+        "WINDOW. StaticSky::scaleSky sizes a sky by the screen's HEIGHT alone (skyScale = GetScreenSize().y / GetSize().y, _source",
+        "above), so the picture is 455 u of content across a view that is 256 x aspect: 455.11 u at 16:9, 554.67 at 2340 x 1080, 568.89",
+        "at 20:9, 597.33 at 21:9. Wider than 16:9 the view runs past the content and the sky ends 49.8 u (at 2340 x 1080) short of each",
+        "side; the engine's black clear colour shows there wherever the level's own art leaves an opening (a window's arch) - the tester's",
+        "black rectangle, 9.0 percent of the width. A fix is to grow the sky, about the view's centre and uniformly, until its CONTENT",
+        "covers the view with `overscan_units` to spare on each side (the quad's edge is then outside the frame's outer pixel, so",
+        "sim/EdgeCover has nothing to do there): scale = (view + 2 x overscan) / content, taller than the view by the same factor, so the",
+        "view shows the middle 1 / scale of the picture's height. Not distorted, one quad, no new entity.",
+        "`tolerance_units`: nothing happens unless the view is wider than the content by more than this. 1.0 keeps 16:9 (0.11 u over",
+        "the 455 u content: step 145's pixel cover's case) and every narrower window exactly as they were."
+      ],
+      "_content": [
+        "A picture's CONTENT is its file less the black columns the artist left at each side. MEASURED, not guessed: Enhanced's",
+        "out/parity/visuals/sky/fix2/fullhd_padding.txt - sky, icy_sky, red_sky and sky_purple at fullhd are 1024 x 512 texels with black",
+        "(0, 0, 0) runs [(0, 56), (967, 1023)], so 910 texels = 455.0 u of content from 28.5 to 483.5 u. dark_sky.png (455 x 256, no",
+        "tier file), satellite_sky.png (512 x 256 u, no black columns) and every 1x file have none: a picture with no entry here is",
+        "all content. An entry is found by the file's name and the tier folder it was drawn from."
+      ]
+    },
     "_source": [
       "Game::preLoop (Game.angelscript, bytes 112536..114414), instructions 148-182: if",
       "Game.spaceBg, SpaceSky(); else StaticSky(sceneMax.x, 'sky', true). The controller is",
