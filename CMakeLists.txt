@@ -19,7 +19,7 @@
 cmake_minimum_required(VERSION 3.20)
 # VERSION is the program's number, the ONE definition of it: the Windows release's version information carries it (game/windows). 0.1.0 is a
 # pre-release's placeholder, not a decision: what the first release is called is the owner's.
-project(MagicPortals VERSION 0.1.5 LANGUAGES C CXX)
+project(MagicPortals VERSION 0.1.6 LANGUAGES C CXX)
 
 # Objective-C++ on Apple platforms only (planning step 206, PORT-8; the sibling port's top-level file, whose Apple build ran on GitHub's macOS runners, is the
 # model): the entries in game/macos and game/ios ask the system for its folders and the engine's iOS backend is UIKit. Objective-C as well, for GLFW's Cocoa

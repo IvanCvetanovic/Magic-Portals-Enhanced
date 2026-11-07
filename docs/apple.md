@@ -236,7 +236,7 @@ Items for the engine's list (the engine is read-only here): no gap that this ste
 
 ## 10. Decisions that are the owner's, and left
 
-* the bundle identifier (a placeholder shared with the Android package), the display name (`Magic Portals`; the Android label says `Magic Portals Enhanced`), the icon (a placeholder drawn by arithmetic), the version (`0.1.5`);
+* the bundle identifier (a placeholder shared with the Android package), the display name (`Magic Portals`; the Android label says `Magic Portals Enhanced`), the icon (a placeholder drawn by arithmetic), the version (`0.1.6`);
 * signing: ad hoc only; a Developer ID and notarisation (a paid account), and whether to publish through TestFlight or the App Store at all;
 * the export-compliance statement (`ITSAppUsesNonExemptEncryption`): not claimed in either plist; it is a declaration of the owner's;
 * `UIFileSharingEnabled`: ON in the iOS template as in the sibling's (the flags file lives in Documents); it shows Documents in the Files app;
