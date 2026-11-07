@@ -21,12 +21,14 @@
 // 0.4382; every other placement in the game is a symmetric quarter turn and would
 // pass either way, which is the whole reason the uneven one is under test.
 //
-// What is NOT asserted: that the bar reaches either stop. It is 254 px long on a
-// 127 px arm, and a level built around one has geometry above it and below -
-// swung one way it settles at 2.11 and the other at 1.67, neither of them a
-// limit. Where it comes to rest is the LEVEL's business and not the joint's.
-// What is pinned is the direction it turns, that it never passes either stop, and
-// the arithmetic that puts those stops where they are.
+// The bar is 254 px long on a 127 px arm, and a level built around one has
+// geometry above it and below: swung the CW way it meets the T-stem near 1.81
+// before its lower stop. Swung the CCW way it reaches its UPPER stop, 3.1958 (past
+// pi), and is held there (ASeesawNeverJumpsAcrossPi; planning step 226: it used to
+// read 2.2 to 2.4 and was called "the level's own geometry", and was the engine's
+// angle wrapping at pi). What is pinned is the direction it turns, that it never
+// passes either stop, that the upper stop holds, and the arithmetic that puts the
+// stops where they are.
 //
 // Reads the converted levels and Enhanced's data from outside this repository,
 // and skips, saying where it looked, when either is absent.
@@ -168,9 +170,9 @@ void TheAuthoredRangeIsMeasuredFromTheRestAngle() {
 // swapped or negated range lands against the wrong stop by a wide margin.
 void ASeesawStopsAtItsOwnEnds() {
     // GRAVITY OFF, so the joint is the only thing that can stop it. Left on, the
-    // seesaw settles at whatever balance gravity finds - 2.1113 in the middle of
-    // a range running 1.6251 to 3.1958 - and never reaches a stop at all, which
-    // says nothing about where the stops are.
+    // plank is dragged back across its rest angle by gravity and the reading says
+    // nothing about where the stops are. (An earlier comment here said it settles
+    // at 2.1113; the plank at rest stays at 2.7576 until something lands on it.)
     // outStart is the angle BEFORE anything is stepped. Everything here rests on
     // restRad - computed from the level's rotations - being the angle the solver
     // actually sees, and that has never been measured. If the two differ, the
@@ -219,12 +221,14 @@ void ASeesawStopsAtItsOwnEnds() {
                   std::to_string(start) + " against " + std::to_string(rest));
     CHECK_MSG(early > start + 0.1, "turning about +z RAISES the hinge angle, got " + std::to_string(early) +
                                        " from " + std::to_string(start));
+    // NOTE: the reading is an atan2 and never exceeds pi, while this stop is at 3.1958: this bound CANNOT fail for it.
+    // That the stop HOLDS is pinned by ASeesawNeverJumpsAcrossPi, which follows the bar's travel round the circle.
     CHECK_MSG(angle <= maxRad + 0.08, "and it never passes the upper stop, got " + std::to_string(angle) +
                                           " against " + std::to_string(maxRad));
 
-    // And down. NEITHER end is actually reached - the bar meets the level's own
-    // geometry first, whichever way it turns - so what is checked is that it goes
-    // the right way and never passes a stop.
+    // And down. The CW end is NOT reached - the bar meets the level's own T-stem near
+    // 1.81 first - so what is checked is that it goes the right way and never passes the
+    // stop. (The +z end IS reached: see ASeesawNeverJumpsAcrossPi.)
     if (!swing(-3.0, angle, rest, minRad, maxRad, start, early)) return;
     std::printf("  %s: -z from %.4f (rest says %.4f), after 6 ticks %.4f, stopped %.4f, ends %.4f..%.4f\n",
                 kSeesawLevel, start, rest, early, angle, minRad, maxRad);
@@ -558,6 +562,64 @@ void TheStoneOf2_29RidesThePlank() {
     std::printf("  2-29: the plank first turns past 0.05 rad on tick %d\n", firstTurned);
 }
 
+// THE WRAP (planning step 226, the beta tester's 2-31 on a phone). Joints::HingeAngle is an atan2 and cannot read above pi, and this seesaw's
+// window runs 1.6251 to 3.1958: its upper stop is 0.054 past it. A bar turned that far read as about -3.1, 4.7 radians below its own lower
+// stop, and the position pass turned it 270 degrees in one step to put it back - onto the far stop, from 10 degrees past level one way to
+// 65 degrees the other in two ticks. ASeesawStopsAtItsOwnEnds could not see it: it bounds the angle from above only, and the sawtooth it
+// produced (the bar flipped every 31 ticks) ended at 2.3675, which that test printed and the notes called "the level's own geometry".
+// GRAVITY OFF and the bar spun at 3 rad/s, so a turn of 0.05 a tick is all that is physical; the turn is read the SHORT way round the circle,
+// so the honest crossing of pi (3.14 to -3.14) is 0.05 and the snap (4.7 radians, 1.58 the short way) is far over the bound.
+void ASeesawNeverJumpsAcrossPi() {
+    Run run;
+    if (!Begin(kSeesawLevel, run)) return;
+    if (run.level.hinge.hinges.empty() || !run.registry.all_of<RigidBodyComponent>(run.level.hinge.hinges.front().body)) {
+        CHECK_MSG(false, "level30a pins a seesaw with a rigid body");
+        return;
+    }
+    const Hinge::Hinged& hinged = run.level.hinge.hinges.front();
+
+    Supersonic::PhysicsSettings settings;
+    settings.gravity = glm::vec3(0.0f);
+    run.registry.ctx().insert_or_assign<Supersonic::PhysicsSettings>(std::move(settings));
+    run.registry.get<RigidBodyComponent>(hinged.body).angularVelocity = glm::vec3(0.0f, 0.0f, 3.0f);
+
+    constexpr double kPi = 3.14159265358979323846;
+    // The turn between two readings, signed, the SHORT way round the circle.
+    const auto shortWay = [kPi](double now, double before) {
+        double d = now - before;
+        while (d > kPi) d -= 2.0 * kPi;
+        while (d < -kPi) d += 2.0 * kPi;
+        return d;
+    };
+    const double startAngle = Hinge::AngleOf(run.registry, hinged);
+    double before = startAngle;
+    double worst = 0.0;
+    int worstTick = 0;
+    double travelled = 0.0;   // the bar's turn from where it began, followed round the circle (an atan2 reading cannot say it)
+    for (int tick = 1; tick <= 240; ++tick) {
+        Tick(run);
+        const double now = Hinge::AngleOf(run.registry, hinged);
+        const double step = shortWay(now, before);
+        if (std::fabs(step) > worst) {
+            worst = std::fabs(step);
+            worstTick = tick;
+        }
+        travelled += step;
+        before = now;
+    }
+    std::printf("  %s: spun at 3 rad/s, the largest turn in one tick %.4f rad (tick %d), the reading ends at %.4f, travelled %.4f of %.4f to the stop\n",
+                kSeesawLevel, worst, worstTick, before, travelled, hinged.maxRad - startAngle);
+    CHECK_MSG(worst < 0.2, "no tick turns the bar by more than a few times its 0.05 a tick, got " + std::to_string(worst) + " on tick " +
+                               std::to_string(worstTick));
+    // And the stop HOLDS: a bar with no stop at all would turn 12 radians in these 240 ticks, one that was flipped back 270 degrees every 31
+    // ticks would not sit on it, and the old reading could not tell either (it never exceeds pi).
+    CHECK_MSG(travelled <= (hinged.maxRad - startAngle) + 0.1,
+              "the bar never goes past its upper stop, travelled " + std::to_string(travelled) + " against " +
+                  std::to_string(hinged.maxRad - startAngle));
+    CHECK_MSG(std::fabs(shortWay(before, hinged.maxRad)) < 0.05,
+              "and it ends held on it, the reading " + std::to_string(before) + " against the stop " + std::to_string(hinged.maxRad));
+}
+
 void WithoutItsAnchorThereIsNoHinge() {
     // The anchor is static, so a level started without its statics has none, and
     // a joint attached to nothing would be worse than no joint at all.
@@ -571,6 +633,7 @@ void runTests() {
     WhatTheLevelsCarry();
     TheAuthoredRangeIsMeasuredFromTheRestAngle();
     ASeesawStopsAtItsOwnEnds();
+    ASeesawNeverJumpsAcrossPi();
     WithoutItsAnchorThereIsNoHinge();
     EveryHingedBodyStandsWhereItsJointHoldsIt();
     AJointWhoseEndsAlreadyMeetMovesNothing();

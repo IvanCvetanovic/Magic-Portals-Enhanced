@@ -69,10 +69,12 @@
 // Two things hide this and are worth knowing. The solver ORDERS the pair itself
 // (constraint.minAngle = min(authored min, max)), so swapping the two does
 // nothing whatever and only a negation was ever doing anything. And a 254 px
-// seesaw on a 127 px arm meets the level's own geometry before it reaches EITHER
-// stop - level30a's settles at 2.11 turned one way and 1.67 the other, neither of
-// them a limit - so "it stopped early" is the ordinary case and says nothing at
-// all about which way the angle runs.
+// seesaw on a 127 px arm can meet the level's own geometry before it reaches a
+// stop - level30a's meets the T-stem near 1.81 turned the CW way - so "it stopped
+// early" is the ordinary case and says nothing about which way the angle runs.
+// (Turned the other way it reaches its UPPER stop, 3.1958, past pi, and is held
+// there: planning step 226. It was once read as "settles at 2.11, not a limit",
+// which was the engine's angle wrapping at pi.)
 //
 // level30a is the only level that can tell a wrong sign from a right one: it
 // swings 1.1325 one way and 0.4382 the other, where every other placement in the
