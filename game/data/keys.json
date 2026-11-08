@@ -111,9 +111,10 @@
     ],
     "_deviation": [
       "A key that has found its keyhole flies into it and is deleted at the fly-in's last frame (#646):",
-      "the fly-in is not built (_not_built), the port holds the key's picture where it opened its keyhole",
-      "until that keyhole is gone, and the light is tied to that picture, so it stays as long as the",
-      "picture does."
+      "the port draws that since planning step 233 (effects.json key_fly_in, Effects::PoseOf), so the key's",
+      "picture, its sparkles and this light go on that frame, about 1.3 s after the unlock and before the",
+      "keyhole (1.5 s). The light is tied to the picture, so it ends with it. A key the layer cannot find the",
+      "fly-in's clock for is still held where it opened its keyhole until that keyhole is gone."
     ],
     "colour_name": "red",
     "colour": [1.0, 0.0, 0.0],
@@ -218,11 +219,15 @@
   ],
 
   "_not_built": [
-    "The fly-in animation a spent key plays: a WaypointManager of timed waypoints with",
-    "smoothEnd filters, running some 400 instructions, that carries the key from where it",
-    "was into the keyhole. It is presentation, and this port has no renderer.",
+    "The fly-in animation a spent key plays (a WaypointManager of timed waypoints with smoothEnd",
+    "filters that carries the key from where it was into the keyhole) is BUILT since planning step",
+    "233: effects.json key_fly_in has its six waypoints, Effects::AdvanceFlyIn its clock and",
+    "Effects::PoseOf where the key stands on it; the layer draws the key there. This file's state",
+    "(`spent`, `opened`, the keyhole's own clock) is unchanged by it.",
     "",
-    "With it: fixKeyAngle, the pick and unlock sounds, and the red key's achievement 61.",
+    "Still not built: fixKeyAngle (the -45 degree tilt of a carried key; the flight's first leg turns",
+    "the key from 0, not from -45, to -90). (The sounds that went with it, in the line this replaces, are",
+    "sounds.json's since; the red key's achievement 61 is the achievements module's, not this file's.)",
     "(The red key's per-frame AddLight is built since planning step 168: red_light above.",
     "The earthquake a door's removal starts is built since step 101: earthquake.json's",
     "door_unlocked, fired from `opened`. The five effect",

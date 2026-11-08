@@ -2816,14 +2816,19 @@ bool MagicPortalsLayer::effectOwnerPoint(const entt::registry& registry, const E
         return false;
     case EffectOwner::Kind::Key: {
         // Where the carry left it and its bob put it, as a level key's picture is
-        // (syncSprites): it goes, sparkles and all, when the keyhole it opened goes.
+        // (syncSprites); once spent, where its flight into the keyhole has it (planning
+        // step 233), and gone - sparkles and all - on the manager's last frame, or with
+        // the keyhole it opened if that goes first. Added at angle 0, which its flight
+        // turns from.
         if (owner.index < 0 || owner.index >= static_cast<int>(m_level.keys.keys.size())) return false;
         const Keys::Key& key = m_level.keys.keys[static_cast<std::size_t>(owner.index)];
         if (key.spent && key.opened >= 0 && key.opened < static_cast<int>(m_level.keys.keyholes.size()) &&
             m_level.keys.keyholes[static_cast<std::size_t>(key.opened)].gone) {
             return false;
         }
-        atPx = key.atPx + owner.offsetPx;
+        const std::optional<Effects::FlyPose> fly = keyFlyPose(owner.index, 0.0);
+        if (fly && fly->deleted) return false;
+        atPx = (fly ? fly->atPx : key.atPx) + owner.offsetPx;
         for (const DroppedKey& dropped : m_droppedKeys) {
             if (dropped.key == owner.index && key.owner == entt::null && !key.spent) atPx += Motion::OffsetPx(dropped.bob);
         }
@@ -3162,6 +3167,16 @@ void MagicPortalsLayer::updateEffects(entt::registry& registry, float deltaTime)
         }
         effect.atPx = atPx;
         effect.hidden = hidden;
+        // A KEY A BOSS DROPPED, ON ITS FLIGHT INTO THE KEYHOLE (planning step 233): its callback's
+        // SetAngle and SetAlpha, as a level key's picture takes them (syncSprites); effectOwnerPoint
+        // has put the point. Its sparkles turn with the angle and are not faded: the alpha is its
+        // sprite's alone (tint, below).
+        if (effect.follow.kind == EffectOwner::Kind::Key) {
+            if (const std::optional<Effects::FlyPose> fly = keyFlyPose(effect.follow.index, 0.0)) {
+                effect.angleDeg = fly->angleDeg;
+                effect.alpha = fly->alpha;
+            }
+        }
         // CHAPTER 4'S BOSS (planning step 99): what its callback wrote this tick -
         // SetFrame, SetAngle, SetEmissiveColor. Its mouth's Kill/Play waits until
         // its particles have been stepped, below.
@@ -7348,19 +7363,39 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             }
         } else if (drawn.key >= 0) {
             // A key is not a body (Keys.hpp): where the carry left it, picture and
-            // sparkle together. The fly-in it plays once spent is not built
-            // (keys.json _not_built), so a spent key holds where it opened its
-            // keyhole and goes, sparkles and all, when that keyhole goes: no key is
-            // left lying where a door stood.
+            // sparkle together. Once spent it FLIES into the keyhole it opened
+            // (effects.json key_fly_in, planning step 233): on the pose of the one clock
+            // latchSimEffects keeps for it, turned to -90, slid in and faded, and deleted
+            // on the manager's last frame - the picture, its sparkles and its light with
+            // it - about 1.3 s after the unlock, before the keyhole's own 1.5 s (the door
+            // does not wait for the key: Keys.cpp). A key whose clock is not there (none
+            // but a test's sprite sync before the first latch) is held where it opened
+            // its keyhole and goes when that keyhole does: no key is left lying where a
+            // door stood.
             const Keys::Key& key = m_level.keys.keys[static_cast<std::size_t>(drawn.key)];
-            gone = key.spent && key.opened >= 0 && key.opened < static_cast<int>(m_level.keys.keyholes.size()) &&
-                   m_level.keys.keyholes[static_cast<std::size_t>(key.opened)].gone;
+            const std::optional<Effects::FlyPose> fly = keyFlyPose(drawn.key, ownerAngleDeg);
+            gone = (key.spent && key.opened >= 0 && key.opened < static_cast<int>(m_level.keys.keyholes.size()) &&
+                    m_level.keys.keyholes[static_cast<std::size_t>(key.opened)].gone) ||
+                   (fly && fly->deleted);
             centrePx += key.atPx - sprite.atPx;
             // The light its callback adds stands where the PREVIOUS call left the key (AddLight is before
             // linearMotion and the carry, #119-186 against #666-679 and #932-976), and drawn.ownerPx still
             // holds that: it is written at the end of this loop.
             if (drawn.keyLight >= 0) m_keyLights[static_cast<std::size_t>(drawn.keyLight)].atPx = drawn.ownerPx;
             ownerPx = key.atPx;
+            if (fly) {
+                // SetPositionXY, SetAngle and SetAlpha of #551-591. Ethanon's angle turns counter-clockwise on the
+                // screen, as the dragon's does (below): -90 stands the ring to the right and the bit to the left,
+                // as F9 shows it. The picture hangs off the point by its offset (none for key.ent) and turns
+                // with it. The sparkles and the light take the point and the angle, through ownerPx and
+                // ownerAngleDeg, and NOT the alpha: SetAlpha is the sprite's alone, and the sparkles go on
+                // until the key is deleted.
+                ownerPx = fly->atPx;
+                ownerAngleDeg = fly->angleDeg;
+                rotation = Units::ToWorldRotation(-ownerAngleDeg * 3.14159265358979323846 / 180.0);
+                centrePx = ownerPx + Particles::Turn(sprite.offsetPx, ownerAngleDeg);
+                drawn.fade = static_cast<float>(fly->alpha);
+            }
             // Lying unowned, it bobs about where it lies: where the level put it, or
             // where it was dropped (ETHCallback_key rewrites originalPos on every
             // carried frame). Carried or spent, it does not.
@@ -7673,6 +7708,20 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
             m_platformDrawn = true;
         }
     }
+}
+
+std::optional<Effects::FlyPose> MagicPortalsLayer::keyFlyPose(int keyIndex, double startAngleDeg) const {
+    if (keyIndex < 0 || keyIndex >= static_cast<int>(m_level.keys.keys.size()) ||
+        keyIndex >= static_cast<int>(m_keyEffects.size())) {
+        return std::nullopt;
+    }
+    const Keys::Key& key = m_level.keys.keys[static_cast<std::size_t>(keyIndex)];
+    if (!key.spent || key.opened < 0 || key.opened >= static_cast<int>(m_level.keys.keyholes.size())) {
+        return std::nullopt;
+    }
+    const Keys::Keyhole& hole = m_level.keys.keyholes[static_cast<std::size_t>(key.opened)];
+    return Effects::PoseOf(m_effectRules, m_keyEffects[static_cast<std::size_t>(keyIndex)].flyIn, key.atPx,
+                           startAngleDeg, hole.atPx);
 }
 
 bool MagicPortalsLayer::motionRuns(const DrawnSprite& drawn) const {
@@ -9070,15 +9119,16 @@ void MagicPortalsLayer::advanceMinions(const ScriptClock::Step& step) {
     for (std::size_t i = 0; i < minions.size(); ++i) {
         const Minions::Minion& minion = minions[i];
         // The sim's arms, one for one. A knight that holds with something in sight is NOT given its standing
-        // frame (ETHCallback_minion #1184-1190: SetFrame only `if (entityInSight == null)`), so Watch sets nothing,
-        // as the lone guard's Settled does; and a knight whose way is blocked searches (#1229-1321), the arm
-        // art.json minion.search was written for.
+        // frame by the script (ETHCallback_minion #1184-1190: SetFrame only `if (entityInSight == null)`), so the
+        // decode leaves it on its last stride's frame, as the lone guard's Settled is left; Art::UpdateMinion draws it
+        // standing all the same when art.json minion.watch_stands says so (the owner's deviation, planning step 234).
+        // A knight whose way is blocked searches (#1229-1321), the arm art.json minion.search was written for.
         Art::MinionArm arm = Art::MinionArm::None;
         switch (minion.arm) {
         case Minions::Arm::Walk: arm = Art::MinionArm::Walk; break;
         case Minions::Arm::Hold: arm = Art::MinionArm::Hold; break;
         case Minions::Arm::Settled: arm = Art::MinionArm::Settled; break;
-        case Minions::Arm::Watch: arm = Art::MinionArm::Settled; break;
+        case Minions::Arm::Watch: arm = Art::MinionArm::Watch; break;
         case Minions::Arm::Search: arm = Art::MinionArm::Search; break;
         case Minions::Arm::None: break;
         }
@@ -11126,7 +11176,8 @@ void MagicPortalsLayer::latchSimEffects(const entt::registry& registry, const Sc
         watch.owner = key.owner;
         // SPENT: the fly-in's clock, whose frame 1 adds key_unlock_halo at
         // vector3(keyholePos, scale(32)) - the keyhole it found, at a depth of its
-        // own - 41 ticks after the unlock at 60 Hz. The flight itself is not built.
+        // own - 41 ticks after the unlock at 60 Hz. The same clock steps on to the manager's last
+        // frame, which says where the key is drawn on its flight and when it goes (keyFlyPose).
         const bool haloNow =
             Effects::AdvanceFlyIn(m_effectRules, watch.flyIn, key.spent, ScriptClock::Ms(step));
         if (haloNow && key.opened >= 0 && key.opened < static_cast<int>(keyholes.size())) {
@@ -12889,8 +12940,9 @@ void MagicPortalsLayer::latchSimSounds(const ScriptClock::Step& step) {
             if (crystal.timed && !crystal.collected && !crystal.expired) latch("crystal_alert");
         }
     }
-    // A key's fly-in, on the clock latchSimEffects keeps for its halo: the frame
-    // it builds its WaypointManager plays playDoorUnlockSound (ETHCallback_key
+    // A key's fly-in, on a clock of the sound's own that steps exactly as the one
+    // latchSimEffects keeps for the halo and the flight (Effects::AdvanceFlyIn): the
+    // frame it builds its WaypointManager plays playDoorUnlockSound (ETHCallback_key
     // #221-550), and its frame 1 playKeyUnlockSound with the halo (#593-635).
     if (m_soundCues.keyFlyIns.size() < m_level.keys.keys.size()) m_soundCues.keyFlyIns.resize(m_level.keys.keys.size());
     for (std::size_t i = 0; i < m_level.keys.keys.size(); ++i) {

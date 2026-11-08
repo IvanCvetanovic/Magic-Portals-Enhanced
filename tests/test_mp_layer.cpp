@@ -3543,6 +3543,185 @@ void AKnightThatSeesThePlayerAddsItsExclamationAndPlaysItsSound() {
     layer.OnDetach(registry);
 }
 
+// A knight braked with something in sight is drawn standing (planning step 234, the owner's 3-05 report: the right-hand
+// knight "gets stuck in front of the door, in the walking animation"). The decode's script sets no frame on that arm
+// (ETHCallback_minion #1184-1190), so the picture would stay on the last frame the stride wrote; art.json's watch_stands, the
+// owner's deviation, draws the hold's frame instead. level0b (3-01): minion_spawn_1811 walks left from (546, 106) to wayA0
+// (509, 112) and holds there with the player in plain view 60 units beyond it from the first tick, so it arrives with
+// someone in sight and is Watch from the tick after its last stride.
+void ABrakedKnightThatSeesThePlayerIsDrawnStandingNotMidStride() {
+    if (!OriginalArtIsThere("ABrakedKnightThatSeesThePlayerIsDrawnStandingNotMidStride")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level0b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const std::string patroller = "minion_spawn_1811";
+    const glm::dvec2 inView(450.0, 109.9);
+    int walkTicks = 0;
+    int watchTicks = 0;
+    int otherTicks = 0;
+    int strideChanges = 0;
+    int lastColumn = 0;
+    int lastStrideColumn = -1;     // the column on the last tick it walked
+    int columnBeforeWatch = -1;    // and the one drawn on the tick before its first Watch
+    bool firstWatchAfterWalk = false;
+    bool watchStands = true;
+    std::string firstWrong;
+    MagicPortals::Minions::Arm previous = MagicPortals::Minions::Arm::None;
+    for (int tick = 1; tick <= 100; ++tick) {
+        HoldPlayerAt(registry, layer, inView);
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortals::Minions::Minion* sim = SimMinion(layer, patroller);
+        const std::vector<MagicPortalsLayer::MinionReport> reports = layer.MinionReports();
+        const MagicPortalsLayer::MinionReport* drawn = MinionOf(reports, patroller);
+        if (sim == nullptr || drawn == nullptr) break;
+        if (sim->arm == MagicPortals::Minions::Arm::Walk) {
+            ++walkTicks;
+            if (drawn->column != lastColumn) ++strideChanges;
+            lastStrideColumn = drawn->column;
+        } else if (sim->arm == MagicPortals::Minions::Arm::Watch) {
+            if (watchTicks == 0) {
+                firstWatchAfterWalk = previous == MagicPortals::Minions::Arm::Walk;
+                columnBeforeWatch = lastColumn;
+            }
+            ++watchTicks;
+            if ((drawn->column != 0 || drawn->row != 1) && watchStands) {
+                watchStands = false;
+                firstWrong = "tick " + std::to_string(tick) + ": column " + std::to_string(drawn->column) + ", row " +
+                             std::to_string(drawn->row);
+            }
+        } else {
+            ++otherTicks;
+        }
+        lastColumn = drawn->column;
+        previous = sim->arm;
+    }
+    // It walks the 29 units to wayA0 as AMinionWalksOnItsSheet has it walk, with the player in sight all the way (it does
+    // not stop for a sighting while its dwell is served: holdMs starts at 0), strides, and is Watch from its arrival on.
+    CHECK_MSG(walkTicks >= 26 && walkTicks <= 32 && strideChanges >= 3,
+              "it walked " + std::to_string(walkTicks) + " ticks in " + std::to_string(strideChanges) + " strides");
+    CHECK_MSG(watchTicks >= 60 && otherTicks <= 3, "and watched from there: " + std::to_string(watchTicks) + " Watch ticks, " +
+                                                       std::to_string(otherTicks) + " of anything else");
+    // The pin has teeth only if the stride's last frame is not the standing one: else the decode and the deviation draw
+    // the same picture.
+    CHECK_MSG(firstWatchAfterWalk && lastStrideColumn > 0 && columnBeforeWatch == lastStrideColumn,
+              "it arrived mid-stride, on column " + std::to_string(lastStrideColumn) + " (before its watch " +
+                  std::to_string(columnBeforeWatch) + ")");
+    CHECK_MSG(watchStands, "watched on column 0 of row 1, standing, on every tick; the first that was not: " + firstWrong);
+    std::printf("test_mp_layer: 3-01's knight walked %d ticks to its post, stride column %d, then %d Watch ticks standing\n",
+                walkTicks, lastStrideColumn, watchTicks);
+    layer.OnDetach(registry);
+}
+
+// 3-05 (level4b): the owner's "the right enemy sometimes gets stuck in front of the door, in the walking animation, as if there
+// is something he can't get over" (planning step 234, reproduction R-B). The right-hand knight A, minion_spawn_1811, patrols
+// the floor between its posts at x 420 (against the lift door under the wall at x 352-416) and x 622; the player, on the far
+// side, steps on the door's button at (336, 205.9), which opens it. This case lets A start its walk back toward the door and
+// then puts the player on the button: A sees him down the open floor, which restarts its dwell (a first sighting resets the
+// clock) and brakes it, where it is, for as long as it sees him and the dwell is not served - the original's own behaviour
+// (ETHCallback_minion #1183-1205) - and the only frame its script then draws is none, so the picture keeps the last stride's
+// unless art.json's watch_stands draws it standing. The knight is Watch twice: where it saw him, and against the door when its
+// walk ends there. (His shots kill him within the case, as they do the player in the original; the knights then go on with
+// their patrol, still "seeing" the body.)
+void TheKnightByThe3_05DoorBrakesWhereItSawThePlayerOnTheButton() {
+    if (!OriginalArtIsThere("TheKnightByThe3_05DoorBrakesWhereItSawThePlayerOnTheButton")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level4b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    const std::string name = "minion_spawn_1811";
+    const MagicPortals::Minions::Minion* knight = SimMinion(layer, name);
+    CHECK_MSG(knight != nullptr && knight->waypoints.size() == 2, "A is a patroller of two posts");
+    if (knight == nullptr || knight->waypoints.size() != 2) return;
+    const std::size_t rightIndex = knight->waypoints[0].atPx.x > knight->waypoints[1].atPx.x ? 0 : 1;
+    const std::size_t leftIndex = 1 - rightIndex;
+    const double leftPostX = knight->waypoints[leftIndex].atPx.x;
+    // Idle until A has held at its right post and set off back toward the left one.
+    int setOff = -1;
+    bool heldRight = false;
+    for (int tick = 1; tick <= 3000 && setOff < 0; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortals::Minions::Minion* sim = SimMinion(layer, name);
+        if (sim == nullptr) break;
+        if (sim->arrivedAt == rightIndex && sim->arm != MagicPortals::Minions::Arm::Walk) heldRight = true;
+        if (heldRight && sim->arm == MagicPortals::Minions::Arm::Walk && sim->dest == leftIndex) setOff = tick;
+    }
+    CHECK_MSG(setOff > 0, "A held at its right post and set off for the left one");
+    if (setOff < 0) return;
+    // A dozen strides' worth of ticks on, the player steps on the button.
+    for (int tick = 0; tick < 12; ++tick) tickWith(layer, registry, kRest, {}, {});
+    const auto knightX = [&]() {
+        return MagicPortals::Units::ToPixels(registry.get<TransformComponent>(SimMinion(layer, name)->body).position).x;
+    };
+    PutPlayerAt(registry, layer, glm::dvec2(336.0, 205.9));
+    struct Run {
+        int from = 0;           // ticks since the player was put down
+        int ticks = 0;
+        double x = 0.0;         // where it braked
+        double drift = 0.0;     // the furthest it went from there
+        int columnBefore = -1;  // the column drawn on the tick before the run
+        bool standing = true;   // column 0 of the row it walked, on every tick of the run
+    };
+    std::vector<Run> runs;
+    int firstSeen = -1;
+    int shotOne = -1;
+    int died = -1;
+    int lastColumn = -1;
+    bool watching = false;
+    for (int tick = 1; tick <= 700; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        const MagicPortals::Minions::Minion* sim = SimMinion(layer, name);
+        const std::vector<MagicPortalsLayer::MinionReport> reports = layer.MinionReports();
+        const MagicPortalsLayer::MinionReport* drawn = MinionOf(reports, name);
+        if (sim == nullptr || drawn == nullptr) break;
+        const double x = knightX();
+        if (sim->seeing && firstSeen < 0) firstSeen = tick;
+        if (shotOne < 0 && layer.SimLevel()->minions.shotsFired > 0) shotOne = tick;
+        if (died < 0 && layer.SimLevel()->hazards.playerDied) died = tick;
+        const bool watch = sim->arm == MagicPortals::Minions::Arm::Watch;
+        if (watch && !watching) {
+            Run run;
+            run.from = tick;
+            run.x = x;
+            run.columnBefore = lastColumn;
+            runs.push_back(run);
+        }
+        if (watch) {
+            Run& run = runs.back();
+            ++run.ticks;
+            run.drift = std::max(run.drift, std::fabs(x - run.x));
+            if (drawn->column != 0 || drawn->row != 1) run.standing = false;
+        }
+        watching = watch;
+        lastColumn = drawn->column;
+    }
+    for (const Run& run : runs) {
+        std::printf("test_mp_layer: 3-05's knight A watched from +%d for %d ticks at x %.1f (moved %.2f), stride column before %d, standing %d\n",
+                    run.from, run.ticks, run.x, run.drift, run.columnBefore, run.standing ? 1 : 0);
+    }
+    std::printf("test_mp_layer: 3-05: the player put on the button at layer tick %d with A set off at %d; seen +%d, first shot +%d, dead +%d\n",
+                setOff + 12, setOff, firstSeen, shotOne, died);
+    CHECK_MSG(firstSeen >= 1 && firstSeen <= 30, "A sees him down the open floor within a few strides: +" + std::to_string(firstSeen));
+    // Braked where it saw him: still, for as long as the dwell the sighting restarted lasts (4000 ms: the right post's hold,
+    // the one it adopted on its last arrival), standing - and it was in mid-stride when the brake began.
+    CHECK_MSG(runs.size() >= 2, "A watched twice (where it saw him, and against the door): " + std::to_string(runs.size()));
+    if (runs.size() < 2) return;
+    const Run& there = runs[0];
+    const Run& door = runs[1];
+    CHECK_MSG(there.from == firstSeen + 1 && there.ticks >= 200 && there.drift < 1.0 && there.x > leftPostX + 100.0,
+              "braked where it saw him for " + std::to_string(there.ticks) + " ticks at x " + std::to_string(there.x));
+    CHECK_MSG(there.columnBefore > 0, "mid-stride when the brake began, on column " + std::to_string(there.columnBefore));
+    CHECK_MSG(door.ticks >= 100 && door.x >= leftPostX && door.x <= leftPostX + 15.0 && door.drift < 1.0,
+              "and against the door, on its post, for " + std::to_string(door.ticks) + " ticks at x " + std::to_string(door.x));
+    CHECK_MSG(door.columnBefore > 0, "mid-stride when its walk ended there, on column " + std::to_string(door.columnBefore));
+    CHECK_MSG(there.standing && door.standing, "standing on both: column 0 of the row it walked, on every tick");
+    layer.OnDetach(registry);
+}
+
 void TheMinionsStandBehindThePlayerAndTheArtAtTwo() {
     // R10 and minion_spawn's 2, both raw depths over the scale factor the level's
     // own nodes were multiplied by (art.json depth): the player at 1.42 and a minion
@@ -4507,6 +4686,32 @@ void ParticlesGoWithTheirLevel() {
 entt::entity SpriteOf(entt::registry& registry, const char* tag, const std::string& file);
 
 // The first report of `node`'s system `slot`, or null.
+// A spent key's flight on this layer's 16 ms ticks, worked by hand from effects.json key_fly_in (and not from
+// Effects::PoseOf, which it is held against): `tickSince` counts the ticks after the one the key found its keyhole on
+// (0), which the next builds the manager on; 42 steps of 16 ms are 672 against w0's 666 (frame 1 on tick 43), the tick
+// frame 1 stood on stays in w2's clock (frame 2 on 44, 406 of its 400 on 68 = frame 3, 214 of w3's 200 on 81 = frame 4),
+// and the key is deleted on 82. Leg 0 goes from `start` and 0 degrees to `hole` + (20, -4) and -90, then the slide to
+// `hole` + (8, -4), then the fade; each eased by sin(bias x PIb).
+struct KeyFlight {
+    glm::dvec2 at;
+    double angleDeg;
+    double alpha;
+};
+KeyFlight KeyFlightAt(int tickSince, const glm::dvec2& start, const glm::dvec2& hole) {
+    const auto eased = [](double bias) { return std::sin(bias * 1.570796327); };
+    const glm::dvec2 w1 = hole + glm::dvec2(20.0, -4.0);
+    const glm::dvec2 w3 = hole + glm::dvec2(8.0, -4.0);
+    const int n = tickSince - 1; // steps since the manager was built
+    if (tickSince < 1 || n <= 41) {
+        const double e = tickSince < 1 ? 0.0 : eased(std::min(666.0, 16.0 * n) / 666.0);
+        return KeyFlight{start + (w1 - start) * e, -90.0 * e, 1.0};
+    }
+    if (n == 42) return KeyFlight{w1, -90.0, 1.0};
+    if (n <= 66) return KeyFlight{w1 + (w3 - w1) * eased((6.0 + 16.0 * (n - 42)) / 400.0), -90.0, 1.0};
+    if (n <= 79) return KeyFlight{w3, -90.0, 1.0 - eased((6.0 + 16.0 * (n - 67)) / 200.0)};
+    return KeyFlight{w3, -90.0, 0.0};
+}
+
 const MagicPortalsLayer::EmitterReport* ReportOf(const std::vector<MagicPortalsLayer::EmitterReport>& reports,
                                                  const std::string& node, int slot) {
     for (const MagicPortalsLayer::EmitterReport& report : reports) {
@@ -4740,21 +4945,77 @@ void AnEmitterFollowsItsOwner() {
         CHECK(keyhole != nullptr);
         if (keyhole != nullptr) {
             const glm::dvec2 holeAt = keyhole->atPx;
+            // THE KEY'S FLIGHT (planning step 233; effects.json key_fly_in): from the tick it finds its
+            // keyhole (`since` 0, on one of the 30 below), what each tick draws of it is kept - the
+            // picture's place, turn and alpha, and where its two sparkle systems stand. On this layer's
+            // 16 ms ticks the manager's frames 1 to 5 come on since 43, 44, 68, 81 and 82, worked by hand
+            // (test_mp_effects pins the stepper on other tick lengths): 42 steps of 16 ms are 672 against
+            // w0's 666, 24 more make 406 against w2's 400, 13 more 214 against w3's 200. The key goes on
+            // 82, the keyhole after it.
+            struct Seen {
+                bool valid = false;          // its picture is still there
+                glm::dvec2 at{0.0};          // its centre
+                float rotation = 0.0f;       // the quad's turn about +z
+                float alpha = 0.0f;          // the quad's alpha
+                bool sparklesFollow = false; // both systems on its point, turned by its angle
+                bool sparklesGone = false;   // both owner-less and drawing nothing
+            };
+            std::vector<Seen> seen;
+            int since = -1;
+            glm::dvec2 keyAtUnlock(0.0);
+            int keyMoved = 0;
+            int keyholeGoneSince = -1;
+            const auto observe = [&]() {
+                const auto* nowKey = layer.SimLevel()->keys.FindKey(name);
+                const auto* nowHole = layer.SimLevel()->keys.FindKeyhole(hole);
+                if (since < 0 && nowHole->unlocked) {
+                    since = 0;
+                    keyAtUnlock = nowKey->atPx;
+                } else if (since >= 0) {
+                    ++since;
+                }
+                if (since < 0) return;
+                if (nowKey->atPx != keyAtUnlock) ++keyMoved;
+                if (nowHole->gone && keyholeGoneSince < 0) keyholeGoneSince = since;
+                Seen one;
+                one.valid = registry.valid(picture);
+                if (one.valid) {
+                    const auto& transform = registry.get<TransformComponent>(picture);
+                    one.at = MagicPortals::Units::ToPixels(transform.position);
+                    one.rotation = transform.rotation.z;
+                    one.alpha = registry.get<MaterialComponent>(picture).albedoColor.a;
+                }
+                const std::vector<MagicPortalsLayer::EmitterReport> reports = layer.EmitterReports();
+                const auto* first = ReportOf(reports, name, 0);
+                const auto* second = ReportOf(reports, name, 1);
+                if (first != nullptr && second != nullptr) {
+                    // Ethanon's angle turns counter-clockwise, the quad's +z does too: the same number in radians.
+                    const double turned = one.rotation;
+                    one.sparklesFollow = one.valid && glm::distance(first->owner.atPx, one.at) < 1e-3 &&
+                                         glm::distance(second->owner.atPx, one.at) < 1e-3 &&
+                                         std::fabs(first->owner.angleDeg * 3.14159265358979323846 / 180.0 - turned) < 2e-5 &&
+                                         std::fabs(second->owner.angleDeg * 3.14159265358979323846 / 180.0 - turned) < 2e-5 &&
+                                         !first->ownerGone && !second->ownerGone;
+                    one.sparklesGone = first->ownerGone && first->drawn == 0 && second->ownerGone && second->drawn == 0;
+                }
+                seen.push_back(one);
+            };
             for (int tick = 0; tick < 30; ++tick) {
                 PutPlayerAt(registry, layer, holeAt);
                 tickWith(layer, registry, kRest, {}, {});
                 layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+                observe();
             }
             CHECK_MSG(layer.SimLevel()->keys.FindKeyhole(hole)->unlocked, "the key opened its keyhole");
             CHECK_MSG(layer.SimLevel()->keys.FindKey(name)->spent, "and is spent");
             int fading = 0;
             int offAlpha = 0;
-            int keyGoneEarly = 0;
             bool goneWithSparkle = false;
             bool keyGoneWithIt = false;
             for (int tick = 0; tick < 120; ++tick) {
                 tickWith(layer, registry, kRest, {}, {});
                 layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+                observe();
                 const auto* now = layer.SimLevel()->keys.FindKeyhole(hole);
                 const entt::entity quad = SpriteOf(registry, "Magic Portals Sprite", "/keyhole.png");
                 const std::vector<MagicPortalsLayer::EmitterReport> reports = layer.EmitterReports();
@@ -4762,16 +5023,14 @@ void AnEmitterFollowsItsOwner() {
                     const auto* sparkle = ReportOf(reports, hole, 0);
                     goneWithSparkle = quad == entt::null && sparkle != nullptr && sparkle->ownerGone &&
                                       sparkle->drawn == 0;
-                    // The spent key, whose fly-in is not built, goes with the keyhole it
-                    // opened, both its sparkles with it, rather than lie where the door was.
+                    // The spent key was deleted on its fly-in's last frame, before the keyhole,
+                    // both its sparkles with it: nothing of it is left where the door was.
                     const auto* first = ReportOf(reports, name, 0);
                     const auto* second = ReportOf(reports, name, 1);
                     keyGoneWithIt = !registry.valid(picture) && first != nullptr && second != nullptr &&
                                     first->ownerGone && first->drawn == 0 && second->ownerGone && second->drawn == 0;
                     break;
                 }
-                // Until then it holds on the keyhole, drawn.
-                if (!registry.valid(picture)) ++keyGoneEarly;
                 if (quad == entt::null) {
                     ++offAlpha;
                     continue;
@@ -4785,8 +5044,75 @@ void AnEmitterFollowsItsOwner() {
                       std::to_string(fading) + " fading ticks, " + std::to_string(offAlpha) +
                           " with the picture's alpha not the keyhole's");
             CHECK_MSG(goneWithSparkle, "the faded keyhole's picture and sparkle went");
-            CHECK_MSG(keyGoneEarly == 0, std::to_string(keyGoneEarly) + " tick(s) the spent key went before its keyhole");
-            CHECK_MSG(keyGoneWithIt, "and the spent key's picture and both its sparkles went with the keyhole");
+            CHECK_MSG(keyGoneWithIt, "and the spent key's picture and both its sparkles are gone by then");
+
+            // THE FLIGHT, tick by tick, against the hand-worked model of the eased legs on 16 ms ticks
+            // (sin(bias x PIb), bias = min(stride, m_time) / stride of the frame it is on): leg 0 from where it
+            // was to hole + (20, -4) over 666 ms, turning to -90; frame 1 there; leg 2 a slide to hole + (8, -4)
+            // over 400; leg 3 a fade over 200; frame 4 at no alpha; frame 5 deleted.
+            const glm::dvec2 w1 = holeAt + glm::dvec2(20.0, -4.0);
+            const glm::dvec2 w3 = holeAt + glm::dvec2(8.0, -4.0);
+            int keyGoneAt = -1;
+            for (std::size_t at = 0; at < seen.size() && keyGoneAt < 0; ++at) {
+                if (!seen[at].valid) keyGoneAt = static_cast<int>(at);
+            }
+            int flightOff = 0;
+            int firstOff = -1;
+            for (int tickSince = 0; tickSince < 82 && tickSince < static_cast<int>(seen.size()); ++tickSince) {
+                const Seen& one = seen[static_cast<std::size_t>(tickSince)];
+                const KeyFlight want = KeyFlightAt(tickSince, keyAtUnlock, holeAt);
+                const bool right = one.valid && glm::distance(one.at, want.at) < 2e-3 &&
+                                   std::fabs(one.rotation - want.angleDeg * 3.14159265358979323846 / 180.0) < 2e-5 &&
+                                   std::fabs(static_cast<double>(one.alpha) - want.alpha) < 2e-4 && one.sparklesFollow;
+                if (!right) {
+                    ++flightOff;
+                    if (firstOff < 0) firstOff = tickSince;
+                }
+            }
+            CHECK_MSG(flightOff == 0, std::to_string(flightOff) + " of the first 82 ticks since the unlock the key's picture, turn, alpha "
+                                      "or sparkles were not where the eased legs put them, the first on " +
+                                          std::to_string(firstOff));
+            CHECK_MSG(keyGoneAt == 82 && keyholeGoneSince > keyGoneAt,
+                      "the key is deleted on the 82nd tick since the unlock and its keyhole after it: " + std::to_string(keyGoneAt) +
+                          ", " + std::to_string(keyholeGoneSince));
+            CHECK_MSG(keyGoneAt == 82 && seen[82].sparklesGone, "and both its sparkles with it, at once");
+            if (seen.size() > 82) {
+                // Frame 1: at hole + (20, -4), a quarter turn CLOCKWISE (-pi/2 about the engine's counter-clockwise +z: key.png's ring
+                // is at the top and its bit sticks out to the right at the foot, and F9's #208-#214 have the ring on the right and the
+                // bit below the shaft pointing left), whole.
+                CHECK_MSG(glm::distance(seen[43].at, w1) < 1e-3 && std::fabs(seen[43].rotation + 1.5707963267948966) < 2e-5 &&
+                              std::fabs(seen[43].alpha - 1.0f) < 1e-6f,
+                          "frame 1: at the keyhole's right, a quarter turn clockwise, whole: " + Point(seen[43].at));
+                CHECK_MSG(glm::distance(seen[0].at, keyAtUnlock) < 1e-3 && glm::distance(seen[1].at, keyAtUnlock) < 1e-3 &&
+                              std::fabs(seen[0].rotation) < 1e-6f,
+                          "until the manager is built the key stands where it was, upright");
+                // The slide is 12 units to hole + (8, -4) and never turns back; the fade is the last 200 ms alone.
+                int slideBack = 0;
+                for (int tickSince = 44; tickSince <= 68; ++tickSince) {
+                    if (seen[static_cast<std::size_t>(tickSince)].at.x > seen[static_cast<std::size_t>(tickSince - 1)].at.x + 1e-9) {
+                        ++slideBack;
+                    }
+                }
+                int wholeUntilFade = 0;
+                for (int tickSince = 0; tickSince <= 67; ++tickSince) {
+                    if (std::fabs(seen[static_cast<std::size_t>(tickSince)].alpha - 1.0f) > 1e-6f) ++wholeUntilFade;
+                }
+                int fadeRises = 0;
+                for (int tickSince = 69; tickSince <= 81; ++tickSince) {
+                    if (!(seen[static_cast<std::size_t>(tickSince)].alpha < seen[static_cast<std::size_t>(tickSince - 1)].alpha)) {
+                        ++fadeRises;
+                    }
+                }
+                CHECK_MSG(slideBack == 0 && std::fabs(seen[68].at.x - w3.x) < 1e-3 && std::fabs(seen[43].at.x - w1.x) < 1e-3,
+                          "it slides 12 units left and stops at hole + (8, -4): " + std::to_string(seen[43].at.x - seen[68].at.x));
+                CHECK_MSG(wholeUntilFade == 0 && fadeRises == 0 && seen[81].alpha == 0.0f,
+                          "whole until the last 200 ms, then it fades to nothing: " + std::to_string(wholeUntilFade) + " ticks "
+                              "short of whole, " + std::to_string(fadeRises) + " that did not fade");
+            }
+            // THE SIM IS UNTOUCHED: the key stays where the carry left it, `spent` and `opened` and the keyhole's own
+            // 1000 + 500 ms are Keys', which the flight only reads.
+            CHECK_MSG(keyMoved == 0, std::to_string(keyMoved) + " tick(s) the sim's spent key moved");
+            std::printf("  3-08's key: unlocked on tick 0, gone on tick %d; its keyhole gone on tick %d\n", keyGoneAt, keyholeGoneSince);
         }
 
         // A crystal taken takes its sparkle.
@@ -16246,6 +16572,68 @@ void TheGhostComesWithItsKnightsDeath() {
     std::printf("  level31b: the ghost added on the knight's death, in at ghost_pos 226 ticks later, burned %d times, "
                 "shot %d, and dropped its key; %zu scattered explosions, %d + %d ghost_utility_spawn\n",
                 level.ghost.hits, level.ghost.shotsMade, scatterFx.size(), atBarrel, atEscort);
+
+    // THE KEY IT DROPPED FLIES INTO THE KEYHOLE (planning step 233): no node pictures this key, so the effects
+    // runtime's key.ent takes the manager's pose - its point from effectOwnerPoint, its angle and alpha from
+    // updateEffects - and goes, sparkles and all, on the last frame. Taken where it lies, carried to the keyhole, and
+    // followed from the unlock on the hand-worked model (KeyFlightAt).
+    if (!level.keys.keys.empty() && !level.keys.keyholes.empty()) {
+        const std::size_t keyIndex = level.keys.keys.size() - 1;
+        const glm::dvec2 holeAt = level.keys.keyholes.front().atPx;
+        for (int tick = 0; tick < 120 && level.keys.keys[keyIndex].owner == entt::null; ++tick) {
+            PutBodyAt(registry, level.player, level.keys.keys[keyIndex].atPx);
+            step();
+        }
+        CHECK_MSG(level.keys.keys[keyIndex].owner == level.player, "the player takes the key the ghost dropped");
+        int since = -1;
+        int effectGoneAt = -1;
+        int off = 0;
+        int firstOff = -1;
+        int fadingOn70 = 0;
+        glm::dvec2 startAt(0.0);
+        int keyMoved = 0;
+        bool holeGone = false;
+        double lastAlpha = 1.0;
+        int alphaRises = 0;
+        for (int tick = 0; tick < 200 && effectGoneAt < 0; ++tick) {
+            PutBodyAt(registry, level.player, holeAt);
+            step();
+            const MagicPortals::Keys::Key& key = level.keys.keys[keyIndex];
+            if (since < 0 && key.spent) {
+                since = 0;
+                startAt = key.atPx;
+            } else if (since >= 0) {
+                ++since;
+            }
+            if (since < 0) continue;
+            if (key.atPx != startAt) ++keyMoved;
+            holeGone = holeGone || level.keys.keyholes.front().gone;
+            const std::vector<MagicPortalsLayer::EffectReport> now = effectsNamed("key.ent");
+            if (now.empty()) {
+                effectGoneAt = since;
+                break;
+            }
+            const KeyFlight want = KeyFlightAt(since, startAt, holeAt);
+            const MagicPortalsLayer::EffectReport& fx = now[0];
+            const bool right = fx.drawn && glm::distance(fx.atPx, want.at) < 2e-3 && std::fabs(fx.angleDeg - want.angleDeg) < 1e-4 &&
+                               std::fabs(fx.alpha - want.alpha) < 1e-6 && fx.systems == 2;
+            if (!right) {
+                ++off;
+                if (firstOff < 0) firstOff = since;
+            }
+            if (fx.alpha > lastAlpha + 1e-12) ++alphaRises;
+            lastAlpha = fx.alpha;
+            if (since == 70 && fx.alpha > 0.0 && fx.alpha < 1.0) ++fadingOn70;
+        }
+        CHECK_MSG(since > 0 && off == 0, std::to_string(off) + " tick(s) the dropped key's effect was not where the flight puts it, the first on " +
+                                             std::to_string(firstOff) + " (the key was spent " + std::to_string(since) + " ticks ago)");
+        CHECK_MSG(effectGoneAt == 82 && !holeGone,
+                  "the dropped key goes on the 82nd tick since its unlock, before its keyhole does: " + std::to_string(effectGoneAt));
+        CHECK_MSG(alphaRises == 0 && fadingOn70 == 1 && keyMoved == 0,
+                  "it only fades (" + std::to_string(alphaRises) + "), is part way faded on 70 (" + std::to_string(fadingOn70) +
+                      ") and the sim's key never moved (" + std::to_string(keyMoved) + ")");
+        std::printf("  level31b: the key the ghost dropped flew into the keyhole and went on tick %d since the unlock\n", effectGoneAt);
+    }
     layer.OnDetach(registry);
 }
 
@@ -25392,8 +25780,10 @@ struct MdRow {
 };
 
 const MdRow kMdTable[5] = {
-    {PtrControl::Left, "walk_left", {15.6444, 208.4978, 47.5022, 240.3556}, {0.0, 208.4978, 53.1911, 256.0}},
-    {PtrControl::Right, "walk_right", {58.8800, 208.4978, 90.7378, 240.3556}, {53.1911, 208.4978, 90.7378, 256.0}},
+    // The arrows' hit rectangles are their boxes, the pair's seam at the middle of their gap (planning step 232, the owner's ruling of 2026-11-08); the
+    // design's table had {0.0, 208.4978, 53.1911, 256.0} and {53.1911, 208.4978, 90.7378, 256.0}.
+    {PtrControl::Left, "walk_left", {15.6444, 208.4978, 47.5022, 240.3556}, {15.6444, 208.4978, 53.1911, 240.3556}},
+    {PtrControl::Right, "walk_right", {58.8800, 208.4978, 90.7378, 240.3556}, {53.1911, 208.4978, 90.7378, 240.3556}},
     {PtrControl::Reset, "restart", {346.1689, 15.6444, 387.1289, 56.6044}, {346.1689, 0.0, 392.8178, 56.6044}},
     {PtrControl::Menu, "pause", {398.5067, 15.6444, 439.4667, 56.6044}, {392.8178, 0.0, 455.1111, 56.6044}},
     {PtrControl::Clear, "clear_portals", {15.6444, 15.6444, 56.6044, 56.6044}, {0.0, 0.0, 56.6044, 56.6044}},
@@ -25402,8 +25792,9 @@ const MdRow kMdTable[5] = {
 // The SPLIT arrangement's rows of table 1.2 at 16:9 (planning step 186): walk_right in the bottom-right corner, the same literals as test_mp_controls'
 // kSplitTable. The corner buttons are the grouped rows'.
 const MdRow kMdTableSplit[5] = {
-    {PtrControl::Left, "walk_left", {15.6444, 208.4978, 47.5022, 240.3556}, {0.0, 208.4978, 47.5022, 256.0}},
-    {PtrControl::Right, "walk_right", {407.6089, 208.4978, 439.4667, 240.3556}, {407.6089, 208.4978, 455.1111, 256.0}},
+    // Each arrow's hit is its box (planning step 232); planning step 186 had {0.0, 208.4978, 47.5022, 256.0} and {407.6089, 208.4978, 455.1111, 256.0}.
+    {PtrControl::Left, "walk_left", {15.6444, 208.4978, 47.5022, 240.3556}, {15.6444, 208.4978, 47.5022, 240.3556}},
+    {PtrControl::Right, "walk_right", {407.6089, 208.4978, 439.4667, 240.3556}, {407.6089, 208.4978, 439.4667, 240.3556}},
     {PtrControl::Reset, "restart", {346.1689, 15.6444, 387.1289, 56.6044}, {346.1689, 0.0, 392.8178, 56.6044}},
     {PtrControl::Menu, "pause", {398.5067, 15.6444, 439.4667, 56.6044}, {392.8178, 0.0, 455.1111, 56.6044}},
     {PtrControl::Clear, "clear_portals", {15.6444, 15.6444, 56.6044, 56.6044}, {0.0, 0.0, 56.6044, 56.6044}},
@@ -25610,7 +26001,7 @@ void TheSharedSeamBetweenTheArrowsIsTheRightArrows() {
               "and the middle of the gap between the boxes");
     const double below = std::nextafter(seam, 0.0);
     const double above = std::nextafter(seam, 1000.0);
-    for (const double y : {209.0, 230.0, 255.99}) {
+    for (const double y : {209.0, 230.0, 240.3}) {
         CHECK_MSG(layer.ControlAt(glm::dvec2(seam, y)) == PtrClaim(PtrControl::Right),
                   "a point ON the seam at y " + PtrNum(y) + " is the right arrow's: " + PtrName(layer.ControlAt(glm::dvec2(seam, y))));
         CHECK_MSG(layer.ControlAt(glm::dvec2(below, y)) == PtrClaim(PtrControl::Left),
@@ -25642,8 +26033,10 @@ void TheSharedSeamBetweenTheArrowsIsTheRightArrows() {
     }
 }
 
-// The edge reach: the strip between a box and the view's edge is the control's, so a missed tap at the corner of the screen is not a
-// portal. Without a portal clear-portals is not shown and its corner is the world; with one it is claimed to the edge.
+// The edge reach: the strip between a CORNER BUTTON's box and the view's edge is the control's, so a missed tap at the corner of the screen is not a
+// portal. Without a portal clear-portals is not shown and its corner is the world; with one it is claimed to the edge. The two walk arrows have no
+// reach (planning step 232, the owner's ruling of 2026-11-08): the strip beside and under them is the world's (the rows say which; the geometry and the
+// pointer are TheWalkArrowsHitIsTheirBox... below).
 void TheCornerEdgeOfTheViewIsAControlPressInModern() {
     // Scope one: no portal.
     {
@@ -25659,11 +26052,15 @@ void TheCornerEdgeOfTheViewIsAControlPressInModern() {
         glm::dvec2 at;
         PtrClaim claim;
     } rows[] = {
-        {"the view's left edge beside the left arrow", glm::dvec2(0.0, 230.0), PtrControl::Left},
-        {"the bottom-left corner", glm::dvec2(0.5, H - 0.5), PtrControl::Left},
-        {"under the left arrow's box", glm::dvec2(20.0, H - 0.01), PtrControl::Left},
-        {"under the right arrow's box", glm::dvec2(80.0, H - 0.01), PtrControl::Right},
-        {"the right arrow, left of its box", glm::dvec2(55.0, 250.0), PtrControl::Right},
+        // The walk arrows have no reach to the view's edge (planning step 232, the owner's ruling of 2026-11-08): the strip beside and under them is the
+        // WORLD's, where these four rows used to be the arrows' (Left, Left, Left, Right).
+        {"the view's left edge beside the left arrow", glm::dvec2(0.0, 230.0), PtrClaim{}},
+        {"the bottom-left corner", glm::dvec2(0.5, H - 0.5), PtrClaim{}},
+        {"under the left arrow's box", glm::dvec2(20.0, H - 0.01), PtrClaim{}},
+        {"under the right arrow's box", glm::dvec2(80.0, H - 0.01), PtrClaim{}},
+        {"the left arrow's box", glm::dvec2(30.0, 224.0), PtrControl::Left},
+        {"the left arrow, right of its box (the seam's half)", glm::dvec2(50.0, 230.0), PtrControl::Left},
+        {"the right arrow, left of its box (the seam's half)", glm::dvec2(55.0, 230.0), PtrControl::Right},
         {"above the left arrow", glm::dvec2(20.0, 208.4), PtrClaim{}},
         {"right of the right arrow", glm::dvec2(91.0, 250.0), PtrClaim{}},
         {"the top-right corner", glm::dvec2(W - 0.5, 0.5), PtrControl::Menu},
@@ -25699,6 +26096,152 @@ void TheCornerEdgeOfTheViewIsAControlPressInModern() {
         CHECK_MSG(withPortal.layer.ControlAt(at) == PtrClaim(PtrControl::Clear), "with a portal " + Point(at) + " is clear-portals': " + PtrName(withPortal.layer.ControlAt(at)));
     }
     CHECK_MSG(!withPortal.layer.ControlAt(glm::dvec2(56.7, 30.0)) && !withPortal.layer.ControlAt(glm::dvec2(30.0, 56.7)), "and a thousandth beyond its box is the world");
+}
+
+// THE WALK ARROWS' HIT AREA IS THEIR BOX (planning step 232, PORT-28: the owner's ruling of 2026-11-08, from his 3-09 report). On 3-09 (level8b) the golden
+// key can only be had with a portal in the level's bottom-left corner, and the left arrow's hit rectangle used to run to the view's left edge and bottom
+// over it ("make the space on the left unclickable"). hit.walk_edge_reach_px is 0 now: the strip beside and under each arrow is the WORLD's. These two cases
+// are the owner's own phone, 2340 x 1080 (19.5:9, a view of 554.667 x 256 units), the arrows split as they ship, on his level; the corner buttons keep
+// their reach to the edge, and the arrows' boxes are still the arrows'. The numbers are literals: the design's box is a 31.8578-unit square whose
+// corner is 15.6444 units (44 px of the 720 reference) from the view's, and nothing the module computes stands in for them.
+void TheWalkArrowsHitIsTheirBoxAndTheStripBesideThemIsTheWorlds() {
+    const glm::vec2 window(2340.0f, 1080.0f);
+    MdRun run(MdSplitPaths(), "level8b", "TheWalkArrowsHitIsTheirBoxAndTheStripBesideThemIsTheWorlds", window);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    const MdGeom g = MdGeometry(layer);
+    const double W = g.view.x;
+    const double H = g.view.y;
+    CHECK_MSG(NearD(W, 256.0 * 2340.0 / 1080.0, 1e-4) && NearD(H, 256.0, 1e-9), "the view is 554.667 x 256 units: " + PtrNum(W) + " x " + PtrNum(H));
+    const double leftBox[4] = {15.6444, 208.4978, 47.5022, 240.3556};
+    const double rightBox[4] = {W - 47.5022, 208.4978, W - 15.6444, 240.3556};
+    CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Left)], leftBox, 1e-4), "the left arrow's box is the design's: " + MdShow(g.box[MdAt(PtrControl::Left)]));
+    CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Right)], rightBox, 1e-4), "the right arrow's box is its mirror: " + MdShow(g.box[MdAt(PtrControl::Right)]));
+    CHECK_MSG(MdRectIs(g.hit[MdAt(PtrControl::Left)], leftBox, 1e-4), "the left arrow's HIT is its box (it used to run to x 0 and y 256): " + MdShow(g.hit[MdAt(PtrControl::Left)]));
+    CHECK_MSG(MdRectIs(g.hit[MdAt(PtrControl::Right)], rightBox, 1e-4), "the right arrow's HIT is its box (it used to run to x " + PtrNum(W) + " and y 256): " + MdShow(g.hit[MdAt(PtrControl::Right)]));
+    // The strip beside and under the arrows, and the corners: the world's, the left ones and their mirrors about the view's middle.
+    int world = 0;
+    for (const glm::dvec2& at : {glm::dvec2(5.0, 225.0), glm::dvec2(0.5, H - 0.5), glm::dvec2(30.0, 250.0), glm::dvec2(47.4, 255.9), glm::dvec2(0.0, 230.0),
+                                 glm::dvec2(10.0, 224.0), glm::dvec2(15.6, 224.0), glm::dvec2(30.0, 240.4)}) {
+        const glm::dvec2 mirror(W - at.x, at.y);
+        CHECK_MSG(!layer.ControlAt(at), "the strip " + Point(at) + " is the world's, not " + PtrName(layer.ControlAt(at)));
+        CHECK_MSG(!layer.ControlAt(mirror), "and its mirror " + Point(mirror) + " is the world's, not " + PtrName(layer.ControlAt(mirror)));
+        if (!layer.ControlAt(at) && !layer.ControlAt(mirror)) ++world;
+    }
+    CHECK_MSG(world == 8, "eight strips, eight world points on both sides: " + std::to_string(world));
+    // The boxes themselves are the arrows': just inside each corner of the box and in the middle.
+    CHECK_MSG(layer.ControlAt(glm::dvec2(30.0, 224.0)) == PtrClaim(PtrControl::Left), "the left arrow's box is the left arrow's: " + PtrName(layer.ControlAt(glm::dvec2(30.0, 224.0))));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(W - 30.0, 224.0)) == PtrClaim(PtrControl::Right), "the right arrow's box is the right arrow's: " + PtrName(layer.ControlAt(glm::dvec2(W - 30.0, 224.0))));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(15.7, 208.6)) == PtrClaim(PtrControl::Left) && layer.ControlAt(glm::dvec2(47.4, 240.3)) == PtrClaim(PtrControl::Left),
+              "and so are the left box's corners, inside");
+    CHECK_MSG(layer.ControlAt(glm::dvec2(W - 15.7, 240.3)) == PtrClaim(PtrControl::Right) && layer.ControlAt(glm::dvec2(W - 47.4, 208.6)) == PtrClaim(PtrControl::Right),
+              "and the right box's");
+    // The corner buttons keep their reach to the view's edge: the top-right corner is pause's, the strip above and beside it too.
+    CHECK_MSG(layer.ControlAt(glm::dvec2(W - 0.5, 0.5)) == PtrClaim(PtrControl::Menu), "the top-right corner is still pause's: " + PtrName(layer.ControlAt(glm::dvec2(W - 0.5, 0.5))));
+    CHECK_MSG(layer.ControlAt(glm::dvec2(W - 0.01, 40.0)) == PtrClaim(PtrControl::Menu), "and so is its right strip: " + PtrName(layer.ControlAt(glm::dvec2(W - 0.01, 40.0))));
+    CHECK_MSG(!layer.ControlAt(glm::dvec2(0.5, 0.5)), "clear-portals is not shown without a portal, so the top-left corner is the world's");
+}
+
+// The same on a finger: a tap that goes down and comes up in the strip beside the left arrow fires a shot toward where it was (the last tap is the pixel
+// mapped into the level), the player does not walk, and nothing is reloaded or paused; a finger held in the box beside it walks him and fires nothing.
+void ATapInTheStripBesideAWalkArrowFiresAPortalAndAHoldInItsBoxWalks() {
+    const glm::vec2 window(2340.0f, 1080.0f);
+    MdRun run(MdSplitPaths(), "level8b", "ATapInTheStripBesideAWalkArrowFiresAPortalAndAHoldInItsBoxWalks", window);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const MdGeom g = MdGeometry(layer);
+    const double W = g.view.x;
+    const double H = g.view.y;
+    const struct {
+        const char* where;
+        glm::dvec2 at;
+        bool atLeftEdge; // the camera is put at the level's left edge first: the view's bottom-left corner is then the level's, where the golden key's portal goes
+    } probes[] = {
+        {"the corner of the view beside the left arrow", glm::dvec2(0.5, H - 0.5), true},
+        {"left of the left arrow's box", glm::dvec2(10.0, 224.0), true},
+        {"under the left arrow's box", glm::dvec2(30.0, 250.0), true},
+        {"right of the right arrow's box", glm::dvec2(W - 10.0, 224.0), false},
+        {"the corner of the view beside the right arrow", glm::dvec2(W - 0.5, H - 0.5), false},
+        {"under the right arrow's box", glm::dvec2(W - 30.0, 250.0), false},
+    };
+    int fired = 0;
+    for (const auto& probe : probes) {
+        const std::string where = std::string(probe.where) + " " + Point(probe.at);
+        CHECK_MSG(!layer.ControlAt(probe.at), where + ": claimed by " + PtrName(layer.ControlAt(probe.at)));
+        const glm::vec2 pixel = PtrPixel(layer, probe.at, window);
+        const double before = playerPx(registry, layer).x;
+        const double age = layer.LevelAgeMs();
+        const int shotsBefore = layer.SimLevel()->portals.shotsFired;
+        if (probe.atLeftEdge) layer.PlaceCameraForTest(registry, glm::dvec2(W * 0.5, H * 0.5));
+        tap(layer, registry, pixel);
+        glm::dvec2 aimed(0.0);
+        CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed), where + ": the pixel maps into the level");
+        // The camera has eased a tick toward the player since it was put at the edge, so "the level's left corner" is a bound and not an equality.
+        if (probe.atLeftEdge) CHECK_MSG(aimed.x < probe.at.x + 40.0, where + ": the aim is in the level's left corner, over the corner block: " + Point(aimed));
+        lift(layer, registry, pixel);
+        const bool shot = glm::distance(PtrLastTap(layer), aimed) < 0.01;
+        CHECK_MSG(shot, where + ": the release fires toward " + Point(aimed) + ": the last tap is " + Point(PtrLastTap(layer)));
+        CHECK_MSG(layer.SimLevel()->portals.shotsFired == shotsBefore + 1, where + ": one shot is counted: " + std::to_string(layer.SimLevel()->portals.shotsFired - shotsBefore));
+        if (shot) ++fired;
+        CHECK_MSG(std::fabs(playerPx(registry, layer).x - before) < 3.0, where + ": he does not walk: " + PtrNum(playerPx(registry, layer).x - before));
+        CHECK_MSG(layer.LevelAgeMs() > age && !layer.Paused(), where + ": nothing reloaded and nothing paused");
+        landShot(layer, registry);
+    }
+    CHECK_MSG(fired == 6, "six taps in the strips, six shots: " + std::to_string(fired));
+    // The box beside it is the arrow's: a finger held in the left box walks him left and the release fires nothing; the right box, right.
+    for (const bool left : {true, false}) {
+        const glm::dvec2 at(left ? 30.0 : W - 30.0, 224.0);
+        const glm::vec2 pixel = PtrPixel(layer, at, window);
+        PtrRest(layer, registry, 30);
+        const double before = playerPx(registry, layer).x;
+        const MdShots shots = MdShotsOf(layer);
+        for (int tick = 0; tick < 8; ++tick) PtrHold(layer, registry, pixel, tick == 0);
+        const double moved = (playerPx(registry, layer).x - before) * (left ? -1.0 : 1.0);
+        CHECK_MSG(moved > 8.0, std::string("a finger held in the ") + (left ? "left" : "right") + " box walks him that way: " + PtrNum(moved));
+        lift(layer, registry, pixel);
+        CHECK_MSG(MdFiredNothingSince(layer, shots), std::string("and its release fires nothing: ") + Point(PtrLastTap(layer)));
+    }
+}
+
+// What the fix frees on 3-09, measured and not assumed. The corner block (a collision polygon of x 0..64, y 224..256, its corners chamfered) fills the level's
+// bottom-left corner under the arrow, so the part of the old arrow's strip that is FREE AIR is the pocket above the block: x 0..15.64 (the box begins there),
+// y 208.5 (the arrow's top) .. 224 (the block's top; the chamfer lowers it to 227 at x 0). He stands on the block with the camera at the level's left edge, as
+// he does when he has walked there, and a tap in the pocket opens a portal there. The box beside it, above the block, is still the arrow's: the fix does not
+// free it, and that is pinned too, so that nobody reads the case as more than it shows.
+void APortalLandsInTheFreedPocketAboveTheCornerBlockOn3_09() {
+    const glm::vec2 window(2340.0f, 1080.0f);
+    MdRun run(MdSplitPaths(), "level8b", "APortalLandsInTheFreedPocketAboveTheCornerBlockOn3_09", window);
+    if (!run.ok) return;
+    MagicPortalsLayer& layer = run.layer;
+    entt::registry& registry = run.registry;
+    const double W = layer.ViewPx().x;
+    // Put above the block and let fall: its top is level y 224 and a standing centre is about 17.6 above it (206.4); the physics settles it, to no pixel in particular.
+    PutPlayerAt(registry, layer, glm::dvec2(40.0, 200.0));
+    PtrRest(layer, registry, 120);
+    const glm::dvec2 player = playerPx(registry, layer);
+    CHECK_MSG(player.x > 30.0 && player.x < 50.0 && player.y > 195.0 && player.y < 215.0, "he stands on the corner block, in the left corner of the level: " + Point(player));
+    const double cameraLeft = layer.CameraCentrePx().x - W * 0.5;
+    CHECK_MSG(std::fabs(cameraLeft) < 1.0, "and the camera is at the level's left edge, so the view's corner is the level's: " + PtrNum(cameraLeft));
+    const glm::dvec2 pocket(10.0, 216.0);
+    const glm::dvec2 aboveTheBlockUnderTheBox(30.0, 216.0);
+    CHECK_MSG(!layer.ControlAt(pocket), "the pocket (10, 216) is the world's: " + PtrName(layer.ControlAt(pocket)));
+    CHECK_MSG(layer.ControlAt(aboveTheBlockUnderTheBox) == PtrClaim(PtrControl::Left),
+              "and (30, 216), above the block and inside the arrow's box, is STILL the arrow's: the box is not freed: " + PtrName(layer.ControlAt(aboveTheBlockUnderTheBox)));
+    waitForFirstTap(layer, registry);
+    const glm::vec2 pixel = PtrPixel(layer, pocket, window);
+    glm::dvec2 aimed(0.0);
+    CHECK_MSG(layer.ViewportToLevelPx(registry, pixel, aimed) && aimed.x >= 0.0 && aimed.x < 15.64 && aimed.y > 208.5 && aimed.y < 224.0,
+              "the pixel maps into the pocket of the level: " + Point(aimed));
+    const std::size_t before = layer.SimLevel()->portals.placed.size();
+    tap(layer, registry, pixel);
+    lift(layer, registry, pixel);
+    landShot(layer, registry);
+    const auto& placed = layer.SimLevel()->portals.placed;
+    CHECK_MSG(placed.size() == before + 1u, "one portal is open: " + std::to_string(placed.size()) + " after " + std::to_string(before));
+    if (placed.size() == before + 1u) {
+        CHECK_MSG(glm::length(placed.back().basePx - aimed) < 1.0, "and it opened where the finger was, in the pocket: " + Point(placed.back().basePx) + " against " + Point(aimed));
+    }
 }
 
 // ---- sliding onto and off an arrow, and the slide itself ---------------------------------------------------------------------------
@@ -25836,7 +26379,7 @@ void MdHitFollowsSlide(Controls::Arrows arrows) {
             if (differ > 20) ++movedTicks;
         }
         if (slide == 0.0) {
-            CHECK_MSG(differ == 0 && claimed > 200, at + ": settled: the claim is the settled claim, " + std::to_string(claimed) + " points are the pair's");
+            CHECK_MSG(differ == 0 && claimed > 100, at + ": settled: the claim is the settled claim, " + std::to_string(claimed) + " points are the pair's");
         }
     }
     CHECK_MSG(movedTicks == 5, "five of the ticks (1, 7, 15, 22, 30) showed a claim that was not the settled one: " + std::to_string(movedTicks));
@@ -25917,7 +26460,7 @@ void MdOnWalkControlIsUngated(Controls::Arrows arrows) {
         {"just above the left arrow", glm::dvec2(26.0, 208.4878), false, true},
         // Grouped: inside the right arrow, 80 units from the corner, outside the classic disc (64). Split: that place is the world (the right arrow
         // is in the other corner), and the classic left disc (64 about the bottom-left corner) does not hold it either.
-        {split ? "where the grouped right arrow was" : "inside the right arrow, outside the classic disc", glm::dvec2(80.0, 250.0), !split, false},
+        {split ? "where the grouped right arrow was" : "inside the right arrow, outside the classic disc", glm::dvec2(80.0, 230.0), !split, false},
         // Inside the classic disc (56 units) and above the modern left arrow.
         {"inside the classic disc, above the modern left arrow", glm::dvec2(5.0, 200.0), false, true},
         {"in the world", glm::dvec2(227.0, 40.0), false, false},
@@ -26141,7 +26684,7 @@ void MdHandUnderAnArrow(Controls::Arrows arrows) {
     const glm::dvec2 onLeft(26.0, 235.0);
     // Grouped: the right arrow's far side, 80 units from the corner, outside the classic disc. Split: a point of the right arrow's hit that the classic
     // right disc does not hold (46 units in from the right edge and 46 up from the bottom: 65 from its corner).
-    const glm::dvec2 onRight = split ? glm::dvec2(W - 46.0, 210.0) : glm::dvec2(80.0, 250.0);
+    const glm::dvec2 onRight = split ? glm::dvec2(W - 46.0, 210.0) : glm::dvec2(80.0, 230.0);
     {
         MdRun run(MdPaths("modern", false, arrows), "level1", std::string("AReleaseOnAModernArrowTakesNoTutorialHand: ") + Controls::NameOf(arrows));
         if (!run.ok) return;
@@ -26630,8 +27173,9 @@ void MdSettledControls(Controls::Arrows arrows) {
                                   {restartX, 15.6444, restartX + 40.96, 56.6044},
                                   {pauseX, 15.6444, pauseX + 40.96, 56.6044},
                                   {15.6444, 15.6444, 56.6044, 56.6044}};
-        const double hit[5][4] = {{0.0, 208.4978, split ? 47.5022 : 53.1911, 256.0},
-                                  {split ? rightArrowX : 53.1911, 208.4978, split ? W : 90.7378, 256.0},
+        // The arrows' hit rectangles are their boxes (planning step 232, the owner's ruling of 2026-11-08), but for a grouped pair's seam.
+        const double hit[5][4] = {{15.6444, 208.4978, split ? 47.5022 : 53.1911, 240.3556},
+                                  {split ? rightArrowX : 53.1911, 208.4978, split ? W - 15.6444 : 90.7378, 240.3556},
                                   {restartX, 0.0, middle, 56.6044},
                                   {middle, 0.0, W, 56.6044},
                                   {0.0, 0.0, 56.6044, 56.6044}};
@@ -26653,10 +27197,10 @@ void MdSettledControls(Controls::Arrows arrows) {
         // The INFO line, at 16:9, is table 1.2 to the printed digit (the layer logs it once at every level's start).
         if (std::string(window.name) == "16:9") {
             const std::string pair =
-                split ? "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(133.6,720.0) px, walk_right (1146.4,586.4)-(1236.0,676.0) px hit "
-                        "(1146.4,586.4)-(1280.0,720.0) px, "
-                      : "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(149.6,720.0) px, walk_right (165.6,586.4)-(255.2,676.0) px hit "
-                        "(149.6,586.4)-(255.2,720.0) px, ";
+                split ? "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (44.0,586.4)-(133.6,676.0) px, walk_right (1146.4,586.4)-(1236.0,676.0) px hit "
+                        "(1146.4,586.4)-(1236.0,676.0) px, "
+                      : "controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (44.0,586.4)-(149.6,676.0) px, walk_right (165.6,586.4)-(255.2,676.0) px hit "
+                        "(149.6,586.4)-(255.2,676.0) px, ";
             const std::string line = pair +
                                      "restart (973.6,44.0)-(1088.8,159.2) px hit (973.6,0.0)-(1104.8,159.2) px, pause (1120.8,44.0)-(1236.0,159.2) px "
                                      "hit (1104.8,0.0)-(1280.0,159.2) px, clear_portals (44.0,44.0)-(159.2,159.2) px hit (0.0,0.0)-(159.2,159.2) px, in a 1280x720 px window (view "
@@ -26717,8 +27261,11 @@ void TheSplitArrowsStandInTheTwoBottomCornersAtEveryWindowShape() {
                   std::string(std::get<0>(look)) + ": the left arrow is 44 px in from the left, the right arrow 44 px in from the right, both " + PtrNum(side) +
                       " a box with their top at " + PtrNum(top) + ": " + ShowRect(left) + ", " + ShowRect(right));
         CHECK_MSG(top >= 206.0, std::string(std::get<0>(look)) + ": and the top is at or below the character's row (206)");
-        CHECK_MSG(run.layer.ControlAt(glm::dvec2(W - 1.0, top + 0.01)) == PtrClaim(PtrControl::Right) && !run.layer.ControlAt(glm::dvec2(W - 1.0, top - 0.01)),
-                  std::string(std::get<0>(look)) + ": the claim begins at the right arrow's top edge, out to the view's edge");
+        // The claim begins at the right arrow's top edge and ends at its box's right side: since planning step 232 (the owner's ruling of 2026-11-08) the
+        // 15.64-unit strip beside it, out to the view's edge, is the world's.
+        CHECK_MSG(run.layer.ControlAt(glm::dvec2(W - 20.0, top + 0.01)) == PtrClaim(PtrControl::Right) && !run.layer.ControlAt(glm::dvec2(W - 20.0, top - 0.01)) &&
+                      !run.layer.ControlAt(glm::dvec2(W - 1.0, top + 0.01)),
+                  std::string(std::get<0>(look)) + ": the claim begins at the right arrow's top edge and ends at its box's right side, the strip beside it is the world's");
     }
 }
 
@@ -27054,21 +27601,44 @@ void MdHalfOpenAtTheFarEdges(Controls::Arrows arrows) {
                 CHECK_MSG(!layer.ControlAt(glm::dvec2(W, y)), in + "x == W at y " + PtrNum(y) + " is no control's: " + PtrName(layer.ControlAt(glm::dvec2(W, y))));
                 CHECK_MSG(layer.ControlAt(glm::dvec2(inside, y)) == PtrClaim(PtrControl::Menu), in + "and the double just inside it is pause's");
             }
-            // The bottom edge: an arrow's, the double just above it. Grouped, both arrows are in the left; split, the right arrow is in the right corner too.
+            // The view's bottom edge: nobody's, and neither is the double just above it - since planning step 232 (the owner's ruling of 2026-11-08) the walk arrows
+            // end at their boxes' bottom, 15.64 units short of it, and the strip under them is the world's. Grouped, both arrows are in the left; split, the right
+            // arrow is in the right corner too.
             for (const double x : split ? std::vector<double>{1.0, 26.0, W - 1.0, W - 26.0, W - 40.0} : std::vector<double>{1.0, 26.0, 80.0}) {
                 CHECK_MSG(!layer.ControlAt(glm::dvec2(x, H)), in + "y == H at x " + PtrNum(x) + " is no control's: " + PtrName(layer.ControlAt(glm::dvec2(x, H))));
-                CHECK_MSG(layer.ControlAt(glm::dvec2(x, std::nextafter(H, 0.0))).has_value(), in + "and the double just above it is an arrow's");
+                CHECK_MSG(!layer.ControlAt(glm::dvec2(x, std::nextafter(H, 0.0))), in + "and nor is the double just above it, under the arrows: " + PtrName(layer.ControlAt(glm::dvec2(x, std::nextafter(H, 0.0)))));
+            }
+            // The arrows are half-open at THEIR far edges, the boxes': the bottom, and the right side of the right arrow (and of the left one when split).
+            {
+                const MdGeom g = MdGeometry(layer);
+                for (const PtrControl arrow : {PtrControl::Left, PtrControl::Right}) {
+                    const Hud::Rect& hit = g.hit[MdAt(arrow)];
+                    const glm::dvec2 hm = hit.Max();
+                    const glm::dvec2 mid = hit.Centre();
+                    const std::string name = std::string(arrow == PtrControl::Left ? "the left" : "the right") + " arrow: ";
+                    CHECK_MSG(!layer.ControlAt(glm::dvec2(mid.x, hm.y)) && layer.ControlAt(glm::dvec2(mid.x, std::nextafter(hm.y, 0.0))) == PtrClaim(arrow),
+                              in + name + "y == its bottom is no control's and the double just above it is its own");
+                    if (arrow == PtrControl::Right || split) {
+                        CHECK_MSG(!layer.ControlAt(glm::dvec2(hm.x, mid.y)) && layer.ControlAt(glm::dvec2(std::nextafter(hm.x, 0.0), mid.y)) == PtrClaim(arrow),
+                                  in + name + "x == its right side is no control's and the double just inside it is its own");
+                    }
+                }
+                // The left arrow's min edges are closed: its left side and its top belong to it, the doubles beyond them to the world.
+                const Hud::Rect& leftHit = g.hit[MdAt(PtrControl::Left)];
+                CHECK_MSG(layer.ControlAt(glm::dvec2(leftHit.min.x, leftHit.Centre().y)) == PtrClaim(PtrControl::Left) && !layer.ControlAt(glm::dvec2(std::nextafter(leftHit.min.x, 0.0), leftHit.Centre().y)) &&
+                              layer.ControlAt(glm::dvec2(leftHit.Centre().x, leftHit.min.y)) == PtrClaim(PtrControl::Left) && !layer.ControlAt(glm::dvec2(leftHit.Centre().x, std::nextafter(leftHit.min.y, 0.0))),
+                          in + "the left arrow's min edges are closed");
             }
             if (split) {
                 // The middle of the bottom edge is the world's, above and at the edge: there is no arrow there.
                 CHECK_MSG(!layer.ControlAt(glm::dvec2(W * 0.5, std::nextafter(H, 0.0))) && !layer.ControlAt(glm::dvec2(W * 0.5, H)), in + "the middle of the bottom edge is the world's");
-                // The bottom-right corner: the double just inside both far edges is the right arrow's, and the corner point itself is nobody's.
-                CHECK_MSG(layer.ControlAt(glm::dvec2(inside, std::nextafter(H, 0.0))) == PtrClaim(PtrControl::Right), in + "the double just inside the bottom-right corner is the right arrow's");
+                // The bottom-right corner is the world's, the double just inside both far edges as the corner point itself: the right arrow no longer reaches it.
+                CHECK_MSG(!layer.ControlAt(glm::dvec2(inside, std::nextafter(H, 0.0))), in + "the double just inside the bottom-right corner is the world's: " + PtrName(layer.ControlAt(glm::dvec2(inside, std::nextafter(H, 0.0)))));
             }
             CHECK_MSG(!layer.ControlAt(glm::dvec2(W, H)) && !layer.ControlAt(glm::dvec2(0.0, H)), in + "nor are the view's two bottom corners");
-            // The far edges' near neighbours are claimed: the top row and the left column are inside (min edges are closed).
-            CHECK_MSG(layer.ControlAt(glm::dvec2(inside, 0.0)) == PtrClaim(PtrControl::Menu) && layer.ControlAt(glm::dvec2(0.0, 230.0)) == PtrClaim(PtrControl::Left),
-                      in + "while the top row and the left column are inside (the min edges are closed)");
+            // The top row is inside pause's (the corner buttons still reach the view's edge; min edges are closed), and the left column beside the left arrow is the world's.
+            CHECK_MSG(layer.ControlAt(glm::dvec2(inside, 0.0)) == PtrClaim(PtrControl::Menu) && !layer.ControlAt(glm::dvec2(0.0, 230.0)),
+                      in + "while the top row is inside and the left column beside the left arrow is the world's");
         } else {
             CHECK_MSG(layer.ControlAt(glm::dvec2(W, 16.0)) == PtrClaim(PtrControl::Menu) && layer.ControlAt(glm::dvec2(26.0, H)) == PtrClaim(PtrControl::Left) &&
                           layer.ControlAt(glm::dvec2(W, H)) == PtrClaim(PtrControl::Right),
@@ -27258,7 +27828,7 @@ void TheModernRectanglesLineNamesTheWindowItIsIn() {
         std::snprintf(pause, sizeof(pause), "pause (%.1f,44.0)-(%.1f,159.2) px hit (%.1f,0.0)-(%.1f,159.2) px", wx - 159.2, wx - 44.0, wx - 175.2, wx);
         const std::string line = layer.ControlsRectsLine();
         const std::string size = std::string("in a ") + std::to_string(static_cast<int>(row.window.x)) + "x720 px window (view " + row.view + " units)";
-        CHECK_MSG(line.rfind("controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (0.0,586.4)-(149.6,720.0) px, walk_right ", 0) == 0,
+        CHECK_MSG(line.rfind("controls: modern, walk_left (44.0,586.4)-(133.6,676.0) px hit (44.0,586.4)-(149.6,676.0) px, walk_right ", 0) == 0,
                   what + ": the pair is where it is at every window: " + line);
         CHECK_MSG(line.find(restart) != std::string::npos && line.find(pause) != std::string::npos,
                   what + ": restart and pause hang from the right edge of THIS window: " + line);
@@ -30770,10 +31340,14 @@ void TheSplitArrowsMoveInWithTheSafeArea() {
         const Hud::Rect& right = g.box[MdAt(PtrControl::Right)];
         CHECK_MSG(NearD(left.min.x, 10.0 + margin, 1e-9) && NearD(H - 40.0 - left.Max().y, margin, 1e-9), "the left arrow is the margin inside the safe area's left and bottom edges: " + MdShow(left));
         CHECK_MSG(NearD(W - 30.0 - right.Max().x, margin, 1e-9) && NearD(H - 40.0 - right.Max().y, margin, 1e-9), "the right arrow is the margin inside its right and bottom edges: " + MdShow(right));
-        CHECK_MSG(g.hit[MdAt(PtrControl::Left)].min.x == 0.0 && g.hit[MdAt(PtrControl::Left)].Max().y == H, "the left arrow's hit still reaches the view's left edge and bottom");
-        CHECK_MSG(g.hit[MdAt(PtrControl::Right)].Max().x == W && g.hit[MdAt(PtrControl::Right)].Max().y == H, "and the right arrow's the view's right edge and bottom");
-        CHECK_MSG(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0)) == PtrClaim(PtrControl::Right) && layer.ControlAt(glm::dvec2(1.0, H - 1.0)) == PtrClaim(PtrControl::Left),
-                  "a tap in the notch's own corner strips is the arrow's: " + PtrName(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(1.0, H - 1.0))));
+        // The arrows' hits are their boxes (planning step 232, the owner's ruling of 2026-11-08), the notch's own strips included: they were the arrows' to the view's edge.
+        CHECK_MSG(SameRect(g.hit[MdAt(PtrControl::Left)], left, 1e-12) && g.hit[MdAt(PtrControl::Left)].min.x > 0.0 && g.hit[MdAt(PtrControl::Left)].Max().y < H,
+                  "the left arrow's hit is its box, short of the view's left edge and bottom: " + MdShow(g.hit[MdAt(PtrControl::Left)]));
+        CHECK_MSG(SameRect(g.hit[MdAt(PtrControl::Right)], right, 1e-12) && g.hit[MdAt(PtrControl::Right)].Max().x < W && g.hit[MdAt(PtrControl::Right)].Max().y < H,
+                  "and the right arrow's is its box, short of the view's right edge and bottom: " + MdShow(g.hit[MdAt(PtrControl::Right)]));
+        CHECK_MSG(!layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0)) && !layer.ControlAt(glm::dvec2(1.0, H - 1.0)) &&
+                      layer.ControlAt(left.Centre()) == PtrClaim(PtrControl::Left) && layer.ControlAt(right.Centre()) == PtrClaim(PtrControl::Right),
+                  "a tap in the notch's own corner strips is the world's, the boxes are the arrows': " + PtrName(layer.ControlAt(glm::dvec2(W - 1.0, H - 1.0))) + ", " + PtrName(layer.ControlAt(glm::dvec2(1.0, H - 1.0))));
     }
     // A left inset of 20 does not move the right arrow, and a right inset of 40 does not move the left one.
     MagicPortalsLayer::Paths onlyLeft = MdSplitPaths();
@@ -30915,8 +31489,8 @@ void ASizeOfOnePointFourDrawsTheClassicSizeOfArrow() {
                               {313.4009, 15.6444, 370.7449, 72.9884},    // restart
                               {382.1227, 15.6444, 439.4667, 72.9884},    // pause
                               {15.6444, 15.6444, 72.9884, 72.9884}};     // clear_portals
-    const double hit[5][4] = {{0.0, 176.6400, 79.3600, 256.0},
-                              {375.7511, 176.6400, 455.1111, 256.0},
+    const double hit[5][4] = {{15.6444, 176.6400, 79.3600, 240.3556},    // the arrows' hits are their boxes (planning step 232)
+                              {375.7511, 176.6400, 439.4667, 240.3556},
                               {313.4009, 0.0, 376.4338, 72.9884},
                               {376.4338, 0.0, 455.1111, 72.9884},
                               {0.0, 0.0, 72.9884, 72.9884}};
@@ -30947,8 +31521,8 @@ void ASizeOfOnePointFourDrawsTheClassicSizeOfArrow() {
     }
     // The INFO line the capture reads: the arrows' boxes are 179.2 px across at 1280 x 720.
     const std::string line = layer.ControlsRectsLine();
-    CHECK_MSG(line.find("walk_left (44.0,496.8)-(223.2,676.0) px hit (0.0,496.8)-(223.2,720.0) px") != std::string::npos, "the INFO line: walk_left is 179.2 px across: " + line);
-    CHECK_MSG(line.find("walk_right (1056.8,496.8)-(1236.0,676.0) px hit (1056.8,496.8)-(1280.0,720.0) px") != std::string::npos, "and walk_right: " + line);
+    CHECK_MSG(line.find("walk_left (44.0,496.8)-(223.2,676.0) px hit (44.0,496.8)-(223.2,676.0) px") != std::string::npos, "the INFO line: walk_left is 179.2 px across: " + line);
+    CHECK_MSG(line.find("walk_right (1056.8,496.8)-(1236.0,676.0) px hit (1056.8,496.8)-(1236.0,676.0) px") != std::string::npos, "and walk_right: " + line);
     // The claim is the bigger rectangle: a point at the old size's top (208.0, which was the world's at 0.7) is the left arrow's now, and just above the new top it is not.
     CHECK_MSG(layer.ControlAt(glm::dvec2(40.0, 208.0)) == PtrClaim(PtrControl::Left) && layer.ControlAt(glm::dvec2(g.view.x - 40.0, 208.0)) == PtrClaim(PtrControl::Right),
               "a point 208 units down, the world's at size 0.7, is an arrow's at 1.4");
@@ -31209,12 +31783,12 @@ void ThePlayersKeptTuningIsPlayedFromTheFileAndNothingIsWritten() {
     const MdGeom g = MdGeometry(layer);
     const double leftBox[4] = {25.6444, 180.7422, 80.2578, 235.3556};
     const double rightBox[4] = {384.8533, 185.7422, 439.4667, 240.3556};
-    const double rightHit[4] = {384.8533, 185.7422, 455.1111, 256.0};
+    const double rightHit[4] = {384.8533, 185.7422, 439.4667, 240.3556}; // its box: no reach to the view's edge (planning step 232)
     CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Left)], leftBox, 1e-3) && MdRectIs(g.hit[MdAt(PtrControl::Left)], leftBox, 1e-3), what + ": walk_left: a 54.6133 box moved (10, -5): " + MdShow(g.box[MdAt(PtrControl::Left)]));
     CHECK_MSG(MdRectIs(g.box[MdAt(PtrControl::Right)], rightBox, 1e-3) && MdRectIs(g.hit[MdAt(PtrControl::Right)], rightHit, 1e-3), what + ": walk_right: the size alone, in its own corner: " + MdShow(g.box[MdAt(PtrControl::Right)]));
     const std::string line = layer.ControlsRectsLine();
     CHECK_MSG(line.find("walk_left (72.1,508.3)-(225.7,661.9) px hit (72.1,508.3)-(225.7,661.9) px") != std::string::npos, what + ": the INFO line shows the tuned rectangles: " + line);
-    CHECK_MSG(line.find("walk_right (1082.4,522.4)-(1236.0,676.0) px hit (1082.4,522.4)-(1280.0,720.0) px") != std::string::npos, what + ": " + line);
+    CHECK_MSG(line.find("walk_right (1082.4,522.4)-(1236.0,676.0) px hit (1082.4,522.4)-(1236.0,676.0) px") != std::string::npos, what + ": " + line);
     CHECK_MSG(layer.ControlAt(g.hit[MdAt(PtrControl::Left)].Centre()) == PtrClaim(PtrControl::Left), what + ": and the moved arrow is claimed where it is drawn");
     // The opacity 0.6 on the pad's pulse.
     int checked = 0;
@@ -34178,6 +34752,9 @@ void runModernTests() {
     ATouchJustOutsideAModernHitRectFiresAPortal();
     TheSharedSeamBetweenTheArrowsIsTheRightArrows();
     TheCornerEdgeOfTheViewIsAControlPressInModern();
+    TheWalkArrowsHitIsTheirBoxAndTheStripBesideThemIsTheWorlds();
+    ATapInTheStripBesideAWalkArrowFiresAPortalAndAHoldInItsBoxWalks();
+    APortalLandsInTheFreedPocketAboveTheCornerBlockOn3_09();
     TheModernRectanglesAreHalfOpenAtTheViewsFarEdges();
     ATouchSlidOntoAModernArrowWalksAndOffItStops();
     TheModernPadsHitRectFollowsItsSlide();
@@ -34622,6 +35199,8 @@ void runTests() {
     AMinionWalksOnItsSheet();
     TheMinionsStandBehindThePlayerAndTheArtAtTwo();
     AKnightThatSeesThePlayerAddsItsExclamationAndPlaysItsSound();
+    ABrakedKnightThatSeesThePlayerIsDrawnStandingNotMidStride();
+    TheKnightByThe3_05DoorBrakesWhereItSawThePlayerOnTheButton();
     ADarkLevelsKnightsAreSilhouettesAndTheBlackKnightIsBlack();
     ATapLandsWhereItPoints();
     AScheduledTapFiresTheShotARealPressFires();

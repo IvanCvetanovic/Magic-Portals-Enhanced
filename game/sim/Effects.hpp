@@ -51,6 +51,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -190,6 +191,25 @@ struct FollowUp {
     glm::dvec2 Current(const FollowUpRule& rule) const;
 };
 
+// One Waypoint(pos, time, color, smoothEnd, angle) of the WaypointManager ETHCallback_key builds for
+// a key that has found its keyhole (effects.json key_fly_in; the callback #221-547). `at` says what
+// `offsetUnits` is added to: the key's own point (w0) or the keyhole's (keyholePos).
+struct FlyWaypoint {
+    enum class Anchor { Key, Keyhole };
+    double timeMs = 0.0; // how long the manager stays on this frame, going on to the next
+    Anchor at = Anchor::Keyhole;
+    glm::dvec2 offsetUnits{0.0};
+    bool angleFromKey = false; // w0: GetAngle() of the key, whatever it was
+    double angleDeg = 0.0;
+    double alpha = 1.0; // FloatColor's alpha: 0xFFFFFFFF is 1, 0x00FFFFFF is 0
+};
+
+struct KeyFlyIn {
+    double pib = 0.0;       // PIb: smoothEnd(v) = sin(v x PIb)
+    int haloFrame = 0;      // the frame on which getFrame() == 1 adds key_unlock_halo and the sound
+    std::vector<FlyWaypoint> waypoints;
+};
+
 struct Rules {
     Rule suck;     // vanishEffect's suck_effect.ent, at the entry portal
     Rule sparkles; // vanishEffect's sparkles.ent, where the traveller stood
@@ -267,7 +287,8 @@ struct Rules {
     // literal of the five (OnEntityBare) - and keyhole_vanish on the keyhole's.
     Rule keyPick;
     Rule keyUnlockHalo;
-    double keyUnlockHaloAfterMs = 0.0; // the fly-in's w0: its time before frame 1
+    double keyUnlockHaloAfterMs = 0.0; // the fly-in's w0: its time before frame 1 (== keyFlyIn.waypoints[0].timeMs)
+    KeyFlyIn keyFlyIn;                 // the six waypoints of the flight itself (planning step 233)
     Rule keyholeVanish;
     Rule doorLockedVanish;
     Rule wallDestroyAtDoor;
@@ -499,24 +520,46 @@ bool TrailDue(const Rules& rules, double& clockMs, double speed, double tickMs);
 Spawn DoorLiftDust(const Rules& rules, bool opening, const glm::dvec2& doorPx, double doorZ, double doorHeightUnits,
                    double scaleFactor);
 
-// A spent key's fly-in, as far as the port draws it: the clock of the
-// WaypointManager ETHCallback_key builds for it, which says when key_unlock_halo
-// is added. The flight itself - the key swung to the keyhole, slid in and faded -
-// is not built (keys.json _not_built); nor is the key deleted at its last frame.
+// A spent key's fly-in: the clock of the WaypointManager ETHCallback_key builds
+// for it (its FrameTimer, bytes 23254..23650), which says when key_unlock_halo is
+// added, where the key stands (PoseOf) and when the key is deleted. The key's own
+// state (Keys::Key) is untouched by it: the door's 1000 ms and 500 ms are the
+// keyhole's.
 struct FlyIn {
     bool found = false;     // the key found its keyhole (Keys::Key::spent turned over)
     bool built = false;     // the next frame: the manager built and its clock at 0
-    double ms = 0.0;        // the manager's m_time since
-    bool haloAdded = false; // frame 1 reached, and the halo added: once
+    double ms = 0.0;        // all the ms added since the build, for the log: never reduced
+    bool haloAdded = false; // the halo's frame reached, and the halo added: once
+    double timeMs = 0.0;    // FrameTimer's m_time: what is left of the frame's stride once a step took it off
+    int frame = 0;          // FrameTimer's m_currentFrame, an index into keyFlyIn.waypoints
+    bool deleted = false;   // the last frame reached: ETHCallback_key's DeleteEntity (#637-648)
 };
 
 // One tick of it, given the key's state after the tick and the tick's length:
 // true on the one tick key_unlock_halo is added. The tick `spent` first reads
 // true is the frame foundKeyhole is set on; the next builds the manager with its
-// clock at 0; every later one adds its ms, and the first to reach
-// keyUnlockHaloAfterMs steps the manager to frame 1 - the 41st tick after the
-// unlock at 60 Hz.
+// clock at 0; every later one adds its ms and takes ONE step of the FrameTimer
+// (the frame goes up by one when m_time reaches the stride of the frame it is on
+// and the stride comes off), so the first to reach w0's 666 ms is frame 1, the 41st
+// tick after the unlock at 60 Hz, and the last frame, on which the key is deleted,
+// is reached 78 ticks after it. Once `deleted` the clock stands still.
 bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs);
+
+// Where a spent key is drawn on the tick the clock last advanced: the point and angle
+// WaypointManager::getCurrentPoint blends and ETHCallback_key #551-591 set the entity
+// to, and its alpha (SetAlpha).
+struct FlyPose {
+    glm::dvec2 atPx{0.0};
+    double angleDeg = 0.0; // Ethanon's, counter-clockwise on the screen
+    double alpha = 1.0;
+    bool deleted = false;  // the entity is gone: DeleteEntity on the last frame
+};
+
+// The pose of a key whose clock is `clock`, from where it was when it found its keyhole
+// (`startPx`, `startAngleDeg`: w0) to the keyhole's own point `holePx`. A clock that has not
+// built its manager yet leaves the key where it was; the last frame is w5's point, at no alpha.
+FlyPose PoseOf(const Rules& rules, const FlyIn& clock, const glm::dvec2& startPx, double startAngleDeg,
+               const glm::dvec2& holePx);
 
 // ETHCallback_projectile's first frame: projectile_shoot where the shot has
 // jumped to, `offsetUnits` out from `fromPx` along normalize(towardPx - fromPx),

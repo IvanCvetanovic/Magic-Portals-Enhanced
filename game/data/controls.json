@@ -110,11 +110,20 @@
     "_source": [
       "seam_px 32: PORT (equal to layout.gap_px): a gap of at most this between two boxes is split at its middle (design 1.4 rule 2).",
       "edge_reach_px 48: PORT (= the 44 px margin + 4 px): a side whose box edge is within this of the view's (safe-area) edge extends",
-      "to the edge, so the strip beside a box is the control's and a missed corner tap is not a portal (design 1.4 rule 3)."
+      "to the edge, so the strip beside a box is the control's and a missed corner tap is not a portal (design 1.4 rule 3). Since planning step 232 it",
+      "is the three CORNER buttons' reach (restart, pause, clear-portals) only; the walk arrows have the next key.",
+      "walk_edge_reach_px 0: OWNER, 2026-11-08 (planning step 232, PORT-28; his 3-09 report: the left arrow covered the bottom-left corner, where a portal had",
+      "to be placed for the golden key): \"make the button not clickable all the way to the left side, make the space on the left unclickable\". The two WALK",
+      "arrows' own edge reach, in place of edge_reach_px: with 0 the strip beside an arrow's box and under it is the world's, where a tap places a portal, and",
+      "the arrow's hit rectangle is its box (plus the seam of a grouped pair and the growth below, if any). It overrides design 1.4 rule 3 and D2 of",
+      "docs/planning/2026-10-15-modern-controls.md for the two arrows only. A value of 44 px (the margin) or more gives the earlier reach back. NOT a guess,",
+      "whatever the `_guess` of this object says of the other two keys; the box itself is still the arrow's."
     ],
     "_guess": true,
     "seam_px": 32,
     "edge_reach_px": 48,
+    "walk_edge_reach_px": 0,
+    "_walk_edge_reach_px": "Provenance: planning step 232, this object's `_source` line for walk_edge_reach_px. The owner (2026-11-08) said to make the space on the left of the left arrow unclickable; 0 on every side of BOTH arrows (and in the grouped arrangement) is the port's wider reading of that, awaiting his answer (step 232, LEFT FOR THE OWNER (7)). The object's `_guess` (true) is not claimed for this key and no `_guess_` mark is set on it.",
 
     "grow_px": {
       "_source": [
@@ -122,7 +131,7 @@
         "touch areas 4 to 8 steps of 16 px (spec 42 l.80); 0 is right for a mouse and for a thumb on a margin (the owner's answer Q0 of",
         "2026-10-15: desktop AND touch, growth 0 in the data; a thumb's growth is a later, MEASURED data change, and then the census of",
         "tests/golden/controls_census.json is re-run before the list is signed). 16 px of growth costs 8, 14 or 16 levels' recorded shots",
-        "at uniform, balanced or mr (design 1.9)."
+        "at uniform, balanced or mr (design 1.9) (counts before planning step 232; the growth_table of tests/golden/controls_census.json has the current ones)."
       ],
       "_guess": true,
       "walk_left": 0,

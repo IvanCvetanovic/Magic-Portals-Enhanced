@@ -381,6 +381,23 @@ void Driver::AfterTick(MagicPortalsLayer& layer) {
 
 // ---- the replay layer ---------------------------------------------------------
 
+namespace {
+
+// The arm a minion's last Tick took, as a word (Minions::Arm, which the picture is framed by).
+const char* ArmName(Minions::Arm arm) {
+    switch (arm) {
+    case Minions::Arm::None: return "None";
+    case Minions::Arm::Walk: return "Walk";
+    case Minions::Arm::Hold: return "Hold";
+    case Minions::Arm::Settled: return "Settled";
+    case Minions::Arm::Watch: return "Watch";
+    case Minions::Arm::Search: return "Search";
+    }
+    return "?";
+}
+
+} // namespace
+
 void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char* why) {
     const Game::Level* level = layer.SimLevel();
     std::printf("    t %5d %-5s", layer.LayerTicks(), why);
@@ -549,6 +566,12 @@ void Trace(const MagicPortalsLayer& layer, entt::registry& registry, const char*
         if (minion.gone || !registry.valid(minion.body)) continue;
         const glm::dvec2 at = Units::ToPixels(registry.get<Supersonic::TransformComponent>(minion.body).position);
         std::printf("\n          minion %s (%.1f, %.1f)", minion.name.c_str(), at.x, at.y);
+        // What the patrol is doing, on a line of its own: out/parity's parsers read the line above to its end, so it
+        // stays as it was (a stuck-looking knight, planning step 234, is told from the arm, the brake and the dwell).
+        const auto* body = registry.try_get<Supersonic::RigidBodyComponent>(minion.body);
+        std::printf("\n            %s arm %s vx %.3f seeing %d spotted %d dest %d hold %.0f elapsed %.0f", minion.name.c_str(),
+                    ArmName(minion.arm), body != nullptr ? body->velocity.x * Units::kPixelsPerMetre : 0.0,
+                    minion.seeing ? 1 : 0, minion.spotted ? 1 : 0, static_cast<int>(minion.dest), minion.holdMs, minion.elapsedMs);
     }
     // The draggable handles and what follows them (step 139): where each is, and
     // whether a touch holds it this tick.

@@ -413,6 +413,8 @@ constexpr double kBox = 128.0 / kPpu;
 constexpr double kCorner = 0.9 * 128.0 / kPpu;
 constexpr double kSeam = 32.0 / kPpu + 1e-9;
 constexpr double kReach = 48.0 / kPpu;
+// The walk arrows' own reach (planning step 232, the owner's ruling of 2026-11-08): none. The python model's WALK_EDGE_REACH.
+constexpr double kWalkReach = 0.0 / kPpu;
 
 struct Look {
     double size;
@@ -471,11 +473,13 @@ Boxes Hits(double width, const Boxes& boxes, double growPx) {
                 if (ot >= bb && ot - bb <= kSeam) b = bb + (ot - bb) / 2.0;
             }
         }
-        if (bl <= kReach) l = 0.0;
-        if (bt <= kReach) t = 0.0;
-        if (width - br <= kReach) r = width;
-        if (kHeight - bb <= kReach) b = kHeight;
-        out[n] = {l, t, r, b};
+        const double reach = (n == Ix(Controls::Id::Left) || n == Ix(Controls::Id::Right)) ? kWalkReach : kReach;
+        if (bl <= reach) l = 0.0;
+        if (bt <= reach) t = 0.0;
+        if (width - br <= reach) r = width;
+        if (kHeight - bb <= reach) b = kHeight;
+        // Never off the view: the arrows no longer snap to its edge, so a growth can now carry a side past it (the module clamps, as the design does).
+        out[n] = {std::max(l, 0.0), std::max(t, 0.0), std::min(r, width), std::min(b, kHeight)};
     }
     return out;
 }
@@ -630,16 +634,18 @@ void TheZonesTheCensusConsumesAreTheDesignsTableAt16x9() {
                           ") against the design's (" + Num(hit[0]) + ", " + Num(hit[1]) + ")-(" + Num(hit[2]) + ", " + Num(hit[3]) + ")");
         }
         // The headline numbers, to the four decimals the design prints: restart's and pause's meeting on x = 392.8178, clear's reaching the corner; and
-        // the arrows. Grouped (design 1.2): the pair's hit (0, 208.4978)-(90.7378, 256) split at 53.1911. Split (planning step 186): the left arrow's
-        // hit (0, 208.4978)-(47.5022, 256) and the right arrow's (407.6089, 208.4978)-(455.1111, 256).
+        // the arrows, which since planning step 232 (the owner's ruling of 2026-11-08) stop at their boxes: the design printed grouped (design 1.2) the
+        // pair's hit (0, 208.4978)-(90.7378, 256) split at 53.1911, and planning step 186 the split left arrow's hit (0, 208.4978)-(47.5022, 256) and
+        // the right arrow's (407.6089, 208.4978)-(455.1111, 256). Grouped now: (15.6444, 208.4978)-(90.7378, 240.3556) split at 53.1911. Split: the
+        // left arrow's hit (15.6444, 208.4978)-(47.5022, 240.3556) and the right arrow's (407.6089, 208.4978)-(439.4667, 240.3556).
         const Zone left = ZoneOf(placed.hits[Ix(Controls::Id::Left)]);
         const Zone right = ZoneOf(placed.hits[Ix(Controls::Id::Right)]);
         if (arrows == Controls::Arrows::Grouped) {
-            CHECK(std::fabs(left.x0 - 0.0) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 53.1911) <= 1e-4 && std::fabs(left.y1 - 256.0) <= 1e-4);
-            CHECK(std::fabs(right.x0 - 53.1911) <= 1e-4 && std::fabs(right.x1 - 90.7378) <= 1e-4 && std::fabs(right.y1 - 256.0) <= 1e-4);
+            CHECK(std::fabs(left.x0 - 15.6444) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 53.1911) <= 1e-4 && std::fabs(left.y1 - 240.3556) <= 1e-4);
+            CHECK(std::fabs(right.x0 - 53.1911) <= 1e-4 && std::fabs(right.x1 - 90.7378) <= 1e-4 && std::fabs(right.y1 - 240.3556) <= 1e-4);
         } else {
-            CHECK(std::fabs(left.x0 - 0.0) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 47.5022) <= 1e-4 && std::fabs(left.y1 - 256.0) <= 1e-4);
-            CHECK(std::fabs(right.x0 - 407.6089) <= 1e-4 && std::fabs(right.y0 - 208.4978) <= 1e-4 && std::fabs(right.x1 - kView169.x) <= kTol && std::fabs(right.y1 - 256.0) <= 1e-4);
+            CHECK(std::fabs(left.x0 - 15.6444) <= 1e-4 && std::fabs(left.y0 - 208.4978) <= 1e-4 && std::fabs(left.x1 - 47.5022) <= 1e-4 && std::fabs(left.y1 - 240.3556) <= 1e-4);
+            CHECK(std::fabs(right.x0 - 407.6089) <= 1e-4 && std::fabs(right.y0 - 208.4978) <= 1e-4 && std::fabs(right.x1 - 439.4667) <= 1e-4 && std::fabs(right.y1 - 240.3556) <= 1e-4);
         }
         const Zone restart = ZoneOf(placed.hits[Ix(Controls::Id::Reset)]);
         const Zone pause = ZoneOf(placed.hits[Ix(Controls::Id::Menu)]);
@@ -675,6 +681,7 @@ void TheGoldenIsTakenForTheDataThatShips() {
     const Json::Value& hit = Key(valid, "hit", "valid_for");
     same("hit.seam_px", g_rules.hit.seamPx, Key(hit, "seam_px", "hit").AsNumber());
     same("hit.edge_reach_px", g_rules.hit.edgeReachPx, Key(hit, "edge_reach_px", "hit").AsNumber());
+    same("hit.walk_edge_reach_px", g_rules.hit.walkEdgeReachPx, Key(hit, "walk_edge_reach_px", "hit").AsNumber());
     const Json::Value& growth = Key(hit, "grow_px", "hit");
     for (const Controls::Id id : Controls::kClaimOrder) {
         same((std::string("hit.grow_px.") + Controls::KeyOf(id)).c_str(), g_rules.hit.growPx[Ix(id)], Key(growth, Controls::KeyOf(id), "grow_px").AsNumber());
@@ -923,7 +930,11 @@ void TheFirstPassPlacementWouldHaveFailed() {
 
         // The module reproduces it, with no snap of its own: the uniform look at the size, 32 px of growth on both arrows, and its edge reach (48
         // px) doing what the snap did. The pair it lays out (GROUPED: the first design's was a pair) is the same rectangle to a billionth.
-        const Placed placed = Place(WithPairGrowth(g_rules, 32.0), Look(Controls::Arrows::Grouped, Controls::Preset::Uniform, steps), kView169);
+        // The review's pair snapped to the view's edge, which the shipped arrows no longer do (planning step 232): the arrows' reach is put back to the
+        // corner buttons' 48 px for this historical reproduction, and only here.
+        Controls::Rules firstDesign = WithPairGrowth(g_rules, 32.0);
+        firstDesign.hit.walkEdgeReachPx = firstDesign.hit.edgeReachPx;
+        const Placed placed = Place(firstDesign, Look(Controls::Arrows::Grouped, Controls::Preset::Uniform, steps), kView169);
         const Zone mine = PairZone(placed);
         CHECK_MSG(std::fabs(mine.x0 - design.x0) <= kTol && std::fabs(mine.y0 - design.y0) <= kTol && std::fabs(mine.x1 - design.x1) <= kTol && std::fabs(mine.y1 - design.y1) <= kTol,
                   std::string(tag) + " the module's pair (" + Num(mine.x0) + ", " + Num(mine.y0) + ")-(" + Num(mine.x1) + ", " + Num(mine.y1) + ") against the review's");

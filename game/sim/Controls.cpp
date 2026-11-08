@@ -642,7 +642,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!Object(root, "hit", why, "")) return fail();
     const Json::Value& hit = root["hit"];
     if (!Num(hit, "seam_px", 0.0, kBig, read.hit.seamPx, why, "hit") ||
-        !Num(hit, "edge_reach_px", 0.0, kBig, read.hit.edgeReachPx, why, "hit") || !Object(hit, "grow_px", why, "hit")) {
+        !Num(hit, "edge_reach_px", 0.0, kBig, read.hit.edgeReachPx, why, "hit") ||
+        !Num(hit, "walk_edge_reach_px", 0.0, kBig, read.hit.walkEdgeReachPx, why, "hit") || !Object(hit, "grow_px", why, "hit")) {
         return fail();
     }
     for (const Id id : kClaimOrder) {
@@ -1141,7 +1142,10 @@ std::array<Hud::Rect, 5> HitRects(const Rules& rules, const std::array<Hud::Rect
     // billionth of a unit of slack stands for the rounding of two sums, as the design's arithmetic gives it.
     constexpr double kSlack = 1e-9;
     const double seam = UnitsOf(rules, viewUnits, rules.hit.seamPx) + kSlack;
-    const double reach = UnitsOf(rules, viewUnits, rules.hit.edgeReachPx) + kSlack;
+    // Two reaches: the walk arrows' own (the owner's ruling of 2026-11-08, planning step 232: the strip beside an arrow is the world's) and the
+    // corner buttons', which still own the strip beside them.
+    const double cornerReach = UnitsOf(rules, viewUnits, rules.hit.edgeReachPx) + kSlack;
+    const double walkReach = UnitsOf(rules, viewUnits, rules.hit.walkEdgeReachPx) + kSlack;
     const Safe safe = SafeRect(viewUnits, insets);
     std::array<Hud::Rect, kIds> hits;
 
@@ -1187,8 +1191,10 @@ std::array<Hud::Rect, 5> HitRects(const Rules& rules, const std::array<Hud::Rect
             }
         }
 
-        // A side within the reach of the safe rectangle's edge goes to the VIEW's edge: the strip beside a box
-        // is the control's, and a missed tap in a corner is not a portal.
+        // A side within the reach of the safe rectangle's edge goes to the VIEW's edge: the strip beside a corner button
+        // is the control's, and a missed tap in a corner is not a portal. A walk arrow's reach is its own, 0 in the data:
+        // the strip beside it is the world's (a portal can be placed in the corner it would otherwise cover).
+        const double reach = IsWalk(id) ? walkReach : cornerReach;
         if (box.min.x - safe.min.x <= reach) l = 0.0;
         if (box.min.y - safe.min.y <= reach) t = 0.0;
         if (safe.max.x - max.x <= reach) r = viewUnits.x;

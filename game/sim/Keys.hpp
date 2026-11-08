@@ -41,11 +41,15 @@
 // holding two pairs of one colour - puts each keyhole 57 px from its own door and
 // 216 px or more from the other.
 //
-// NOT built, and recorded in data/keys.json: the fly-in animation the key plays
-// once it is spent (a WaypointManager of timed waypoints with smoothEnd filters -
-// presentation, in a renderer-free port), fixKeyAngle, the idle linearMotion bob,
-// the three vanish entities, the pick and unlock sounds, and the red key's
-// achievement. The earthquake is the layer's, read from `opened` (earthquake.json).
+// The fly-in animation the key plays once it is spent (a WaypointManager of timed
+// waypoints with smoothEnd filters) is NOT this module's: it is presentation, drawn by
+// the layer from Effects::AdvanceFlyIn's clock and Effects::PoseOf (effects.json
+// key_fly_in, planning step 233) and it changes nothing here - the key stays where it
+// opened the keyhole, `spent` and `opened` are the whole of its state, and the
+// keyhole's 1000 ms and 500 ms do not wait for it. Still NOT built, recorded in
+// data/keys.json: fixKeyAngle. The idle linearMotion bob, the vanish entities and the
+// sounds are the layer's (the visuals plan; motions.json, effects.json, sounds.json).
+// The earthquake is the layer's, read from `opened` (earthquake.json).
 
 #include "sim/Carry.hpp"
 #include "sim/LevelBuilder.hpp"
@@ -90,8 +94,9 @@ struct Key : Carry::Carried {
     std::string colour; // metadata/color, which every one of them carries
     bool spent = false; // it has opened its keyhole and is done
     // Which keyhole in State::keyholes it opened, once spent; -1 before. What the
-    // picture follows: a spent key's fly-in is not built, so the layer takes it away
-    // when that keyhole goes.
+    // picture flies into (the layer's, Effects::PoseOf): it is deleted on the fly-in's
+    // last frame, and the layer also takes it away when this keyhole goes if that is
+    // first.
     int opened = -1;
 };
 

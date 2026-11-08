@@ -2150,6 +2150,12 @@ private:
     // Whether a picture's script calls linearMotion now: a crystal while it lives,
     // a key while no one carries it and it has not found its keyhole.
     bool motionRuns(const DrawnSprite& drawn) const;
+    // Where a spent key is drawn on its flight into the keyhole it opened (planning step 233,
+    // effects.json key_fly_in): the pose of the ONE clock latchSimEffects keeps for it
+    // (m_keyEffects), from where the carry left it - `startAngleDeg` its angle there - to that
+    // keyhole's point. Nothing for a key that is not spent or whose clock or keyhole is not
+    // known: the caller then draws it where it stands. Never changes the sim's key.
+    std::optional<Effects::FlyPose> keyFlyPose(int keyIndex, double startAngleDeg) const;
     void syncBoss(entt::registry& registry);
     // The minions' frames, once a level step after Minions::Tick has chosen each
     // one's arm (Art::UpdateMinion), and their pictures where their bodies stand.
@@ -2891,7 +2897,8 @@ private:
     // Per key of Keys', in its order (the visuals plan's 10.3): the carrier it
     // had at the last latch - key_pick is queued when that CHANGES to one; a
     // drop and re-take by one carrier between latches is no change - and its
-    // fly-in clock once spent, which queues key_unlock_halo. Grown, never
+    // fly-in clock once spent, which queues key_unlock_halo and says where the key is
+    // drawn on its flight (keyFlyPose) and when it goes. Grown, never
     // snapshotted: a key the level starts with is unowned until a carrier takes
     // it, so a pick on the very first tick (3-18's knight) is a pick; and a key a
     // boss drops joins the end of Keys' list.

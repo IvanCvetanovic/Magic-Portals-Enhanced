@@ -240,7 +240,10 @@ struct Rules {
     struct Hit {
         std::array<double, 5> growPx{}; // by Id: growth toward the world, px
         double seamPx = 0.0;
-        double edgeReachPx = 0.0;
+        double edgeReachPx = 0.0;     // the three corner buttons' reach to the view's edge
+        // The two walk arrows' own reach (planning step 232, the owner's ruling of 2026-11-08): 0 leaves the strip beside and under an arrow to the world,
+        // where a tap places a portal. Kept apart from edgeReachPx, which the corner buttons still need.
+        double walkEdgeReachPx = 0.0;
     } hit;
 
     ActOn cornerActOn = ActOn::Release;
@@ -537,7 +540,9 @@ std::array<Hud::Rect, 5> Boxes(const Rules& rules, const Tuning& tuning, const g
 
 // The five hit rectangles of these boxes (design 1.4): each box grown by the control's growth, a side that
 // faces another box across at most `seam` goes to the middle of the gap, a side within the edge reach of
-// the safe rectangle's edge goes to the view's edge, and the whole is kept inside the view. A rectangle
+// the safe rectangle's edge goes to the view's edge (a corner button's reach is hit.edge_reach_px, a walk
+// arrow's hit.walk_edge_reach_px, which the data sets to 0: an arrow's hit stops at its box and the strip
+// beside it is the world's), and the whole is kept inside the view. A rectangle
 // is read half-open ([min, max)), so a point on a shared edge is the later control's. Each is computed
 // from the boxes alone, never from another's hit, so it does not depend on the order they are asked in.
 std::array<Hud::Rect, 5> HitRects(const Rules& rules, const std::array<Hud::Rect, 5>& boxes, const glm::dvec2& viewUnits,

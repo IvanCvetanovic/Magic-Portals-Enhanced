@@ -596,8 +596,11 @@ const Table kGroupedTable = {
       {346.1689, 15.6444, 387.1289, 56.6044},
       {398.5067, 15.6444, 439.4667, 56.6044},
       {15.6444, 15.6444, 56.6044, 56.6044}}},
-    {{{0.0, 208.4978, 53.1911, 256.0},
-      {53.1911, 208.4978, 90.7378, 256.0},
+    // The arrows' hit rectangles are their boxes (planning step 232, the owner's ruling of 2026-11-08: no reach to the view's edge), the seam between the
+    // two at the middle of their gap. The design's table printed {0.0, 208.4978, 53.1911, 256.0} and {53.1911, 208.4978, 90.7378, 256.0} (areas 2526.7 and
+    // 1783.6, total 13680.9); the corner buttons' rows are the design's.
+    {{{15.6444, 208.4978, 53.1911, 240.3556},
+      {53.1911, 208.4978, 90.7378, 240.3556},
       {346.1689, 0.0, 392.8178, 56.6044},
       {392.8178, 0.0, 455.1111, 56.6044},
       {0.0, 0.0, 56.6044, 56.6044}}},
@@ -606,14 +609,14 @@ const Table kGroupedTable = {
       {973.6, 44.0, 1088.8, 159.2},
       {1120.8, 44.0, 1236.0, 159.2},
       {44.0, 44.0, 159.2, 159.2}}},
-    {{{0.0, 586.4, 149.6, 720.0},
-      {149.6, 586.4, 255.2, 720.0},
+    {{{44.0, 586.4, 149.6, 676.0},
+      {149.6, 586.4, 255.2, 676.0},
       {973.6, 0.0, 1104.8, 159.2},
       {1104.8, 0.0, 1280.0, 159.2},
       {0.0, 0.0, 159.2, 159.2}}},
     {{{88.8, 631.2}, {210.4, 631.2}, {1031.2, 101.6}, {1178.4, 101.6}, {101.6, 101.6}}},
-    {2526.7, 1783.6, 2640.5, 3526.1, 3204.1},
-    13680.9};
+    {1196.2, 1196.2, 2640.5, 3526.1, 3204.1},
+    11763.0};
 
 const Table kSplitTable = {
     {{{15.6444, 208.4978, 47.5022, 240.3556},
@@ -621,8 +624,10 @@ const Table kSplitTable = {
       {346.1689, 15.6444, 387.1289, 56.6044},
       {398.5067, 15.6444, 439.4667, 56.6044},
       {15.6444, 15.6444, 56.6044, 56.6044}}},
-    {{{0.0, 208.4978, 47.5022, 256.0},
-      {407.6089, 208.4978, 455.1111, 256.0},
+    // Each arrow's hit is its box (planning step 232, the owner's ruling of 2026-11-08). Before it the rows read {0.0, 208.4978, 47.5022, 256.0} and
+    // {407.6089, 208.4978, 455.1111, 256.0} (px {0, 586.4, 133.6, 720} and {1146.4, 586.4, 1280, 720}, areas 2256.5, total 13883.6).
+    {{{15.6444, 208.4978, 47.5022, 240.3556},
+      {407.6089, 208.4978, 439.4667, 240.3556},
       {346.1689, 0.0, 392.8178, 56.6044},
       {392.8178, 0.0, 455.1111, 56.6044},
       {0.0, 0.0, 56.6044, 56.6044}}},
@@ -631,14 +636,14 @@ const Table kSplitTable = {
       {973.6, 44.0, 1088.8, 159.2},
       {1120.8, 44.0, 1236.0, 159.2},
       {44.0, 44.0, 159.2, 159.2}}},
-    {{{0.0, 586.4, 133.6, 720.0},
-      {1146.4, 586.4, 1280.0, 720.0},
+    {{{44.0, 586.4, 133.6, 676.0},
+      {1146.4, 586.4, 1236.0, 676.0},
       {973.6, 0.0, 1104.8, 159.2},
       {1104.8, 0.0, 1280.0, 159.2},
       {0.0, 0.0, 159.2, 159.2}}},
     {{{88.8, 631.2}, {1191.2, 631.2}, {1031.2, 101.6}, {1178.4, 101.6}, {101.6, 101.6}}},
-    {2256.5, 2256.5, 2640.5, 3526.1, 3204.1},
-    13883.6};
+    {1014.9, 1014.9, 2640.5, 3526.1, 3204.1},
+    11400.5};
 
 const Table& TableFor(Controls::Arrows arrows) {
     return arrows == Controls::Arrows::Split ? kSplitTable : kGroupedTable;
@@ -681,6 +686,9 @@ void TheModernRulesAreTheFilesNumbers() {
         CHECK_MSG(rules.hit.growPx[static_cast<std::size_t>(id)] == 0.0, std::string(Controls::KeyOf(id)) + " grows by 0 px");
     }
     CHECK(rules.hit.seamPx == 32.0 && rules.hit.edgeReachPx == 48.0);
+    // The walk arrows' own edge reach is 0 (the owner's ruling of 2026-11-08, planning step 232): the strip beside an arrow is the world's. The corner
+    // buttons keep the 48 px above.
+    CHECK_MSG(rules.hit.walkEdgeReachPx == 0.0, "the walk arrows' edge reach is 0 px: the empty strip beside an arrow is the world's");
     CHECK(rules.cornerActOn == Controls::ActOn::Release);
 
     // The grids: eleven sizes, nine opacities, counted in whole steps.
@@ -1035,12 +1043,15 @@ void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
         double pairHitArea;  // the two arrows' hit rectangles together, u^2
         double ofClassic;    // that against the classic discs' 6,434.0, to two decimals
     };
-    const std::array<Column, 5> columns = {{{4, 18.2044, 40.96, 63.4311, 222.1511, 2147.1, 0.33},
-                                            {7, 31.8578, 40.96, 90.7378, 208.4978, 4310.2, 0.67},
-                                            {10, 45.5111, 40.96, 118.0444, 194.8444, 7219.1, 1.12},
-                                            {12, 54.6133, 49.152, 136.2489, 185.7422, 9572.5, 1.49},
-                                            {14, 63.7156, 57.344, 154.4533, 176.6400, 12257.4, 1.91}}};
-    // The plan's table is the GROUPED pair's (planning step 180); the split arrows' own columns follow it.
+    // The plan's table is the GROUPED pair's (planning step 180); the split arrows' own columns follow it. The last two columns are NOT the plan's any more:
+    // the owner's ruling of 2026-11-08 (planning step 232) took the strip to the view's edge out of the arrows' hit rectangles, so a pair's hit area is
+    // (its right edge - 15.6444) x the arrow, worked here from the formula; the plan printed 2147.1, 4310.2, 7219.1, 9572.5, 12257.4 (0.33, 0.67, 1.12,
+    // 1.49, 1.91 of the classic discs'). Their ratio to the classic discs is given to three decimals.
+    const std::array<Column, 5> columns = {{{4, 18.2044, 40.96, 63.4311, 222.1511, 869.9, 0.135},
+                                            {7, 31.8578, 40.96, 90.7378, 208.4978, 2392.3, 0.372},
+                                            {10, 45.5111, 40.96, 118.0444, 194.8444, 4660.3, 0.724},
+                                            {12, 54.6133, 49.152, 136.2489, 185.7422, 6586.6, 1.024},
+                                            {14, 63.7156, 57.344, 154.4533, 176.6400, 8844.3, 1.375}}};
     for (const Column& c : columns) {
         const Controls::Tuning tuning = TunedFor(Controls::Arrows::Grouped, c.steps);
         const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
@@ -1087,9 +1098,10 @@ void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
                   at + "the corner row is in order and pause keeps its margin from the right edge");
     }
 
-    // The SPLIT arrows' own columns (planning step 186), the same five sizes, worked by CTL6b/work/split_numbers.py from the design's formula: each
-    // arrow's hit is a square from the view's edge to the far side of its box, so its area is (15.6444 + the box)^2, and the pair of them is 0.70 of the
-    // classic discs at the default (against the grouped pair's 0.67) and passes the classic total at size 1.0.
+    // The SPLIT arrows' own columns (planning step 186), the same five sizes, worked from the design's formula: each arrow's hit is its box (planning
+    // step 232, the owner's ruling of 2026-11-08: no reach to the view's edge), so its area is the box squared, and the pair of them is 0.316 of the
+    // classic discs at the default (against the grouped pair's 0.372). Planning step 186 had each hit run to the view's edge and bottom, the areas
+    // (15.6444 + the box)^2 = 1145.7, 2256.5, 3740.0, 4936.2, 6298.0 (0.36, 0.70, 1.16, 1.53, 1.96 of the discs').
     struct SplitColumn {
         int steps;
         double leftHitRight;  // the left arrow's hit right edge (= its box's)
@@ -1097,21 +1109,24 @@ void ThePlansSizeTableAndItsNarrowWindowRowsArePinned() {
         double top;
         double oneArea;       // one arrow's hit
         double twoArea;       // both
-        double ofClassic;     // both against the classic discs' 6,434.0, to two decimals
+        double ofClassic;     // both against the classic discs' 6,434.0, to three decimals
     };
-    const std::array<SplitColumn, 5> splitColumns = {{{4, 33.8489, 421.2622, 222.1511, 1145.7, 2291.5, 0.36},
-                                                      {7, 47.5022, 407.6089, 208.4978, 2256.5, 4512.9, 0.70},
-                                                      {10, 61.1556, 393.9556, 194.8444, 3740.0, 7480.0, 1.16},
-                                                      {12, 70.2578, 384.8533, 185.7422, 4936.2, 9872.3, 1.53},
-                                                      {14, 79.3600, 375.7511, 176.6400, 6298.0, 12596.0, 1.96}}};
+    const std::array<SplitColumn, 5> splitColumns = {{{4, 33.8489, 421.2622, 222.1511, 331.4, 662.8, 0.103},
+                                                      {7, 47.5022, 407.6089, 208.4978, 1014.9, 2029.8, 0.316},
+                                                      {10, 61.1556, 393.9556, 194.8444, 2071.3, 4142.5, 0.644},
+                                                      {12, 70.2578, 384.8533, 185.7422, 2982.6, 5965.2, 0.927},
+                                                      {14, 79.3600, 375.7511, 176.6400, 4059.7, 8119.3, 1.262}}};
     for (const SplitColumn& c : splitColumns) {
         const Controls::Tuning tuning = TunedFor(Controls::Arrows::Split, c.steps);
         const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, tuning, kView169, kNoInsets);
         const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, kNoInsets);
         const std::string at = "split size " + Num(static_cast<double>(c.steps) / 10.0) + ": ";
-        CHECK_MSG(Near(boxes[0].Max().x, c.leftHitRight, kTable) && Near(hits[0].Max().x, c.leftHitRight, kTable) && hits[0].min.x == 0.0, at + "the left arrow's hit runs from the view's edge to " + Num(hits[0].Max().x));
-        CHECK_MSG(Near(boxes[1].min.x, c.rightBoxLeft, kTable) && Near(hits[1].min.x, c.rightBoxLeft, kTable) && hits[1].Max().x == kView169.x, at + "the right arrow's hit runs from " + Num(hits[1].min.x) + " to the view's edge");
-        CHECK_MSG(Near(boxes[0].min.y, c.top, kTable) && Near(boxes[1].min.y, c.top, kTable) && hits[0].Max().y == kHeight && hits[1].Max().y == kHeight, at + "both reach the view's bottom from " + Num(boxes[0].min.y));
+        CHECK_MSG(Near(boxes[0].Max().x, c.leftHitRight, kTable) && Near(hits[0].Max().x, c.leftHitRight, kTable) && hits[0].min.x == boxes[0].min.x && hits[0].min.x > 15.0,
+                  at + "the left arrow's hit is its box, from " + Num(hits[0].min.x) + " to " + Num(hits[0].Max().x));
+        CHECK_MSG(Near(boxes[1].min.x, c.rightBoxLeft, kTable) && Near(hits[1].min.x, c.rightBoxLeft, kTable) && hits[1].Max().x == boxes[1].Max().x && hits[1].Max().x < kView169.x - 15.0,
+                  at + "the right arrow's hit is its box, from " + Num(hits[1].min.x) + " to " + Num(hits[1].Max().x));
+        CHECK_MSG(Near(boxes[0].min.y, c.top, kTable) && Near(boxes[1].min.y, c.top, kTable) && hits[0].Max().y == boxes[0].Max().y && hits[1].Max().y == boxes[1].Max().y && hits[0].Max().y < kHeight,
+                  at + "both end at their boxes' bottom, " + Num(boxes[0].Max().y) + ", above the view's, from " + Num(boxes[0].min.y));
         CHECK_MSG(Near(AreaOf(hits[0]), c.oneArea, 0.06) && Near(AreaOf(hits[1]), c.oneArea, 0.06), at + "each arrow's hit area is " + Num(AreaOf(hits[0])) + ", the model's " + Num(c.oneArea));
         const double area = AreaOf(hits[0]) + AreaOf(hits[1]);
         CHECK_MSG(Near(area, c.twoArea, 0.1) && Near(area / kClassicPair, c.ofClassic, 0.0051), at + "the two together are " + Num(area) + ", " + Num(area / kClassicPair) + " of the classic discs'");
@@ -1190,8 +1205,10 @@ void CheckSeams(Controls::Arrows arrows) {
         for (const double x : {kView169.x * 0.5, left.rect.Max().x + 0.01, right.rect.min.x - 0.01, left.rect.Max().x + 100.0}) {
             CHECK_MSG(!left.hit.Contains(glm::dvec2(x, 230.0)) && !right.hit.Contains(glm::dvec2(x, 230.0)), which + "between the arrows (x " + Num(x) + ") is the world");
         }
-        // And the arrows' own far sides are the view's edges: a point on the left edge is the left arrow's, one 0.01 inside the right edge the right's.
-        CHECK(left.hit.Contains(glm::dvec2(0.0, 230.0)) && right.hit.Contains(glm::dvec2(kView169.x - 0.01, 230.0)));
+        // And the arrows' own far sides are their boxes' (planning step 232, the owner's ruling of 2026-11-08): a point on the left edge and one 0.01
+        // inside the right edge are the world's, the box's own corners the arrows'.
+        CHECK(!left.hit.Contains(glm::dvec2(0.0, 230.0)) && !right.hit.Contains(glm::dvec2(kView169.x - 0.01, 230.0)));
+        CHECK(left.hit.Contains(left.rect.min + glm::dvec2(0.01)) && right.hit.Contains(right.rect.Max() - glm::dvec2(0.01)));
     }
     // The same for restart and pause, 11.3778 apart, split at 392.8178.
     const double mid2 = (restart.rect.Max().x + pause.rect.min.x) * 0.5;
@@ -1274,81 +1291,125 @@ void TheEdgeReachGoesToTheViewEdgeOnlyWithinTheReach() {
     const auto box = [&](Controls::Id id) { return layout.At(id).rect; };
     const auto hit = [&](Controls::Id id) { return layout.At(id).hit.rect; };
 
-    // The 15.64-unit margin is within the 17.07-unit reach: the sides toward a view edge go to it.
-    CHECK(hit(Controls::Id::Left).min.x == 0.0 && hit(Controls::Id::Left).Max().y == kHeight);
-    CHECK(hit(Controls::Id::Right).Max().y == kHeight);
+    // The 15.64-unit margin is within the 17.07-unit reach of the CORNER buttons: their sides toward a view edge go to it. The two WALK arrows have a reach
+    // of their own, 0 in the data (planning step 232, the owner's ruling of 2026-11-08: his 3-09 report, the left arrow covered the corner where a portal
+    // had to go): every side of an arrow's hit is its box's, bar the seam between a grouped pair.
     CHECK(hit(Controls::Id::Menu).Max().x == kView169.x && hit(Controls::Id::Menu).min.y == 0.0);
     CHECK(hit(Controls::Id::Reset).min.y == 0.0);
     CHECK(hit(Controls::Id::Clear).min.x == 0.0 && hit(Controls::Id::Clear).min.y == 0.0);
-    // The sides toward the world are the box's own: the arrow's top, the right arrow's right side, a corner button's bottom.
-    CHECK(hit(Controls::Id::Left).min.y == box(Controls::Id::Left).min.y);
-    CHECK(hit(Controls::Id::Right).min.y == box(Controls::Id::Right).min.y && hit(Controls::Id::Right).Max().x == box(Controls::Id::Right).Max().x);
+    CHECK_MSG(hit(Controls::Id::Left).min.x == box(Controls::Id::Left).min.x && hit(Controls::Id::Left).min.x > 15.0, "the left arrow's hit does not reach the view's left edge");
+    CHECK_MSG(hit(Controls::Id::Left).min.y == box(Controls::Id::Left).min.y && hit(Controls::Id::Left).Max().y == box(Controls::Id::Left).Max().y &&
+                  hit(Controls::Id::Left).Max().y < kHeight,
+              "its top is its box's and its bottom is its box's, above the view's bottom");
+    CHECK_MSG(hit(Controls::Id::Right).min.y == box(Controls::Id::Right).min.y && hit(Controls::Id::Right).Max().y == box(Controls::Id::Right).Max().y &&
+                  hit(Controls::Id::Right).Max().x == box(Controls::Id::Right).Max().x,
+              "the right arrow's top, bottom and right side are its box's");
+    // The corner buttons' sides toward the world are the box's own too.
     CHECK(hit(Controls::Id::Menu).Max().y == box(Controls::Id::Menu).Max().y);
     CHECK(hit(Controls::Id::Reset).Max().y == box(Controls::Id::Reset).Max().y);
     CHECK(hit(Controls::Id::Clear).Max().x == box(Controls::Id::Clear).Max().x && hit(Controls::Id::Clear).Max().y == box(Controls::Id::Clear).Max().y);
-    // A tap in the strip between the box and the screen's corner is the control's, not a portal.
-    CHECK(layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(3.0, 252.0)));
+    // A tap in the strip between a corner button's box and the screen's corner is the control's, not a portal; the strip beside and under a walk arrow is
+    // the WORLD's, where a tap places one, and the arrow's box itself is the arrow's.
+    CHECK(!layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(3.0, 252.0)));
+    CHECK(!layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(3.0, 224.0)));
+    CHECK(!layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(30.0, 250.0)));
+    CHECK(layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(30.0, 224.0)));
     CHECK(layout.At(Controls::Id::Menu).hit.Contains(glm::dvec2(kView169.x - 3.0, 3.0)));
     CHECK(layout.At(Controls::Id::Clear).hit.Contains(glm::dvec2(3.0, 3.0)));
     // And just above the left arrow's box, toward the world, a tap fires.
-    CHECK(!layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, box(Controls::Id::Left).min.y - 0.01)));
+    CHECK(!layout.At(Controls::Id::Left).hit.Contains(glm::dvec2(30.0, box(Controls::Id::Left).min.y - 0.01)));
 
-    // SPLIT (planning step 186): walk_right is in the bottom-right corner and reaches the view's right edge and bottom, as walk_left reaches the
-    // left edge and the bottom; each keeps its box's own top and the side of its box that faces the middle of the view.
+    // SPLIT (planning step 186): walk_right is in the bottom-right corner, as walk_left is in the bottom-left. Since planning step 232 (the owner's ruling
+    // of 2026-11-08) each arrow's hit is exactly its box: planning step 186 had them reach the view's own edge and bottom, which covered the corner.
     {
         const Controls::Layout split = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
         const Hud::Rect& l = split.At(Controls::Id::Left).hit.rect;
         const Hud::Rect& r = split.At(Controls::Id::Right).hit.rect;
         const Hud::Rect& lb = split.At(Controls::Id::Left).rect;
         const Hud::Rect& rb = split.At(Controls::Id::Right).rect;
-        CHECK_MSG(l.min.x == 0.0 && l.Max().y == kHeight && l.min.y == lb.min.y && l.Max().x == lb.Max().x, "split: the left arrow reaches the left edge and the bottom, and keeps its top and its inner side");
-        CHECK_MSG(r.Max().x == kView169.x && r.Max().y == kHeight && r.min.y == rb.min.y && r.min.x == rb.min.x, "split: the right arrow reaches the right edge and the bottom, and keeps its top and its inner side");
-        // A tap in the strip between the right arrow's box and the view's bottom-right corner is the arrow's, not a portal.
-        CHECK(split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 3.0, 252.0)));
-        CHECK(split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 0.01, kHeight - 0.01)));
+        CHECK_MSG(l.min.x == lb.min.x && l.Max().y == lb.Max().y && l.min.y == lb.min.y && l.Max().x == lb.Max().x, "split: the left arrow's hit is its box");
+        CHECK_MSG(r.Max().x == rb.Max().x && r.Max().y == rb.Max().y && r.min.y == rb.min.y && r.min.x == rb.min.x, "split: the right arrow's hit is its box");
+        // A tap in the strip between the right arrow's box and the view's bottom-right corner is the WORLD's, where a portal is placed; the box is the arrow's.
+        CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 3.0, 252.0)));
+        CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 0.01, kHeight - 0.01)));
+        CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 0.01, 224.0)));
+        CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 30.0, kHeight - 0.5)));
+        CHECK(split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 30.0, 224.0)));
         // And just above the right arrow's box, and just left of it, toward the world, a tap fires.
         CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 20.0, rb.min.y - 0.01)));
         CHECK(!split.At(Controls::Id::Right).hit.Contains(glm::dvec2(rb.min.x - 0.01, 232.0)));
+        // The mirror strip of the left arrow's: the corner, the strip beside the box and the strip under it belong to the world.
+        for (const glm::dvec2 point : {glm::dvec2(5.0, 225.0), glm::dvec2(0.5, kHeight - 0.5), glm::dvec2(30.0, 250.0), glm::dvec2(47.4, 255.9)}) {
+            CHECK_MSG(!split.At(Controls::Id::Left).hit.Contains(point) && !split.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - point.x, point.y)),
+                      "split: (" + Num(point.x) + ", " + Num(point.y) + ") and its mirror are the world's");
+        }
     }
 
     // The reach is the data's: at 43.99 px a margin of 44 px is out of it, at exactly 44 px (the equality is in) and
     // above it is in, and at 0 nothing reaches. The px are the reference's, and the boxes sit 44 px from the edges.
+    // The CORNER buttons' reach is hit.edge_reach_px, the walk arrows' hit.walk_edge_reach_px (planning step 232, the owner's ruling of 2026-11-08): each
+    // probe moves ONE of the two and the other control kind must not notice (the first probe set holds the arrows' reach at 48 px and moves the corners', the
+    // second holds the corners' at 48 and moves the arrows').
     const double u = kHeight / kRefHeightPx;
     struct Probe {
         double reachPx;
         bool reaches;
     };
-    for (const Probe& probe : {Probe{43.99, false}, Probe{44.0, true}, Probe{44.01, true}, Probe{48.0, true}, Probe{0.0, false}}) {
+    const std::array<Probe, 5> probes = {Probe{43.99, false}, Probe{44.0, true}, Probe{44.01, true}, Probe{48.0, true}, Probe{0.0, false}};
+    for (const Probe& probe : probes) {
         Controls::Rules edited = rules;
         edited.hit.edgeReachPx = probe.reachPx;
+        edited.hit.walkEdgeReachPx = 48.0; // the arrows keep the old reach: this probe is about the corner buttons
+        const std::array<Hud::Rect, 5> boxes = Controls::Boxes(edited, kNoTuning, kView169, kNoInsets);
+        const std::array<Hud::Rect, 5> hits = Controls::HitRects(edited, boxes, kView169, kNoInsets);
+        const std::string at = "corner reach " + Num(probe.reachPx) + " px: ";
+        CHECK_MSG((hits[3].Max().x == kView169.x) == probe.reaches && (hits[3].min.y == 0.0) == probe.reaches, at + "pause's right side and top");
+        CHECK_MSG((hits[2].min.y == 0.0) == probe.reaches, at + "restart's top");
+        CHECK_MSG((hits[4].min.x == 0.0) == probe.reaches && (hits[4].min.y == 0.0) == probe.reaches, at + "clear-portals' left side and top");
+        CHECK_MSG(hits[3].Max().x == boxes[3].Max().x || probe.reaches, at + "with no reach pause's right side is its box's");
+        // The arrows are held at 48 px, so they reach whatever the corner buttons' reach is.
+        CHECK_MSG(hits[0].min.x == 0.0 && hits[0].Max().y == kHeight, at + "the left arrow is not moved by the corner buttons' reach");
+        CHECK_MSG(Near(boxes[0].min.x, 44.0 * u, 1e-9), at + "and the box itself does not move");
+    }
+    for (const Probe& probe : probes) {
+        Controls::Rules edited = rules;
+        edited.hit.walkEdgeReachPx = probe.reachPx;
+        edited.hit.edgeReachPx = 48.0; // and the corner buttons keep theirs
         const std::array<Hud::Rect, 5> boxes = Controls::Boxes(edited, kNoTuning, kView169, kNoInsets);
         {
-            // Split: the right arrow's right side and bottom reach the view's edge exactly when the reach does.
+            // Split: the right arrow's right side and bottom reach the view's edge exactly when the arrows' reach does.
             const std::array<Hud::Rect, 5> splitHits = Controls::HitRects(edited, boxes, kView169, kNoInsets);
             CHECK_MSG((splitHits[1].Max().x == kView169.x) == probe.reaches && (splitHits[1].Max().y == kHeight) == probe.reaches,
-                      "split, reach " + Num(probe.reachPx) + " px: the right arrow's right side and bottom");
-            CHECK_MSG(splitHits[1].Max().x == boxes[1].Max().x || probe.reaches, "split, reach " + Num(probe.reachPx) + " px: with no reach the right arrow's right side is its box's");
+                      "split, walk reach " + Num(probe.reachPx) + " px: the right arrow's right side and bottom");
+            CHECK_MSG(splitHits[1].Max().x == boxes[1].Max().x || probe.reaches, "split, walk reach " + Num(probe.reachPx) + " px: with no reach the right arrow's right side is its box's");
         }
         const std::array<Hud::Rect, 5> hits = Controls::HitRects(edited, boxes, kView169, kNoInsets);
-        const std::string at = "reach " + Num(probe.reachPx) + " px: ";
+        const std::string at = "walk reach " + Num(probe.reachPx) + " px: ";
         CHECK_MSG((hits[0].min.x == 0.0) == probe.reaches && (hits[0].min.x == boxes[0].min.x) == !probe.reaches, at + "the left arrow's left side");
-        CHECK_MSG((hits[0].Max().y == kHeight) == probe.reaches, at + "the left arrow's bottom");
-        CHECK_MSG((hits[3].Max().x == kView169.x) == probe.reaches && (hits[3].min.y == 0.0) == probe.reaches, at + "pause's right side and top");
-        CHECK_MSG((hits[4].min.x == 0.0) == probe.reaches, at + "clear-portals' left side");
+        CHECK_MSG((hits[0].Max().y == kHeight) == probe.reaches && (hits[0].Max().y == boxes[0].Max().y) == !probe.reaches, at + "the left arrow's bottom");
+        CHECK_MSG(hits[3].Max().x == kView169.x && hits[3].min.y == 0.0 && hits[4].min.x == 0.0, at + "and the corner buttons, held at 48 px, still reach");
         CHECK_MSG(Near(boxes[0].min.x, 44.0 * u, 1e-9), at + "and the box itself does not move");
     }
 
-    // The reach is measured from the safe rectangle's edge and goes to the VIEW's edge.
+    // The reach is measured from the safe rectangle's edge and goes to the VIEW's edge. The corner buttons' first, with the data as it ships.
     const Controls::Insets notch{10.0, 20.0, 30.0, 40.0};
     const std::array<Hud::Rect, 5> boxes = Controls::Boxes(rules, kNoTuning, kView169, notch);
     const std::array<Hud::Rect, 5> hits = Controls::HitRects(rules, boxes, kView169, notch);
-    CHECK_MSG(Near(boxes[0].min.x, 10.0 + 44.0 * u, 1e-9) && hits[0].min.x == 0.0, "the left arrow's box is in the notch's margin and its hit goes to the view's left edge");
-    CHECK_MSG(hits[0].Max().y == kHeight && Near(boxes[0].Max().y, kHeight - 40.0 - 44.0 * u, 1e-9), "and its bottom to the view's bottom");
     CHECK_MSG(hits[3].Max().x == kView169.x && Near(boxes[3].Max().x, kView169.x - 30.0 - 44.0 * u, 1e-9), "pause's right goes to the view's right edge");
     CHECK_MSG(hits[4].min.y == 0.0 && Near(boxes[4].min.y, 20.0 + 44.0 * u, 1e-9), "clear-portals' top goes to the view's top");
-    // Split: the right arrow's box is in the notch's margin from the right (30) and the bottom (40), and its hit goes to the view's right edge and bottom.
+    // The arrows, as they ship, stop at their boxes: the notch's strip beside and under them is the world's.
+    CHECK_MSG(Near(boxes[0].min.x, 10.0 + 44.0 * u, 1e-9) && hits[0].min.x == boxes[0].min.x, "the left arrow's box is in the notch's margin and its hit stops at it");
+    CHECK_MSG(hits[0].Max().y == boxes[0].Max().y && Near(boxes[0].Max().y, kHeight - 40.0 - 44.0 * u, 1e-9), "and its bottom at the box's");
+    // Split: the right arrow's box is in the notch's margin from the right (30) and the bottom (40), and its hit is the box.
     CHECK_MSG(Near(boxes[1].Max().x, kView169.x - 30.0 - 44.0 * u, 1e-9) && Near(boxes[1].Max().y, kHeight - 40.0 - 44.0 * u, 1e-9), "the right arrow's box is in the notch's margin");
-    CHECK_MSG(hits[1].Max().x == kView169.x && hits[1].Max().y == kHeight, "and its hit goes to the view's right edge and bottom");
+    CHECK_MSG(hits[1].Max().x == boxes[1].Max().x && hits[1].Max().y == boxes[1].Max().y, "and its hit is the box");
+    // With the arrows' reach put back to 48 px (not the data's): the same notch, and the hit goes to the VIEW's edge, from the safe rectangle's.
+    Controls::Rules reaching = rules;
+    reaching.hit.walkEdgeReachPx = 48.0;
+    const std::array<Hud::Rect, 5> reachingHits = Controls::HitRects(reaching, boxes, kView169, notch);
+    CHECK_MSG(reachingHits[0].min.x == 0.0, "with a reach of 48 px the left arrow's hit goes to the view's left edge, from the notch's margin");
+    CHECK_MSG(reachingHits[0].Max().y == kHeight, "and its bottom to the view's bottom");
+    CHECK_MSG(reachingHits[1].Max().x == kView169.x && reachingHits[1].Max().y == kHeight, "and the right arrow's to the view's right edge and bottom");
 }
 
 void CheckNoGrowth(Controls::Arrows arrows) {
@@ -1380,7 +1441,8 @@ void CheckNoGrowth(Controls::Arrows arrows) {
         CHECK_MSG(owns(hmax.y, bmax.y, kHeight, false, 0.0), name + ": the hit's bottom side");
     }
 
-    // Growth is the data's, per control and per side, and only toward the world: 16 px is 5.69 units of it.
+    // Growth is the data's, per control and per side: 16 px is 5.69 units of it. (Since planning step 232 an arrow's side that faces a view edge no longer
+    // snaps to the edge, so a growth would push it out by the same 5.69 units, short of the edge, which is held to the view: the data's growth is 0.)
     const double grow = 16.0 * kHeight / kRefHeightPx;
     Controls::Rules edited = rules;
     edited.hit.growPx[static_cast<std::size_t>(Controls::Id::Right)] = 16.0;
@@ -1388,13 +1450,16 @@ void CheckNoGrowth(Controls::Arrows arrows) {
     CHECK_MSG(Near(grown[1].min.y, boxes[1].min.y - grow, 1e-9), which + "16 px of growth lifts the right arrow's top by 5.69 units");
     if (arrows == Controls::Arrows::Grouped) {
         CHECK_MSG(Near(grown[1].Max().x, boxes[1].Max().x + grow, 1e-9), which + "and pushes its right side out by 5.69 units");
-        // The seam and the edge still win over it: the seam stays at the middle of the gap, the bottom at the view's.
-        CHECK_MSG(grown[1].min.x == hits[1].min.x && grown[1].Max().y == kHeight, which + "the right arrow's seam and bottom are what they were");
+        // The seam still wins over it: the seam stays at the middle of the gap. The bottom has no reach to the view's edge to win with, so it is pushed too.
+        CHECK_MSG(grown[1].min.x == hits[1].min.x, which + "the right arrow's seam is what it was");
+        CHECK_MSG(Near(grown[1].Max().y, boxes[1].Max().y + grow, 1e-9) && grown[1].Max().y < kHeight, which + "and its bottom is pushed out by 5.69 units, short of the view's");
     } else {
-        // Split: the right arrow's side toward the world is its LEFT one, which is pushed out by 5.69 units; its right side is the view's edge,
-        // which the growth cannot pass, and its bottom stays on the view's bottom.
+        // Split: the right arrow's LEFT side is pushed out by 5.69 units, and so are its right side and its bottom (no reach to the view's edge since
+        // planning step 232, so there is no edge to hold them): they stay inside the view, the 15.64-unit margin being wider than the growth.
         CHECK_MSG(Near(grown[1].min.x, boxes[1].min.x - grow, 1e-9), which + "and pushes its left side out by 5.69 units");
-        CHECK_MSG(grown[1].Max().x == kView169.x && grown[1].Max().y == kHeight, which + "its right side and bottom stay on the view's edges");
+        CHECK_MSG(Near(grown[1].Max().x, boxes[1].Max().x + grow, 1e-9) && Near(grown[1].Max().y, boxes[1].Max().y + grow, 1e-9) &&
+                      grown[1].Max().x < kView169.x && grown[1].Max().y < kHeight,
+                  which + "its right side and bottom are pushed out by the same, short of the view's edges");
     }
     CHECK_MSG(SameBits(grown[0], hits[0]) && SameBits(grown[2], hits[2]) && SameBits(grown[3], hits[3]) && SameBits(grown[4], hits[4]),
               which + "and only the one control's");
@@ -1449,9 +1514,13 @@ void TheModernHudIsNoMoreThanOneAndAHalfTimesTheClassicsAtDefaultSize() {
     const Hud::Rules hud = Load();
     const Controls::Rules rules = LoadModern();
     CHECK_MSG(Near(kClassicTotal, 9505.98, 0.01), "the classic dead zone is " + Num(kClassicTotal));
-    // Per arrangement, per aspect, in total (clear shown, so all five) and for the arrows alone. GROUPED is planning step 180's (1.44 times the
-    // classic, the pair 0.67); SPLIT is planning step 186's: each arrow's hit is a square of 47.50 units, so the two are 4,512.9 (0.70 of the classic
-    // discs) and the whole HUD 13,883.6, 1.46 times the classic and under the budget of 1.5 at every aspect (the areas do not depend on the width).
+    // Per arrangement, per aspect, in total (clear shown, so all five) and for the arrows alone. GROUPED was planning step 180's (1.44 times the
+    // classic, the pair 0.67); SPLIT was planning step 186's: each arrow's hit was a square of 47.50 units, so the two were 4,512.9 (0.70 of the classic
+    // discs) and the whole HUD 13,883.6, 1.46 times the classic. Since planning step 232 (the owner's ruling of 2026-11-08: the arrows' hit is their box)
+    // the numbers are those of the boxes, worked from the design's formulas: SPLIT is two squares of 31.86 units, 2,029.8 (0.316 of the discs) and the whole
+    // HUD 11,400.5, 1.20 times the classic; GROUPED the pair's two boxes and the seam, 2,392.3 (0.372) and 11,763.0, 1.24 times. Both are under the budget of
+    // 1.5 at every aspect (the areas do not depend on the width). The old rows were: split 13,883.6 / 1.46 / 4,512.9 / 0.70 / 11.92, 15.89, 16.95 per cent /
+    // balanced 14,419.6, 0.785 / mr 15,415.6, 0.94; grouped 13,680.9 / 1.44 / 4,310.2 / 0.67 / 11.7, 15.7, 16.7 / 14,212.7, 0.75 / 15,204.7, 0.91.
     struct Budget {
         Controls::Arrows arrows;
         double total;     // u^2
@@ -1464,8 +1533,8 @@ void TheModernHudIsNoMoreThanOneAndAHalfTimesTheClassicsAtDefaultSize() {
         double mrTotal;
         double mrPairShare;
     };
-    const std::array<Budget, 2> budgets = {{{Controls::Arrows::Split, 13883.6, 1.46, 4512.9, 0.70, {11.92, 15.89, 16.95}, 14419.6, 0.785, 15415.6, 0.94},
-                                            {Controls::Arrows::Grouped, 13680.9, 1.44, 4310.2, 0.67, {11.7, 15.7, 16.7}, 14212.7, 0.75, 15204.7, 0.91}}};
+    const std::array<Budget, 2> budgets = {{{Controls::Arrows::Split, 11400.5, 1.20, 2029.8, 0.316, {9.79, 13.05, 13.92}, 12021.9, 0.412, 13513.2, 0.644},
+                                            {Controls::Arrows::Grouped, 11763.0, 1.24, 2392.3, 0.372, {10.10, 13.46, 14.36}, 12436.1, 0.476, 14031.0, 0.724}}};
     const std::array<std::pair<const char*, double>, 3> shapes = {{{"16:9", 16.0 / 9.0}, {"4:3", 4.0 / 3.0}, {"5:4", 1.25}}};
     for (const Budget& budget : budgets) {
         const Controls::Tuning tuning = TunedFor(budget.arrows);
@@ -1552,8 +1621,11 @@ void TheSlideMovesEachArrowFromItsNearerEdgeAndTheHitFollows() {
         for (const double x : {10.0, kView169.x - 10.0, 80.0, kView169.x - 80.0}) {
             CHECK(!start.At(Controls::Id::Left).hit.Contains(glm::dvec2(x, 230.0)) && !start.At(Controls::Id::Right).hit.Contains(glm::dvec2(x, 230.0)));
         }
-        CHECK(rest.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, 230.0)));
-        if (arrows == Controls::Arrows::Split) CHECK(rest.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 10.0, 230.0)));
+        // At rest the arrows' hits are their boxes (planning step 232): 30 units in from the edge is inside the box, 10 units in is the world's.
+        CHECK(rest.At(Controls::Id::Left).hit.Contains(glm::dvec2(30.0, 230.0)) && !rest.At(Controls::Id::Left).hit.Contains(glm::dvec2(10.0, 230.0)));
+        if (arrows == Controls::Arrows::Split) {
+            CHECK(rest.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 30.0, 230.0)) && !rest.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 10.0, 230.0)));
+        }
 
         // An arrow moved into the other half comes in from the other edge: the nearer edge is judged where it rests. (Grouped: walk_left moved right;
         // split: walk_right moved left, 300 units, which fits.)
@@ -1709,13 +1781,15 @@ void DefaultTuningIsTheBaseBitForBit() {
         const double seamArrows = (boxes[0].Max().x + boxes[1].min.x) * 0.5;
         const double seamButtons = (boxes[2].Max().x + boxes[3].min.x) * 0.5;
         const std::string where = std::string(ArrangementName(arrows)) + " " + aspect.name + ": ";
+        // The arrows' hits are their boxes (planning step 232, the owner's ruling of 2026-11-08), but for the pair's seam when grouped; the corner buttons
+        // below still run to the view's edge.
         if (arrows == Controls::Arrows::Grouped) {
-            CHECK_MSG(RectIs(hits[0], {0.0, boxes[0].min.y, seamArrows, view.y}, 1e-9), where + "the left arrow's hit " + EdgesOf(hits[0]));
-            CHECK_MSG(RectIs(hits[1], {seamArrows, boxes[1].min.y, boxes[1].Max().x, view.y}, 1e-9), where + "the right arrow's hit " + EdgesOf(hits[1]));
+            CHECK_MSG(RectIs(hits[0], {boxes[0].min.x, boxes[0].min.y, seamArrows, boxes[0].Max().y}, 1e-9), where + "the left arrow's hit " + EdgesOf(hits[0]));
+            CHECK_MSG(RectIs(hits[1], {seamArrows, boxes[1].min.y, boxes[1].Max().x, boxes[1].Max().y}, 1e-9), where + "the right arrow's hit " + EdgesOf(hits[1]));
         } else {
-            // Split: no seam; each arrow is its box plus the strips to its own two view edges.
-            CHECK_MSG(RectIs(hits[0], {0.0, boxes[0].min.y, boxes[0].Max().x, view.y}, 1e-9), where + "the left arrow's hit " + EdgesOf(hits[0]));
-            CHECK_MSG(RectIs(hits[1], {boxes[1].min.x, boxes[1].min.y, view.x, view.y}, 1e-9), where + "the right arrow's hit " + EdgesOf(hits[1]));
+            // Split: no seam; each arrow is its box.
+            CHECK_MSG(RectIs(hits[0], {boxes[0].min.x, boxes[0].min.y, boxes[0].Max().x, boxes[0].Max().y}, 1e-9), where + "the left arrow's hit " + EdgesOf(hits[0]));
+            CHECK_MSG(RectIs(hits[1], {boxes[1].min.x, boxes[1].min.y, boxes[1].Max().x, boxes[1].Max().y}, 1e-9), where + "the right arrow's hit " + EdgesOf(hits[1]));
         }
         CHECK_MSG(RectIs(hits[2], {boxes[2].min.x, 0.0, seamButtons, boxes[2].Max().y}, 1e-9), where + "restart's hit " + EdgesOf(hits[2]));
         CHECK_MSG(RectIs(hits[3], {seamButtons, 0.0, view.x, boxes[3].Max().y}, 1e-9), where + "pause's hit " + EdgesOf(hits[3]));
@@ -1922,11 +1996,14 @@ void SafeInsetsMoveTheDefaultsInward() {
     const Controls::Layout classicFlat = Controls::LayOut(Controls::Style::Classic, rules, hud, kNoTuning, kView169, kNoInsets, 5000.0);
     const Controls::Layout classicNotch = Controls::LayOut(Controls::Style::Classic, rules, hud, kNoTuning, kView169, notch, 5000.0);
     for (std::size_t i = 0; i < 5; ++i) CHECK_MSG(SameBits(classicFlat.frames[i].rect, classicNotch.frames[i].rect) && SameBits(classicFlat.frames[i].hit, classicNotch.frames[i].hit), "the classic layout ignores the insets");
-    // A tap in the notch's own strip is still the arrow's: the hit goes to the view's edge.
+    // A tap in the notch's own strip is still a corner button's (its hit goes to the view's edge) and is the world's beside a walk arrow (planning step 232,
+    // the owner's ruling of 2026-11-08: the arrows' hit is their box).
     const Controls::Layout laid = Controls::LayOut(Controls::Style::Modern, rules, hud, kNoTuning, kView169, notch, 5000.0);
-    CHECK(laid.At(Controls::Id::Left).hit.Contains(glm::dvec2(2.0, kHeight - 2.0)));
+    CHECK(!laid.At(Controls::Id::Left).hit.Contains(glm::dvec2(2.0, kHeight - 2.0)));
     CHECK(laid.At(Controls::Id::Menu).hit.Contains(glm::dvec2(kView169.x - 2.0, 2.0)));
-    CHECK_MSG(laid.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 2.0, kHeight - 2.0)), "and the split right arrow's, to the view's bottom-right corner");
+    CHECK_MSG(!laid.At(Controls::Id::Right).hit.Contains(glm::dvec2(kView169.x - 2.0, kHeight - 2.0)), "and the split right arrow's: the view's bottom-right corner is the world's");
+    CHECK_MSG(laid.At(Controls::Id::Left).hit.Contains(laid.At(Controls::Id::Left).rect.Centre()) && laid.At(Controls::Id::Right).hit.Contains(laid.At(Controls::Id::Right).rect.Centre()),
+              "while each arrow's box is its own");
 }
 
 void TheDrawRectPutsEveryTiersBodyOnTheSameFace() {
@@ -2541,6 +2618,11 @@ void WhatIsRefused() {
         {{"hit", "seam_px"}, number(-1.0), false},
         {{"hit", "edge_reach_px"}, number(-1.0), false},
         {{"hit", "edge_reach_px"}, number(0.0), true},
+        // The walk arrows' own reach (planning step 232, the owner's ruling of 2026-11-08): a number from 0 up, like its neighbour.
+        {{"hit", "walk_edge_reach_px"}, number(-1.0), false},
+        {{"hit", "walk_edge_reach_px"}, number(0.0), true},
+        {{"hit", "walk_edge_reach_px"}, number(48.0), true},
+        {{"hit", "walk_edge_reach_px"}, text("0"), false},
         {{"hit", "grow_px", "walk_left"}, number(16.0), true},
         {{"hit", "grow_px", "walk_left"}, number(-1.0), false},
         {{"hit", "grow_px", "pause"}, text("x"), false},
@@ -2630,7 +2712,12 @@ void WhatIsRefused() {
         Controls::Rules r;
         std::string why;
         CHECK(LoadScratch("m1.json", Write(Edit(root, Path{"layout", "margin_px", "side"}, 0, number(40.0))), r, why) && r.marginSidePx == 40.0);
-        CHECK(LoadScratch("m2.json", Write(Edit(root, Path{"hit", "edge_reach_px"}, 0, number(0.0))), r, why) && r.hit.edgeReachPx == 0.0);
+        CHECK(LoadScratch("m2.json", Write(Edit(root, Path{"hit", "edge_reach_px"}, 0, number(0.0))), r, why) && r.hit.edgeReachPx == 0.0 && r.hit.walkEdgeReachPx == 0.0);
+        // The walk arrows' reach is read from its own key and from no other: the shipped 0 is read as 0, an edited 48 as 48, and the corner buttons' stays.
+        CHECK_MSG(LoadScratch("m2b.json", Write(Edit(root, Path{"hit", "walk_edge_reach_px"}, 0, number(48.0))), r, why) && r.hit.walkEdgeReachPx == 48.0 && r.hit.edgeReachPx == 48.0,
+                  "the walk arrows' reach is read as set: " + why);
+        CHECK_MSG(LoadScratch("m2c.json", Write(Edit(root, Path{"hit", "walk_edge_reach_px"}, 0, number(12.5))), r, why) && r.hit.walkEdgeReachPx == 12.5 && r.hit.edgeReachPx == 48.0,
+                  "and the corner buttons' is not the arrows': " + why);
         CHECK(LoadScratch("m3.json", Write(Edit(root, Path{"hit", "grow_px", "walk_left"}, 0, number(16.0))), r, why) && r.hit.growPx[0] == 16.0 && r.hit.growPx[1] == 0.0);
         // The shipped switch is on (the owner's answers of 2026-10-15 and 2026-10-16), and the file is read, not copied: false is false.
         CHECK_MSG(LoadScratch("m4.json", Write(root), r, why) && r.twoContacts, "the shipped data reads two fingers: " + why);

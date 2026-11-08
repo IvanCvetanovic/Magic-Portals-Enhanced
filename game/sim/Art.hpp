@@ -459,6 +459,11 @@ struct Minion : Picture {
     int lastColumn = 0;
     double strideMs = 0.0;
     int holdColumn = 0;             // SetFrame(hold, dirRow) while it does not walk
+    // A braked knight with something in sight (MinionArm::Watch) is drawn on the hold column too. false is the decode: the
+    // script sets the standing frame only while nothing is in sight, so the knight keeps its last walk frame; true is a
+    // deviation decided in step 234 after the owner's 3-05 report, the owner to confirm (art.json _watch_stands). A rule absent
+    // from art.json reads false.
+    bool watchStands = false;
     int startRow = 0;               // dirRow before its first walk
     int leftRow = 0;                // dirRow walking left
     int rightRow = 0;               // and right
@@ -485,6 +490,7 @@ enum class MinionArm {
     Hold,    // it did not walk, its way clear: the hold column of the row it last walked
     Search,  // its way blocked and nothing spotted: the hold column, looking one way then the other
     Settled, // a lone guard inside minDist x 2 (shouldntMove): nothing written
+    Watch,   // braked with something in sight: nothing written by the script (#1184-1190); Minion::watchStands draws the hold
 };
 
 // A minion's frame and what its script keeps for it.

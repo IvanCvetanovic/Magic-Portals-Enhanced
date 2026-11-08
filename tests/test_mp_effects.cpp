@@ -907,6 +907,207 @@ void TheUnlockHaloComesOnTheFlyInsFrameOne() {
     std::printf("  the unlock halo: %d ticks after the unlock at 60 Hz, %d at 30 Hz\n", at60, at30);
 }
 
+// The flight a spent key makes (planning step 233): ETHCallback_key's six waypoints as decoded, the
+// FrameTimer's ONE step a tick, and where the key stands on each frame.
+struct FlightTicks {
+    int frame[6] = {-1, -1, -1, -1, -1, -1}; // the tick (0 is the unlock's own) each frame is first reached on
+    int deleted = -1;                        // and the tick the key is deleted on
+    int halos = 0;
+};
+
+FlightTicks FlightAt(const Effects::Rules& rules, double tickMs) {
+    Effects::FlyIn clock;
+    FlightTicks out;
+    for (int tick = 0; tick < 600; ++tick) {
+        if (Effects::AdvanceFlyIn(rules, clock, true, tickMs)) ++out.halos;
+        if (clock.built && clock.frame > 0 && out.frame[clock.frame] < 0) out.frame[clock.frame] = tick;
+        if (clock.deleted && out.deleted < 0) out.deleted = tick;
+    }
+    return out;
+}
+
+void TheKeyFliesIntoItsKeyholeAndIsDeleted() {
+    const Effects::Rules rules = TheRules();
+    const Effects::KeyFlyIn& fly = rules.keyFlyIn;
+
+    // THE TABLE, as ETHCallback_key #261-512 builds it: Waypoint(pos, time, color, smoothEnd, angle) six
+    // times - w0 the key's own point and angle at 666 ms, w1 and w2 at keyholePos + (20, -4) and -90 degrees
+    // (0 and 400 ms), w3 at + (8, -4) for 200 ms, w4 and w5 there at no alpha (0 ms each).
+    using Anchor = Effects::FlyWaypoint::Anchor;
+    struct Row {
+        double timeMs;
+        Anchor at;
+        double x, y;
+        bool angleFromKey;
+        double angle;
+        double alpha;
+    };
+    const Row table[] = {{666, Anchor::Key, 0, 0, true, 0, 1},       {0, Anchor::Keyhole, 20, -4, false, -90, 1},
+                         {400, Anchor::Keyhole, 20, -4, false, -90, 1}, {200, Anchor::Keyhole, 8, -4, false, -90, 1},
+                         {0, Anchor::Keyhole, 8, -4, false, -90, 0},    {0, Anchor::Keyhole, 8, -4, false, -90, 0}};
+    CHECK_MSG(fly.waypoints.size() == 6, "six waypoints: " + std::to_string(fly.waypoints.size()));
+    for (std::size_t i = 0; i < 6 && i < fly.waypoints.size(); ++i) {
+        const Effects::FlyWaypoint& w = fly.waypoints[i];
+        CHECK_MSG(w.timeMs == table[i].timeMs && w.at == table[i].at && w.offsetUnits.x == table[i].x &&
+                      w.offsetUnits.y == table[i].y && w.angleFromKey == table[i].angleFromKey &&
+                      w.angleDeg == table[i].angle && w.alpha == table[i].alpha,
+                  "waypoint " + std::to_string(i) + " is the decoded one: " + Num(w.timeMs) + " ms, " + At(w.offsetUnits));
+    }
+    CHECK_MSG(Near(fly.pib, 1.570796327, 1e-12) && fly.haloFrame == 1,
+              "smoothEnd's PIb 1.570796327 and the halo on frame 1: " + Num(fly.pib) + ", " + std::to_string(fly.haloFrame));
+    // The halo's row and the flight's say w0's time once.
+    CHECK(rules.keyUnlockHaloAfterMs == fly.waypoints[0].timeMs);
+
+    // WHEN EACH FRAME IS REACHED, from the unlock (tick 0): found there, built on 1 (its m_time 0), and then a
+    // tick adds its ms and takes ONE step. A frame goes up when m_time reaches the stride of the frame it is
+    // on and the stride comes off, so frame 2 is entered the tick after frame 1 (w1's 0 ms takes nothing off,
+    // and the tick spent on it stays in w2's 400), and the last frame, on which the key deletes itself, two
+    // ticks after w3's 200 ms are up. Worked by hand for each tick length:
+    //   16 ms     m_time 672 at the 42nd step: 1 at tick 43 (6 over), 2 at 44, 3 at 68 (406 against 400),
+    //             4 at 81 (214 against 200), 5 at 82.
+    //   1000 / 60 the 40th step (666.67): 1 at 41, 2 at 42, 3 at 65, 4 at 77, 5 at 78.
+    //   1000 / 30 the 20th step: 1 at 21, 2 at 22, 3 at 33, 4 at 39, 5 at 40.
+    //   111, 110  the 6th and 7th steps reach 666: 1 at 7 and 8, 2 at 8 and 9, 3 at 11, 4 at 13, 5 at 14.
+    struct Expect {
+        double tickMs;
+        int frame[5];
+    };
+    const Expect expects[] = {{16.0, {43, 44, 68, 81, 82}},
+                              {1000.0 / 60.0, {41, 42, 65, 77, 78}},
+                              {1000.0 / 30.0, {21, 22, 33, 39, 40}},
+                              {111.0, {7, 8, 11, 13, 14}},
+                              {110.0, {8, 9, 11, 13, 14}}};
+    for (const Expect& expect : expects) {
+        const FlightTicks flight = FlightAt(rules, expect.tickMs);
+        bool same = flight.deleted == expect.frame[4] && flight.halos == 1;
+        for (int f = 1; f <= 5; ++f) same = same && flight.frame[f] == expect.frame[f - 1];
+        CHECK_MSG(same, "at " + Num(expect.tickMs) + " ms a tick: frames 1-5 on " + std::to_string(flight.frame[1]) + ", " +
+                            std::to_string(flight.frame[2]) + ", " + std::to_string(flight.frame[3]) + ", " +
+                            std::to_string(flight.frame[4]) + ", " + std::to_string(flight.frame[5]) + ", deleted on " +
+                            std::to_string(flight.deleted) + ", " + std::to_string(flight.halos) + " halo(s)");
+        // The key goes 1.3 s after the unlock (666 + 400 + 200 and a frame or two), to within four ticks,
+        // and so before the keyhole, whose own 1000 + 500 ms the door does not wait for the key to spend.
+        CHECK_MSG(flight.deleted > 0 && flight.deleted * expect.tickMs <= 1300.0 + 4.0 * expect.tickMs,
+                  "deleted about 1.3 s after the unlock: tick " + std::to_string(flight.deleted));
+    }
+    // A clock that stands still once the key is deleted: nothing changes, and no second halo.
+    {
+        Effects::FlyIn clock;
+        for (int tick = 0; tick < 200; ++tick) Effects::AdvanceFlyIn(rules, clock, true, 16.0);
+        const Effects::FlyIn kept = clock;
+        for (int tick = 0; tick < 50; ++tick) CHECK(!Effects::AdvanceFlyIn(rules, clock, true, 16.0));
+        CHECK(clock.deleted && clock.frame == kept.frame && clock.timeMs == kept.timeMs && clock.ms == kept.ms);
+    }
+
+    // WHERE THE KEY STANDS, on a 1 ms tick so that every frame's m_time is a whole number. From (100, 50) at
+    // 10 degrees to a keyhole at (300, 80): w1 is (320, 76), w3 (308, 76). The easing is sin(bias x PIb) of
+    // bias = min(stride, m_time) / max(stride, 1) of the frame it is on: here done in doubles.
+    const glm::dvec2 start(100.0, 50.0);
+    const glm::dvec2 hole(300.0, 80.0);
+    constexpr double kStartAngle = 10.0;
+    const glm::dvec2 w1(320.0, 76.0);
+    const glm::dvec2 w3(308.0, 76.0);
+    const auto eased = [](double bias) { return std::sin(bias * 1.570796327); };
+    Effects::FlyIn clock;
+    int deletedAt = -1;
+    int frame1At = -1;
+    double lastAlpha = 1.0;
+    double lastX = start.x;
+    int alphaOff = 0;
+    int xBack = 0;
+    bool left = false;
+    for (int tick = 0; tick < 1400; ++tick) {
+        Effects::AdvanceFlyIn(rules, clock, true, 1.0);
+        const Effects::FlyPose pose = Effects::PoseOf(rules, clock, start, kStartAngle, hole);
+        // n is the step of the clock: the build is tick 1, which is n = 0.
+        const int n = tick - 1;
+        if (tick < 2) {
+            // Found, then built: the key has not moved, at its own angle and whole.
+            CHECK_MSG(pose.atPx == start && pose.angleDeg == kStartAngle && pose.alpha == 1.0 && !pose.deleted,
+                      "before the first step the key is where it was: tick " + std::to_string(tick));
+        }
+        if (clock.frame == 1 && frame1At < 0) frame1At = tick;
+        if (pose.deleted && deletedAt < 0) deletedAt = tick;
+        if (n == 333) {
+            // Half way through w0's 666 ms: smoothEnd(0.5), from the key's point and angle toward w1 and -90.
+            const double e = eased(0.5);
+            CHECK_MSG(Near(pose.atPx.x, start.x + (w1.x - start.x) * e, 1e-5) &&
+                          Near(pose.atPx.y, start.y + (w1.y - start.y) * e, 1e-5) &&
+                          Near(pose.angleDeg, kStartAngle + (-90.0 - kStartAngle) * e, 1e-5) && pose.alpha == 1.0,
+                      "w0's middle: " + At(pose.atPx) + " at " + Num(pose.angleDeg));
+        }
+        if (n == 665) {
+            // One step short of the stride: nearly there, and not yet frame 1.
+            CHECK_MSG(clock.frame == 0 && glm::distance(pose.atPx, w1) < 0.01,
+                      "w0's last step: " + At(pose.atPx) + ", frame " + std::to_string(clock.frame));
+        }
+        if (n == 666) {
+            // Frame 1: AT w1 (its stride is 0, so its bias is 0), turned to -90, whole.
+            CHECK_MSG(clock.frame == 1 && Near(pose.atPx.x, w1.x, 1e-9) && Near(pose.atPx.y, w1.y, 1e-9) &&
+                          Near(pose.angleDeg, -90.0, 1e-9) && pose.alpha == 1.0,
+                      "frame 1 is w1: " + At(pose.atPx) + " at " + Num(pose.angleDeg));
+        }
+        if (n == 667) {
+            // Frame 2, one ms in (w1's tick stays in w2's clock): sliding from w1 toward w3.
+            CHECK_MSG(clock.frame == 2 && Near(clock.timeMs, 1.0, 1e-9) &&
+                          Near(pose.atPx.x, w1.x + (w3.x - w1.x) * eased(1.0 / 400.0), 1e-9),
+                      "frame 2 begins with the tick frame 1 took: " + Num(clock.timeMs) + " ms, x " + Num(pose.atPx.x));
+        }
+        if (n == 866) {
+            // 200 of w2's 400 ms: half way through the 12-unit slide, level with the keyhole's y - 4.
+            CHECK_MSG(clock.frame == 2 && Near(clock.timeMs, 200.0, 1e-9) &&
+                          Near(pose.atPx.x, 320.0 - 12.0 * eased(0.5), 1e-5) && Near(pose.atPx.y, 76.0, 1e-9) &&
+                          Near(pose.angleDeg, -90.0, 1e-9) && pose.alpha == 1.0,
+                      "the slide's middle: " + At(pose.atPx));
+        }
+        if (n == 1066) {
+            // Frame 3: at w3, 12 units left of where it rested, still whole.
+            CHECK_MSG(clock.frame == 3 && Near(pose.atPx.x, w3.x, 1e-9) && Near(pose.atPx.y, w3.y, 1e-9) &&
+                          pose.alpha == 1.0,
+                      "frame 3 is w3: " + At(pose.atPx) + ", alpha " + Num(pose.alpha));
+        }
+        if (n == 1166) {
+            // 100 of w3's 200 ms: the fade is half way, 1 - smoothEnd(0.5), and the key does not move.
+            CHECK_MSG(clock.frame == 3 && Near(pose.alpha, 1.0 - eased(0.5), 1e-6) && Near(pose.atPx.x, w3.x, 1e-9),
+                      "the fade's middle: alpha " + Num(pose.alpha));
+        }
+        if (n == 1266) {
+            CHECK_MSG(clock.frame == 4 && pose.alpha == 0.0 && !pose.deleted,
+                      "frame 4 is at no alpha and not yet deleted: alpha " + Num(pose.alpha));
+        }
+        if (n == 1267) {
+            CHECK_MSG(clock.frame == 5 && pose.deleted && pose.alpha == 0.0 && Near(pose.atPx.x, w3.x, 1e-9),
+                      "frame 5 is the last: deleted at w3, no alpha");
+        }
+        // It only ever fades, and from frame 1 it only ever goes left; before the first step it has not moved.
+        if (pose.alpha > lastAlpha + 1e-12) ++alphaOff;
+        lastAlpha = pose.alpha;
+        if (clock.frame >= 1) {
+            if (pose.atPx.x > lastX + 1e-9 && left) ++xBack;
+            left = true;
+        }
+        lastX = pose.atPx.x;
+    }
+    CHECK_MSG(frame1At == 667 && deletedAt == 1268,
+              "on 1 ms ticks frame 1 is tick 667 (the unlock is tick 0) and the key goes on 1268: " +
+                  std::to_string(frame1At) + ", " + std::to_string(deletedAt));
+    CHECK_MSG(alphaOff == 0 && xBack == 0,
+              "the alpha never rises (" + std::to_string(alphaOff) + ") and the slide never turns back (" +
+                  std::to_string(xBack) + ")");
+    // The key's own angle is w0's, whatever it was, and the keyhole's point anchors every other waypoint.
+    {
+        Effects::FlyIn mid;
+        for (int tick = 0; tick < 2 + 333; ++tick) Effects::AdvanceFlyIn(rules, mid, true, 1.0);
+        const Effects::FlyPose a = Effects::PoseOf(rules, mid, start, 0.0, hole);
+        const Effects::FlyPose b = Effects::PoseOf(rules, mid, start, 30.0, hole);
+        CHECK_MSG(Near(b.angleDeg - a.angleDeg, 30.0 * (1.0 - eased(0.5)), 1e-5) && a.atPx == b.atPx,
+                  "w0's angle is the key's own: " + Num(a.angleDeg) + " from 0, " + Num(b.angleDeg) + " from 30");
+        const Effects::FlyPose moved = Effects::PoseOf(rules, mid, start, 0.0, hole + glm::dvec2(10.0, -5.0));
+        CHECK_MSG(moved.atPx != a.atPx, "the keyhole's point is where it flies to");
+    }
+    std::printf("  the key's flight: frames 1-5 on ticks 41, 42, 65, 77, 78 at 60 Hz (deleted on 78), 43..82 at 16 ms\n");
+}
+
 // What a diamond, a shock ring and a fire signal leave (the visuals plan's 10.4):
 // eight calls, each pinned as read, and the arithmetic of each reading - on an
 // entity's own depth, a bare 10 on one, a bare 10 of its own, and the strike's
@@ -1668,6 +1869,22 @@ void ARowMissingAFactIsRefused() {
             "shock_diamond_pick.z");
     refused("halo_at_once.json", "\"after_fly_in_ms\": 666,", "\"after_fly_in_ms\": 0,",
             "key_unlock_halo.after_fly_in_ms");
+    // The key's flight (planning step 233): required, and its first time the halo's.
+    refused("no_fly.json", "\"key_fly_in\": {", "\"key_fly_in_gone\": {", "key_fly_in");
+    refused("fly_apart.json", "{\"time_ms\": 666, \"at\": \"key\"", "{\"time_ms\": 600, \"at\": \"key\"",
+            "key_fly_in.waypoints[0].time_ms");
+    refused("fly_no_pib.json", "\"pib\": 1.570796327,", "\"pib\": 0,", "key_fly_in.pib");
+    refused("fly_halo_past.json", "\"halo_frame\": 1,", "\"halo_frame\": 6,", "key_fly_in.halo_frame");
+    refused("fly_halo_first.json", "\"halo_frame\": 1,", "\"halo_frame\": 0,", "key_fly_in.halo_frame");
+    refused("fly_anchor.json", "\"at\": \"key\",", "\"at\": \"key_hole\",", "key_fly_in.waypoints[0].at");
+    refused("fly_alpha.json", "\"angle_deg\": \"key\", \"alpha\": 1}", "\"angle_deg\": \"key\", \"alpha\": 2}",
+            "key_fly_in.waypoints[0].alpha");
+    refused("fly_angle.json", "\"angle_deg\": \"key\"", "\"angle_deg\": \"sideways\"",
+            "key_fly_in.waypoints[0].angle_deg");
+    refused("fly_negative_time.json", "{\"time_ms\": 0, \"at\": \"keyhole\"", "{\"time_ms\": -1, \"at\": \"keyhole\"",
+            "key_fly_in.waypoints[1].time_ms");
+    refused("fly_offset.json", "\"offset_units\": [20, -4],", "\"offset_units\": [20],",
+            "key_fly_in.waypoints[1].offset_units");
     // The 11.1 rows: each required; the wall's turned by its wall and nothing
     // else, and its float named; the stone's and the door's never turned; each z
     // read the one way the decode has it; the door's shares signed as decoded.
@@ -1794,6 +2011,7 @@ MP_SUITE_MAIN("test_mp_effects") {
     TheCrystalRowsAddToTheCrystalsOwnPoint();
     TheKeyRowsAreTheDecodedCalls();
     TheUnlockHaloComesOnTheFlyInsFrameOne();
+    TheKeyFliesIntoItsKeyholeAndIsDeleted();
     TheShockBurnAndExtinguishRowsAreTheDecodedCalls();
     TheWallStoneAndDoorRowsAreTheDecodedCalls();
     TheTorchTrailAndRoundaboutRowsAreTheDecodedCalls();

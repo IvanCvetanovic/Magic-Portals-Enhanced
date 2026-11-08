@@ -16,7 +16,15 @@
     "DERIVED from the independent python model out/parity/program/CTL/CTL6b/work/arrows_model.py (places and hits for both arrangements, written from the design's section 1 and the",
     "owner's decision alone; the routes and the camera model are deadzone_census.py's) by out/parity/program/CTL/CTL6b/work/oracle_golden_ctl6b.py, at the exact window widths 256 x aspect.",
     "The `grouped` block was diffed against the previous golden (git show HEAD:tests/golden/controls_census.json): every key equal. docs/planning/2026-10-15-modern-controls.md",
-    "section 1.9 and Appendix A name the headline numbers of the grouped arrangement; planning step 186 those of the split one."
+    "section 1.9 and Appendix A name the headline numbers of the grouped arrangement; planning step 186 those of the split one.",
+    "PLANNING STEP 232 (the owner's ruling of 2026-11-08, his 3-09 report): the two walk arrows' hit rectangles no longer run to the view's edge (hit.walk_edge_reach_px 0; the corner buttons keep",
+    "edge_reach_px 48). Re-derived with the same model and the same routes, with an edge reach per control and the grouped pair's zone taken as the UNION of its two hit rectangles (the model had",
+    "it as (0, top, right, view bottom), which was that union only while the arrows reached the view's edge). The accepted lists (EM 16, slack 0) are unchanged at every shape and the split arrows'",
+    "lists stay empty. The lists can only shrink, and do in the grouped arrangement's EM 0 and slack 4 variants (1-20 and 3-27 are freed there) and in the `growth_table` counts; the arrows'",
+    "`zones_16x9` hit rectangles are now their boxes (to the seam, when grouped).",
+    "THE SCRIPTS NAMED ABOVE ARE THE PRE-STEP-232 ORIGINALS (one edge reach for every control) and cannot reproduce this file. The step-232 copies are out/parity/program/CTL/CTL6b/work/arrows_model_step232.py (the model with an edge reach",
+    "per control and the union pair zone) and out/parity/program/CTL/CTL6b/work/oracle_golden_ctl6b_step232.py (loads that model; python -B -I <it> from the repository root prints this file's JSON, equal to it apart from the console's line endings,",
+    "checked 2026-11-08; with --write it overwrites this file). They are LOCAL copies, persistent in the gitignored out/, and not committed: a fresh clone has neither."
   ],
   "valid_for": {
     "default_arrows": "split",
@@ -35,6 +43,7 @@
     "hit": {
       "seam_px": 32,
       "edge_reach_px": 48,
+      "walk_edge_reach_px": 0,
       "grow_px": {
         "walk_left": 0,
         "walk_right": 0,
@@ -376,10 +385,10 @@
             240.35555555555555
           ],
           "hit": [
-            0.0,
+            15.644444444444444,
             208.49777777777777,
             47.50222222222222,
-            256.0
+            240.35555555555555
           ]
         },
         "walk_right": {
@@ -392,8 +401,8 @@
           "hit": [
             407.6088888888889,
             208.49777777777777,
-            455.1111111111111,
-            256.0
+            439.46666666666664,
+            240.35555555555555
           ]
         },
         "pause": {
@@ -498,13 +507,13 @@
             ],
             "16": [
               [
-                4,
-                1,
+                0,
+                0,
                 0
               ],
               [
-                4,
-                1,
+                0,
+                0,
                 0
               ],
               [
@@ -534,13 +543,13 @@
             ],
             "16": [
               [
-                10,
-                3,
+                0,
+                0,
                 0
               ],
               [
-                10,
-                3,
+                0,
+                0,
                 0
               ],
               [
@@ -751,10 +760,7 @@
             ]
           },
           "blocked_em0": {
-            "pair": [
-              "1-20",
-              "3-27"
-            ],
+            "pair": [],
             "restart": [],
             "pause": [],
             "clear_portals": [
@@ -763,10 +769,7 @@
               "3-14"
             ]
           },
-          "blocked_pair_slack4": [
-            "1-20",
-            "3-27"
-          ]
+          "blocked_pair_slack4": []
         },
         {
           "name": "4:3",
@@ -787,10 +790,7 @@
             ]
           },
           "blocked_em0": {
-            "pair": [
-              "1-20",
-              "3-27"
-            ],
+            "pair": [],
             "restart": [],
             "pause": [],
             "clear_portals": [
@@ -799,10 +799,7 @@
               "3-14"
             ]
           },
-          "blocked_pair_slack4": [
-            "1-20",
-            "3-27"
-          ]
+          "blocked_pair_slack4": []
         },
         {
           "name": "3:2",
@@ -823,10 +820,7 @@
             ]
           },
           "blocked_em0": {
-            "pair": [
-              "1-20",
-              "3-27"
-            ],
+            "pair": [],
             "restart": [],
             "pause": [],
             "clear_portals": [
@@ -835,10 +829,7 @@
               "3-14"
             ]
           },
-          "blocked_pair_slack4": [
-            "1-20",
-            "3-27"
-          ]
+          "blocked_pair_slack4": []
         },
         {
           "name": "16:10",
@@ -859,10 +850,7 @@
             ]
           },
           "blocked_em0": {
-            "pair": [
-              "1-20",
-              "3-27"
-            ],
+            "pair": [],
             "restart": [],
             "pause": [],
             "clear_portals": [
@@ -871,10 +859,7 @@
               "3-14"
             ]
           },
-          "blocked_pair_slack4": [
-            "1-20",
-            "3-27"
-          ]
+          "blocked_pair_slack4": []
         },
         {
           "name": "16:9",
@@ -898,7 +883,6 @@
           },
           "blocked_em0": {
             "pair": [
-              "1-20",
               "3-27"
             ],
             "restart": [
@@ -912,7 +896,6 @@
             ]
           },
           "blocked_pair_slack4": [
-            "1-20",
             "3-27"
           ]
         },
@@ -940,7 +923,6 @@
           },
           "blocked_em0": {
             "pair": [
-              "1-20",
               "3-27"
             ],
             "restart": [
@@ -955,7 +937,6 @@
             ]
           },
           "blocked_pair_slack4": [
-            "1-20",
             "3-27"
           ]
         },
@@ -976,18 +957,14 @@
             ]
           },
           "blocked_em0": {
-            "pair": [
-              "1-20"
-            ],
+            "pair": [],
             "restart": [],
             "pause": [],
             "clear_portals": [
               "1-09"
             ]
           },
-          "blocked_pair_slack4": [
-            "1-20"
-          ]
+          "blocked_pair_slack4": []
         },
         {
           "name": "21:9",
@@ -1006,18 +983,14 @@
             ]
           },
           "blocked_em0": {
-            "pair": [
-              "1-20"
-            ],
+            "pair": [],
             "restart": [],
             "pause": [],
             "clear_portals": [
               "1-09"
             ]
           },
-          "blocked_pair_slack4": [
-            "1-20"
-          ]
+          "blocked_pair_slack4": []
         },
         {
           "name": "32:9",
@@ -1049,10 +1022,10 @@
             240.35555555555555
           ],
           "hit": [
-            0.0,
+            15.644444444444444,
             208.49777777777777,
             53.19111111111111,
-            256.0
+            240.35555555555555
           ]
         },
         "walk_right": {
@@ -1066,7 +1039,7 @@
             53.19111111111111,
             208.49777777777777,
             90.73777777777778,
-            256.0
+            240.35555555555555
           ]
         },
         "pause": {
@@ -1118,108 +1091,108 @@
           "uniform": {
             "0": [
               [
-                2,
-                2,
-                2
+                1,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                0
               ],
               [
                 2,
-                2,
-                2
-              ],
-              [
-                2,
-                2,
-                2
+                1,
+                0
               ]
             ],
             "16": [
               [
-                8,
                 2,
-                2
+                1,
+                1
+              ],
+              [
+                2,
+                1,
+                1
               ],
               [
                 8,
                 2,
-                2
-              ],
-              [
-                8,
-                2,
-                2
+                1
               ]
             ]
           },
           "balanced": {
             "0": [
               [
-                2,
-                2,
-                2
+                1,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                0
               ],
               [
                 2,
-                2,
-                2
-              ],
-              [
-                2,
-                2,
-                2
+                1,
+                0
               ]
             ],
             "16": [
               [
-                14,
-                5,
-                2
+                3,
+                1,
+                1
+              ],
+              [
+                4,
+                1,
+                1
               ],
               [
                 14,
                 5,
-                2
-              ],
-              [
-                14,
-                5,
-                2
+                1
               ]
             ]
           },
           "mr": {
             "0": [
               [
-                2,
-                2,
-                2
+                1,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                0
               ],
               [
                 2,
-                2,
-                2
-              ],
-              [
-                2,
-                2,
-                2
+                1,
+                0
               ]
             ],
             "16": [
               [
-                17,
-                10,
-                2
+                7,
+                4,
+                1
+              ],
+              [
+                7,
+                4,
+                1
               ],
               [
                 17,
                 10,
-                2
-              ],
-              [
-                17,
-                10,
-                2
+                1
               ]
             ]
           }

@@ -447,6 +447,15 @@ void UpdateMinion(const Minion& art, MinionPose& pose, MinionArm arm, bool right
         pose.row = pose.dirRow;
         pose.column = art.holdColumn;
         return;
+    case MinionArm::Watch:
+        // The decode writes no frame here (#1184-1190: SetFrame only `if (entityInSight == null)`), so the knight keeps
+        // the last stride's frame, which reads as a knight frozen mid-step. The standing frame instead is the owner's
+        // deviation (art.json _watch_stands); the row is the one it last walked, as a hold's.
+        if (art.watchStands) {
+            pose.row = stored;
+            pose.column = art.holdColumn;
+        }
+        return;
     case MinionArm::None:
     case MinionArm::Settled:
         return;
@@ -718,6 +727,12 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         minionEntry["darkest_zeroes_emissive"].IsBool() && black.IsObject() && black["entity"].IsString() &&
         !black["entity"].AsString("").empty() && Emissive(black["colour"], minion.blackColour) &&
         Emissive(black["emissive"], minion.blackEmissive);
+    // Optional, and false where absent (the decode's own draw); present, it must say true or false, as a stray word would
+    // otherwise turn the step 234 deviation on or off by accident.
+    if (minionEntry.Has("watch_stands") && !minionEntry["watch_stands"].IsBool()) {
+        error = path + ": minion.watch_stands is true or false";
+        return false;
+    }
     if (!minionOk) {
         error = path + ": minion needs pivot_px, z.value, feet_below_entity_px from 0, walk.first_column and "
                        ".last_column in order and a walk.stride_ms above 0, hold_column, start_row and "
@@ -734,6 +749,7 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     minion.searchPeriodMs = search["period_ms"].AsNumber();
     minion.searchRightAfterMs = search["right_after_ms"].AsNumber();
     minion.darkestZeroesEmissive = minionEntry["darkest_zeroes_emissive"].AsBool();
+    minion.watchStands = minionEntry.Has("watch_stands") && minionEntry["watch_stands"].AsBool();
     minion.blackEntity = black["entity"].AsString("");
 
     // The exit door's second sheet and the glow behind it. None has a default:

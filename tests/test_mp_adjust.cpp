@@ -2079,11 +2079,14 @@ void AGrabIsTheDrawnBoxNotTheHitRect() {
     if (!d.ok) return;
     const Screen s(16.0 / 9.0);
     const Controls::Layout layout = Controls::LayOut(Controls::Style::Modern, d.controls, d.hud, Controls::Tuning{}, s.view, s.insets, kSettled);
-    // walk_left's hit rectangle reaches the view's left and bottom edges; its box does not.
+    // walk_left's hit rectangle is its box since planning step 232 (the owner's ruling of 2026-11-08: no reach to the view's edge for the walk arrows), so
+    // the difference between a hit rectangle and a drawn box is shown on a CORNER button: clear-portals' hit reaches the view's top-left corner, its box does not.
     const Hud::Rect box = layout.At(Controls::Id::Left).rect;
     CHECK_MSG(NearRect(box, Hud::Rect{glm::dvec2(15.644444444, 208.497777778), glm::dvec2(31.857777778)}, 1e-6), "walk_left's box (15.6444, 208.4978)");
-    const glm::dvec2 inHitOnly(5.0, 250.0);
-    CHECK_MSG(layout.At(Controls::Id::Left).hit.Contains(inHitOnly) && !Adjust::StrictlyInside(box, inHitOnly), "(5, 250) is in the hit rectangle and outside the box");
+    CHECK_MSG(NearRect(layout.At(Controls::Id::Left).hit.rect, box, 1e-9), "and walk_left's hit rectangle is that box");
+    const Hud::Rect clearBox = layout.At(Controls::Id::Clear).rect;
+    const glm::dvec2 inHitOnly(5.0, 5.0);
+    CHECK_MSG(layout.At(Controls::Id::Clear).hit.Contains(inHitOnly) && !Adjust::StrictlyInside(clearBox, inHitOnly), "(5, 5) is in clear-portals' hit rectangle and outside its box");
     {
         Pad pad(s);
         const Adjust::Step step = pad.Press(inHitOnly);

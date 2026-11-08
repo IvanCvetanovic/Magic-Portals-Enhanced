@@ -850,8 +850,23 @@
       "ETHCallback_minion ins 1164-1205: a minion not walking - serving its hold, or with its way blocked -",
       "has its velocity times (0.3, 1) and, while nothing is in its sight (entityInSight null; the port's",
       "sight is built since planning step 158, G1a, minions.json `sight`: a knight that holds with something",
-      "in sight keeps its stride's frame), SetFrame(0, dirRow): column 0 of the last row it walked. A lone",
-      "guard inside minDist x 2 (shouldntMove, ins 1089 -> 1163 -> 1450) writes no frame at all"
+      "in sight keeps its stride's frame, unless watch_stands below draws it standing), SetFrame(0, dirRow):",
+      "column 0 of the last row it walked. A lone guard inside minDist x 2 (shouldntMove, ins 1089 -> 1163 ->",
+      "1450) writes no frame at all"
+    ],
+    "watch_stands": true,
+    "_watch_stands": [
+      "false is the decode: ETHCallback_minion #1183-1205 brakes a knight that is not walking (velocity x 0.3)",
+      "and calls SetFrame(0, dirRow) only if entityInSight == null, so a braked knight with something in sight",
+      "keeps the last frame its stride wrote (3 of the walk's 4 columns differ from the standing one) for as long",
+      "as it stays braked with something in sight: the dwell it serves is the waypoint's hold (2000-4000 ms), and",
+      "each first sighting and each of its shots restarts it. Once nothing is in sight the Hold arm writes the",
+      "standing frame in both modes. true draws the standing frame (hold_column, the row it last walked) for the",
+      "watching knight too. A DEVIATION from the original: decided in step 234 after the owner's 3-05 report; the owner to confirm (the right",
+      "knight 'gets stuck in front of the door, in the walking animation, as if there is something he can't get",
+      "over'; his words, a symptom report, not a ruling; planning step 234). It is cosmetic: it moves no simulation number and no route (the sim's arm,",
+      "Minions::Arm::Watch, is the same either way). Footage of the original would settle which is right",
+      "(docs/parity.md sections 1-2). Absent from this file the rule reads false"
     ],
     "start_row": 0,
     "_start_row": "GetUInt('dirRow') of a key never set reads 0 (ETHEntity.cpp:865-870); frame 0 is also the default (ETHEntity.cpp:101)",

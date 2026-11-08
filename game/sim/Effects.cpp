@@ -20,6 +20,10 @@ constexpr const char* kAlongFlightMinus90 = "along_flight_minus_90";
 constexpr const char* kRadiansAsDegrees = "get_angle_radians_as_degrees";
 constexpr const char* kEntityAngle = "entity_angle";
 constexpr const char* kHaloBrightnessScale = "halo_brightness_scale";
+// key_fly_in's two anchors, and the angle that is the key's own.
+constexpr const char* kAnchorKey = "key";
+constexpr const char* kAnchorKeyhole = "keyhole";
+constexpr const char* kAngleOfKey = "key";
 
 bool Finite(const Json::Value& value) {
     return value.IsNumber() && std::isfinite(value.AsNumber());
@@ -250,6 +254,77 @@ Spawn SpawnOf(const Rule& rule, const glm::dvec2& fromPx, const glm::dvec2& dire
     return spawn;
 }
 
+// effects.json key_fly_in: the six waypoints ETHCallback_key builds, every field stated. The halo's frame
+// has to be one the manager reaches by a step (a frame above 0 and not past the last), and a waypoint with
+// no time, point or alpha would be a number nobody decoded.
+bool ReadKeyFlyIn(const Json::Value& row, KeyFlyIn& out, std::string& error) {
+    const std::string where = "key_fly_in";
+    if (!row.IsObject()) {
+        error = where + " is not an object";
+        return false;
+    }
+    KeyFlyIn read;
+    if (!Finite(row["pib"]) || !(row["pib"].AsNumber() > 0.0)) {
+        error = where + ".pib is not a number above 0 (smoothEnd's PIb)";
+        return false;
+    }
+    read.pib = row["pib"].AsNumber();
+    const Json::Value& list = row["waypoints"];
+    if (!list.IsArray() || list.AsArray().size() < 2) {
+        error = where + ".waypoints is not a list of at least two waypoints";
+        return false;
+    }
+    for (std::size_t i = 0; i < list.AsArray().size(); ++i) {
+        const Json::Value& item = list.AsArray()[i];
+        const std::string at = where + ".waypoints[" + std::to_string(i) + "]";
+        FlyWaypoint waypoint;
+        if (!item.IsObject() || !Finite(item["time_ms"]) || item["time_ms"].AsNumber() < 0.0) {
+            error = at + ".time_ms is not a number from 0";
+            return false;
+        }
+        waypoint.timeMs = item["time_ms"].AsNumber();
+        if (item["at"].IsString() && item["at"].AsString() == kAnchorKey) {
+            waypoint.at = FlyWaypoint::Anchor::Key;
+        } else if (item["at"].IsString() && item["at"].AsString() == kAnchorKeyhole) {
+            waypoint.at = FlyWaypoint::Anchor::Keyhole;
+        } else {
+            error = at + ".at is not \"" + kAnchorKey + "\" or \"" + kAnchorKeyhole + "\"";
+            return false;
+        }
+        const Json::Value& offset = item["offset_units"];
+        if (!offset.IsArray() || offset.AsArray().size() != 2 || !Finite(offset.AsArray()[0]) ||
+            !Finite(offset.AsArray()[1])) {
+            error = at + ".offset_units is not a pair [x, y] of numbers";
+            return false;
+        }
+        waypoint.offsetUnits = glm::dvec2(offset.AsArray()[0].AsNumber(), offset.AsArray()[1].AsNumber());
+        const Json::Value& angle = item["angle_deg"];
+        if (angle.IsString() && angle.AsString() == kAngleOfKey) {
+            waypoint.angleFromKey = true;
+        } else if (Finite(angle)) {
+            waypoint.angleDeg = angle.AsNumber();
+        } else {
+            error = at + ".angle_deg is not a number or \"" + kAngleOfKey + "\"";
+            return false;
+        }
+        if (!Finite(item["alpha"]) || item["alpha"].AsNumber() < 0.0 || item["alpha"].AsNumber() > 1.0) {
+            error = at + ".alpha is not a number from 0 to 1";
+            return false;
+        }
+        waypoint.alpha = item["alpha"].AsNumber();
+        read.waypoints.push_back(waypoint);
+    }
+    const Json::Value& halo = row["halo_frame"];
+    if (!Finite(halo) || halo.AsNumber() != std::floor(halo.AsNumber()) || halo.AsNumber() < 1.0 ||
+        halo.AsNumber() >= static_cast<double>(read.waypoints.size())) {
+        error = where + ".halo_frame is not a frame the manager steps to (a whole number from 1 to the last)";
+        return false;
+    }
+    read.haloFrame = static_cast<int>(halo.AsNumber());
+    out = std::move(read);
+    return true;
+}
+
 } // namespace
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error) {
@@ -403,6 +478,16 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         return false;
     }
     read.keyUnlockHaloAfterMs = halo.AsNumber();
+    // The flight, and its one number the halo's row also states: the halo is added on the frame the manager
+    // steps to after w0's time, so the two rows say one thing and a difference is refused.
+    if (!ReadKeyFlyIn(root["key_fly_in"], read.keyFlyIn, why)) {
+        error = path + ": " + why;
+        return false;
+    }
+    if (read.keyFlyIn.waypoints.front().timeMs != read.keyUnlockHaloAfterMs) {
+        error = path + ": key_unlock_halo.after_fly_in_ms is key_fly_in.waypoints[0].time_ms, the one number";
+        return false;
+    }
     // The wall's datum that scales its dust: the key ETHCallback_breakable_wall
     // reads (#16-26). Named in the data, not here, as earthquake.json names it for
     // the same arm's shake.
@@ -1032,7 +1117,7 @@ Spawn DoorLiftDust(const Rules& rules, bool opening, const glm::dvec2& doorPx, d
 }
 
 bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs) {
-    if (!spent || clock.haloAdded) return false;
+    if (!spent || clock.deleted) return false;
     // ETHCallback_key #1084-1093: the frame the key finds its keyhole only sets
     // foundKeyhole; #204-220 read it on the next.
     if (!clock.found) {
@@ -1044,14 +1129,72 @@ bool AdvanceFlyIn(const Rules& rules, FlyIn& clock, bool spent, double tickMs) {
     if (!clock.built) {
         clock.built = true;
         clock.ms = 0.0;
+        clock.timeMs = 0.0;
+        clock.frame = 0;
         return false;
     }
-    // Every later frame adds its ms (#6-11), and m_time >= w0's stride steps it to
-    // frame 1 (#46-57), on which #593-629 add the halo.
+    const std::vector<FlyWaypoint>& waypoints = rules.keyFlyIn.waypoints;
+    if (waypoints.empty()) return false;
+    const int last = static_cast<int>(waypoints.size()) - 1;
+    // Every later frame adds its ms (#6-11), and ONE step is taken (#46-57: an if, not a loop): m_time >= the
+    // stride of the frame it is on - WaypointManager::update passes waypoints[currentFrame].time, the frame
+    // held BEFORE the step - goes up a frame and takes the stride off, and past the last frame it stays there
+    // with m_time 0 (#59-76). A stride of 0 steps every frame and takes nothing off.
     clock.ms += tickMs;
-    if (clock.ms < rules.keyUnlockHaloAfterMs) return false;
-    clock.haloAdded = true;
-    return true;
+    clock.timeMs += tickMs;
+    const double stride = waypoints[static_cast<std::size_t>(std::clamp(clock.frame, 0, last))].timeMs;
+    if (clock.timeMs >= stride) {
+        ++clock.frame;
+        clock.timeMs -= stride;
+        if (clock.frame > last) {
+            clock.frame = last;
+            clock.timeMs = 0.0;
+        }
+    }
+    // #637-648: on the last frame the key deletes itself.
+    if (clock.frame == last) clock.deleted = true;
+    // #593-635: on the halo's frame, the halo and its sound. A frame of 0 ms lasts one tick, but the flag
+    // keeps it to one whatever the numbers say.
+    if (clock.frame == rules.keyFlyIn.haloFrame && !clock.haloAdded) {
+        clock.haloAdded = true;
+        return true;
+    }
+    return false;
+}
+
+FlyPose PoseOf(const Rules& rules, const FlyIn& clock, const glm::dvec2& startPx, double startAngleDeg,
+               const glm::dvec2& holePx) {
+    FlyPose pose;
+    pose.atPx = startPx;
+    pose.angleDeg = startAngleDeg;
+    const std::vector<FlyWaypoint>& waypoints = rules.keyFlyIn.waypoints;
+    // Until the manager is built the key is where it was (#204-220 only read foundKeyhole).
+    if (waypoints.empty() || !clock.built) return pose;
+    const int last = static_cast<int>(waypoints.size()) - 1;
+    const int frame = std::clamp(clock.frame, 0, last);
+    const FlyWaypoint& current = waypoints[static_cast<std::size_t>(frame)];
+    // getCurrentPoint: the next frame, or the same one on the last (not repeating).
+    const FlyWaypoint& next = waypoints[static_cast<std::size_t>(frame == last ? frame : frame + 1)];
+    // FrameTimer::getBias (23716..23810), in floats: min(stride, m_time) / max(stride, 1), the stride of the
+    // frame it is on NOW (setCurrentStride after the step). Then the waypoint's filter, smoothEnd.
+    const float bias = static_cast<float>(std::min(current.timeMs, clock.timeMs)) /
+                       static_cast<float>(std::max(current.timeMs, 1.0));
+    const double eased =
+        static_cast<double>(Supersonic::DetMath::sin(bias * static_cast<float>(rules.keyFlyIn.pib)));
+    const auto pointOf = [&](const FlyWaypoint& waypoint) {
+        return (waypoint.at == FlyWaypoint::Anchor::Key ? startPx : holePx) + waypoint.offsetUnits;
+    };
+    const auto angleOf = [&](const FlyWaypoint& waypoint) {
+        return waypoint.angleFromKey ? startAngleDeg : waypoint.angleDeg;
+    };
+    // interpolate(a, b, bias) = a + (b - a) x bias (Interpolator.angelscript 314380..314616), for the
+    // position, the angle and the colour's alpha alike.
+    const glm::dvec2 from = pointOf(current);
+    pose.atPx = from + (pointOf(next) - from) * eased;
+    pose.angleDeg = angleOf(current) + (angleOf(next) - angleOf(current)) * eased;
+    pose.alpha = current.alpha + (next.alpha - current.alpha) * eased;
+    pose.deleted = clock.deleted;
+    return pose;
 }
 
 Spawn ProjectileShoot(const Rules& rules, const glm::dvec2& fromPx, const glm::dvec2& towardPx) {

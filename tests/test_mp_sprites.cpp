@@ -1353,6 +1353,7 @@ void TheMinionIsMinionEnt() {
     CHECK_MSG(minion.firstColumn == 0 && minion.lastColumn == 3 && minion.strideMs == 120.0,
               "the walk: set(0, 3, 120, true)");
     CHECK_MSG(minion.holdColumn == 0 && minion.startRow == 0, "the hold on column 0, and row 0 before any walk");
+    CHECK_MSG(minion.watchStands, "a braked knight with something in sight stands: the deviation of planning step 234 (the owner to confirm)");
     CHECK_MSG(minion.leftRow == 1 && minion.rightRow == 2, "the decoded rows: 1 walking left, 2 right (R3)");
     CHECK_MSG(minion.searchPeriodMs == 4000.0 && minion.searchRightAfterMs == 2000.0,
               "a blocked minion looks right while elapsedTime % 4000 > 2000");
@@ -1404,6 +1405,10 @@ void AMinionWithoutItsFramingIsRefused() {
     refused("\"darkest_zeroes_emissive\": true,", "\"darkest_zeroes_emissive\": 1,", "a flag not a bool",
             "minion needs");
     refused("\"entity\": \"ghost_minion.ent\",", "\"entity\": \"\",", "no black knight", "minion needs");
+    refused("\"watch_stands\": true,", "\"watch_stands\": \"yes\",", "a standing watch that is a word",
+            "minion.watch_stands is true or false");
+    refused("\"watch_stands\": true,", "\"watch_stands\": 1,", "a standing watch that is a number",
+            "minion.watch_stands is true or false");
     refused("\"scale_factor\": 2.8125", "\"scale_factor\": 0", "no depth factor", "depth needs a scale_factor");
     refused("\"value\": 4.0", "\"value\": \"4\"", "a player depth not a number", "character needs z.value");
     refused("\"value\": 2.0", "\"value\": \"2\"", "a minion depth not a number", "minion needs");
@@ -1472,6 +1477,96 @@ void AMinionIsFramedAsItsScriptFramesIt() {
     CHECK_MSG(pose.row == 2, "at 6500 ms: right again");
     Art::UpdateMinion(art, pose, Art::MinionArm::Hold, false, tick, 0.0);
     CHECK_MSG(pose.row == 2 && pose.column == 0, "and a hold after keeps the row the search stored");
+}
+
+// A knight braked with something in sight (MinionArm::Watch, planning step 234): the decode's script sets no frame there
+// (ETHCallback_minion #1184-1190), so the picture keeps the last frame its stride wrote, which is mid-step in three of the
+// walk's four columns. art.json's watch_stands, the deviation decided in step 234 after the owner's 3-05 report (the owner to confirm), draws the standing frame of
+// the row it last walked instead. Both arms are pinned on a copy of the rules, so that the data's switch is the whole
+// difference and nothing else in the pose moves.
+void AWatchingKnightKeepsItsStrideFrameUnlessTheDataSaysItStands() {
+    Art::Rules rules;
+    std::string error;
+    CHECK_MSG(Art::LoadRules(kPortData + "/art.json", rules, error), error);
+    Art::Minion decoded = rules.minion;
+    decoded.watchStands = false;
+    Art::Minion standing = rules.minion;
+    standing.watchStands = true;
+    const double tick = 1000.0 / 60.0;
+
+    // Walked right to a column that is not the standing one.
+    Art::MinionPose walked;
+    walked.row = decoded.startRow;
+    int ticks = 0;
+    while (ticks < 60 && (walked.column == decoded.holdColumn || ticks == 0)) {
+        Art::UpdateMinion(decoded, walked, Art::MinionArm::Walk, true, tick, 0.0);
+        ++ticks;
+    }
+    CHECK_MSG(walked.column != decoded.holdColumn && walked.row == decoded.rightRow && walked.dirRow == decoded.rightRow,
+              "walked right to a stride column: " + std::to_string(walked.column));
+
+    // The decode: nothing written, however long it is watched, and whichever way the call says it last went.
+    Art::MinionPose pose = walked;
+    for (int i = 0; i < 100; ++i) Art::UpdateMinion(decoded, pose, Art::MinionArm::Watch, i % 2 == 0, tick, 5000.0);
+    CHECK_MSG(pose.column == walked.column && pose.row == walked.row && pose.dirRow == walked.dirRow &&
+                  pose.timer.frame == walked.timer.frame && pose.timer.timeMs == walked.timer.timeMs,
+              "watch_stands false: the stride's frame stays, and the timer");
+
+    // The deviation: the hold column of the row it last walked, the stored row and the timer as a Hold leaves them.
+    pose = walked;
+    Art::UpdateMinion(standing, pose, Art::MinionArm::Watch, false, tick, 0.0);
+    CHECK_MSG(pose.column == standing.holdColumn && pose.row == walked.dirRow && pose.dirRow == walked.dirRow &&
+                  pose.timer.frame == walked.timer.frame && pose.timer.timeMs == walked.timer.timeMs,
+              "watch_stands true: the hold column of the row it walked, the walk's column and time kept");
+    Art::MinionPose held = walked;
+    Art::UpdateMinion(standing, held, Art::MinionArm::Hold, false, tick, 0.0);
+    CHECK_MSG(held.column == pose.column && held.row == pose.row, "and a watch is drawn as a hold is");
+
+    // On, it resumes the walk from the column the timer kept, as after a hold.
+    Art::UpdateMinion(standing, pose, Art::MinionArm::Walk, true, tick, 0.0);
+    CHECK_MSG(pose.column == walked.column || pose.column == (walked.column + 1) % (standing.lastColumn + 1),
+              "walking on from the column it stopped on: " + std::to_string(pose.column));
+
+    // Before any walk the stored row reads as the start row, and a watch stores nothing.
+    Art::MinionPose fresh;
+    fresh.row = standing.startRow;
+    Art::UpdateMinion(standing, fresh, Art::MinionArm::Watch, true, tick, 0.0);
+    CHECK_MSG(fresh.column == standing.holdColumn && fresh.row == standing.startRow && fresh.dirRow == -1,
+              "watched before any walk: the start row, nothing stored");
+
+    // The lone guard's Settled and an unticked minion still write nothing, with the switch on.
+    pose = walked;
+    Art::UpdateMinion(standing, pose, Art::MinionArm::Settled, true, tick, 0.0);
+    Art::UpdateMinion(standing, pose, Art::MinionArm::None, true, tick, 0.0);
+    CHECK_MSG(pose.column == walked.column && pose.row == walked.row, "Settled and None are left alone, standing or not");
+
+    // The switch is the data's: a file without the key reads false, with false reads false, with true reads true.
+    std::ifstream file(kPortData + "/art.json", std::ios::binary);
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string real = buffer.str();
+    const std::string key = "\"watch_stands\": true,";
+    CHECK_MSG(real.find(key) != std::string::npos && real.find(key, real.find(key) + 1) == std::string::npos, "once: " + key);
+    const auto loaded = [&real, &key](const std::string& to, const std::string& name, bool& stands) {
+        std::string text = real;
+        const std::size_t at = text.find(key);
+        if (at == std::string::npos) return false;
+        text.replace(at, key.size(), to);
+        const std::filesystem::path path = Scratch() / ("art-minion-watch-" + name + ".json");
+        Write(path, std::vector<unsigned char>(text.begin(), text.end()));
+        Art::Rules read;
+        std::string why;
+        const bool ok = Art::LoadRules(path.string(), read, why);
+        CHECK_MSG(ok, name + ": " + why);
+        stands = read.minion.watchStands;
+        return ok;
+    };
+    bool stands = true;
+    CHECK_MSG(loaded("", "absent", stands) && !stands, "no watch_stands: false, the decode's own draw");
+    stands = true;
+    CHECK_MSG(loaded("\"watch_stands\": false,", "false", stands) && !stands, "watch_stands false reads false");
+    stands = false;
+    CHECK_MSG(loaded("\"watch_stands\": true,", "true", stands) && stands, "watch_stands true reads true");
 }
 
 void APulseGoesThereAndBack() {
@@ -4435,6 +4530,7 @@ static void runFreeCases() {
     TheMinionIsMinionEnt();
     AMinionWithoutItsFramingIsRefused();
     AMinionIsFramedAsItsScriptFramesIt();
+    AWatchingKnightKeepsItsStrideFrameUnlessTheDataSaysItStands();
     APulseGoesThereAndBack();
     ASheetThatDoesNotSayHowFastIsRefused();
     APlayerWithoutItsWalkIsRefused();
