@@ -2,6 +2,8 @@
 
 #include "core/Components.hpp"
 #include "core/Json.hpp"
+#include "core/PhysicsSystem.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/Resting.hpp"
 #include "sim/Units.hpp"
 #include "sim/Zerog.hpp"
@@ -13,13 +15,106 @@
 #include <fstream>
 #include <optional>
 #include <sstream>
+#include <vector>
 
 namespace MagicPortals::Portals {
 
+using Supersonic::CapsuleColliderComponent;
+using Supersonic::ConvexHullColliderComponent;
 using Supersonic::RigidBodyComponent;
 using Supersonic::TransformComponent;
 
 namespace {
+
+// WHERE A TRAVELLER MAY BE PUT DOWN UNDER A PLATFORM (planning step 229: 1-21's player inside two grey slabs, after a portal opened close to a ceiling).
+//
+// The engine's contact of a capsule with a convex hull (CollisionHull.cpp CollideCapsuleHull, the two fallback normals at :476 and :481) has no
+// direction to give when the capsule's AXIS runs through the hull's surface, and answers the world's UP whichever face that is. On a platform's top
+// that is right. Under one it is INTO the platform: every platform, block and bridge a CollisionPolygon2D gives is a hull, and a portal opens in free
+// air wherever the tap was, as near an underside as a finger can aim, so he can be put down with the top of his axis (9 above his centre) up to 9 units
+// inside the face. The position correction then sends him UP into the hull, about 7 units a tick, until his centre is inside and the nearest-face rule
+// takes over: by a side face where two platforms touch (1-21's single_block_plat_ent_862 and bridge01_ent_818 meet at x 320, and he stayed at about
+// (314, 142), the picture of the owner and the tester), or by none (1-20's plank: the recorded route aims its third pair at (300, 168) because
+// (300, 150) walked him through it). A box's contact (CollisionSAT.cpp CollideSphereObb) takes its face from the side the centre is on and has no
+// such case, so only hulls matter here. The original is INFERRED not to clip (Box2D's circle against a polygon takes the face of greatest
+// separation); it is not measured on a clip.
+//
+// This puts a capsule traveller whose axis's top end lies inside a solid hull that is over it, his centre being outside, to just under that hull's
+// underside. What is left of the overlap is the ordinary one, the axis clear of the hull and a normal from its nearest point, and the engine's own
+// step pushes him the rest of the way down: lowered at once, where the original would ease him out over a few ticks (a recorded deviation in
+// placement, 9.5 units at most). Nothing else changes: a body that is not a capsule, one whose axis is clear of every hull, one in the open air and
+// one on a floor (where the engine's UP is right) are put exactly where the exit says.
+//
+// A numerical margin, not a tuned value (so not data): any gap above the float rounding of these coordinates (about 1e-5 px) takes the axis off
+// the face and out of the engine's degenerate case; half a pixel is far above that and far below what a player can see.
+constexpr double kAxisClearancePx = 0.5;
+// Lowered under one platform he may find the top of his axis inside the next one down; a stack of more than this, each closer to the next than his axis
+// is long, does not occur in a level, and the bound keeps the loop from spinning on one that did.
+constexpr int kMostLowerings = 4;
+
+// Whether `p` lies inside the convex outline (even-odd crossings, +y down).
+bool OutlineHolds(const std::vector<glm::dvec2>& outline, const glm::dvec2& p) {
+    bool in = false;
+    for (std::size_t i = 0, j = outline.size() - 1; i < outline.size(); j = i++) {
+        const glm::dvec2& a = outline[i];
+        const glm::dvec2& b = outline[j];
+        if ((a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y)) in = !in;
+    }
+    return in;
+}
+
+// The outline's lowest y on the vertical line x, or none where the line misses it.
+std::optional<double> OutlineBottomAt(const std::vector<glm::dvec2>& outline, double x) {
+    std::optional<double> lowest;
+    for (std::size_t i = 0, j = outline.size() - 1; i < outline.size(); j = i++) {
+        const glm::dvec2& a = outline[i];
+        const glm::dvec2& b = outline[j];
+        if ((a.x - x) * (b.x - x) > 0.0) continue;
+        const double y = a.x == b.x ? std::max(a.y, b.y) : a.y + (x - a.x) * (b.y - a.y) / (b.x - a.x);
+        if (!lowest || y > *lowest) lowest = y;
+    }
+    return lowest;
+}
+
+// Where `atPx` should be for a traveller put down there: itself, unless the traveller is a capsule whose axis's top end is inside a hull that is over it
+// (see above), and then just under the lowest such hull. The capsule's centre is the body's position, as the player's is built (Player.cpp).
+glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const glm::dvec2& atPx) {
+    const auto* capsule = registry.try_get<CapsuleColliderComponent>(body);
+    if (capsule == nullptr) return atPx;
+    const double radiusPx = static_cast<double>(capsule->radius) * Units::kPixelsPerMetre;
+    const double halfAxisPx =
+        std::max(static_cast<double>(capsule->height) * 0.5 - static_cast<double>(capsule->radius), 0.0) *
+        Units::kPixelsPerMetre;
+
+    // The hulls round the arrival, as the engine's own broad phase names them, to as far as he can be lowered; the ones he does not collide with (layers)
+    // and the ones the contact itself moves (a dynamic body) are left out.
+    std::vector<entt::entity> candidates;
+    Supersonic::PhysicsSystem::OverlapSphere(registry, Units::ToWorld(atPx.x, atPx.y),
+                                             Units::ToMetres(radiusPx + (kMostLowerings + 1) * halfAxisPx), candidates, body, false);
+    std::vector<std::vector<glm::dvec2>> outlines;
+    for (const entt::entity solid : candidates) {
+        if (registry.try_get<ConvexHullColliderComponent>(solid) == nullptr) continue;
+        const auto* rigid = registry.try_get<RigidBodyComponent>(solid);
+        if (rigid != nullptr && !rigid->isKinematic) continue;
+        if (!Impacts::Collides(registry, body, solid)) continue;
+        Impacts::Shape shape;
+        if (Impacts::ShapeOf(registry, solid, shape) && shape.core.size() >= 3) outlines.push_back(std::move(shape.core));
+    }
+
+    glm::dvec2 at = atPx;
+    for (int pass = 0; pass < kMostLowerings; ++pass) {
+        const glm::dvec2 top(at.x, at.y - halfAxisPx);
+        std::optional<double> lowest;
+        for (const std::vector<glm::dvec2>& outline : outlines) {
+            if (!OutlineHolds(outline, top) || OutlineHolds(outline, at)) continue;
+            const std::optional<double> bottom = OutlineBottomAt(outline, at.x);
+            if (bottom && (!lowest || *bottom > *lowest)) lowest = bottom;
+        }
+        if (!lowest) break;
+        at.y = *lowest + kAxisClearancePx + halfAxisPx;
+    }
+    return at;
+}
 
 // portal_system.gd:230-261, in the Godot project's space: pixels, +y down. Placed
 // portals are never turned, so rotate_to_exit would turn through nothing here.
@@ -33,7 +128,9 @@ void Teleport(entt::registry& registry, entt::entity body, const glm::dvec2& exi
     Resting::WakeAround(registry, body);
     const glm::dvec2 velocityPx(rigid.velocity.x * Units::kPixelsPerMetre, -rigid.velocity.y * Units::kPixelsPerMetre);
     const glm::dvec2 exitVelocityPx = Portal::ExitVelocity(velocityPx, 0.0, 0.0, transit, character);
-    const glm::dvec2 destinationPx = Portal::ExitPosition(exitPx, exitVelocityPx, transit);
+    // Put down where the exit says, but not with his axis through the underside of a platform over it (LowerOutOfOverhead).
+    const glm::dvec2 destinationPx =
+        LowerOutOfOverhead(registry, body, Portal::ExitPosition(exitPx, exitVelocityPx, transit));
     const glm::vec3 destination = Units::ToWorld(destinationPx.x, destinationPx.y);
     transform.position = glm::vec3(destination.x, destination.y, transform.position.z);
     rigid.velocity =

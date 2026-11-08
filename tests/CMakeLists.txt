@@ -263,6 +263,8 @@ add_mp_test(test_mp_diamonds SKIPS_WITH_77)
 add_mp_test(test_mp_fields SKIPS_WITH_77)
 # Launchers, what they throw, and what takes it back.
 add_mp_test(test_mp_launchers SKIPS_WITH_77)
+# Where a traveller is put down under a platform (planning step 229): a capsule whose axis runs through a hull's underside is not pushed up into it. Reads 1-20 and 1-21.
+add_mp_test(test_mp_arrival SKIPS_WITH_77)
 # The portal shot: a tap fires, and the portal opens where the shot arrives.
 add_mp_test(test_mp_shot SKIPS_WITH_77)
 # Chapter 1's boss, the beholder of level31, as the original's script plays it.
