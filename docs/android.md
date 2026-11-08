@@ -105,7 +105,8 @@ that is ignored), strips them, and calls the packager, which writes `out/android
   step 225 the APK also has `res/mipmap-anydpi-v26/ic_launcher.xml` (`game/android/res/`, committed text: an `<adaptive-icon>` of two layers) and, in five densities,
   `ic_launcher_foreground.png` and `ic_launcher_background.png`, the two full-bleed 108 dp layers (108, 162, 216, 324, 432 pixels) that a launcher masks to its own
   shape (72 dp of them show; the middle 66 dp are safe from every mask). Both icon tools write them: `original_icon.py` makes the foreground from the tile's interior
-  (the 78 source pixels inside the bezel, 78 dp across in the middle of the canvas, so that no mask can reach a corner or the bezel) and the background as the flat
+  (the 78 source pixels inside the bezel, 62 dp across in the middle of the canvas with its outer 4 dp fading out, so that no mask can reach the bezel and the whole
+  gear is on screen: it was 78 dp in releases 0.1.6 and earlier, which the owner found too zoomed in, "reduce the zoom by 20%": 78 x 0.8 = 62.4) and the background as the flat
   colour of that interior's rim; `make_app_icon.py` draws the rings as the foreground and the disc's colour field as the background. The packager refuses an icon set
   without the layers (an `--icons` folder made before step 225), and `inspect` refuses an APK whose launcher icon is not the adaptive XML or lacks a layer.
   minSdk is 26, where adaptive icons begin, so the XML is the icon on every device the game installs on; the legacy PNGs stay for tools that ask for them.

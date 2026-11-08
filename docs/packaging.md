@@ -294,8 +294,9 @@ that every mask shows).
 **Its adaptive layers** (planning step 225): the same tool also writes `android/mipmap-*/ic_launcher_foreground.png` and `ic_launcher_background.png` (108 dp: 108 162 216 324 432
 pixels). The original's 96 pixel tile has a 4 pixel silver bezel (8 along a diagonal) and transparent rounded corners, which a launcher would show as a shrunk picture on a
 white plate (the owner's Pixel 9 Pro XL, Android 17). The foreground is the tile's INTERIOR, source pixels 9 to 86 on both axes (78 of them, measured on the original's
-xhdpi icon: 9 clears the bezel on a diagonal), resampled to 78 dp in the middle of a transparent 108 dp canvas; the background is one flat colour, the mean of the outer three
-pixels of that interior. A tile that is not opaque inside those pixels is refused by name. The packager (`android_package.py`) takes an icon set only with the layers at
+xhdpi icon: 9 clears the bezel on a diagonal), resampled to 62 dp in the middle of a transparent 108 dp canvas (the first adaptive icon, in 0.1.6, used 78 dp, which cropped the
+gear's rim in every launcher mask: the owner asked for a fifth less zoom, 78 x 0.8 = 62.4) with the outer 4 dp of the square fading to clear, so that its rays blend into the
+background and show no square edge in a 72 dp circle; the background is one flat colour, the mean of the outer three pixels of that interior. A tile that is not opaque inside those pixels is refused by name. The packager (`android_package.py`) takes an icon set only with the layers at
 the 108 dp pixel sizes and links them with `game/android/res/mipmap-anydpi-v26/ic_launcher.xml`.
 
 ## 7. The Apple layouts, and what adding the data to a macOS bundle costs

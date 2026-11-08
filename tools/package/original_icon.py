@@ -19,10 +19,11 @@ Android 8 on a launcher puts such a picture on a white plate and shrinks it, so 
 two full-bleed layers of 108 dp that the launcher masks to its own shape (72 dp of them show; the middle 66 dp are safe from every mask). So this tool also
 writes, per density, android/mipmap-<d>/ic_launcher_foreground.png and ic_launcher_background.png at 108 dp (108, 162, 216, 324 and 432 pixels):
   foreground  the tile's INTERIOR, the 78 source pixels inside the bezel and the rounded corners (INTERIOR below), scaled so that they are FOREGROUND_DP
-              (78 dp) across, in the middle of a transparent 108 dp canvas: every launcher mask (a circle of 72 dp is the smallest) lies inside that square, so no
-              corner, bezel or plate can show, and the gear (66 of those 78 pixels, 66 dp) stays inside the safe circle;
-  background  one flat colour, the mean of the outer three pixels of that interior (blue rays: the gear does not reach them), so that what a launcher's parallax
-              uncovers beside the square is the tile's own blue. It is never seen at rest.
+              (62 dp) across, in the middle of a transparent 108 dp canvas, with the outer FEATHER_DP (4 dp) of the square fading out: no bezel or plate can show, and
+              the gear (66 of those 78 pixels, 52.5 dp) stays well inside the 66 dp circle no mask touches, so the whole picture is on screen. (Until the owner found it too
+              zoomed in the square was 78 dp, which covered the 72 dp mask and cropped the gear's rim.);
+  background  one flat colour, the mean of the outer three pixels of that interior (blue rays: the gear does not reach them). It fills what a launcher shows beside
+              the square (in a 72 dp circle, up to 5 dp each side of it), where the feathered rays fade into it.
 The picture is the original's, so the layers are the owner's data like the legacy set: only ever under out/.
 """
 
@@ -46,7 +47,12 @@ SOURCE_FOLDER = 'drawable-%s-v4'
 SOURCE_NAME = 'icon.png'
 # The adaptive layers: density -> pixels of the 108 dp canvas (1, 1.5, 2, 3 and 4 pixels a dp).
 ADAPTIVE_DP = 108
-FOREGROUND_DP = 78
+# The foreground's side. It was 78 dp until the owner found that too zoomed in (the visible mask is 72 dp, so 78 dp of picture lost the gear's rim to every mask); a fifth less,
+# 62 dp (78 x 0.8 = 62.4), puts the whole picture on screen. Below the 66 dp that no mask touches: the gear, 66 of the interior's 78 source pixels, is then 52.5 dp.
+FOREGROUND_DP = 62
+# The outer band of the square whose alpha rises from nothing at its edge to full, so that the blue rays fade into the flat background instead of ending in a square
+# (a 62 dp square in a 72 dp circle would show its edge). 4 dp: the gear's own margin to the square is 4.7 dp, so it is never touched.
+FEATHER_DP = 4
 ADAPTIVE = (('mdpi', 108), ('hdpi', 162), ('xhdpi', 216), ('xxhdpi', 324), ('xxxhdpi', 432))
 # The tile's interior in the 96 pixel original, as source pixels [first, past the last) on both axes. MEASURED on the original's xhdpi icon: the silver bezel
 # is 4 pixels at the middle of an edge and 8 along a diagonal (the corners are rounded and transparent), so 9 clears both; 87 is the mirror of 9 about the
@@ -209,6 +215,19 @@ def face_pixels(canvas):
     return (canvas * FOREGROUND_DP // ADAPTIVE_DP) // 2 * 2
 
 
+def feather_pixels(canvas):
+    """The width, in pixels, of the foreground square's fading edge on a canvas of `canvas` pixels."""
+    return canvas * FEATHER_DP // ADAPTIVE_DP
+
+
+def feather_alpha(depth, feather):
+    """The alpha (0-255) of a foreground pixel `depth` pixels in from the nearest edge of the square (0 on the edge itself): a straight ramp from just above
+    nothing on the edge to full once `feather` pixels in, taken at the pixel's centre so that no pixel of the square is invisible."""
+    if feather <= 0 or depth >= feather:
+        return 255
+    return (255 * (2 * depth + 1) + feather) // (2 * feather)
+
+
 def adaptive_layers(rows):
     """{density: (foreground png bytes, background png bytes)} from the rows of the 96 pixel icon."""
     crop = interior_of(rows)
@@ -217,11 +236,16 @@ def adaptive_layers(rows):
     layers = {}
     for density, canvas in ADAPTIVE:
         face = face_pixels(canvas)
+        feather = feather_pixels(canvas)
         offset = (canvas - face) // 2
         scaled = resize(side, side, crop, face)
         foreground = [bytearray(canvas * 4) for _ in range(canvas)]
         for y in range(face):
-            foreground[offset + y][offset * 4:(offset + face) * 4] = scaled[y]
+            row = bytearray(scaled[y])
+            for x in range(face):
+                depth = min(x, y, face - 1 - x, face - 1 - y)
+                row[x * 4 + 3] = feather_alpha(depth, feather) * row[x * 4 + 3] // 255
+            foreground[offset + y][offset * 4:(offset + face) * 4] = row
         flat = bytes(colour + (255,)) * canvas
         layers[density] = (write_png(canvas, canvas, foreground), write_png(canvas, canvas, [bytearray(flat) for _ in range(canvas)]))
     return layers

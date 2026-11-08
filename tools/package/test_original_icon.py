@@ -221,7 +221,8 @@ class TheAdaptiveLayers(unittest.TestCase):
         self.assertEqual(width, height)
         return width, rows
 
-    def test_the_foreground_is_a_square_of_78_dp_in_the_middle_of_a_transparent_canvas(self):
+    def test_the_foreground_is_a_square_of_62_dp_in_the_middle_of_a_transparent_canvas(self):
+        # 62 dp: the owner's "reduce the zoom by 20%" of the 78 dp square of 0.1.6 (78 x 0.8 = 62.4).
         layers = oi.adaptive_layers(self.rows())
         self.assertEqual(sorted(layers), sorted(d for d, _ in self.DENSITIES))
         for density, canvas in self.DENSITIES:
@@ -229,13 +230,44 @@ class TheAdaptiveLayers(unittest.TestCase):
             self.assertEqual(side, canvas, density)
             face = oi.face_pixels(canvas)
             self.assertEqual((canvas - face) % 2, 0, 'it centres on whole pixels: ' + density)
-            self.assertAlmostEqual(face / canvas, 78 / 108, delta=2.0 / canvas, msg=density)
+            self.assertAlmostEqual(face / canvas, 62 / 108, delta=2.0 / canvas, msg=density)
+            self.assertAlmostEqual(face / canvas, 0.8 * 78 / 108, delta=2.0 / canvas, msg='a fifth less than the 0.1.6 icon: ' + density)
             offset = (canvas - face) // 2
             for y in range(canvas):
                 for x in range(canvas):
                     inside = offset <= x < offset + face and offset <= y < offset + face
                     alpha = rows[y][x * 4 + 3]
-                    self.assertEqual(alpha, 255 if inside else 0, '%s (%d, %d)' % (density, x, y))
+                    if inside:
+                        self.assertGreater(alpha, 0, '%s (%d, %d): no pixel of the square is invisible' % (density, x, y))
+                    else:
+                        self.assertEqual(alpha, 0, '%s (%d, %d)' % (density, x, y))
+
+    def test_the_squares_edge_fades_and_its_middle_is_opaque(self):
+        layers = oi.adaptive_layers(self.rows())
+        for density, canvas in self.DENSITIES:
+            _, rows = self.decode(layers[density][0])
+            face = oi.face_pixels(canvas)
+            feather = oi.feather_pixels(canvas)
+            offset = (canvas - face) // 2
+            self.assertGreater(feather, 0, density)
+            middle = canvas // 2
+            # Along the middle row, from the square's left edge inwards: rising, then full from `feather` pixels in, and the same from the right edge (symmetric).
+            alphas = [rows[middle][(offset + d) * 4 + 3] for d in range(face)]
+            self.assertEqual(alphas, alphas[::-1], 'symmetric: ' + density)
+            self.assertEqual(alphas, sorted(alphas[:face // 2]) + sorted(alphas[face // 2:], reverse=True), 'rising to the middle: ' + density)
+            self.assertLess(alphas[0], 40, 'the edge is nearly clear: ' + density)
+            self.assertEqual(set(alphas[feather:face - feather]), {255}, 'full inside the band: ' + density)
+            # Corners fade on both axes at once, never brighter than the nearer edge's own alpha.
+            self.assertLessEqual(rows[offset][offset * 4 + 3], alphas[0], density)
+
+    def test_the_feather_ramp_is_straight_and_never_reaches_zero(self):
+        self.assertEqual(oi.feather_alpha(0, 0), 255)
+        self.assertEqual(oi.feather_alpha(5, 4), 255)
+        ramp = [oi.feather_alpha(d, 8) for d in range(8)]
+        self.assertEqual(ramp, sorted(ramp))
+        self.assertGreater(ramp[0], 0)
+        self.assertLess(ramp[-1], 255)
+        self.assertEqual(ramp[0], (255 * 1 + 8) // 16)
 
     def test_the_square_is_the_interior_alone_no_bezel_and_no_corner_shows_in_it(self):
         # The bezel here is light grey and the interior blue: not one pixel of the foreground may be the bezel's colour, and every corner of the square is the interior's.
@@ -244,15 +276,18 @@ class TheAdaptiveLayers(unittest.TestCase):
             _, rows = self.decode(layers[density][0])
             face = oi.face_pixels(canvas)
             offset = (canvas - face) // 2
-            seen = {bytes(rows[y][x * 4:x * 4 + 4]) for y in range(offset, offset + face) for x in range(offset, offset + face)}
-            self.assertEqual(seen, {bytes((30, 120, 220, 255))}, density)
+            seen = {bytes(rows[y][x * 4:x * 4 + 3]) for y in range(offset, offset + face) for x in range(offset, offset + face)}
+            self.assertEqual(seen, {bytes((30, 120, 220))}, density)
 
-    def test_the_square_covers_every_mask_a_launcher_applies(self):
-        # Android shows the middle 72 dp of the 108: a circle of that diameter, or a rounded square inside it. The square must contain the whole 72 dp.
+    def test_the_whole_picture_is_on_screen_whatever_mask_a_launcher_applies(self):
+        # Android shows the middle 72 dp of the 108 (a circle, or a squircle inside it) and no mask touches the middle 66 dp. At 78 dp the gear's rim (66 of 78 source
+        # pixels = 66 dp) filled the safe circle and the square covered the whole mask, which cropped the picture: "too zoomed in". Now the GEAR (66/78 of the face) must lie
+        # inside the safe 66 dp circle with room to spare, and the square itself stays inside the 72 dp that is shown.
         for density, canvas in self.DENSITIES:
             face = oi.face_pixels(canvas)
-            visible = canvas * 72 / 108
-            self.assertGreaterEqual(face, visible, density)
+            gear = face * 66 / 78
+            self.assertLess(gear, canvas * 66 / 108 - 2.0, density)
+            self.assertLess(face, canvas * 72 / 108, density)
             self.assertLessEqual(face, canvas, density)
 
     def test_the_background_is_flat_opaque_and_the_mean_of_the_interiors_border(self):
