@@ -1,0 +1,25 @@
+{
+  "_about": [
+    "The English strings: the defaults. Every other language's file has exactly these keys and these placeholders (tests/test_mp_strings.cpp), and a table that lacks a key shows this one.",
+    "Each value equals the English the rules fields still hold (the drift case of tests/test_mp_strings.cpp): hud.part is ui.json's caption and pause title prefix 'Part ' with the level number; dashboard.chapter is the dashboard's 'Chapter ' prefix;",
+    "dashboard.new is the dashboard's new_label text; selector.requires is the selector's warning words with the chapter_unlock_percent of ui.json's locking block as {percent}; card.unlocked is achievements.json's card message_prefix with the title;",
+    "card.locked_level is achievements.json's locked_card message; the secret achievement's two texts are NOT here: they are Asantee's words and live in the gitignored out/data/achievements.<code>.json (Achievements::LoadTranslation); credits.* are the words of ui.json's credits tail;",
+    "options.* are the words of controls.json's options block; hint.camera is camera.json's hint text; language.title is this port's own. The numbers these strings carry are never stored here."
+  ],
+  "strings": {
+    "hud.part": "Part {n}",
+    "dashboard.chapter": "Chapter {n}",
+    "dashboard.new": "new!",
+    "selector.requires": "requires {percent}%",
+    "card.unlocked": "Achievement unlocked! {title}",
+    "card.locked_level": "This level is locked!",
+    "credits.enhanced": "an enhanced version of Magic Portals by Asantee Games",
+    "credits.engine": "the enhanced version and the Supersonic Engine",
+    "options.title": "Controls",
+    "options.modern": "Modern",
+    "options.classic": "Classic",
+    "options.adjust": "Adjust controls",
+    "hint.camera": "move the camera around",
+    "language.title": "Language"
+  }
+}

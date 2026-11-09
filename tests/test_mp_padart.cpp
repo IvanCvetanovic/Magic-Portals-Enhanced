@@ -210,7 +210,8 @@ void EachControlHasItsOwnGlyph() {
     std::sort(seen.begin(), seen.end());
     CHECK(std::adjacent_find(seen.begin(), seen.end()) == seen.end());
     CHECK(std::find(seen.begin(), seen.end(), Glyph::Gear) == seen.end());
-    CHECK_EQ(PadArt::kGlyphs.size(), std::size_t{6});
+    CHECK(std::find(seen.begin(), seen.end(), Glyph::Globe) == seen.end());
+    CHECK_EQ(PadArt::kGlyphs.size(), std::size_t{7});
 }
 
 // ---- 3: the body and its margin ---------------------------------------------------------------------------------------
@@ -245,7 +246,7 @@ void ABodyKeepsTheStatedMarginAndNoOtherAlpha() {
             const Box solid = BoxOf(bitmap, [](const Pixel& p) { return p.a >= 250; });
             CHECK_MSG(anyAlpha == body, Where(glyph, size) + ": alpha > 0 spans " + Describe(anyAlpha) + ", the body is " + Describe(body));
             CHECK_MSG(solid == body, Where(glyph, size) + ": alpha >= 250 spans " + Describe(solid) + ", the body is " + Describe(body));
-            // No other alpha: the plate alone makes it, so the six glyphs share one alpha channel, and a pixel is partly covered only
+            // No other alpha: the plate alone makes it, so the seven glyphs share one alpha channel, and a pixel is partly covered only
             // in a corner of the plate, where it is rounded (a corner is 0.3 of the half body, 15 px of the 100 of a 128 picture).
             bool sameAlpha = true;
             bool partialOnlyInCorners = true;
@@ -416,6 +417,15 @@ const std::vector<Probe>& ProbesFor(Glyph glyph) {
         {Is::Fill, 0.0, 0.0},       {Is::Fill, 0.10, 0.0},     {Is::Fill, 0.45, 0.19},    {Is::Fill, 0.19, 0.45},   {Is::Fill, 0.62, 0.0},
         {Is::Rim, 0.9625, 0.0},     {Is::Nothing, 1.12, 0.0},
     };
+    // The globe (planning step 239): the ring, the equator, a parallel and the meridian are the glyph; between them the plate shows. (0.149, 0.35) is on the
+    // meridian alone: the ellipse x^2/0.23^2 + y^2/0.46^2 = 1 at y = 0.35 is x = 0.1492, and the ring (from 0.40 out), the equator and the parallels
+    // (0.21 to 0.29) are all clear of it.
+    static const std::vector<Probe> globe = {
+        {Is::Glyph, 0.46, 0.0},     {Is::Glyph, 0.0, 0.46},    {Is::Glyph, -0.46, 0.0},   {Is::Glyph, 0.0, 0.0},    {Is::Glyph, 0.30, 0.0},   {Is::Glyph, 0.0, 0.25},
+        {Is::Glyph, 0.10, -0.25},   {Is::Glyph, 0.149, 0.35},  {Is::Glyph, -0.149, -0.35},
+        {Is::Fill, 0.0, 0.12},      {Is::Fill, 0.35, 0.12},    {Is::Fill, -0.15, -0.12},  {Is::Fill, 0.0, 0.37},    {Is::Fill, 0.62, 0.0},    {Is::Fill, 0.62, 0.62},
+        {Is::Rim, 0.9625, 0.0},     {Is::Nothing, 1.12, 0.0},
+    };
     switch (glyph) {
     case Glyph::WalkLeft:
         return left;
@@ -429,6 +439,8 @@ const std::vector<Probe>& ProbesFor(Glyph glyph) {
         return clearPortals;
     case Glyph::Gear:
         return gear;
+    case Glyph::Globe:
+        return globe;
     }
     return left;
 }
@@ -505,7 +517,7 @@ void EveryGlyphFillsItsPlateAndSitsInItsMiddle() {
                       box.maxY <= kSize - 1 - margin - clearance + 1,
                   where + ": it reaches " + Describe(box));
     }
-    // Six different pictures.
+    // Seven different pictures.
     for (std::size_t a = 0; a < PadArt::kGlyphCount; ++a) {
         for (std::size_t b = a + 1; b < PadArt::kGlyphCount; ++b) {
             CHECK_MSG(Drawn(PadArt::kGlyphs[a], kSize).rgba != Drawn(PadArt::kGlyphs[b], kSize).rgba,

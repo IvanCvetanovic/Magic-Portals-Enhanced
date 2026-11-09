@@ -139,6 +139,31 @@ void TheTwoLayoutsAreTheRepositoryAndThePackage() {
     }
 }
 
+// The interface languages (planning step 239) read three things by a path built from a layout's fields: the string tables at <portData>/lang, the picker's table at
+// <portData>/picker.json, and the achievements' translation as a SIBLING of the English list (<folder of achievements>/achievements.<code>.json). The last is the
+// one that depends on the layouts agreeing: the packaged folder holds the English list and the translations in tables/, this repository in out/data/.
+//
+// MUTATION: Packaged() with its achievements in a folder of its own (the translations would then be looked for where the packager does not put them).
+void TheLanguageFilesAreWhereBothLayoutsKeepThem() {
+    const auto folderOf = [](const std::string& path) {
+        const std::size_t slash = path.rfind('/');
+        return slash == std::string::npos ? std::string(".") : path.substr(0, slash);
+    };
+    const auto nameOf = [](const std::string& path) {
+        const std::size_t slash = path.rfind('/');
+        return slash == std::string::npos ? path : path.substr(slash + 1);
+    };
+    for (const AR::Layout& layout : {AR::Layout::Repo(), AR::Layout::Packaged()}) {
+        CHECK_MSG(nameOf(layout.achievements) == "achievements.json", layout.name + ": the English list is achievements.json: " + layout.achievements);
+        CHECK_MSG(folderOf(layout.achievements) == folderOf(layout.chapters),
+                  layout.name + ": it is beside chapters.json, where the packager keeps both (tables/) and this repository's converter writes them (out/data/)");
+        CHECK_MSG(!layout.portData.empty() && layout.portData != "." && layout.portData.find("..") == std::string::npos,
+                  layout.name + ": the port data is a folder (game/data or port-data), under which lang/, fonts/ and picker.json are: " + layout.portData);
+    }
+    CHECK_MSG(folderOf(AR::Layout::Packaged().achievements) == "tables" && folderOf(AR::Layout::Repo().achievements) == "out/data",
+              "tables/ in the package, out/data/ in the repository");
+}
+
 // ---- the string rules -----------------------------------------------------------------------------------------------------------
 
 // MUTATION: Normalize that leaves a "x/.." pair, keeps a backslash, keeps a trailing separator, lets ".." climb above an absolute root,
@@ -885,6 +910,7 @@ void TwoSuffixesAreNeverTheSame() {
 
 void runTests() {
     TheTwoLayoutsAreTheRepositoryAndThePackage();
+    TheLanguageFilesAreWhereBothLayoutsKeepThem();
     NormalizeSpellsAPathOut();
     WhatIsAbsoluteIsJudgedOnTheTextAlone();
     JoinPutsARelativePathUnderAFolder();

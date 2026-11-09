@@ -103,7 +103,7 @@ The modern on-screen controls are the default: the two arrows in the bottom corn
 
 ## Where the game keeps things
 
-Your medals, the sound and music switches, your achievements and your choice of controls are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, and in the app's own storage on Android (uninstalling the app removes them). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
+Your medals, the sound and music switches, your achievements, your choice of controls and your choice of language (`language.json`) are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, and in the app's own storage on Android (uninstalling the app removes them). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
 
 ## Reporting a problem
 

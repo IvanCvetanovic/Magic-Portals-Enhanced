@@ -53,6 +53,8 @@ struct Rules {
     std::string text;
     std::string font;
     double unitsPerFontPx = 0.0;
+    double maxWidthUnits = 0.0;   // the text's widest, 0 for no limit (planning step 238: Hud::FitUnitsPerFontPx)
+    bool mirrorWhenRtl = false;   // a right-to-left language anchors the text at the view's RIGHT edge, the same distance in (step 238)
     double leftUnits = 0.0;       // from the view's left edge
     double aboveBottomUnits = 0.0; // the text's top, above the view's bottom edge
     double fadeMs = 0.0;
@@ -114,7 +116,9 @@ struct Arrow {
 // as the byte its colour takes; 0 from the fade's end, when it is dropped.
 double TextAlpha(const Rules& rules, double ageMs);
 
-// Where the text's box starts on a view `viewUnits` in size.
-glm::dvec2 TextTopLeft(const Rules& rules, const glm::dvec2& viewUnits);
+// Where the text's box starts on a view `viewUnits` in size. For a right-to-left language (`rtl`) on a rule that mirrors (mirror_when_rtl), the
+// box ENDS where it would have started: its right edge is `leftUnits` in from the view's right edge, and `textWidthUnits` is how wide the
+// box is (MeasureText at the units a font pixel it is drawn with). For every other case the width is not read.
+glm::dvec2 TextTopLeft(const Rules& rules, const glm::dvec2& viewUnits, bool rtl = false, double textWidthUnits = 0.0);
 
 } // namespace MagicPortals::Hint

@@ -1,0 +1,23 @@
+{
+  "_about": [
+    "The 14 short interface strings of one language, keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
+    "PROVENANCE: machine-translated by a language model from English, terms aligned with the Magic Rampage Companion app, reviewed by a second model pass, NOT by a native speaker.",
+    "Native review is open (planning step 236, LEFT FOR THE OWNER). A key missing from this file shows the English one, and a placeholder that differs from the English one is refused for that key."
+  ],
+  "strings": {
+    "hud.part": "مرحلة {n}",
+    "dashboard.chapter": "الفصل {n}",
+    "dashboard.new": "جديد!",
+    "selector.requires": "يتطلب {percent}%",
+    "card.unlocked": "تم فتح إنجاز! {title}",
+    "card.locked_level": "هذه المرحلة مقفلة!",
+    "credits.enhanced": "نسخة محسنة من Magic Portals من تطوير Asantee Games",
+    "credits.engine": "النسخة المحسنة ومحرك Supersonic Engine",
+    "options.title": "التحكم",
+    "options.modern": "حديث",
+    "options.classic": "كلاسيكي",
+    "options.adjust": "ضبط الأزرار",
+    "hint.camera": "حرك الكاميرا",
+    "language.title": "اللغة"
+  }
+}

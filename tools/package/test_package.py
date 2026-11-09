@@ -114,6 +114,10 @@ def build_world(root):
                                      {'name': 'lvl_b', 'scene': 'res://assets/levels/lvl_b.tscn'}]}]})
     put_json(os.path.join(repo, 'out', 'data', 'achievements.json'),
              {'achievements': [{'icon': 'ach_a.png'}], 'secret': {'icon': 'ach_s.png'}})
+    # the achievements in an interface language (planning step 238) ship beside it; the folder of their sources, and a file that is not a language's, do not
+    put_json(os.path.join(repo, 'out', 'data', 'achievements.de.json'), {'format': 1, 'achievements': {'0': {'title': 'T', 'description': 'D'}}})
+    put_json(os.path.join(repo, 'out', 'data', 'lang_src', 'de.json'), {'achievements': {}})
+    put_json(os.path.join(repo, 'out', 'data', 'achievements.draft.json'), {'achievements': {}})
     put(os.path.join(repo, 'out', 'assets', 'entities', 'sheet_a.png'), b'sheet-a-1x')
     put(os.path.join(repo, 'out', 'assets', 'entities', 'hd', 'sheet_a.png'), b'sheet-a-hd')
     put(os.path.join(repo, 'out', 'assets', 'entities', 'unused_sheet.png'), b'unused-sheet')
@@ -135,6 +139,16 @@ def build_world(root):
     put_json(os.path.join(repo, 'game', 'data', 'tiers.json'), {'density_tiers': {'search': ['fullhd', 'hd']}})
     put_json(os.path.join(repo, 'game', 'data', 'art.json'), {'sprites': {'blue': '_blue.png'}, '_about': ['_green.png']})
     put_json(os.path.join(repo, 'game', 'data', 'controls.json'), {'art': {'mr': {'file': 'pad_a.png'}, 'generated': {'file': 'made_a.png'}}})
+    # the interface languages (planning steps 236-237): a table in a sub-folder that names a .ttf and the original's font BY NAME, and the folder of faces with
+    # their licence text. None of it names a .fnt or a .png: a generated font is made at run time and a name like that would be resolved as an original asset.
+    put_json(os.path.join(repo, 'game', 'data', 'lang', 'languages.json'),
+             {'fonts': {'folder': 'fonts', 'faces': [{'id': 'a', 'file': 'Face.ttf'}], 'slots': [{'id': 'matura', 'original_font': 'Matura84_shadow'}]}})
+    put(os.path.join(repo, 'game', 'data', 'fonts', 'Face.ttf'), b'a face')
+    put(os.path.join(repo, 'game', 'data', 'fonts', 'OFL-Face.txt'), 'the licence of the face')
+    # the language picker's table (planning step 239): the globe the game draws is named by a STEM, never by a .png (that would be resolved as an original asset),
+    # and the title's font is a file of the original's, named by its role as the other tables name theirs
+    put_json(os.path.join(repo, 'game', 'data', 'picker.json'),
+             {'_about': ['the picker'], 'entry': {'glyph': 'language_globe', 'glyph_px': 128}, 'title': {'font': 'face_a.fnt'}})
     # tracked files of the repository the packager must never write into
     put(os.path.join(repo, 'tools', 'readme.txt'), b'tracked')
     put(os.path.join(repo, 'engine', 'assets', 'shaders', 'one.spv'), b'spv-one')
@@ -145,8 +159,12 @@ def build_world(root):
 
 EXPECTED_REQUIRED = sorted([
     # the converted levels, the tables beside them, the committed tables
-    'levels/lvl_a.tscn', 'levels/lvl_b.tscn', 'tables/chapters.json', 'tables/achievements.json',
+    'levels/lvl_a.tscn', 'levels/lvl_b.tscn', 'tables/chapters.json', 'tables/achievements.json', 'tables/achievements.de.json',
     'data/items.json', 'port-data/sounds.json', 'port-data/ui.json', 'port-data/tiers.json', 'port-data/controls.json', 'port-data/art.json',
+    # the language table in its sub-folder, and a font with its licence text: every file of game/data ships, whatever its extension
+    'port-data/lang/languages.json', 'port-data/fonts/Face.ttf', 'port-data/fonts/OFL-Face.txt',
+    # the language picker's table, beside the others
+    'port-data/picker.json',
     # the level's texture, picked in its hd tier
     'assets/entities/hd/sheet_a.png',
     # tables: tier twins, entity, particle bitmap, font and its page, sounds, music
@@ -231,6 +249,31 @@ class TheClosure(World):
         self.assertIn('the normal of original:entities/door_a.ent', why['entities/normalmaps/door_a_n.png'])
         self.assertIn('the halo of original:entities/door_a.ent', why['entities/glow_a.png'])
         self.assertIn('original/entities/door_a.png', have, 'and the 1x file under the picked twin')
+
+    def test_the_language_tables_the_fonts_and_the_translated_achievements_travel_and_the_picker_names_nothing_to_resolve(self):
+        # planning step 239: game/data's sub-folders (lang, fonts) and the picker's table ship with the port data whatever their extension, the achievements'
+        # translation ships beside the English list in tables/, and no value of the new tables is resolved as an original asset.
+        self.content()
+        have = set(self.paths())
+        for shipped in ('port-data/lang/languages.json', 'port-data/fonts/Face.ttf', 'port-data/fonts/OFL-Face.txt', 'port-data/picker.json', 'tables/achievements.de.json'):
+            self.assertIn(shipped, have, shipped)
+        self.assertNotIn('tables/achievements.draft.json', have, 'a file that is not a language of the interface is not shipped')
+        self.assertFalse([p for p in have if p.startswith('tables/lang_src')], 'the sources of the translations are not shipped')
+        refs = cl.collect_references(cl.Sources.from_disk(self.repo, self.ref))
+        self.assertFalse([r.src for r in refs if '/lang/' in r.src or '/fonts/' in r.src], 'nothing in a language table or beside a face is a reference')
+        # the title's font is the one reference the picker table makes, and it resolves in the original's data folder
+        picker = [r for r in refs if 'picker.json' in r.src]
+        self.assertEqual([(r.cat, r.ref) for r in picker], [('json:font', 'face_a.fnt')])
+
+    def test_a_picker_table_that_names_its_globe_as_a_png_would_be_resolved_as_an_original_asset(self):
+        # why the table holds a stem: the closure resolves any bare string that ends in .png against the original's pictures, and this one is not there
+        path = os.path.join(self.repo, 'game', 'data', 'picker.json')
+        put_json(path, {'entry': {'glyph': 'language_globe.png'}})
+        src = cl.Sources.from_disk(self.repo, self.ref)
+        named = [ref for ref in cl.collect_references(src) if 'picker.json' in ref.src]
+        self.assertEqual([ref.ref for ref in named], ['language_globe.png'])
+        plan = cl.build_plan(src)
+        self.assertIn('language_globe.png', [reference for (_cat, reference, _optional) in plan.absent])
 
     def test_a_colour_variant_is_found_by_the_suffix_a_table_spells_and_the_entity_that_names_it(self):
         self.content()

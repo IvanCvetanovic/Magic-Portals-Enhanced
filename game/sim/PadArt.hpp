@@ -1,7 +1,7 @@
 #pragma once
 
 // The pictures the modern controls fall back on when no better one is on disk: two arrows, restart, pause,
-// clear-portals and a gear, drawn by arithmetic into an in-memory bitmap.
+// clear-portals and a gear, drawn by arithmetic into an in-memory bitmap - and the globe of the language entry.
 //
 // WHY THEY ARE DRAWN. The modern layout (docs/planning/2026-10-15-modern-controls.md, section 4.2) draws each control
 // with Magic Rampage's own picture when the owner has it in a gitignored folder, then the original's own sprite, and
@@ -10,8 +10,8 @@
 // files: they are a function of a size, and the layer writes the pixels into its own scratch directory when it needs a
 // file at all. Nothing here opens a file, so nothing generated can reach a tracked path.
 //
-// ONE SHAPE FOR ALL SIX. Every glyph sits on the same rounded plate with a lighter rim, so the plate - and with it the
-// alpha channel - is identical for the six: only the colour inside it differs. The plate is the picture's BODY, and it
+// ONE SHAPE FOR ALL SEVEN. Every glyph sits on the same rounded plate with a lighter rim, so the plate - and with it the
+// alpha channel - is identical for the seven: only the colour inside it differs. The plate is the picture's BODY, and it
 // leaves `bodyInset` of the bitmap transparent on each side (Magic Rampage's own pictures are 14 px of 128: the layout
 // measures a control's box and draws the body exactly into the box's solid face, game/sim/Controls.hpp DrawRect). The
 // body's edges lie on pixel boundaries, so the margin is exactly zero alpha and the body's bounding box is exactly the
@@ -34,20 +34,20 @@
 
 namespace MagicPortals::PadArt {
 
-// The six: the five controls' and the options entry's. `kGlyphs` is THE SIX and test_mp_padart holds each of them to the plate
-// invariants (one shared alpha channel, six different pictures); the adjustment screen's seven editor glyphs (CTL-11) do not belong in
-// it and go in a list of their own, so that no invariant of the six is asked of them.
-enum class Glyph { WalkLeft, WalkRight, Restart, Pause, ClearPortals, Gear };
-inline constexpr std::size_t kGlyphCount = 6;
-inline constexpr std::array<Glyph, kGlyphCount> kGlyphs = {Glyph::WalkLeft, Glyph::WalkRight, Glyph::Restart,
-                                                          Glyph::Pause,    Glyph::ClearPortals, Glyph::Gear};
+// The seven: the five controls', the options entry's gear and the language entry's globe (planning step 239). `kGlyphs` is THE SEVEN and
+// test_mp_padart holds each of them to the plate invariants (one shared alpha channel, seven different pictures); the adjustment screen's
+// eight editor glyphs (CTL-11) do not belong in it and go in a list of their own, so that no invariant of the seven is asked of them.
+enum class Glyph { WalkLeft, WalkRight, Restart, Pause, ClearPortals, Gear, Globe };
+inline constexpr std::size_t kGlyphCount = 7;
+inline constexpr std::array<Glyph, kGlyphCount> kGlyphs = {Glyph::WalkLeft, Glyph::WalkRight, Glyph::Restart, Glyph::Pause,
+                                                          Glyph::ClearPortals, Glyph::Gear,    Glyph::Globe};
 
 // For a log line and a test's message.
 const char* NameOf(Glyph glyph);
 
 // The adjustment screen's pictures (planning step 192, CTL-11): eight, for its seven widgets - the lock has one for each of its states, as
-// Magic Rampage has two sprites for it. Drawn on the same plate as the six, but in a list of their own: test_mp_padart holds the six to the
-// plate's invariants (one shared alpha channel, six different pictures) and none of that is asked of these, whose open lock sits on a RED
+// Magic Rampage has two sprites for it. Drawn on the same plate as the seven, but in a list of their own: test_mp_padart holds the seven to the
+// plate's invariants (one shared alpha channel, seven different pictures) and none of that is asked of these, whose open lock sits on a RED
 // plate (Magic Rampage's editing frame) and so shares a colour with no other.
 enum class EditorGlyph { SizeMinus, SizePlus, OpacityMinus, OpacityPlus, LockLocked, LockUnlocked, Restore, Back };
 inline constexpr std::size_t kEditorGlyphCount = 8;
@@ -110,7 +110,7 @@ Bitmap Draw(Glyph glyph, int size, double bodyInset);
 // plate (its body fills the picture less the margin) as Draw.
 Bitmap DrawEditor(EditorGlyph glyph, int size, double bodyInset);
 
-// The glyph that stands for a control. The gear is none's: it belongs to the Options entry, not to the five.
+// The glyph that stands for a control. The gear is none's: it belongs to the Options entry, not to the five; nor is the globe, the language entry's.
 Glyph GlyphOf(Controls::Id id);
 
 } // namespace MagicPortals::PadArt

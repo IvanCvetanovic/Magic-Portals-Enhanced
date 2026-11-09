@@ -27,5 +27,9 @@
 # writes it with CRLF, while NOTICE.md beside it stays LF; release.py copies both into every archive unchanged. tools/ci/test_notice.py pins it.
 LICENSE        text eol=lf
 
+# The licence texts of the interface languages' faces are .txt files, so they fall under `text=auto` below too and a Windows checkout writes them with CRLF; the content package
+# copies them unchanged, and a package must be byte-identical whichever host built it.
+game/data/fonts/*.txt text eol=lf
+
 # Let git decide for anything not listed.
 *       text=auto

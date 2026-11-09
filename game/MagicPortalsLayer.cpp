@@ -7,11 +7,13 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <memory>
 #include <map>
+#include <optional>
 #include <set>
 #include <random>
 #include <sstream>
@@ -352,6 +354,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // then draws no rows, and this says why, once. Not a reason to refuse the start.
     if (std::string why; Achievements::Load(m_paths.achievements, m_achievements, why)) {
         m_achievementsLoaded = true;
+        m_achievementsShown = m_achievements;
     } else {
         m_achievementsError = why;
         SUPERSONIC_LOG_WARN("Magic Portals") << "no achievement rows: " << why << std::endl;
@@ -420,6 +423,11 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // ui.json is the port's own and committed, so a HUD that will not read is a
     // fault in this repository and stops the start as loudly as a missing level.
     m_hudReady = read;
+    // Which language it speaks (planning step 238): the flag, else the saved choice, else English; its strings, its fonts and the achievements'
+    // translation. After the tables, whose font names it loads, and before any level or menu is built.
+    if (read) startLanguage();
+    // The language picker's table and its globe (planning step 239), in a run that offers it: after the language, whose table it needs.
+    if (read) loadPickerRules();
     // Which controls this run plays: after the chain and outside it, before any level is built.
     resolveControls();
     // The tick's two deltas before the first tick runs: what a constructor that moves
@@ -1018,6 +1026,100 @@ void MagicPortalsLayer::resolveOptionsEntry() {
     }
     if (wrote) ++m_modernArtFilesWritten;
     m_optionsEntryImage = target.string();
+}
+
+void MagicPortalsLayer::loadPickerRules() {
+    m_pickerReady = false;
+    m_pickerRules = Picker::Rules{};
+    m_languageEntryImage.clear();
+    // A run that does not offer the picker (a bare layer, a developer's run) reads nothing of it, so that a table that will not read cannot touch such a run.
+    if (!m_paths.language.picker) return;
+    std::string why;
+    if (!Picker::LoadRules(m_paths.portData + Picker::kDataFile, m_pickerRules, why)) {
+        // game/data is the port's own and committed: a table that will not read is a fault of this build, said loudly; the run goes on without a picker.
+        m_pickerRules = Picker::Rules{};
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "language picker unavailable: " << why << std::endl;
+        return;
+    }
+    m_pickerReady = true;
+    resolveLanguageEntry();
+}
+
+void MagicPortalsLayer::resolveLanguageEntry() {
+    // THE GLOBE on the main menu's entry and on Options (planning step 239): a glyph the game draws itself (sim/PadArt) and writes, as the gear, into the
+    // directory the layer is given for what it generates - never into a tracked path, and never next to the saves. With nowhere to write it, the entry is a
+    // flat quad.
+    m_languageEntryImage.clear();
+    if (!m_pickerReady || m_paths.prisms.empty()) return;
+    const Picker::Rules::Entry& entry = m_pickerRules.entry;
+    const PadArt::Bitmap bitmap = PadArt::Draw(PadArt::Glyph::Globe, entry.glyphPx, entry.bodyInset);
+    std::string bytes;
+    if (bitmap.Empty() || !EncodePng(bitmap, bytes)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "the language entry's globe could not be drawn at " << entry.glyphPx << " px: it is a flat quad" << std::endl;
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(m_paths.prisms, ec);
+    // The stem is bare letters, digits and underscores (Picker::LoadRules refused any other), so this stays inside prisms.
+    const std::filesystem::path target = m_paths.prisms / (entry.glyph + Picker::kGlyphExtension);
+    bool wrote = false;
+    if (!WriteWhole(target, bytes, wrote)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "the language entry's globe could not be written: " << target.string() << " - it is a flat quad" << std::endl;
+        return;
+    }
+    if (wrote) ++m_modernArtFilesWritten;
+    m_languageEntryImage = target.string();
+}
+
+bool MagicPortalsLayer::ensurePicker() {
+    // The plates' names are in five scripts, and no one font of the original's holds them, so ONE atlas holds them all: baked from the committed faces in
+    // the slot languages.json calls the picker's (FontBake), into the scratch folder, once - Ensure finds the files already there by their input hash. It is
+    // baked on the screen's first entry, not at the start: a player who never opens the picker never pays for it. It is a file of its own, which SetLanguage
+    // (that replaces the fonts of the language) never touches, so the plates do not change when a language is chosen.
+    if (m_pickerFontTried) return !m_pickerFontFile.empty();
+    m_pickerFontTried = true;
+    const auto fail = [this](const std::string& why) {
+        const std::string note = "the language picker cannot be shown: " + why;
+        m_languageNotes.push_back(note);
+        SUPERSONIC_LOG_ERROR("Magic Portals") << note << std::endl;
+        return false;
+    };
+    const Strings::LanguageTable& languages = m_strings.Languages();
+    const FontBake::Plan& plan = languages.Fonts();
+    const FontBake::SlotSpec* slot = plan.loaded ? plan.Slot(plan.pickerSlot) : nullptr;
+    if (slot == nullptr) return fail("game/data/lang/languages.json names no picker slot");
+    if (m_paths.prisms.empty()) return fail("there is no scratch folder to write the names' font in");
+    std::vector<FontBake::FaceBytes> faces;
+    std::string error;
+    if (!FontBake::LoadFaces(plan, m_paths.portData + "/" + plan.folder, faces, error)) return fail(error);
+    const std::filesystem::path dir = m_paths.prisms / FontBake::kScratchFolder;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return fail("cannot make " + dir.string() + ": " + ec.message());
+    const FontBake::Written written =
+        FontBake::Ensure(plan, *slot, faces, Strings::PickerCodePoints(languages), dir.string(), slot->originalFont + FontBake::kPickerSuffix);
+    if (!written.ok) return fail(written.error);
+    if (!written.missing.empty()) {
+        std::string list;
+        for (const std::uint32_t codePoint : written.missing) {
+            char text[16];
+            std::snprintf(text, sizeof(text), "%sU+%04X", list.empty() ? "" : " ", static_cast<unsigned>(codePoint));
+            list += text;
+        }
+        const std::string note = "the picker's faces have no glyph for " + list + ": those letters of a language's name are not drawn";
+        m_languageNotes.push_back(note);
+        SUPERSONIC_LOG_WARN("Magic Portals") << note << std::endl;
+    }
+    m_pickerFontFile = written.fntPath;
+    // Each name shaped for ITS OWN language, whatever language is on the screen: the atlas holds the shaped forms of the Arabic name, and a name shaped for
+    // the language on the screen would be a hole in every language but Arabic.
+    m_pickerNames.clear();
+    for (std::size_t i = 0; i < Strings::kLangCount; ++i) {
+        const auto lang = static_cast<Strings::Lang>(i);
+        m_pickerNames.push_back(Strings::Display(lang, languages.NativeName(lang)));
+    }
+    SUPERSONIC_LOG_INFO("Magic Portals") << "language picker: names baked into " << written.fntPath << (written.cached ? " (already there)" : "") << std::endl;
+    return true;
 }
 
 namespace {
@@ -2024,12 +2126,13 @@ void MagicPortalsLayer::unlockAchievement(int id, bool notify, double delayMs, c
     if (!notify || !m_notificatorReady) return;
     // #77-180: the card, with the entry's own title and icon - none to show
     // without Enhanced's list, which says why once at attach.
-    const Achievements::Entry* entry = m_achievementsLoaded ? m_achievements.Find(id) : nullptr;
+    const Achievements::Entry* entry = m_achievementsLoaded ? m_achievementsShown.Find(id) : nullptr;
     if (entry == nullptr) return;
     Notificator::Card card;
     card.id = id;
     card.background = m_achievementRules.card.background;
-    card.message = m_achievementRules.card.messagePrefix + entry->title;
+    card.message = strings() != nullptr ? m_strings.Show(Strings::Key::kCardUnlocked, {{Strings::Placeholder::kTitle, entry->title}})
+                                        : m_achievementRules.card.messagePrefix + entry->title;
     card.icon = m_achievementRules.card.iconDirectory + entry->icon;
     card.sound = m_achievementRules.card.soundEvent;
     card.durationMs = m_achievementRules.card.durationMs;
@@ -3885,7 +3988,7 @@ void MagicPortalsLayer::layOutMenu() {
     // The loading screen has no button; credits, the dashboard and Options say what a touch
     // is on themselves (sim/Credits.hpp, sim/Dashboard.hpp, sim/Options.hpp).
     if (m_screen == Screen::Loading || m_screen == Screen::Credits || m_screen == Screen::Achievements ||
-        m_screen == Screen::Options || m_screen == Screen::Adjust) {
+        m_screen == Screen::Options || m_screen == Screen::Adjust || m_screen == Screen::Language) {
         return;
     }
     if (m_screen == Screen::Main) {
@@ -3999,7 +4102,7 @@ void MagicPortalsLayer::buildMenu(entt::registry& registry) {
     // in display values.
     if (m_screen == Screen::Finished || m_screen == Screen::Dead || m_screen == Screen::Main ||
         m_screen == Screen::Credits || m_screen == Screen::Achievements || m_screen == Screen::Options ||
-        m_screen == Screen::Adjust) {
+        m_screen == Screen::Adjust || m_screen == Screen::Language) {
         return;
     }
     if (m_screen == Screen::Loading) {
@@ -4118,6 +4221,9 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
     // exists only where Options does and the style in force is Modern: a classic run has nothing to adjust.
     if (screen == Screen::Options && !OptionsAvailable()) return;
     if (screen == Screen::Adjust && !AdjustAvailable()) return;
+    // The picker exists only in a run that offers it (LanguageAvailable), and only when its atlas can be made: it is baked here, on the first entry, before
+    // anything of the screen it leaves is torn down.
+    if (screen == Screen::Language && (!LanguageAvailable() || !ensurePicker())) return;
     // A level and a menu are never both in the registry.
     unloadLevel(registry);
     m_loaded = false;
@@ -4163,6 +4269,12 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         loadUiFont(m_optionsRules.wordFont);
         loadUiFont(m_optionsRules.adjust.font);
     }
+    if (changed && screen == Screen::Language) {
+        // A fresh screen, in the language on the screen: its title is that language's in the original's font of the role, and its names are the atlas.
+        m_pickerTouch = Picker::Touch{};
+        loadUiFont(m_pickerRules.title.font);
+        loadUiFont(Picker::kNamesFont);
+    }
     if (changed && screen == Screen::Adjust) {
         // A FRESH screen: locked (it always opens locked, and the lock is never saved), with no touch followed - and the press that opened it spent until
         // it lifts (design 3.3.7). The readouts are in the original's font.
@@ -4175,11 +4287,7 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         // ScoreDashboard::preLoop: a fresh list at the top, and what the save has
         // unlocked of it now.
         // AchievementManager::isUnlocked reads the saved list (planning step 143).
-        const Achievements::Content* content = m_achievementsLoaded ? &m_achievements : nullptr;
-        m_dashboardBoard = m_achievementRulesReady
-                               ? Dashboard::Build(content, m_lockingRules, m_scores, m_chapters,
-                                                  m_achievementStore.Ids())
-                               : Dashboard::Build(content, m_lockingRules, m_scores, m_chapters);
+        m_dashboardBoard = buildDashboardBoard();
         m_dashboardState = Dashboard::State{};
         for (const std::string* font :
              {&m_dashboardRules.header.font, &m_dashboardRules.title.font, &m_dashboardRules.description.font,
@@ -4191,7 +4299,7 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         // LevelSelector::preLoop: what the save has opened, and setCurrentPage from
         // page 0 to the opening page, which slides in under the black.
         m_selectorBoard = screen == Screen::Worlds
-                              ? Selector::BuildChapters(m_selectorRules, m_lockingRules, m_scores, m_chapters)
+                              ? Selector::BuildChapters(m_selectorRules, m_lockingRules, m_scores, m_chapters, strings())
                               : Selector::BuildLevels(m_selectorRules, m_lockingRules, m_scores, m_chapters, m_menuWorld);
         m_selectorState = Selector::Open(m_selectorBoard, Selector::OpeningPage(m_selectorBoard, m_menuWorld));
         m_selectorDown = Selector::Hit{};
@@ -4368,6 +4476,10 @@ void MagicPortalsLayer::menuTick(entt::registry& registry, const ScriptClock::St
     }
     if (m_screen == Screen::Options) {
         optionsInput(registry);
+        return;
+    }
+    if (m_screen == Screen::Language) {
+        pickerInput(registry);
         return;
     }
     if (m_screen == Screen::Adjust) {
@@ -4605,10 +4717,16 @@ void MagicPortalsLayer::mainMenuInput(entt::registry& registry) {
     if (entryOn) {
         entry = Options::EntryAt(m_optionsRules, m_mainMenuRules.layer, m_mainMenuRules.state, view, m_menuClock.ms, false).rect;
     }
+    // THE LANGUAGE GLOBE (planning step 239), where the run offers the picker: claimed first of all, so a press on it is neither a press on the gear nor on a main
+    // menu button whose box it overlaps. Where the run does not offer it nothing below differs from what it was.
+    const bool globeOn = LanguageAvailable();
+    const bool globePressed =
+        globeOn && languageEntryTouch(touch, Picker::EntryAt(m_pickerRules, m_mainMenuRules.layer, m_mainMenuRules.state, view, m_menuClock.ms, false).rect);
+    const bool globeHas = globePressed || m_menuTouch.languageDown;
     if (touch.pressed) {
         MenuState::TouchDown(m_menuTouch.touch, touch.atView);
-        m_menuTouch.optionsDown = entryOn && entry.Contains(touch.atView);
-        m_menuTouch.mainDown = m_menuTouch.optionsDown
+        m_menuTouch.optionsDown = !globeHas && entryOn && entry.Contains(touch.atView);
+        m_menuTouch.mainDown = (globeHas || m_menuTouch.optionsDown)
                                    ? 0u
                                    : MainMenu::ButtonsAt(m_mainMenuRules, switches, view, m_menuClock.ms, touch.atView);
     }
@@ -4618,6 +4736,15 @@ void MagicPortalsLayer::mainMenuInput(entt::registry& registry) {
         touch.over ? MainMenu::ButtonsAt(m_mainMenuRules, switches, view, m_menuClock.ms, touch.atView) : 0u;
     m_menuTouch.mainHeld = touch.held && !touch.released ? (m_menuTouch.mainDown & inside) : 0u;
     if (!touch.released) return;
+    if (globePressed) {
+        // The same noise the gear's entry makes, and the picker on the next tick; it returns to the main menu.
+        m_menuTouch = MenuTouch{};
+        latch("level_button");
+        m_languageFrom = Screen::Main;
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = Screen::Language;
+        return;
+    }
     const bool entryPressed = m_menuTouch.optionsDown && insideEntry;
     const unsigned pressed = m_menuTouch.mainDown & inside;
     m_menuTouch = MenuTouch{};
@@ -4773,6 +4900,16 @@ void MagicPortalsLayer::optionsInput(entt::registry& registry) {
     }
     const Touch touch = touchThisTick(registry);
     const glm::dvec2 view = MenuBoxPx();
+    // THE LANGUAGE GLOBE in the corner (planning step 239), claimed before the screen's own widgets: the picker opens on the next tick and returns here.
+    if (LanguageAvailable() && languageEntryTouch(touch, Picker::CornerRect(m_pickerRules, view))) {
+        m_optionsTouch = Options::Touch{};
+        m_menuTouch = MenuTouch{};
+        latch("level_button");
+        m_languageFrom = Screen::Options;
+        m_pendingMenu.kind = PendingMenu::Kind::Screen;
+        m_pendingMenu.screen = Screen::Language;
+        return;
+    }
     // The button under the tiles that opens the adjustment screen is a widget only while the style in force is Modern: hidden, it is not claimed.
     const bool adjustShown = AdjustAvailable();
     const Options::Widget on = touch.over ? Options::WidgetAt(m_optionsRules, m_creditsRules, view, m_menuClock.ms, touch.atView, adjustShown)
@@ -4798,6 +4935,51 @@ void MagicPortalsLayer::optionsInput(entt::registry& registry) {
     // A tile: the run plays that style from the next level load, and the choice is kept. Pressing the lit one is a choice too, and is kept -
     // a player who chose Classic keeps it when the shipped default changes.
     if (const std::optional<Controls::Style> style = Options::StyleOf(press.widget)) chooseControlsStyle(*style);
+}
+
+bool MagicPortalsLayer::languageEntryTouch(const Touch& touch, const Hud::Rect& rect) {
+    // Button::update's rule, as the main menu follows it: the touch that went down on the globe works it only while it is inside it (the press tint), and
+    // acts on the release inside it.
+    if (touch.pressed) m_menuTouch.languageDown = rect.Contains(touch.atView);
+    const bool inside = touch.over && rect.Contains(touch.atView);
+    m_menuTouch.languageHeld = m_menuTouch.languageDown && touch.held && !touch.released && inside;
+    if (!touch.released) return false;
+    const bool pressed = m_menuTouch.languageDown && inside;
+    m_menuTouch.languageDown = false;
+    m_menuTouch.languageHeld = false;
+    return pressed;
+}
+
+void MagicPortalsLayer::leaveLanguage() {
+    m_pickerTouch = Picker::Touch{};
+    // Back to the screen that opened the picker; Options only where it still exists.
+    m_pendingMenu.kind = PendingMenu::Kind::Screen;
+    m_pendingMenu.screen = m_languageFrom == Screen::Options && OptionsAvailable() ? Screen::Options : Screen::Main;
+}
+
+void MagicPortalsLayer::pickerInput(entt::registry& registry) {
+    using Supersonic::Input;
+    // The credits' back key and back button (BackButtonLayer): the screen that opened the picker, on the next tick.
+    if (Input::TickWasPressed(kBack) || devPressDue(DevPress::Back)) {
+        leaveLanguage();
+        return;
+    }
+    const Touch touch = touchThisTick(registry);
+    const glm::dvec2 view = MenuBoxPx();
+    const std::size_t count = m_pickerNames.size();
+    const Picker::Target on = touch.over ? Picker::TargetAt(m_pickerRules, m_creditsRules, view, m_menuClock.ms, touch.atView, count) : Picker::Target{};
+    const bool touching = touch.pressed || (touch.held && !touch.released);
+    const Picker::Press press = Picker::Follow(m_pickerTouch, touch.pressed, touch.released, touching, on);
+    if (!press.happened) return;
+    // getButtonSoundName: the credits' back button's own noise, for the plates too.
+    latch("menu_button");
+    if (press.target.kind == Picker::Target::Kind::Back) {
+        leaveLanguage();
+        return;
+    }
+    // A plate: the language is spoken from this tick on and the choice is kept (Language::Store, language.json) - the screen stays, in the new language.
+    // Pressing the lit one is a choice too, and is kept.
+    ChooseLanguage(static_cast<Strings::Lang>(press.target.index));
 }
 
 Adjust::Layout MagicPortalsLayer::AdjustLayout() const {
@@ -4885,7 +5067,7 @@ void MagicPortalsLayer::dashboardInput(entt::registry& registry) {
         if (m_notificatorReady && m_achievementRulesReady) {
             Notificator::Card card;
             card.background = m_achievementRules.locked.background;
-            card.message = m_achievementRules.locked.message;
+            card.message = strings() != nullptr ? m_strings.Show(Strings::Key::kCardLockedLevel) : m_achievementRules.locked.message;
             card.durationMs = m_achievementRules.locked.durationMs;
             card.delayMs = m_achievementRules.locked.delayMs;
             m_notificator.Notify(std::move(card));
@@ -4938,6 +5120,7 @@ bool MagicPortalsLayer::menuStateUp() const {
     case Screen::Achievements:
     case Screen::Options:
     case Screen::Adjust:
+    case Screen::Language:
         return true;
     case Screen::None:
     case Screen::Finished:
@@ -4953,21 +5136,263 @@ const std::string& MagicPortalsLayer::menuPicture(const std::string& file) const
     return found != m_menuPictures.end() ? found->second : none;
 }
 
+std::string MagicPortalsLayer::fontFile(const std::string& name) const {
+    // A language the original's bitmaps cannot spell has fonts baked for it (FontBake), by the role the rule tables name; every other role - and
+    // every role of a language set in the original's own - is the original's file, as it always was.
+    // The picker's atlas of the eleven names is its own role, in no language's set (planning step 239).
+    if (name == Picker::kNamesFont) return m_pickerFontFile;
+    const auto baked = m_generatedFonts.find(name);
+    return baked != m_generatedFonts.end() ? baked->second : m_paths.original + "/data/" + name;
+}
+
 void MagicPortalsLayer::loadUiFont(const std::string& name) {
     if (name == m_hudRules.caption.font) {
         if (m_captionFontTried) return;
         m_captionFontTried = true;
         std::string why;
-        if (!m_captionFont.Load(m_paths.original + "/data/" + name, why)) {
+        if (!m_captionFont.Load(fontFile(name), why)) {
             SUPERSONIC_LOG_WARN("Magic Portals") << "no text in " << name << ": " << why << std::endl;
         }
         return;
     }
     if (m_uiFonts.find(name) != m_uiFonts.end()) return;
     std::string why;
-    if (!m_uiFonts[name].Load(m_paths.original + "/data/" + name, why)) {
+    if (!m_uiFonts[name].Load(fontFile(name), why)) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "no text in " << name << ": " << why << std::endl;
     }
+}
+
+// ---- the language (planning step 238, PORT-34) ---------------------------------------------------------------------------------
+
+void MagicPortalsLayer::startLanguage() {
+    // Which codes there are, from the port's own committed table: without it nothing can be said in another language, and the rules' English is drawn.
+    Strings::LanguageTable languages;
+    std::string why;
+    if (!Strings::LoadLanguages(m_paths.portData + Strings::kLanguagesFile, languages, why)) {
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "language: the table of languages could not be read, English is drawn: " << why << std::endl;
+        m_languageNotes.push_back(why);
+        return;
+    }
+    Strings::Lang start = Strings::kDefaultLang;
+    if (m_paths.language.forced) {
+        // `--lang <code>`, or the English a developer's or parity run is given (Language::ResolvePolicy): for this run only. The store is opened on no
+        // directory: it neither reads language.json nor ever writes it.
+        const std::optional<Strings::Lang> forced = languages.LangOfCode(*m_paths.language.forced);
+        if (forced) {
+            start = *forced;
+            SUPERSONIC_LOG_INFO("Magic Portals") << "language: " << *m_paths.language.forced << " (forced by --lang or by a developer's run; the saved choice is not read or written)" << std::endl;
+        } else {
+            SUPERSONIC_LOG_ERROR("Magic Portals") << "language: --lang " << *m_paths.language.forced << " is no language of game/data/lang/languages.json, English is drawn" << std::endl;
+        }
+        std::string opened;
+        m_languageStore.Open(std::string(), languages, opened);
+    } else {
+        if (std::string opened; !m_languageStore.Open(m_paths.saveDir, languages, opened)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "language not read, English kept: " << opened << std::endl;
+        } else if (m_languageStore.FromFile()) {
+            SUPERSONIC_LOG_INFO("Magic Portals") << "language: " << languages.CodeOf(m_languageStore.Language()) << " (the player's choice, read from "
+                                                 << m_languageStore.Path() << ")" << std::endl;
+        }
+        start = m_languageStore.Language();
+    }
+    SetLanguage(start);
+}
+
+bool MagicPortalsLayer::bakeLanguageFonts(const Strings::Table& table, Strings::Lang lang, const Achievements::Content& content,
+                                          std::map<std::string, std::string>& files, std::string& error) {
+    const FontBake::Plan& plan = table.Languages().Fonts();
+    if (!plan.loaded) {
+        error = "game/data/lang/languages.json has no fonts plan";
+        return false;
+    }
+    if (m_paths.prisms.empty()) {
+        error = "there is no scratch folder to write the fonts in";
+        return false;
+    }
+    std::vector<FontBake::FaceBytes> faces;
+    if (!FontBake::LoadFaces(plan, m_paths.portData + "/" + plan.folder, faces, error)) return false;
+    const std::filesystem::path dir = m_paths.prisms / FontBake::kScratchFolder;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        error = "cannot make " + dir.string() + ": " + ec.message();
+        return false;
+    }
+    // The words the Verdana slot draws besides its three keys: every achievement's title and description and the secret achievement's two texts (the
+    // translation's `secret` block, which is not in the committed tables), as they will reach the font (shaped).
+    std::vector<std::string> achievementWords;
+    for (const Achievements::Entry& entry : content.entries) {
+        achievementWords.push_back(table.Shape(entry.title));
+        achievementWords.push_back(table.Shape(entry.description));
+    }
+    for (const std::string& text : Achievements::SecretSamples(content)) achievementWords.push_back(table.Shape(text));
+    for (const FontBake::SlotSpec& slot : plan.slots) {
+        const std::set<std::uint32_t> codePoints = Strings::SlotCodePoints(
+            table, slot.id, slot.id == Strings::kSlotVerdana ? achievementWords : std::vector<std::string>());
+        const std::string name = slot.originalFont + "_" + table.Languages().CodeOf(lang);
+        const FontBake::Written written = FontBake::Ensure(plan, slot, faces, codePoints, dir.string(), name);
+        if (!written.ok) {
+            error = slot.id + " slot: " + written.error;
+            return false;
+        }
+        if (!written.missing.empty()) {
+            std::string list;
+            for (const std::uint32_t codePoint : written.missing) {
+                char text[16];
+                std::snprintf(text, sizeof(text), "%sU+%04X", list.empty() ? "" : " ", static_cast<unsigned>(codePoint));
+                list += text;
+            }
+            const std::string note = "the " + slot.id + " slot's faces have no glyph for " + list + ": those letters are not drawn";
+            m_languageNotes.push_back(note);
+            SUPERSONIC_LOG_WARN("Magic Portals") << "language " << table.Languages().CodeOf(lang) << ": " << note << std::endl;
+        }
+        files[slot.originalFont + ".fnt"] = written.fntPath;
+        SUPERSONIC_LOG_INFO("Magic Portals") << "language " << table.Languages().CodeOf(lang) << ": " << slot.originalFont << " baked into "
+                                             << written.fntPath << (written.cached ? " (already there)" : "") << std::endl;
+    }
+    return true;
+}
+
+bool MagicPortalsLayer::SetLanguage(Strings::Lang requested) {
+    m_languageNotes.clear();
+    Strings::Lang shown = requested;
+    Strings::Table table;
+    std::string why;
+    if (!table.Load(m_paths.portData, shown, why)) {
+        // game/data/lang is the port's own and committed: a table that will not read is a fault of this build, said loudly. Nothing changes.
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "language: the strings could not be read, the language is left as it was: " << why << std::endl;
+        m_languageNotes.push_back(why);
+        return false;
+    }
+    const std::string code = table.Languages().CodeOf(shown);
+    for (const std::string& note : table.Notes()) {
+        m_languageNotes.push_back(note);
+        SUPERSONIC_LOG_WARN("Magic Portals") << "language " << code << ": " << note << std::endl;
+    }
+
+    // The achievements in this language: Asantee's words, translated, in the gitignored file beside the English list, with the secret achievement's
+    // title and sentence. Without the file the English list is shown, and for an id it lacks the English of that entry, said once.
+    const auto contentIn = [&](const Strings::Table& words, Strings::Lang lang) {
+        if (!m_achievementsLoaded) return Achievements::Content{};
+        if (lang == Strings::kDefaultLang) return m_achievements;
+        const std::string wanted = words.Languages().CodeOf(lang);
+        const std::string file =
+            (std::filesystem::path(m_paths.achievements).parent_path() / ("achievements." + wanted + ".json")).string();
+        Achievements::Translation translation;
+        std::string problem;
+        std::vector<int> missing;
+        if (!Achievements::LoadTranslation(file, wanted, translation, problem)) {
+            const std::string note = "the achievements are shown in English: " + problem;
+            m_languageNotes.push_back(note);
+            SUPERSONIC_LOG_WARN("Magic Portals") << "language " << wanted << ": " << note << std::endl;
+            return Achievements::Localized(m_achievements, nullptr);
+        }
+        Achievements::Content content = Achievements::Localized(m_achievements, &translation, &missing);
+        if (!missing.empty()) {
+            std::string list;
+            for (const int id : missing) list += (list.empty() ? "" : ", ") + std::to_string(id);
+            const std::string note = std::to_string(missing.size()) + " achievement(s) have no " + wanted + " text and are shown in English: ids " + list;
+            m_languageNotes.push_back(note);
+            SUPERSONIC_LOG_WARN("Magic Portals") << "language " << wanted << ": " << note << std::endl;
+        }
+        return content;
+    };
+    Achievements::Content content = contentIn(table, shown);
+
+    // The fonts: the original's own bitmaps for a language whose text lies in Latin-1, else baked from the faces in game/data/fonts. A language
+    // whose letters cannot be drawn is not shown as blanks: the run speaks English and says why, once.
+    std::map<std::string, std::string> baked;
+    if (shown != Strings::kDefaultLang && table.Languages().FontSetOf(shown) == Strings::FontSet::Generated) {
+        std::string problem;
+        if (!bakeLanguageFonts(table, shown, content, baked, problem)) {
+            const std::string note = "the fonts for " + code + " could not be made (" + problem + "); English is shown instead";
+            m_languageNotes.push_back(note);
+            SUPERSONIC_LOG_ERROR("Magic Portals") << "language: " << note << std::endl;
+            baked.clear();
+            shown = Strings::kDefaultLang;
+            if (!table.Load(m_paths.portData, shown, why)) {
+                SUPERSONIC_LOG_ERROR("Magic Portals") << "language: the English strings could not be read either: " << why << std::endl;
+                return false;
+            }
+            content = contentIn(table, shown);
+        }
+    }
+
+    m_strings = std::move(table);
+    m_stringsReady = true;
+    m_language = shown;
+    m_languageRequested = requested;
+    m_generatedFonts = std::move(baked);
+    if (m_achievementsLoaded) m_achievementsShown = std::move(content);
+
+    // Every font read so far is read again from where this language has it, and the caption's with them.
+    const bool captionWanted = m_captionFontTried;
+    std::vector<std::string> names;
+    for (const auto& [name, font] : m_uiFonts) {
+        (void)font;
+        names.push_back(name);
+    }
+    m_uiFonts.clear();
+    m_captionFont = Supersonic::BitmapFont{};
+    m_captionFontTried = false;
+    for (const std::string& name : names) loadUiFont(name);
+    if (captionWanted) loadUiFont(m_hudRules.caption.font);
+
+    recomposeStrings();
+    SUPERSONIC_LOG_INFO("Magic Portals") << "language: " << code << " (" << m_strings.Languages().NativeName(shown) << ")"
+                                         << (m_generatedFonts.empty() ? ", the original's fonts" : ", fonts baked for it")
+                                         << (shown != requested ? "; English instead of the one asked for" : "") << std::endl;
+    return shown == requested;
+}
+
+bool MagicPortalsLayer::ChooseLanguage(Strings::Lang language) {
+    const bool shown = SetLanguage(language);
+    // The CHOICE is kept even where the fonts could not be made: a later run on a machine that can make them speaks it.
+    if (m_stringsReady) {
+        m_languageStore.SetLanguage(language);
+        if (std::string why; !m_languageStore.Save(why)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "language not saved: " << why << std::endl;
+        }
+    }
+    return shown;
+}
+
+void MagicPortalsLayer::recomposeStrings() {
+    // The level's caption was composed when the level loaded.
+    if (!m_captionText.empty()) {
+        if (const Chapters::Level* level = Current()) m_captionText = Hud::CaptionText(m_hudRules, level->index, strings());
+    }
+    // The dashboard's board at its entry, chapter select's warning at its own; a screen not up composes both afresh when it is opened.
+    if (m_screen == Screen::Achievements) m_dashboardBoard = buildDashboardBoard();
+    if (m_screen == Screen::Worlds) m_selectorBoard.warningWords = Selector::WarningWords(m_lockingRules, strings());
+    // The pause's popup was composed when it opened. A card already on the stack keeps the words it was made with.
+    if (m_achievementsPopup.open) {
+        if (const Chapters::Level* level = Current()) {
+            m_achievementsPopup.text = achievementsPopupText(Achievements::FromLevel(m_achievementsShown, level->world, level->index));
+        }
+    }
+}
+
+Dashboard::Board MagicPortalsLayer::buildDashboardBoard() const {
+    const Achievements::Content* content = m_achievementsLoaded ? &m_achievementsShown : nullptr;
+    Dashboard::Board board = m_achievementRulesReady
+                                 ? Dashboard::Build(content, m_lockingRules, m_scores, m_chapters, m_achievementStore.Ids())
+                                 : Dashboard::Build(content, m_lockingRules, m_scores, m_chapters);
+    // The words reach the font shaped, once (Strings::Display): a right-to-left language's rows are in visual order from here on.
+    if (const Strings::Table* table = strings()) {
+        for (Dashboard::Line& line : board.lines) {
+            if (line.header) continue;
+            line.title = table->Shape(line.title);
+            line.description = table->Shape(line.description);
+        }
+    }
+    return board;
+}
+
+std::string MagicPortalsLayer::achievementsPopupText(const std::vector<const Achievements::Entry*>& entries) const {
+    std::string text = Achievements::PopupText(m_achievementRules, m_achievementsShown, entries, m_achievementStore.Sorted());
+    if (const Strings::Table* table = strings()) text = table->Shape(text);
+    return text;
 }
 
 Pause::Switches MagicPortalsLayer::MainMenuSwitches() const {
@@ -5067,6 +5492,18 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 glyph.uvOffset + glyph.uvScale);
         }
     };
+    // The language globe (planning step 239): the picture the game drew, or - with nowhere to write it - a flat quad on the button's box.
+    const auto drawGlobe = [&](const Picker::Entry& entry) {
+        const float grey = static_cast<float>(entry.rgbByte) / 255.0f;
+        const float alpha = static_cast<float>(entry.alphaByte) / 255.0f;
+        if (!m_languageEntryImage.empty()) {
+            add(entry.picture, m_languageEntryImage, glm::vec4(grey, grey, grey, alpha));
+        } else {
+            const PadArt::Rgb rim = PadArt::kPlateRim;
+            add(entry.rect, std::string(),
+                glm::vec4(static_cast<float>(rim.r) / 255.0f * grey, static_cast<float>(rim.g) / 255.0f * grey, static_cast<float>(rim.b) / 255.0f * grey, alpha));
+        }
+    };
     const Hud::Rect whole{glm::dvec2(0.0), view};
     const float black =
         static_cast<float>(MenuState::FadeAlphaByte(m_mainMenuRules.state, m_menuClock.wallMs)) / 255.0f;
@@ -5109,6 +5546,10 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                               static_cast<float>(rim.b) / 255.0f * grey, alpha));
             }
         }
+        // THE LANGUAGE GLOBE (planning step 239), where the run offers the picker: under the gear, at the same entrance.
+        if (LanguageAvailable()) {
+            drawGlobe(Picker::EntryAt(m_pickerRules, m_mainMenuRules.layer, m_mainMenuRules.state, view, m_menuClock.ms, m_menuTouch.languageHeld));
+        }
         // The state's black, drawn after the layer manager: over all of it.
         add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
         return;
@@ -5126,12 +5567,13 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         }
         // THE CLOSING CARD (Enhanced, planning step 212): words under the original's picture on the same strip, drawn after it. The glyphs are the
         // fonts' white; the tint is the picture's black at its alpha, so they read as part of it. A font that did not load draws nothing.
-        for (const Credits::Words& words : Credits::TailWords(m_creditsRules, view, m_credits)) {
+        for (const Credits::Words& words : Credits::TailWords(m_creditsRules, view, m_credits, strings())) {
             const Supersonic::BitmapFont* font = uiFont(words.font);
             if (font == nullptr) continue;
             const auto& pages = font->Pages();
             const float ink = static_cast<float>(words.rgbByte) / 255.0f;
-            for (const Hud::Glyph& glyph : Hud::LayOutText(*font, words.text, words.centre, words.unitsPerFontPx)) {
+            const double fitted = Hud::FitUnitsPerFontPx(*font, words.text, words.unitsPerFontPx, words.maxWidthUnits);
+            for (const Hud::Glyph& glyph : Hud::LayOutText(*font, words.text, words.centre, fitted)) {
                 if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)],
                     glm::vec4(ink, ink, ink, static_cast<float>(words.alphaByte) / 255.0f), glyph.uvOffset,
@@ -5147,7 +5589,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         if (OptionsAvailable()) {
             for (const Options::Piece& piece :
                  Options::Pieces(m_optionsRules, m_creditsRules, m_controlsRules, m_hudRules, m_controlsApplied, view, m_menuClock.ms,
-                                 m_controlsStyle, m_optionsTouch.held, AdjustAvailable())) {
+                                 m_controlsStyle, m_optionsTouch.held, AdjustAvailable(), strings())) {
                 const glm::vec4 colour(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
                                        static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
                 switch (piece.element) {
@@ -5163,7 +5605,8 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                     const Supersonic::BitmapFont* font = uiFont(piece.font);
                     if (font == nullptr) break;
                     const auto& pages = font->Pages();
-                    for (const Hud::Glyph& glyph : Hud::LayOutText(*font, piece.words, piece.rect.min, piece.unitsPerFontPx)) {
+                    const double fitted = Hud::FitUnitsPerFontPx(*font, piece.words, piece.unitsPerFontPx, piece.maxWidthUnits);
+                    for (const Hud::Glyph& glyph : Hud::LayOutText(*font, piece.words, piece.rect.min, fitted)) {
                         if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
                         add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset,
                             glyph.uvOffset + glyph.uvScale);
@@ -5174,6 +5617,46 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 case Options::Element::ThumbnailBase:
                 case Options::Element::ThumbnailControl:
                 case Options::Element::AdjustFrame:
+                    add(piece.rect, std::string(), colour);
+                    break;
+                }
+            }
+        }
+        // THE LANGUAGE GLOBE in the corner (planning step 239): over the screen's pieces, flat on its box, no entrance.
+        if (LanguageAvailable()) drawGlobe(Picker::CornerAt(m_pickerRules, m_creditsRules.state, view, m_menuTouch.languageHeld));
+        add(whole, std::string(), glm::vec4(0.0f, 0.0f, 0.0f, black));
+        return;
+    }
+    if (m_screen == Screen::Language) {
+        // THE LANGUAGE PICKER (planning step 239): the credits' background and back button, the title in the language on the screen, and a plate for each of the
+        // eleven languages in its own name (sim/Picker.hpp), the state's black over all of it. Drawn only where the run offers it and its atlas was made.
+        if (LanguageAvailable() && !m_pickerNames.empty()) {
+            const std::string title = m_strings.Show(Strings::Key::kLanguageTitle);
+            for (const Picker::Piece& piece : Picker::Pieces(m_pickerRules, m_creditsRules, view, m_menuClock.ms, Strings::IndexOf(m_language),
+                                                             m_pickerTouch.held, title, m_pickerNames)) {
+                const glm::vec4 colour(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
+                                       static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
+                switch (piece.element) {
+                case Picker::Element::Background:
+                case Picker::Element::Back: {
+                    const std::string& image = menuPicture(piece.file);
+                    if (!image.empty()) add(piece.rect, image, colour);
+                    if (piece.element == Picker::Element::Background) fillSides(piece.rect, piece.file);
+                    break;
+                }
+                case Picker::Element::Title:
+                case Picker::Element::PlateWord: {
+                    const Supersonic::BitmapFont* font = uiFont(piece.font);
+                    if (font == nullptr) break;
+                    const auto& pages = font->Pages();
+                    const double fitted = Hud::FitUnitsPerFontPx(*font, piece.words, piece.unitsPerFontPx, piece.maxWidthUnits);
+                    for (const Hud::Glyph& glyph : Hud::LayOutText(*font, piece.words, piece.rect.min, fitted)) {
+                        if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
+                        add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset, glyph.uvOffset + glyph.uvScale);
+                    }
+                    break;
+                }
+                case Picker::Element::PlateFrame:
                     add(piece.rect, std::string(), colour);
                     break;
                 }
@@ -5253,7 +5736,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         // Every picture and word in ScoreDashboard::loop's order (sim/Dashboard.hpp),
         // then the state's black.
         for (const Dashboard::Piece& piece : Dashboard::Pieces(m_dashboardRules, m_dashboardBoard, m_dashboardState,
-                                                               view, m_menuClock.ms, m_layerClockMs)) {
+                                                               view, m_menuClock.ms, m_layerClockMs, strings())) {
             const glm::vec4 colour(glm::vec3(piece.rgbBytes) / 255.0f, static_cast<float>(piece.alphaByte) / 255.0f);
             if (piece.kind == Dashboard::Kind::Sprite) {
                 const std::string& image = menuPicture(piece.file);
@@ -5267,9 +5750,9 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             if (font == nullptr) continue;
             const auto& pages = font->Pages();
             // drawCenteredText centres the summed box; DrawText draws from its top-left.
-            const std::vector<Hud::Glyph> glyphs =
-                piece.centred ? Hud::LayOutText(*font, piece.words, piece.at, piece.unitsPerFontPx)
-                              : Hud::LayOutTextFrom(*font, piece.words, piece.at, piece.unitsPerFontPx);
+            const double fitted = Hud::FitUnitsPerFontPx(*font, piece.words, piece.unitsPerFontPx, piece.maxWidthUnits);
+            const std::vector<Hud::Glyph> glyphs = piece.centred ? Hud::LayOutText(*font, piece.words, piece.at, fitted)
+                                                                 : Hud::LayOutTextFrom(*font, piece.words, piece.at, fitted);
             for (const Hud::Glyph& glyph : glyphs) {
                 if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset,
@@ -5320,9 +5803,9 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             const Supersonic::BitmapFont* font = uiFont(piece.file);
             if (font == nullptr) continue;
             const auto& pages = font->Pages();
-            const std::vector<Hud::Glyph> glyphs =
-                piece.centred ? Hud::LayOutText(*font, piece.words, piece.at, piece.unitsPerFontPx)
-                              : Hud::LayOutTextFrom(*font, piece.words, piece.at, piece.unitsPerFontPx);
+            const double fitted = Hud::FitUnitsPerFontPx(*font, piece.words, piece.unitsPerFontPx, piece.maxWidthUnits);
+            const std::vector<Hud::Glyph> glyphs = piece.centred ? Hud::LayOutText(*font, piece.words, piece.at, fitted)
+                                                                 : Hud::LayOutTextFrom(*font, piece.words, piece.at, fitted);
             for (const Hud::Glyph& glyph : glyphs) {
                 if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], colour, glyph.uvOffset,
@@ -9463,15 +9946,8 @@ void MagicPortalsLayer::buildControls() {
     // "Part N", over the font's own pages. Read once, the first time a level
     // wants it: the font is the original's and lives beside its other data, so
     // a machine without it plays with no caption and says so.
-    if (!m_captionFontTried) {
-        m_captionFontTried = true;
-        std::string why;
-        const std::string font = m_paths.original + "/data/" + m_hudRules.caption.font;
-        if (!m_captionFont.Load(font, why)) {
-            SUPERSONIC_LOG_WARN("Magic Portals") << "no level caption: " << why << std::endl;
-        }
-    }
-    m_captionText = Hud::CaptionText(m_hudRules, entry.index);
+    loadUiFont(m_hudRules.caption.font);
+    m_captionText = Hud::CaptionText(m_hudRules, entry.index, strings());
 
     // The pause's pictures, each resolved once for the level: any of them may be
     // drawn the moment the pause opens.
@@ -9521,11 +9997,7 @@ void MagicPortalsLayer::buildControls() {
     const Pause::Rules& pause = m_pauseRules;
     for (const std::string* name : {&pause.title.font, &pause.goldenNumber.font, &finished.counter.font,
                                     &finished.goldenNumber.font, &finished.crystalCount.font}) {
-        if (*name == m_hudRules.caption.font || m_uiFonts.find(*name) != m_uiFonts.end()) continue;
-        std::string why;
-        if (!m_uiFonts[*name].Load(m_paths.original + "/data/" + *name, why)) {
-            SUPERSONIC_LOG_WARN("Magic Portals") << "no text in " << *name << ": " << why << std::endl;
-        }
+        loadUiFont(*name);
     }
 }
 
@@ -9870,7 +10342,7 @@ bool MagicPortalsLayer::openAchievementsPopup() {
     if (level == nullptr) return false;
     // getAchievementsFromLevel: none named, no popup - and in the original no
     // button either (CustomGameMenuLayer #229-280).
-    const std::vector<const Achievements::Entry*> entries = Achievements::FromLevel(m_achievements, level->world,
+    const std::vector<const Achievements::Entry*> entries = Achievements::FromLevel(m_achievementsShown, level->world,
                                                                                     level->index);
     if (entries.empty()) {
         SUPERSONIC_LOG_INFO("Magic Portals") << "achievements pressed on tick " << m_ticks
@@ -9891,7 +10363,7 @@ bool MagicPortalsLayer::openAchievementsPopup() {
     popup.cls.tapScreenToClose = true;
     popup.cls.closeButtonHighlight = true;
     popup.state = Popup::Start(popup.cls);
-    popup.text = Achievements::PopupText(m_achievementRules, m_achievements, entries, m_achievementStore.Sorted());
+    popup.text = achievementsPopupText(entries);
     m_achievementsPopup = std::move(popup);
     loadUiFont(rules.font);
     SUPERSONIC_LOG_INFO("Magic Portals") << "AchievementsPopup opened over the pause on tick " << m_ticks << " with "
@@ -9938,9 +10410,11 @@ void MagicPortalsLayer::emitAchievementsPopup(Supersonic::ScreenOverlay& overlay
     const auto tiles = m_cardImages.find(rules.tiles);
     // The button's colour: its alpha, and the press tint Button::update writes into it.
     const glm::vec4 colour(glm::vec3(static_cast<float>(button.tint)), static_cast<float>(bias));
+    // The text is never wider or taller than the slot (a translation of three entries is longer than the English ones; planning step 238).
+    const double fittedUnits = Hud::FitUnitsPerFontPx(*font, popup.text, rules.unitsPerFontPx, rules.maxWidthUnits, rules.maxHeightUnits);
     const Notificator::Box box =
         Notificator::LayOutBox(glm::dvec2(rules.tileUnitsX, rules.tileUnitsY), rules.tileColumns, rules.tileRows, scale,
-                               rules.unitsPerFontPx, view * 0.5, glm::dvec2(0.5), glm::dvec2(font->Measure(popup.text)));
+                               fittedUnits, view * 0.5, glm::dvec2(0.5), glm::dvec2(Hud::MeasureText(*font, popup.text)));
     const auto add = [&overlay, &view, &colour](const Hud::Rect& rect, const std::string& image,
                                                 const glm::dvec2& uvMin, const glm::dvec2& uvMax) {
         ScreenOverlay::Quad quad;
@@ -9958,7 +10432,7 @@ void MagicPortalsLayer::emitAchievementsPopup(Supersonic::ScreenOverlay& overlay
     }
     // TextBoxFrame::draw #93-114: DrawText from the box's top-left.
     const auto& pages = font->Pages();
-    for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, popup.text, box.textTopLeft, rules.unitsPerFontPx)) {
+    for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, popup.text, box.textTopLeft, fittedUnits)) {
         if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
         add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], glyph.uvOffset, glyph.uvOffset + glyph.uvScale);
     }
@@ -9977,10 +10451,15 @@ void MagicPortalsLayer::EmitNotifications(entt::registry& registry) const {
     const glm::dvec2 view = menuStateUp() ? MenuBoxPx() : ViewPx();
     if (view.x <= 0.0 || view.y <= 0.0) return;
     const Supersonic::BitmapFont* font = uiFont(m_notificatorRules.font);
-    const glm::dvec2 textPx = font != nullptr && font->IsLoaded() ? glm::dvec2(font->Measure(card->message))
+    const glm::dvec2 textPx = font != nullptr && font->IsLoaded() ? glm::dvec2(Hud::MeasureText(*font, card->message))
                                                                    : glm::dvec2(0.0);
-    const Notificator::Layout layout =
-        Notificator::LayOut(m_notificatorRules, *card, m_notificator.FrontAgeMs(), view, textPx);
+    // The card's text is never wider than its slot (planning step 238): the scale the card is laid out with is the fitted one.
+    Notificator::Rules fittedRules = m_notificatorRules;
+    if (font != nullptr && font->IsLoaded()) {
+        fittedRules.unitsPerFontPx =
+            Hud::FitUnitsPerFontPx(*font, card->message, m_notificatorRules.unitsPerFontPx, m_notificatorRules.maxWidthUnits);
+    }
+    const Notificator::Layout layout = Notificator::LayOut(fittedRules, *card, m_notificator.FrontAgeMs(), view, textPx);
     // computeEffectScale's colour: white, at the fade's alpha.
     const glm::vec4 colour(1.0f, 1.0f, 1.0f, static_cast<float>(layout.alpha));
     if (colour.a <= 0.0f) return;
@@ -10176,7 +10655,7 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
             add(sprite.rect, image->second, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
         }
         const double text = static_cast<double>(Pause::TextAlphaByte(m_pauseRules, m_pause.clockMs)) / 255.0;
-        write(m_pauseRules.title.font, Pause::TitleText(m_pauseRules, m_pause.level),
+        write(m_pauseRules.title.font, Pause::TitleText(m_pauseRules, m_pause.level, strings()),
               Pause::TitleCentre(m_pauseRules, view), m_pauseRules.title.unitsPerFontPx, true, text);
         write(m_pauseRules.goldenNumber.font, Pause::GoldenText(m_pause.level),
               Pause::GoldenCentre(m_pauseRules, view), m_pauseRules.goldenNumber.unitsPerFontPx, true, text);
@@ -10283,10 +10762,10 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         if (hint > 0.0) {
             const auto& pages = font->Pages();
             // The modern controls' pair stands over the classic text's row (planning step 183): the text starts clear of it, and inside the view.
-            // Classic is the literal call it always was.
-            glm::dvec2 hintTopLeft = Hint::TextTopLeft(m_hintRules, view);
-            if (modern) hintTopLeft.x = modernHintLeft(*font, hintTopLeft, view);
-            for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, m_hintRules.text, hintTopLeft, m_hintRules.unitsPerFontPx)) {
+            // Classic is the literal call it always was. In a language the text is the table's, fitted to its slot and, in a right-to-left one,
+            // anchored at the right edge (planning step 238).
+            const HintDraw hintText = hintDraw(*font, view, modern);
+            for (const Hud::Glyph& glyph : Hud::LayOutTextFrom(*font, hintText.words, hintText.topLeft, hintText.unitsPerFontPx)) {
                 if (glyph.page < 0 || static_cast<std::size_t>(glyph.page) >= pages.size()) continue;
                 add(glyph.rect, pages[static_cast<std::size_t>(glyph.page)], white(hint), glyph.uvOffset,
                     glyph.uvOffset + glyph.uvScale);
@@ -10295,11 +10774,27 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
     }
 }
 
-double MagicPortalsLayer::modernHintLeft(const Supersonic::BitmapFont& font, const glm::dvec2& classicTopLeft, const glm::dvec2& view) const {
+MagicPortalsLayer::HintDraw MagicPortalsLayer::hintDraw(const Supersonic::BitmapFont& font, const glm::dvec2& view, bool modern) const {
+    HintDraw draw;
+    draw.words = strings() != nullptr ? m_strings.Show(Strings::Key::kHintCamera) : m_hintRules.text;
+    draw.unitsPerFontPx = Hud::FitUnitsPerFontPx(font, draw.words, m_hintRules.unitsPerFontPx, m_hintRules.maxWidthUnits);
+    const bool rtl = strings() != nullptr && m_strings.Rtl() && m_hintRules.mirrorWhenRtl;
+    const double width = rtl ? static_cast<double>(Hud::MeasureText(font, draw.words).x) * draw.unitsPerFontPx : 0.0;
+    draw.topLeft = Hint::TextTopLeft(m_hintRules, view, rtl, width);
+    if (modern) {
+        const double clear = modernHintLeft(font, draw.topLeft, view, draw.words, draw.unitsPerFontPx);
+        // Mirrored, the text is already at the far side from the pair: it only moves if it would reach it.
+        draw.topLeft.x = rtl ? std::max(draw.topLeft.x, clear) : clear;
+    }
+    return draw;
+}
+
+double MagicPortalsLayer::modernHintLeft(const Supersonic::BitmapFont& font, const glm::dvec2& classicTopLeft, const glm::dvec2& view,
+                                         const std::string& words, double unitsPerFontPx) const {
     // The text's own width and rows, from the glyphs it is laid out in: the extent to the last glyph's EDGE (not its advance), so that the
     // edge and not the pen stays inside the view; a font change cannot break it. The line is laid out at the classic place and the width
     // and rows do not depend on where that is.
-    const std::vector<Hud::Glyph> glyphs = Hud::LayOutTextFrom(font, m_hintRules.text, classicTopLeft, m_hintRules.unitsPerFontPx);
+    const std::vector<Hud::Glyph> glyphs = Hud::LayOutTextFrom(font, words, classicTopLeft, unitsPerFontPx);
     if (glyphs.empty()) return classicTopLeft.x;
     double right = classicTopLeft.x;
     double top = glyphs.front().rect.min.y;

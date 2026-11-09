@@ -244,6 +244,72 @@ class H2Binaries(SyntheticRepos):
         self.assertIn('f14.md', ' '.join(f.path for f in notes))
 
 
+class FontFaces(SyntheticRepos):
+    """The one place a font binary is committed (planning step 237): the interface languages' open-licence faces, each with its OFL text beside it."""
+    FACE = 'game/data/fonts/Kurale-Regular.ttf'
+    LICENCE = 'game/data/fonts/OFL-Kurale.txt'
+    OFL = 'This Font Software is licensed under the SIL Open Font License.\nPermission is hereby granted. Redistribution is allowed.\nwithout specific, written permission.\n'
+
+    def with_face(self, **more):
+        files = self.edited()
+        files[self.FACE] = b'\0\1\0\0 a face, with NUL bytes in it'
+        files[self.LICENCE] = self.OFL
+        files.update(more)
+        return files
+
+    def test_a_face_with_its_licence_text_beside_it_passes_h1_h2_and_h5(self):
+        files = self.with_face()
+        for rule in ('H1', 'H2', 'H5'):
+            self.assertGreen(files, rule)
+
+    def test_a_face_without_its_licence_text_is_refused(self):
+        files = self.with_face()
+        del files[self.LICENCE]
+        found = self.assertRed(files, 'H1', 1)
+        self.assertIn('OFL-Kurale.txt', found[0].text)
+
+    def test_the_licence_of_another_family_is_not_the_licence(self):
+        files = self.with_face()
+        del files[self.LICENCE]
+        files['game/data/fonts/OFL-Other.txt'] = self.OFL
+        self.assertRed(files, 'H1', 1)
+
+    def test_a_face_over_the_cap_is_refused_and_one_at_the_cap_is_not(self):
+        with mock.patch.object(cp, 'MOST_FONT_BYTES', 100):
+            files = self.with_face()
+            files[self.FACE] = b'\0' * 101
+            self.assertRed(files, 'H1', 1)
+            files[self.FACE] = b'\0' * 100
+            self.assertGreen(files, 'H1')
+
+    def test_nothing_else_widens(self):
+        # a face anywhere else, a face of another type, a face in a sub-folder, a name that is not Family-Style, and any other binary in the folder
+        for name in ('font.ttf', 'game/data/Kurale-Regular.ttf', 'game/data/fonts/sub/Kurale-Regular.ttf', 'game/data/fonts/Kurale.ttf', 'game/data/fonts/Kurale-Regular.otf',
+                     'game/data/fonts/Kurale-Regular.png', 'game/data/fonts/Kurale-Regular.fnt', 'assets/Kurale-Regular.ttf'):
+            files = self.with_face()
+            files[name] = b'x'
+            if name == self.FACE:
+                continue
+            found = self.errors(self.findings(files), 'H1')
+            self.assertTrue(found and all(f.path == name for f in found), '%s: %r' % (name, [repr(f) for f in found]))
+        files = self.with_face()
+        files['game/data/fonts/data.bin'] = b'abc' + bytes([0]) + b'def'
+        self.assertRed(files, 'H2', 1)
+
+    def test_the_licence_exemption_is_for_the_ofl_files_of_that_folder_alone(self):
+        for name in ('game/data/fonts/NOTES.txt', 'game/data/fonts/README.md', 'game/data/OFL-Kurale.txt', 'docs/OFL-Kurale.txt', 'game/data/fonts/OFL-Kurale.md'):
+            files = self.with_face()
+            files[name] = self.OFL
+            found = self.errors(self.findings(files), 'H5')
+            self.assertTrue(found and all(f.path == name for f in found), '%s: %r' % (name, [repr(f) for f in found]))
+
+    def test_history_does_not_count_a_face_of_the_folder_and_does_count_any_other_font(self):
+        repo = self.make(self.with_face(**{'font.ttf': b'x'}))
+        result = cp.run_history(repo, accounts=[ACCOUNT])
+        found = [f.path for f in result.findings if f.cls == cp.HISTORY and f.rule in ('H1', 'H2')]
+        self.assertEqual(found, ['font.ttf'])
+
+
 class H3Secrets(SyntheticRepos):
     SECRETS = {
         'a pem key': '-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----\n',

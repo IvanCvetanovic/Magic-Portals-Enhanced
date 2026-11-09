@@ -1,6 +1,7 @@
 #include "sim/Selector.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Strings.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -42,7 +43,7 @@ bool ReadText(const Json::Value& block, const char* atKey, Rules::Text& out, std
               const std::string& where) {
     return Text(block, "font", out.font, why, where) &&
            Positive(block, "units_per_font_px", out.unitsPerFontPx, why, where) &&
-           Pair(block, atKey, out.atUnits, why, where);
+           Pair(block, atKey, out.atUnits, why, where) && UiLayer::Read::MaxWidth(block, out.maxWidthUnits, why, where);
 }
 
 bool ReadBounce(const Json::Value& block, MenuState::Bounce& out, std::string& why, const std::string& where) {
@@ -208,10 +209,17 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
+std::string WarningWords(const Locking::Rules& locking, const Strings::Table* strings) {
+    if (strings == nullptr) return std::string();
+    return strings->Show(Strings::Key::kSelectorRequires, {{Strings::Placeholder::kPercent, std::to_string(locking.chapterUnlockPercent)}});
+}
+
 Board BuildChapters(const Rules& rules, const Locking::Rules& locking, const Scores::Store& scores,
-                    const Chapters::Table& table) {
+                    const Chapters::Table& table, const Strings::Table* strings) {
     Board board;
     board.levels = false;
+    // The percent is locking.json's, once: the English words carry the same 60 in a second place (ui.json selector.chapter_select.warning).
+    board.warningWords = WarningWords(locking, strings);
     board.perPage = rules.chapters.perPage;
     const int worlds = WorldsIn(table);
     for (int w = 0; w < worlds; ++w) {
@@ -373,6 +381,7 @@ std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& s
         piece.at = at;
         piece.centred = centred;
         piece.unitsPerFontPx = how.unitsPerFontPx;
+        piece.maxWidthUnits = how.maxWidthUnits;
         piece.rgbBytes = rgb;
         piece.alphaByte = alphaByte;
         out.push_back(std::move(piece));
@@ -428,7 +437,7 @@ std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& s
                 if (chapter.warned) {
                     // computeAccomplishmentWarningBlinkColor: a rising sawtooth on the wall clock.
                     const double phase = std::fmod(std::max(0.0, wallMs), c.warningSawtoothMs) / c.warningSawtoothMs;
-                    text(c.warning, c.warningWords, cell.min + c.warning.atUnits, true, glm::ivec3(255),
+                    text(c.warning, board.warningWords.empty() ? c.warningWords : board.warningWords, cell.min + c.warning.atUnits, true, glm::ivec3(255),
                          static_cast<int>(phase * 255.0));
                 }
                 continue;

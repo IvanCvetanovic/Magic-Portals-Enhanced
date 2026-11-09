@@ -16,6 +16,7 @@
 // Nothing here reaches Game::Level or the state hash. A HUD is a picture, and the
 // one thing it may change - a clear-portals press - goes through Portals::State.
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,10 @@
 
 namespace Supersonic {
 class BitmapFont;
+}
+
+namespace MagicPortals::Strings {
+class Table;
 }
 
 namespace MagicPortals::Hud {
@@ -207,8 +212,9 @@ glm::dvec2 SignTarget(const Rules& rules, const glm::dvec2& cameraCorner, const 
 // The caption's alpha; zero once it has faded.
 double CaptionAlpha(const Rules& rules, double ageMs);
 
-// "Part N" for the level at `index` within its world.
-std::string CaptionText(const Rules& rules, int index);
+// "Part N" for the level at `index` within its world. With a string table (the layer passes one for every language but English: planning step
+// 238) the words are the table's hud.part, filled and shaped; without one they are rules.caption.prefix and the number, as they always were.
+std::string CaptionText(const Rules& rules, int index, const Strings::Table* strings = nullptr);
 
 // The current-score plaque's alpha, and its medal's, which share it.
 double PlaqueAlpha(const Rules& rules, double ageMs);
@@ -243,16 +249,41 @@ struct Glyph {
 std::vector<Glyph> LayOutCaption(const Rules& rules, const Supersonic::BitmapFont& font, const std::string& text,
                                  const glm::dvec2& viewUnits);
 
+// ---- text is UTF-8 here (planning step 236, PORT-32) ---------------------------------------------------------------
+//
+// !!! The engine's BitmapFont::Measure and BitmapFont::BuildText are BYTE-WISE: each byte of the string is one glyph id (Latin-1). They must NEVER
+// !!! be given a string that can hold a non-ASCII character - any UI language but English does - or they measure and draw the bytes of a UTF-8
+// !!! sequence as separate Latin-1 glyphs, with no error. The engine is not patched. Everything the port lays out or measures goes through
+// !!! LayOutText / LayOutTextFrom / MeasureText below, which decode UTF-8 (sim/Utf8.hpp) and look glyphs up by CODE POINT
+// !!! (BitmapFont::Find takes one). For ASCII the results are bit for bit what the byte loops gave, and the tests pin it.
+//
+// A code point the font has no glyph for draws nothing and does not advance the pen, as before - but it is no longer invisible: a caller
+// that passes `missing` gets every such code point, in the order met (a repeated one repeated), so that a coverage test or a log line can
+// see it. A malformed byte reaches the lookup as U+FFFD, which no shipped font holds, so it is reported the same way.
+
 // The same rule for any centred text: the line's box, its summed advances by
 // the line height at `unitsPerFontPx`, centred on `centre` on the view. The
 // pause's "Part N" and its golden number are drawCenteredText too, at their own
 // places (Pause.hpp).
 std::vector<Glyph> LayOutText(const Supersonic::BitmapFont& font, const std::string& text, const glm::dvec2& centre,
-                              double unitsPerFontPx);
+                              double unitsPerFontPx, std::vector<std::uint32_t>* missing = nullptr);
 
 // And text that is NOT centred: gs2d's DrawBitmapText as ETHScript's DrawText
 // calls it, the box's top-left at `topLeft` (the finished screen's crystal count).
 std::vector<Glyph> LayOutTextFrom(const Supersonic::BitmapFont& font, const std::string& text,
-                                  const glm::dvec2& topLeft, double unitsPerFontPx);
+                                  const glm::dvec2& topLeft, double unitsPerFontPx,
+                                  std::vector<std::uint32_t>* missing = nullptr);
+
+// How wide and tall `text` is in the font's own pixels: BitmapFont::Measure's answer for ASCII (the widest line's summed advances as a float,
+// by the line count times the line height; a missing glyph adds nothing), for UTF-8 text. Zero for a font that is not loaded.
+glm::vec2 MeasureText(const Supersonic::BitmapFont& font, const std::string& text);
+
+// FIT TO WIDTH (planning step 238). A translation can be longer than the English a slot was laid out for, and nothing wraps: a slot may name a
+// `max_width_units` in its rule table (0, or absent, is no limit and English's numbers are not touched), and the font size of a text wider
+// than that is scaled down so that the text, at the returned units a font pixel, is exactly that wide. The limit is a width in design units
+// (the view is 256 tall), so it compares with MeasureText(...) * unitsPerFontPx; `maxHeightUnits` (0: none) limits the lines the same way,
+// for a box of several lines. Never larger than `unitsPerFontPx`: a text that fits is returned as it was, bit for bit.
+double FitUnitsPerFontPx(const Supersonic::BitmapFont& font, const std::string& text, double unitsPerFontPx, double maxWidthUnits,
+                         double maxHeightUnits = 0.0);
 
 } // namespace MagicPortals::Hud

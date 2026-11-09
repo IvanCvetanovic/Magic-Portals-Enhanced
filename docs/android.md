@@ -171,6 +171,11 @@ exit after the unpack, the argument list and the log of a failed start are in `U
   The words of a refusal round the need up and the free figure down ("needs about 26 MB and 15 MB are free"; **run**).
 * **A hostile or damaged list** must not write outside the folders: every path must be relative, free of `..`, `.`, empty segments, backslashes, colons,
   control characters and NUL, not end in `/`, be unique, and begin with `GameData` or `engine`. A bad list is refused before anything on the disk is touched.
+* **Sub-folders under the port's data (Step 239).** Until the interface languages every file of the content package sat one folder under `GameData/` (`GameData/port-data/ui.json`).
+  The languages added the first deeper ones: `GameData/port-data/lang/` (the string tables), `GameData/port-data/fonts/` (four `.ttf` faces and their licence texts, whatever the
+  extension) and `GameData/tables/achievements.<code>.json` (the translations of the achievements). The rule above has no depth and no list of extensions, so they pass; the C++ suite
+  (`test_mp_unpack`) and the packager's (`test_android_package.py`) each list the same ten names and hold both to the same answer. The language picker needs a writable scratch folder
+  for the fonts it bakes (the same folder the game's other generated pictures go in); **a phone has not run it** (a language other than English has been drawn on a PC only).
 * **The event pump.** The engine's activity waits for the game thread to read its lifecycle commands, and a thread that does not for about five seconds is
   "not responding". The unpack calls `Android::PumpEvents()` after every 16th file. If the app is asked to finish meanwhile the unpack **stops without an
   error** (no further file, no stamp, no dialog).
@@ -183,7 +188,7 @@ exit after the unpack, the argument list and the log of a failed start are in `U
   after such an end shows that report first ("the game ended itself with an error (1), status 1"), and the game's start waits behind its OK button.
 * **Where things go.** The game's data: `files/GameData/`, the shaders `files/engine/assets/shaders/`, the working directory `files/engine/` (the engine
   looks there for `assets/shaders`, and writes its pipeline cache there, which a re-unpack removes with the folder). The player's saves (`scores.json`, `audio.json`,
-  `achievements.json`, `controls.json`): `files/Magic Portals/`, which is where the engine puts a user's data on Android (internal storage; **run:** it survives a
+  `achievements.json`, `controls.json`, `language.json`): `files/Magic Portals/`, which is where the engine puts a user's data on Android (internal storage; **run:** it survives a
   force-stop and an update, and uninstalling removes it). The log and the generated files: `files/Magic Portals/scratch/` (`Scratch::ArrangedFor` puts it first on a
   phone, because the NDK's C++ library names `/data/local/tmp` as the temporary folder and an app cannot write there), so the log is always
   `files/Magic Portals/scratch/magicportals.log`, the path the manifest's `supersonic.reportLog` names (a test ties the two).

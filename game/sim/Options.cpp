@@ -1,6 +1,7 @@
 #include "sim/Options.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Strings.hpp"
 
 #include <cctype>
 #include <cmath>
@@ -69,7 +70,8 @@ bool ReadWords(const Json::Value& block, Rules::Words& out, std::string& why, co
     Rules::Words read;
     if (!Text(block, "words", read.words, why, where) || !Text(block, "font", read.font, why, where) ||
         !Positive(block, "units_per_font_px", read.unitsPerFontPx, why, where) ||
-        !Fraction(block, "at_screen", read.atScreen, why, where) || !Byte(block, "alpha_byte", read.alphaByte, why, where)) {
+        !Fraction(block, "at_screen", read.atScreen, why, where) || !Byte(block, "alpha_byte", read.alphaByte, why, where) ||
+        !UiLayer::Read::MaxWidth(block, read.maxWidthUnits, why, where)) {
         return false;
     }
     out = std::move(read);
@@ -130,7 +132,8 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& 
         !ReadColour(tile, "idle_frame_rgba", read.idleFrame, why, "options.tile") ||
         !ReadColour(tile, "chosen_frame_rgba", read.chosenFrame, why, "options.tile") ||
         !Byte(tile, "idle_word_alpha_byte", read.idleWordAlphaByte, why, "options.tile") ||
-        !Byte(tile, "chosen_word_alpha_byte", read.chosenWordAlphaByte, why, "options.tile")) {
+        !Byte(tile, "chosen_word_alpha_byte", read.chosenWordAlphaByte, why, "options.tile") ||
+        !UiLayer::Read::MaxWidth(tile, read.wordMaxWidthUnits, why, "options.tile")) {
         return fail();
     }
     for (std::size_t i = 0; i < kTileStyles.size(); ++i) {
@@ -165,7 +168,8 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& 
         !Positive(adjust, "units_per_font_px", read.adjust.unitsPerFontPx, why, "options.adjust_button") ||
         !UiLayer::Read::Pair(adjust, "word_at_units", read.adjust.wordAtUnits, why, "options.adjust_button") ||
         !ReadColour(adjust, "frame_rgba", read.adjust.frame, why, "options.adjust_button") ||
-        !Byte(adjust, "word_alpha_byte", read.adjust.wordAlphaByte, why, "options.adjust_button")) {
+        !Byte(adjust, "word_alpha_byte", read.adjust.wordAlphaByte, why, "options.adjust_button") ||
+        !UiLayer::Read::MaxWidth(adjust, read.adjust.maxWidthUnits, why, "options.adjust_button")) {
         return fail();
     }
 
@@ -257,7 +261,7 @@ std::array<Hud::Rect, 5> ThumbnailRects(const Rules& rules, const Controls::Rule
 
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,
                           const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held,
-                          bool adjustShown) {
+                          bool adjustShown, const Strings::Table* strings) {
     std::vector<Piece> pieces;
     // The credits' background and back button, as the credits draw them: its first two pieces. (Its papyrus and its strip are the credits'.)
     for (const Credits::Piece& piece : Credits::Pieces(credits, viewUnits, stateMs, Credits::Scroll{}, held == Widget::Back)) {
@@ -273,9 +277,10 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
     {
         Piece title;
         title.element = Element::Title;
-        title.words = rules.title.words;
+        title.words = strings != nullptr ? strings->Show(Strings::Key::kOptionsTitle) : rules.title.words;
         title.font = rules.title.font;
         title.unitsPerFontPx = rules.title.unitsPerFontPx;
+        title.maxWidthUnits = rules.title.maxWidthUnits;
         title.rect = Hud::Rect{rules.title.atScreen * viewUnits, glm::dvec2(0.0)};
         title.colour = Colour{255, 255, 255, rules.title.alphaByte};
         pieces.push_back(std::move(title));
@@ -321,9 +326,12 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
         {
             Piece word;
             word.element = Element::Word;
-            word.words = rules.tiles[TileIndex(style)].word;
+            word.words = strings != nullptr
+                             ? strings->Show(style == Controls::Style::Modern ? Strings::Key::kOptionsModern : Strings::Key::kOptionsClassic)
+                             : rules.tiles[TileIndex(style)].word;
             word.font = rules.wordFont;
             word.unitsPerFontPx = rules.wordUnitsPerFontPx;
+            word.maxWidthUnits = rules.wordMaxWidthUnits;
             word.rect = Hud::Rect{tile.min + rules.wordAtUnits, glm::dvec2(0.0)};
             word.colour = tinted(Colour{255, 255, 255, isChosen ? rules.chosenWordAlphaByte : rules.idleWordAlphaByte});
             word.tile = style;
@@ -345,9 +353,10 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
         pieces.push_back(std::move(frame));
         Piece word;
         word.element = Element::Word;
-        word.words = rules.adjust.word;
+        word.words = strings != nullptr ? strings->Show(Strings::Key::kOptionsAdjust) : rules.adjust.word;
         word.font = rules.adjust.font;
         word.unitsPerFontPx = rules.adjust.unitsPerFontPx;
+        word.maxWidthUnits = rules.adjust.maxWidthUnits;
         word.rect = Hud::Rect{button.min + rules.adjust.wordAtUnits, glm::dvec2(0.0)};
         word.colour = tinted(Colour{255, 255, 255, rules.adjust.wordAlphaByte});
         pieces.push_back(std::move(word));

@@ -60,6 +60,7 @@ struct Rules {
         std::string font;
         double unitsPerFontPx = 0.0;
         glm::dvec2 atUnits{0.0}; // a centre or a top-left, as each says, from what it is placed on
+        double maxWidthUnits = 0.0; // 0: no limit (planning step 238; see Hud::FitUnitsPerFontPx)
     };
     Text header; // centred, from the row's top-left
     std::string headerPrefix;
@@ -237,6 +238,7 @@ struct Piece {
     glm::dvec2 at{0.0};
     bool centred = false; // Text: `at` is the box's centre, else its top-left
     double unitsPerFontPx = 0.0;
+    double maxWidthUnits = 0.0; // Text: the slot's limit, 0 for none; the layer fits the words to it
     glm::ivec3 rgbBytes{255};
     int alphaByte = 255;
 };
@@ -245,8 +247,9 @@ struct Piece {
 // background; the scroll bar (doScrolling draws it first); the rows - a header's
 // text, or the icon, its lock, the bar, "new!", the title, the description and
 // the points - for each row on the view; the plaque and the total; then the
-// layer's back button and start button. `wallMs` is the layer's clock.
+// layer's back button and start button. `wallMs` is the layer's clock. With a string table (planning step 238: every language but English)
+// a chapter's header and the "new!" mark are the table's words; without one, the rules' own.
 std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& state, const glm::dvec2& viewUnits,
-                          double stateMs, double wallMs);
+                          double stateMs, double wallMs, const Strings::Table* strings = nullptr);
 
 } // namespace MagicPortals::Dashboard

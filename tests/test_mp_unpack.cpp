@@ -403,6 +403,21 @@ void EveryRefusalOfAPathStandsOnItsOwn() {
         const bool ok = Unpack::SafePath(path, kOwned, why);
         CHECK_MSG(ok, path + " should pass: " + why);
     }
+    // The interface languages (planning step 239) put the first SUB-FOLDERS under the port's own data: the string tables in port-data/lang, the faces and their
+    // licence texts in port-data/fonts, the picker's table beside the others and the achievements' translation in tables/. Every file of the content package
+    // goes through SafePath, so each name the package holds must pass - at any depth, whatever the extension (.ttf, .txt, .md). The same names are in
+    // tools/package/test_android_package.py (ThePathRules.LANGUAGE_FILES), which holds the packager to the same answer.
+    for (const std::string& path : {std::string("GameData/port-data/lang/languages.json"), std::string("GameData/port-data/lang/en.json"), std::string("GameData/port-data/lang/ar.json"),
+                                    std::string("GameData/port-data/fonts/Kurale-Regular.ttf"), std::string("GameData/port-data/fonts/NotoSansJP-Bold.ttf"),
+                                    std::string("GameData/port-data/fonts/OFL-NotoSansArabic.txt"), std::string("GameData/port-data/fonts/README.md"),
+                                    std::string("GameData/port-data/picker.json"), std::string("GameData/tables/achievements.de.json"), std::string("GameData/tables/achievements.ja.json")}) {
+        std::string why;
+        const bool ok = Unpack::SafePath(path, kOwned, why);
+        CHECK_MSG(ok, path + " should pass: " + why);
+    }
+    // And what is still refused beside them: a climb out of the sub-folder.
+    refused("GameData/port-data/lang/../../../etc/x", "..", "a climb out of the language folder");
+    refused("GameData/port-data/fonts/../../..", "..", "a climb out of the fonts folder");
 }
 
 // ---- The run ----------------------------------------------------------------------------------------------------------------------------

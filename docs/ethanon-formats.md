@@ -3096,3 +3096,18 @@ the engine's side is `ETHBucketManager.cpp:193-252, 505-523, 636-645` and `ETHSc
   2.000, 2.333, 2.667, 3.000 and 4.000 (steps 3, 5, 6, 7, 8, 9 and 12), and 2.5 is crossed at a drop of 15.56 u: 15 does not kill, 17 does. (The row STK-9 gave 0.667 and 1.333 for 2 and 6 u, taking the polygon's skin as
   0.5 level units.) The port's engine brakes a closing pair before it meets, so the layer's impact watch replays a stone's free flight from the last step it had not braked (`Impacts::FreeFlightVelocity`) and reads that. Which step that was is judged by two guesses of the port's own (`earthquake.json` `impacts.free_flight`, `_guess`), not by anything the original does.
 
+
+## 24. Text is UTF-8 in the original, and a bitmap font is indexed by code point (planning step 236)
+
+`gs2d`'s `BitmapFont` decodes UTF-8 itself. `ConvertCharacterToIndex` (`gs2d/src/Video/BitmapFont.cpp:314-352`), used by `ComputeTextBoxSize` (`:383-407`) and `DrawBitmapText` (`:459`): a byte that is valid UTF-8 on its own
+(`utf8::is_valid(c, c + 1)`, `Unicode/utf8/utf8/core.h:300`; every ASCII byte) is its own glyph index; otherwise the function looks for the shortest valid sequence of 2 to 8 bytes at that place, decodes it with
+`utf8::utf8to32` to a code point and the loop skips the rest of the sequence (`t += charByteCount - 1`, `:344`); the index is capped at `GS2D_CHARSET_MAX_CHARS - 1` = 65535 (`BitmapFont.h:32`). So the `.fnt` ids 160-255 of the
+original's fonts are the code points U+00A0-00FF **as decoded from UTF-8** (an accented letter is a two-byte sequence in the text), and a BMFont file may hold any id up to 65535. A byte that starts no valid sequence is handed to
+`utf8::next` with whatever follows it, and the checked library throws `utf8::invalid_utf8` there (`checked.h:136-153`); what the shipped game does then (a handler, a build without exceptions) is **not known**.
+
+The port follows the same rule in its own code: text is UTF-8, `Hud::LayOutText`, `LayOutTextFrom` and `MeasureText` decode it (`game/sim/Utf8.{hpp,cpp}`: a bad byte is U+FFFD by the standard's maximal-subpart rule, drawn as nothing and reported)
+and look glyphs up by code point, and the engine's own `BitmapFont::Measure`/`BuildText`, which are byte-wise, are never given a string that can hold a non-ASCII character.
+
+A string constant of the saved bytecode is bytes (`asCReader::ReadString`, `as_restore.cpp:1323`). Exactly one constant of the functions the extractors read is not valid UTF-8: achievement 60's description, whose number 1080 is followed by the
+single byte 0xBA (found by regenerating the 98,778-line listing with a decoder that no longer replaces bad bytes, and comparing: one line differed). `tools/asbc/asbc.py` `decode_string` reads such a constant as Latin-1, so it is U+00BA
+(the masculine ordinal indicator, not the degree sign U+00B0 the author probably meant), where the decoder it replaced made U+FFFD of it.

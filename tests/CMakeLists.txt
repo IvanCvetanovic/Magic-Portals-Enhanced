@@ -82,6 +82,23 @@ add_mp_test(test_mp_tscn)
 # the part that reads every number of the converted levels and the data skips itself without them, so the suite takes no SKIPS_WITH_77.
 add_mp_test(test_mp_numbers)
 add_mp_test(test_mp_levels SKIPS_WITH_77)
+
+# UTF-8 text and the interface languages (planning step 236, PORT-32): sim/Utf8's decoder and encoder (each malformed class pinned to its exact
+# output, a fuzz for the round trip), sim/Strings' language table and its fourteen keys in eleven languages (key and placeholder parity, the
+# original fonts' character set, the drift against the English the rules fields still hold, fallback to English), and sim/Language's saved
+# choice. Pure sim and a scratch directory; its drift case ties en.json to the English the rule tables still hold (the secret achievement's words are
+# Asantee's, in no committed table: the overlay's, test_mp_langsim).
+add_mp_test(test_mp_utf8)
+add_mp_test(test_mp_strings)
+add_mp_test(test_mp_language)
+
+# Fonts for the languages the original's bitmaps cannot spell (planning step 237, PORT-33): sim/ArabicShaping (the joining forms, the lam-alef
+# ligature and the bidirectional reordering, worked by hand from Penumbra's cases and this game's own strings) and sim/FontBake (the atlas baked
+# from the committed OFL faces: every glyph present, whole-pixel advances, determinism, the cache that writes nothing, the engine's own reader
+# loading it, and a coverage check of every string the shipped tables draw). The achievements' translations are not in git: that part of the
+# coverage says so when out/data/achievements.<code>.json is absent (a part of a suite, so no SKIPS_WITH_77).
+add_mp_test(test_mp_arabic)
+add_mp_test(test_mp_fontbake)
 add_mp_test(test_mp_geometry)
 add_mp_test(test_mp_portal)
 add_mp_test(test_mp_play SKIPS_WITH_77)
@@ -387,6 +404,35 @@ add_mp_test(test_mp_layer SKIPS_WITH_77)
 # unmodified claim code and refuses to overwrite a file (planning step 178).
 set_property(SOURCE test_mp_layer.cpp APPEND PROPERTY
              COMPILE_DEFINITIONS "MAGICPORTALS_GOLDEN_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/golden\"")
+
+# The layer speaks the language (planning step 238, PORT-34). Its first half is a snapshot guard: the quad lists of every menu screen, the
+# level texts and the cards, kept as numbers in tests/golden/menu_screens.json and compared within a tolerance (dumped from the wired layer in the very run
+# that proved it equal to the bit-hash golden recorded BEFORE the languages were wired in; `test_mp test_mp_langlayer --record-golden <dir>` writes it and
+# refuses to overwrite), so that English is proven to draw what it always drew.
+# Its second half drives each language through the layer. Reads the converted levels, Enhanced's achievements list and the original's pictures,
+# and skips with 77 without the levels (the cases that need the rest say so and skip themselves).
+add_mp_test(test_mp_langlayer SKIPS_WITH_77)
+set_property(SOURCE test_mp_langlayer.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_GOLDEN_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/golden\"")
+
+# The modules that speak a language, without a layer (planning step 238): the fit to a slot's width over a font baked at run time, what each module
+# takes from the string table, the hint's mirroring, the optional limits' reading (and its refusals), and the achievements' translation overlay.
+# Every text is synthetic, and the suite needs nothing outside this repository.
+add_mp_test(test_mp_langsim)
+
+# Does every translation fit its box? (planning step 238) The fourteen interface strings in the real font set of each of the eleven languages against
+# the limits the rule tables name, and - a suite of its own that exits 77 without the gitignored achievements.<code>.json files - the achievements'
+# titles, descriptions, unlock cards and popups, and the locked secret achievements' words.
+add_mp_test(test_mp_overflow)
+add_mp_test(test_mp_overflow_achievements IN_SOURCE test_mp_overflow SKIPS_WITH_77)
+
+# The language picker (planning step 239, PORT-35). test_mp_picker is the pure half: picker.json as it is and as its loader refuses it, the grid and the two
+# globes at the nine shapes of window (clear of the back button, of each other and of every button they share a screen with), the touch rule, the pieces, and
+# the atlas of the eleven names baked from the committed faces. test_mp_pickerlayer drives the layer: the globe, the screen, every name drawn without a hole
+# in every language, a choice kept and read back by a fresh layer, and the runs that must have no picker. It needs the converted levels and the original's
+# pictures, and exits 77 without them.
+add_mp_test(test_mp_picker)
+add_mp_test(test_mp_pickerlayer IN_SOURCE test_mp_picker SKIPS_WITH_77)
 
 # Every level a win route plays from its start to its door (game/Route.hpp): the
 # routes are tests/routes/<level>.json, found at run time, so a route is added

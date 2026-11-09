@@ -76,6 +76,18 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         }
         *item.to = hint[item.key].AsNumber();
     }
+    if (hint.Has("max_width_units") && (!hint["max_width_units"].IsNumber() || !(hint["max_width_units"].AsNumber() > 0.0))) {
+        error = path + ": hint.max_width_units is not a number above zero";
+        return false;
+    }
+    if (hint.Has("max_width_units")) read.maxWidthUnits = hint["max_width_units"].AsNumber();
+    if (hint.Has("mirror_when_rtl")) {
+        if (!hint["mirror_when_rtl"].IsBool()) {
+            error = path + ": hint.mirror_when_rtl is not true or false";
+            return false;
+        }
+        read.mirrorWhenRtl = hint["mirror_when_rtl"].AsBool();
+    }
     if (read.unitsPerFontPx <= 0.0 || read.fadeMs <= 0.0 || read.lifeMs <= 0.0 || read.arrowBounce.strideMs <= 0.0) {
         error = path + ": hint's units_per_font_px, fade_ms, life_ms and arrow_bounce_stride_ms must be above 0";
         return false;
@@ -214,7 +226,8 @@ double TextAlpha(const Rules& rules, double ageMs) {
     return static_cast<double>(static_cast<int>(fade * 255.0)) / 255.0;
 }
 
-glm::dvec2 TextTopLeft(const Rules& rules, const glm::dvec2& viewUnits) {
+glm::dvec2 TextTopLeft(const Rules& rules, const glm::dvec2& viewUnits, bool rtl, double textWidthUnits) {
+    if (rtl && rules.mirrorWhenRtl) return glm::dvec2(viewUnits.x - rules.leftUnits - textWidthUnits, viewUnits.y - rules.aboveBottomUnits);
     return glm::dvec2(rules.leftUnits, viewUnits.y - rules.aboveBottomUnits);
 }
 

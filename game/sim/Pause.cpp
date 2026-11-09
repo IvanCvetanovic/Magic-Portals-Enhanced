@@ -1,6 +1,7 @@
 #include "sim/Pause.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Strings.hpp"
 
 #include <utility>
 
@@ -166,7 +167,8 @@ std::optional<Button> ButtonAt(const Rules& rules, const Level& level, const Swi
     return std::nullopt;
 }
 
-std::string TitleText(const Rules& rules, const Level& level) {
+std::string TitleText(const Rules& rules, const Level& level, const Strings::Table* strings) {
+    if (strings != nullptr) return strings->Show(Strings::Key::kHudPart, {{Strings::Placeholder::kN, std::to_string(level.index + 1)}});
     return rules.title.prefix + std::to_string(level.index + 1);
 }
 

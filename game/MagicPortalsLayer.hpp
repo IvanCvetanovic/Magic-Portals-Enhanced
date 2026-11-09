@@ -44,6 +44,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Hint.hpp"
 #include "sim/Hud.hpp"
 #include "sim/Impacts.hpp"
+#include "sim/Language.hpp"
 #include "sim/LevelEnd.hpp"
 #include "sim/LevelStart.hpp"
 #include "sim/Lighting.hpp"
@@ -57,6 +58,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Options.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Pause.hpp"
+#include "sim/Picker.hpp"
 #include "sim/Pictures.hpp"
 #include "sim/Popup.hpp"
 #include "sim/Scores.hpp"
@@ -247,6 +249,11 @@ public:
         // (planning step 182; testInsets is the test seam over the window's own safe area from planning
         // step 183, ControlsInsets()).
         Controls::Policy controls;
+
+        // WHICH LANGUAGE THE RUN SPEAKS (planning step 238, PORT-34; sim/Language.hpp): `--lang <code>` forces one for the run and keeps the
+        // saved choice out of it; without it the run speaks the player's saved choice, else English. The default is "no flag", and a bare
+        // layer has no save directory, so it speaks English and writes nothing.
+        Language::Policy language;
     };
 
     // The last level cleared: the portals spent against its golden score, which
@@ -281,7 +288,9 @@ public:
     // (Enhanced's ui2 spec, D7) - and both are drawn through the screen
     // overlay on the view, as the pause is (sim/LevelEnd.hpp). Everything that
     // treats a screen as "the level is gone" has to name both.
-    enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Options, Adjust, Finished, Dead };
+    // `Language` (planning step 239) is the language picker: a menu state like Credits, reached from the globe on the main menu or on Options and
+    // leaving for the one it came from.
+    enum class Screen { None, Loading, Main, Worlds, Levels, Credits, Achievements, Options, Adjust, Finished, Dead, Language };
 
     // A button the menu drew, in the menu's pixel box (MenuBoxPx). Kept as
     // data so a click is tested against exactly what was drawn, and so a test
@@ -1412,6 +1421,28 @@ public:
     const Controls::Store& ControlsStore() const { return m_controlsStore; }
     // The widget the held touch went down on and is still inside (the press tint), on the main menu (the entry) and on Options.
     bool OptionsEntryHeld() const { return m_menuTouch.optionsHeld; }
+
+    // ---- the language picker (planning step 239, PORT-35) -----------------------------------------------------------------------
+    //
+    // A globe on the main menu (under the Options gear) and one in the corner of Options open a screen of eleven plates, each the language's own name
+    // in its own script; a tap chooses it - the words and fonts change at once and the choice is kept (ChooseLanguage) - and the back button or key
+    // leaves for the screen that opened it. It does NOT hang on OptionsAvailable(): it needs no modern-controls table.
+    //
+    // THE ONE PREDICATE: the globes are drawn and claimed and the screen reachable only when this is true - a run that offers the picker
+    // (Paths::language.picker: a player's run, never a developer's or a bare suite's), whose picker.json and string tables read, that has the
+    // folder the picker's atlas is baked into, and whose HUD tables read.
+    bool LanguageAvailable() const { return m_paths.language.picker && m_pickerReady && m_stringsReady && m_hudReady && !m_paths.prisms.empty(); }
+    const Picker::Rules& PickerRules() const { return m_pickerRules; }
+    // The globe the game drew and wrote, or empty (a flat quad is drawn).
+    const std::string& LanguageEntryImage() const { return m_languageEntryImage; }
+    // The atlas of the eleven names, baked on the picker's first entry; empty until then (and when it could not be made).
+    const std::string& PickerFontFile() const { return m_pickerFontFile; }
+    // The names on the plates as they are drawn (each shaped for its own language), in the enum's order; empty before the first entry.
+    const std::vector<std::string>& PickerNames() const { return m_pickerNames; }
+    // The screen the picker returns to (Main, or Options when it was opened from there).
+    Screen LanguageReturnsTo() const { return m_languageFrom; }
+    // The globe the held touch went down on and is still inside (the press tint), on the main menu and on Options.
+    bool LanguageEntryHeld() const { return m_menuTouch.languageHeld; }
     Options::Widget OptionsHeld() const { return m_optionsTouch.held; }
 
     // ---- the adjustment screen (planning step 192, CTL-11) -------------------------------------------------------
@@ -1535,7 +1566,13 @@ public:
     const Dashboard::State& DashboardState() const { return m_dashboardState; }
     // The original's achievements, when Paths::achievements could be read; null
     // otherwise, and AchievementsError says why.
+    // As it is SHOWN (planning step 238): the English list as Enhanced's file holds it, in the player's language where there is a translation
+    // of an entry (Achievements::Localized). In English it is that list, entry for entry.
     const Achievements::Content* AchievementsContent() const {
+        return m_achievementsLoaded ? &m_achievementsShown : nullptr;
+    }
+    // The list as the file holds it, always English.
+    const Achievements::Content* AchievementsEnglish() const {
         return m_achievementsLoaded ? &m_achievements : nullptr;
     }
     const std::string& AchievementsError() const { return m_achievementsError; }
@@ -1739,6 +1776,45 @@ public:
     const LevelEnd::Play& EndPlay() const { return m_end.play; }
     int PortalsCounted() const { return m_end.portals.current; }
     int CrystalsCounted() const { return m_end.crystals.current; }
+
+    // ---- the language (planning step 238, PORT-34) ----------------------------------------------------------------------------
+    //
+    // The player's language: the run's flag (Paths::language), else the saved choice (sim/Language, language.json beside the other stores), else
+    // English; applied at attach, after the tables are read. SetLanguage loads the language's strings, its fonts (the original's own bitmaps for a language
+    // whose text lies in Latin-1, else fonts baked at run time into Paths::prisms/fonts from the faces in game/data/fonts: sim/FontBake) and the
+    // achievements' translation (out/data/achievements.<code>.json beside the English file), and rebuilds every string the layer keeps composed: the
+    // level's caption, the dashboard's rows, chapter select's warning, the open achievements popup. A card already on the stack keeps its words.
+    // English is the table-less path of every module, so it draws what it always drew.
+    //
+    // When a language's fonts cannot be made (no scratch folder to write them in, a face that will not read) the run speaks ENGLISH, with one
+    // ERROR line saying why, and RequestedLanguage() still says what was asked: a language whose letters nothing can draw is never shown as blanks.
+    // False for a table that will not read at all (the port's own game/data/lang, which is committed): nothing is changed then.
+    bool SetLanguage(Strings::Lang language);
+    // SetLanguage, and the choice kept: in the store, written to language.json unless the run is forced or has nowhere to write (the picker's call).
+    bool ChooseLanguage(Strings::Lang language);
+    // The language on the screen, and the one that was asked for (they differ only when the fonts could not be made).
+    Strings::Lang CurrentLanguage() const { return m_language; }
+    Strings::Lang RequestedLanguage() const { return m_languageRequested; }
+    // The table of the language on the screen; Ready() is false when game/data/lang would not read (every module then draws its rules' English).
+    const Strings::Table& StringTable() const { return m_strings; }
+    bool LanguageReady() const { return m_stringsReady; }
+    const Language::Store& LanguageStore() const { return m_languageStore; }
+    // What the last SetLanguage said was wrong, one line each (the keys a language lacked, a translation file that was missing or short, a font
+    // that could not be made): kept for the suites, and logged once as it happened.
+    const std::vector<std::string>& LanguageNotes() const { return m_languageNotes; }
+    // The font file a role name (Matura84_shadow.fnt) is read from in the language on the screen: the original's, or the one baked for it.
+    std::string UiFontFile(const std::string& name) const { return fontFile(name); }
+    // Whether the language on the screen draws generated fonts.
+    bool GeneratedFonts() const { return !m_generatedFonts.empty(); }
+    // A role's font as the screens read it (loaded now if no screen has yet), or null when it would not load: the suites measure and lay out with it.
+    const Supersonic::BitmapFont* UiFontOf(const std::string& name) {
+        loadUiFont(name);
+        return uiFont(name);
+    }
+    // The level's caption as composed, "Part 1" in the language on the screen; empty with no level.
+    const std::string& CaptionWords() const { return m_captionText; }
+    // What the run was told about its language.
+    const Language::Policy& LanguagePolicy() const { return m_paths.language; }
 
 private:
     // A body the level built, and the box standing for it. The box sits at the
@@ -1959,8 +2035,30 @@ private:
     // A picture of the original's that the menu states draw, resolved once; empty
     // when it cannot be read.
     const std::string& menuPicture(const std::string& file) const;
-    // A font of the original's, read once for the run.
+    // A font of the original's, read once for the run - or, in a language the original's bitmaps cannot spell, the one baked for it.
     void loadUiFont(const std::string& name);
+    // Where a role name's font is read from in the language on the screen.
+    std::string fontFile(const std::string& name) const;
+    // The strings for a module that takes a table: null in English (every module's own English), else the table.
+    const Strings::Table* strings() const { return m_stringsReady && m_language != Strings::kDefaultLang ? &m_strings : nullptr; }
+    // Starts the run's language at attach (the policy, the store), once the tables are read.
+    void startLanguage();
+    // Bakes the generated language's two slots into Paths::prisms/fonts; the files of each role in `files`, or false with `error`.
+    bool bakeLanguageFonts(const Strings::Table& table, Strings::Lang lang, const Achievements::Content& content, std::map<std::string, std::string>& files,
+                           std::string& error);
+    // Every string the layer keeps composed, rebuilt in the language on the screen.
+    void recomposeStrings();
+    // The dashboard's board over the content as shown, its words shaped for the language.
+    Dashboard::Board buildDashboardBoard() const;
+    // The pause's achievements popup for the current level, shaped.
+    std::string achievementsPopupText(const std::vector<const Achievements::Entry*>& entries) const;
+    // 1-21's hint: its words, and where and how large it is drawn.
+    struct HintDraw {
+        std::string words;
+        double unitsPerFontPx = 0.0;
+        glm::dvec2 topLeft{0.0};
+    };
+    HintDraw hintDraw(const Supersonic::BitmapFont& font, const glm::dvec2& view, bool modern) const;
     void unloadMenu(entt::registry& registry);
     // Just the drawables, which a rebuilt screen replaces but a click on a
     // level takes away for good.
@@ -3244,6 +3342,9 @@ private:
         // The main menu's Options entry (planning step 185): the touch went down on it, and is still inside it (the press tint).
         bool optionsDown{false};
         bool optionsHeld{false};
+        // The language globe on the main menu and on Options (planning step 239): the same pair.
+        bool languageDown{false};
+        bool languageHeld{false};
     };
     MenuTouch m_menuTouch;
     // What a release - or the loading screen's hold, or the back key - asked for,
@@ -3572,6 +3673,24 @@ private:
     bool m_optionsReady{false};
     std::string m_optionsEntryImage;
     void resolveOptionsEntry();
+
+    // THE LANGUAGE PICKER (planning step 239; game/data/picker.json, sim/Picker), read after and outside the chain of ui.json's loaders like the
+    // Options block: a table that will not read costs the picker, never a run. The globe the entries draw is written by the game into Paths::prisms
+    // (PadArt::Glyph::Globe) - a run that offers the picker only - and the atlas of the eleven names is baked on the screen's first entry.
+    Picker::Rules m_pickerRules;
+    bool m_pickerReady{false};
+    std::string m_languageEntryImage;
+    std::string m_pickerFontFile;
+    bool m_pickerFontTried{false};
+    std::vector<std::string> m_pickerNames;
+    Picker::Touch m_pickerTouch;
+    Screen m_languageFrom{Screen::Main};
+    void loadPickerRules();
+    void resolveLanguageEntry();
+    // Bakes the picker's atlas once and names the plates; false (said once) when the atlas could not be made.
+    bool ensurePicker();
+    void pickerInput(entt::registry& registry);
+    void leaveLanguage();
     // controls.json's `adjust` block (sim/Adjust), read after and outside the chain like the rest of the file.
     Adjust::Rules m_adjustRules;
     bool m_adjustReady{false};
@@ -3680,7 +3799,8 @@ private:
     void refreshSafeInsets(const entt::registry& registry);
     // Where 1-21's hint text starts under the modern controls (the classic start is Hint::TextTopLeft's, untouched): clear of the pair
     // and inside the view, by the text's own measured width.
-    double modernHintLeft(const Supersonic::BitmapFont& font, const glm::dvec2& classicTopLeft, const glm::dvec2& view) const;
+    double modernHintLeft(const Supersonic::BitmapFont& font, const glm::dvec2& classicTopLeft, const glm::dvec2& view, const std::string& words,
+                          double unitsPerFontPx) const;
 
     double m_levelAgeMs{0.0};
     // The frame time the level's age last gained (the script's, ScriptClock::Ms): what a wall's colour
@@ -3811,6 +3931,10 @@ private:
     // One contact, through the level start's rule (planning step 205, sim/LevelStart.hpp): the touch itself, or "nothing there" for a finger that went down before the
     // new level's first frame and has not lifted. A run that does not cover its level starts gets every touch back untouched. Declared here, after Touch.
     Touch filterContact(int id, const Touch& touch);
+    // The language globe's touch on the main menu and on Options (planning step 239): claimed BEFORE the screen's own widgets, acted on the way
+    // every main-menu button is (a release inside it after a press inside it). `rect` is where the globe is; true when it was pressed (the screen
+    // it opens is asked for, and the press spent).
+    bool languageEntryTouch(const Touch& touch, const Hud::Rect& rect);
     // The touch a LEVEL reads its input by (planning step 191): touchThisTick, or, with two contacts on, the WORLD's finger - the one that is
     // not on a control - with `m_controlsTouch` the finger the controls are worked by; with one finger down they are the same touch and this
     // is what it always was.
@@ -3855,6 +3979,19 @@ private:
     // caption's own; read once for the run.
     std::map<std::string, Supersonic::BitmapFont> m_uiFonts;
     const Supersonic::BitmapFont* uiFont(const std::string& name) const;
+
+    // THE LANGUAGE (planning step 238). The table of the language on the screen, the store that keeps the player's choice, the language asked for and
+    // the one shown (English when the fonts could not be made), the fonts baked for a generated language (role name -> .fnt file; empty for a language
+    // set in the original's bitmaps) and what was said wrong, once.
+    Strings::Table m_strings;
+    bool m_stringsReady{false};
+    Language::Store m_languageStore;
+    Strings::Lang m_language{Strings::kDefaultLang};
+    Strings::Lang m_languageRequested{Strings::kDefaultLang};
+    std::map<std::string, std::string> m_generatedFonts;
+    std::vector<std::string> m_languageNotes;
+    // The list as the dashboard, the cards and the popup show it (Achievements::Localized over m_achievements).
+    Achievements::Content m_achievementsShown;
 
     // DEV ONLY: the scheduled presses and holds, and the layer's own tick count.
     std::vector<std::pair<int, DevPress>> m_devPresses;

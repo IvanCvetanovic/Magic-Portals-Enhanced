@@ -56,7 +56,8 @@ class TheWorld(unittest.TestCase):
         self.assertIn('out/data/chapters.json', repo_files)
         for table in ('entity_roles.json', 'player.json', 'portals.json'):
             self.assertIn('data/' + table, repo_files)
-        port = sorted('game/data/' + n for n in os.listdir(os.path.join(REPO, 'game', 'data')))
+        # every FILE under game/data, the language tables of game/data/lang/ (planning step 236) among them: the world is a copy of the tree
+        port = ['game/data/' + n for n in self.files(os.path.join(REPO, 'game', 'data'))]
         self.assertEqual([n for n in repo_files if n.startswith('game/data/')], port, 'the port\'s own tables, all of them and nothing else')
         self.assertEqual(self.files(self.ref), ['extracted/assets/sprites/stub_b.bin_png'])
         self.assertIn('out/assets/entities/stub_a.bin_png', repo_files)

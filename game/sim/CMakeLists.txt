@@ -7,6 +7,7 @@
 add_library(MagicPortalsSim STATIC
     Achievements.cpp
     Adjust.cpp
+    ArabicShaping.cpp
     Art.cpp
     AssetRoot.cpp
     Boss.cpp
@@ -29,6 +30,7 @@ add_library(MagicPortalsSim STATIC
     Effects.cpp
     EngineTuning.cpp
     Files.cpp
+    FontBake.cpp
     Fields.cpp
     Fire.cpp
     Follower.cpp
@@ -43,6 +45,7 @@ add_library(MagicPortalsSim STATIC
     Hud.cpp
     Impacts.cpp
     Keys.cpp
+    Language.cpp
     Launchers.cpp
     LevelBuilder.cpp
     LevelEnd.cpp
@@ -62,6 +65,7 @@ add_library(MagicPortalsSim STATIC
     PadArt.cpp
     Particles.cpp
     Pause.cpp
+    Picker.cpp
     Pictures.cpp
     Player.cpp
     Popup.cpp
@@ -82,6 +86,7 @@ add_library(MagicPortalsSim STATIC
     Sprites.cpp
     StartChecks.cpp
     StoneGrip.cpp
+    Strings.cpp
     Switches.cpp
     Tiers.cpp
     Trigger.cpp
@@ -92,6 +97,7 @@ add_library(MagicPortalsSim STATIC
     Turrets.cpp
     UiLayer.cpp
     Unpack.cpp
+    Utf8.cpp
     Zerog.cpp
 )
 

@@ -8,6 +8,7 @@ mistyped, and a move of the engine pin that changes a licence file turns this te
 (engine/THIRD_PARTY_LICENSES.md) is in NOTICE.md's table. LICENSE is the engine's licence text, and a clone made with core.autocrlf=true (a Windows machine) still has LICENSE and NOTICE.md with Unix line ends. NOTICE.md stands alone: it links to no file of the repository.
 WHAT IT CANNOT PROVE. That the table says the right thing about a program it was not made from (the table says which entries are from a link line and which are from the engine's list);
 the blocks that come from outside the repository (the NDK, the GCC runtime exception, AngelScript's header, Ethanon's source) are named `external:` and are not compared with a file, because those files are not in a clone (the GCC exception is pinned by its parts).
+The licence texts of the fonts this repository ships (game/data/fonts/OFL-<Name>.txt, planning step 237) are compared with those files, which are in a clone; no other path of the repository is a source.
 """
 import os
 import re
@@ -24,6 +25,21 @@ ENGINE = os.path.join(REPO, 'engine')
 GIT_ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
 
 MARKER = re.compile(r'^<!-- verbatim: (?P<path>.+?)(?: (?P<first>\d+)-(?P<last>\d+))? -->$')
+# The licence text of a font this repository ships (planning step 237): game/data/fonts/OFL-<Name>.txt, compared with the file in the clone. Exactly that folder and that
+# name, and no other path of the repository: a block may not point at a file the tests have no reason to trust as a licence text.
+FONT_LICENCE = re.compile(r'^game/data/fonts/OFL-[A-Za-z]+\.txt$')
+
+
+def source_of(path):
+    """Where a verbatim block's text is compared with: 'engine' (a file of the engine's tree), 'font' (a font licence of this repository), 'external' (not in a clone: not compared),
+    or None (a path nothing may be compared with: the block is refused)."""
+    if path.startswith('external:'):
+        return 'external'
+    if path.startswith('engine/') and '..' not in path.split('/'):
+        return 'engine'
+    if FONT_LICENCE.match(path):
+        return 'font'
+    return None
 
 
 def read(path):
@@ -140,15 +156,35 @@ class TheNotice(unittest.TestCase):
             self.skipTest('the engine is not checked out: no licence text was compared (git submodule update --init)')
         compared = 0
         for n, path, first, last, body in blocks(self.text):
-            if path.startswith('external:'):
+            kind = source_of(path)
+            if kind in ('external', 'font'):
                 continue
-            self.assertTrue(path.startswith('engine/'), 'line %d: %s is neither in the engine nor marked external' % (n, path))
+            self.assertEqual(kind, 'engine', 'line %d: %s is neither in the engine, nor a font licence of game/data/fonts, nor marked external' % (n, path))
             lines = read(os.path.join(REPO, *path.split('/'))).split('\n')
             if first is not None:
                 lines = lines[first - 1:last]
             self.assertEqual(normal(body), normal(lines), 'line %d: the block is not the text of %s%s' % (n, path, '' if first is None else ' lines %d-%d' % (first, last)))
             compared += 1
         self.assertGreaterEqual(compared, 15)
+
+    def test_each_font_licence_block_is_the_text_of_the_file_beside_its_font(self):
+        # the four faces of the interface languages (game/data/fonts) are under the SIL OFL 1.1 and each licence text travels with its font: NOTICE.md reproduces each, whole
+        folder = os.path.join(REPO, 'game', 'data', 'fonts')
+        files = sorted(f for f in os.listdir(folder) if f.startswith('OFL-') and f.endswith('.txt'))
+        self.assertGreaterEqual(len(files), 4, files)
+        announced = sorted(path for n, path, first, last, body in blocks(self.text) if source_of(path) == 'font')
+        self.assertEqual(announced, ['game/data/fonts/' + f for f in files], 'every OFL text beside a font is in NOTICE.md, and NOTICE.md has no other')
+        for n, path, first, last, body in blocks(self.text):
+            if source_of(path) != 'font':
+                continue
+            self.assertIsNone(first, 'line %d: a font licence is reproduced whole' % n)
+            self.assertEqual(normal(body), normal(read(os.path.join(REPO, *path.split('/'))).split('\n')), 'line %d: the block is not the text of %s' % (n, path))
+        # and each font file has its row in the table and its licence section
+        table = '\n'.join(l for l in self.text.split('\n') if l.startswith('| '))
+        for needle in ('Kurale', 'Noto Sans (', 'Noto Sans JP', 'Noto Sans Arabic'):
+            self.assertIn(needle, table, needle)
+        for ttf in sorted(f for f in os.listdir(folder) if f.endswith('.ttf')):
+            self.assertTrue(os.path.isfile(os.path.join(folder, 'OFL-' + ttf.split('-')[0] + '.txt')), '%s has no OFL text beside it' % ttf)
 
     def test_every_component_of_the_engines_own_list_is_in_the_table(self):
         listing = os.path.join(ENGINE, 'THIRD_PARTY_LICENSES.md')
@@ -222,6 +258,16 @@ class TheHelpers(unittest.TestCase):
     def test_the_block_reader_finds_the_marker_the_range_and_the_text(self):
         text = 'a\n<!-- verbatim: engine/x/LICENSE 3-9 -->\n```text\nline\n\nline2\n```\n<!-- verbatim: external: y -->\ntext\n'
         self.assertEqual(blocks(text), [(2, 'engine/x/LICENSE', 3, 9, ['line', '', 'line2']), (8, 'external: y', None, None, None)])
+
+    def test_only_the_engine_a_font_licence_and_an_external_marker_are_sources(self):
+        self.assertEqual(source_of('engine/third_party/entt-3.13.2/LICENSE'), 'engine')
+        self.assertEqual(source_of('game/data/fonts/OFL-Kurale.txt'), 'font')
+        self.assertEqual(source_of('game/data/fonts/OFL-NotoSansJP.txt'), 'font')
+        self.assertEqual(source_of('external: GCC RUNTIME LIBRARY EXCEPTION, version 3.1'), 'external')
+        for refused in ('game/data/fonts/../../LICENSE', 'game/data/fonts/Kurale-Regular.ttf', 'game/data/fonts/sub/OFL-X.txt', 'game/data/fonts/OFL-.txt',
+                        'game/data/fonts/OFL-Kurale.TXT', 'game/data/fonts/OFL-Ku-rale.txt', 'game/data/fonts/README.md', 'game/data/lang/en.json', 'game/data/OFL-Kurale.txt',
+                        'LICENSE', 'NOTICE.md', 'reference/extracted/x.txt', 'out/OFL-Kurale.txt', 'engine/../LICENSE', '/etc/passwd', ''):
+            self.assertIsNone(source_of(refused), refused)
 
     def test_a_changed_word_is_not_equal(self):
         self.assertNotEqual(normal(['Permission is hereby granted']), normal(['Permission is hereby granted,']))

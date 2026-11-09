@@ -2,10 +2,12 @@
 
 #include "core/Json.hpp"
 #include "sim/Files.hpp"
+#include "sim/Strings.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -113,6 +115,96 @@ bool Load(const std::string& path, Content& out, std::string& error) {
     return true;
 }
 
+bool LoadTranslation(const std::string& path, const std::string& code, Translation& out, std::string& error) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = path + ": cannot open";
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    const std::string text = buffer.str();
+    Json::Parser parser(text);
+    Json::Value root;
+    if (!parser.Parse(root)) {
+        error = path + ": " + parser.Error();
+        return false;
+    }
+    if (!root.IsObject() || !root["format"].IsNumber() || root["format"].AsNumber() != 1.0 || !root["achievements"].IsObject()) {
+        error = path + ": not format 1 with an \"achievements\" object";
+        return false;
+    }
+    if (root.Has("language") && (!root["language"].IsString() || root["language"].AsString() != code)) {
+        error = path + ": \"language\" is not \"" + code + "\"";
+        return false;
+    }
+    Translation read;
+    read.code = code;
+    for (const auto& [key, value] : root["achievements"].AsObject()) {
+        int id = 0;
+        std::size_t used = 0;
+        try {
+            id = std::stoi(key, &used);
+        } catch (const std::exception&) {
+            used = 0;
+        }
+        if (used == 0 || used != key.size() || id < 0) {
+            error = path + ": the key \"" + key + "\" is not an achievement id";
+            return false;
+        }
+        if (!value.IsObject() || !value["title"].IsString() || value["title"].AsString().empty() || !value["description"].IsString() ||
+            value["description"].AsString().empty()) {
+            error = path + ": achievement " + key + " lacks a non-empty title or description";
+            return false;
+        }
+        read.words[id] = Words{value["title"].AsString(), value["description"].AsString()};
+    }
+    // The secret achievement's words, which are in this overlay and not in the committed string tables (they are Asantee's).
+    const Json::Value& secret = root["secret"];
+    if (!secret.IsObject() || !secret["title"].IsString() || secret["title"].AsString().empty() || !secret["description"].IsString()) {
+        error = path + ": no \"secret\" block with a non-empty title and description";
+        return false;
+    }
+    read.secret = Words{secret["title"].AsString(), secret["description"].AsString()};
+    bool titleFormed = false;
+    bool descriptionFormed = false;
+    const std::vector<std::string> titleHolds = Strings::PlaceholdersOf(read.secret.title, titleFormed);
+    const std::vector<std::string> descriptionHolds = Strings::PlaceholdersOf(read.secret.description, descriptionFormed);
+    const std::vector<std::string> wanted = {std::string(Strings::Placeholder::kLevel), std::string(Strings::Placeholder::kWorld)}; // sorted
+    if (!titleFormed || !titleHolds.empty() || !descriptionFormed || descriptionHolds != wanted) {
+        error = path + ": the secret title must hold no brace, and its description {world} and {level} once each and no other brace";
+        return false;
+    }
+    out = std::move(read);
+    return true;
+}
+
+Content Localized(const Content& english, const Translation* language, std::vector<int>* missing) {
+    Content shown = english;
+    if (language != nullptr) {
+        for (Entry& entry : shown.entries) {
+            const auto found = language->words.find(entry.id);
+            if (found == language->words.end()) {
+                if (missing != nullptr) missing->push_back(entry.id);
+                continue;
+            }
+            entry.title = found->second.title;
+            entry.description = found->second.description;
+        }
+        shown.secret.title = language->secret.title;
+        shown.secret.descriptionTemplate = language->secret.description;
+    }
+    return shown;
+}
+
+std::vector<std::string> SecretSamples(const Content& content) {
+    std::string sentence = content.secret.descriptionPrefix + "0" + content.secret.descriptionSeparator + "0";
+    if (!content.secret.descriptionTemplate.empty()) {
+        sentence = Strings::Fill(content.secret.descriptionTemplate, {{Strings::Placeholder::kWorld, "0"}, {Strings::Placeholder::kLevel, "0"}});
+    }
+    return {content.secret.title, sentence};
+}
+
 std::vector<int> Unlocked(const Content& content, const Locking::Rules& locking, const Scores::Store& scores,
                           const Chapters::Table& chapters) {
     std::vector<int> ids;
@@ -145,6 +237,10 @@ std::string TitleOf(const Content& content, const Entry& entry, bool unlocked) {
 
 std::string DescriptionOf(const Content& content, const Entry& entry, bool unlocked) {
     if (!entry.isSecret || unlocked) return entry.description;
+    if (!content.secret.descriptionTemplate.empty()) {
+        return Strings::Fill(content.secret.descriptionTemplate, {{Strings::Placeholder::kWorld, std::to_string(entry.world + 1)},
+                                                                  {Strings::Placeholder::kLevel, std::to_string(entry.level + 1)}});
+    }
     return content.secret.descriptionPrefix + std::to_string(entry.world + 1) + content.secret.descriptionSeparator +
            std::to_string(entry.level + 1);
 }
@@ -454,6 +550,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         !Integer(popup, "tile_columns", read.popup.tileColumns) || !Integer(popup, "tile_rows", read.popup.tileRows) ||
         !Text(popup, "font", read.popup.font) || !Number(popup, "units_per_font_px", read.popup.unitsPerFontPx) ||
         !Text(popup, "unlocked_mark", read.popup.unlockedMark) || !Text(popup, "locked_mark", read.popup.lockedMark) ||
+        (popup.Has("max_width_units") && (!Number(popup, "max_width_units", read.popup.maxWidthUnits) || !(read.popup.maxWidthUnits > 0.0))) ||
+        (popup.Has("max_height_units") && (!Number(popup, "max_height_units", read.popup.maxHeightUnits) || !(read.popup.maxHeightUnits > 0.0))) ||
         !Text(close, "sprite", read.popup.closeSprite) ||
         !pair(close["at_screen"], read.popup.closeAtX, read.popup.closeAtY) ||
         !pair(close["origin"], read.popup.closeOriginX, read.popup.closeOriginY) ||

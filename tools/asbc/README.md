@@ -47,3 +47,14 @@ body = h[h.index('const asSBCInfo asBCInfo[256]'):]
 body = body[:body.index('\n};')]
 rows = re.findall(r'asBCINFO(_DUMMY)?\(\s*(\w+)\s*(?:,\s*(\w+)\s*,)?', body)
 ```
+
+## Tests
+
+```bash
+python -I -m unittest discover -s tools/asbc -p "test_*.py" -v
+```
+
+`test_asbc.py` (planning step 236) pins how a string constant's bytes become text: valid UTF-8 is UTF-8 and anything else is Latin-1, so no byte is ever replaced by U+FFFD (it was: achievement 60's `1080<0xBA>` came out as a replacement character). It reads no game file.
+Regenerating `out/data/achievements.json` needs the listing, which the gitignored decoder in `out/parity/asbc/decoder_scratch` writes (`dump_all.py`), then `python tools/asbc/achievements.py --listing <all_functions.txt> --out out/data/achievements.json`. **That scratch copy is NOT patched**: its `asbc.py` still has the old `decode("utf-8", "replace")` line, which would put the U+FFFD back into the listing (copy `decode_string` from `tools/asbc/asbc.py` into it first), and its `full_decode.py` and `decode_fn.py` still point at the binary under the repository's old folder name (`Magic-Portals-Remake`; the folder is `Magic-Portals-Enhanced`). Step 236 regenerated the listing from a patched copy kept outside the repository.
+
+CI does not run this test (`.github/workflows/ci.yml` discovers `tools/package`, `tools/ci` and `tools/apple` only); run it by hand with the command above.

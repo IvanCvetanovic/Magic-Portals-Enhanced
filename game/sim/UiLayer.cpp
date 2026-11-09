@@ -169,6 +169,11 @@ bool Positive(const Json::Value& block, const char* key, double& out, std::strin
     return true;
 }
 
+bool MaxWidth(const Json::Value& block, double& out, std::string& why, const std::string& where) {
+    if (!block.Has("max_width_units")) return true;
+    return Positive(block, "max_width_units", out, why, where);
+}
+
 bool Byte(const Json::Value& block, const char* key, int& out, std::string& why, const std::string& where) {
     const Json::Value& value = block[key];
     // The range is a positive condition ahead of the cast (a NaN fails it and never reaches the conversion; see LevelEnd.cpp).

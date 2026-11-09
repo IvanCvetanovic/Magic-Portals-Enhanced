@@ -51,7 +51,7 @@ art is `out/assets/...`). It is what a developer's checkout, or a copy of one, l
 content/
   levels/              the converted levels (*.tscn)
   assets/              what res:// stands for: assets/entities/** (the converted art, tier folders included)
-  tables/              chapters.json, achievements.json
+  tables/              chapters.json, achievements.json, achievements.<code>.json (one per interface language but English, when out/data holds them)
   data/                Enhanced's tables
   port-data/           the port's own tables
   original/            the original's files the game opens: sprites/, entities/, particles/, data/, soundfx/
@@ -94,16 +94,32 @@ tables, and exactly the files those name (a texture in its density tiers `fullhd
 bitmaps each entity names; the fonts and their pages; the sounds and the music), then what the entity files themselves name (the picture
 in `<Sprite>`, the normal map in `<Normal>`, the light's `<HaloBitmap>`, and the colour variants: the entity's own name in front of a
 suffix a table spells, such as `_blue.png`), plus the 1x file under a tier twin that was picked.
-On the owner's data (2026-10-23, taken again by Step 203's own run and by its verifier's) that is 883 files, 24,589,032 bytes (Step 200 measured
-24,584,458; the 4,574 bytes between are presumably the edits of `engine.json` and `sounds.json` in Steps 201 and 202, inferred and not measured;
-725 required, 158 fallback: 472 pictures, 180 entity files, 54 tables, 128 levels, 41 sounds, 5 music tracks, 3 fonts); 896 files and
-24,704,515 bytes with `--with-pad-art` (Step 200's figure, **not retaken**: presumably the same 4,574 bytes higher now); `package.py shell` adds the 17
-shaders (118,716 bytes). Compared with the research's list (`PLAT/case_audit/package_files.csv`, 757 files and the 17 shaders): 5 page
+On the owner's data (2026-11-08, taken by Step 239's own run of `package.py content` into a scratch folder under `out/`, then `verify`: ok) that is 923 files, 26,969,467
+bytes (762 required, 23,208,325 bytes, and 161 fallback, 3,761,142: 478 pictures, 180 entity files, 79 tables, 128 levels, 41 sounds, 5 music tracks, the original's 3
+fonts, and 9 files of another kind: the four interface faces, their four licence texts and the folder's README); 936 files and 27,089,524 bytes with `--with-pad-art` (13 more
+files, 120,057 bytes). The 883 files and 24,589,032 bytes of 2026-10-23 grew by 40 files: 32 of them are the interface languages' (below: 12 language tables, the picker's, ten translated-achievements tables
+and the faces folder's 9 files), and the other 8 are earlier steps' and were not itemised; `package.py shell` adds the 17 shaders (118,716 bytes: Step 200's figure, **not retaken**). Compared with the research's list (`PLAT/case_audit/package_files.csv`, 757 files and the 17 shaders): 5 page
 pictures of fonts that no table names are left out (651,321 bytes), and 131 files are added (4,298,588 bytes): 55 sprite pictures, 27
 normal maps, 1 halo and 6 colour variants of entities the closure already held, and the 1x fallbacks under them (42). **The first run of the
 sweep from a package built without them found the gap**: eight pictures the game opens (the black bars' own, a shooter's bolt, the
 coloured keys, keyholes and locked doors) are named by no table, only by an entity file or by a suffix; every other file, size and role is
 equal to the research's.
+
+**The interface languages' faces (Step 237).** `game/data/fonts/` holds four subset `.ttf` files (Kurale, Noto Sans Bold, Noto Sans JP Bold, Noto Sans Arabic Bold: about
+435 KB, one of them 329 KB for the kanji) with their `OFL-<name>.txt` texts, and `game/data/lang/` is the first sub-folder of tables. Both ship as `port-data/fonts/` and
+`port-data/lang/` by the rule that every file of `game/data` does, whatever its extension (`tools/package/test_package.py` carries a font, its licence text and a table in a
+sub-folder in its miniature world). The counts above include them (Step 239 took them again). The tables name a `.ttf` and a face id and NEVER a generated
+`.fnt` or `.png`: the atlases are made at run time into the scratch folder, and a name like that in a table would be resolved by the closure as an original asset and fail it.
+
+**The language picker and the translated achievements (Step 239).** `game/data/picker.json` ships with the port data like every table of `game/data`; it names the globe the game draws
+by a STEM (`language_globe`, the layer adds `.png`), never by a picture's name, for the reason just given (`tools/package/test_package.py` shows the closure resolving a `.png` it
+named as an original asset that is not there), and its one font name, the title's `Matura84_shadow.fnt`, is the original's. The language tables (12 files, the eleven languages and the table of languages), the picker's table (1) and the faces folder (9 files: four faces, four
+licence texts and a README) are 22 files of the package's `port-data/`; the ten `out/data/achievements.<code>.json` (the achievements in each language but English, Asantee's words in other languages, kept out of git) go in the
+package's `tables/` folder BY NAME (`closure.py`'s `ACHIEVEMENT_LANGUAGE_RE`: two letters between `achievements.` and `.json`, in no sub-folder; `out/data/lang_src/`, their sources, is never
+shipped), where the game reads them as siblings of `tables/achievements.json`. An Android install unpacks every one of them under `GameData/`: `tests/test_mp_unpack.cpp` and
+`tools/package/test_android_package.py` pin that `SafePath` accepts `GameData/port-data/lang/en.json`, `GameData/port-data/fonts/Kurale-Regular.ttf` and the rest at their depth, and
+`tests/test_mp_assetroot.cpp` that the English list and the translations share a folder in both layouts (`tables/` and `out/data/`).
+The achievements' translations are Asantee's words and stay out of git (`out/data/achievements.<code>.json`, made by `tools/l10n/make_achievement_languages.py` from `out/data/lang_src/<code>.json`); since Step 238 the closure (`tools/package/closure.py`) puts every `achievements.<code>.json` into the content package as `tables/achievements.<code>.json`, beside `tables/achievements.json`, where the game looks for a language's file (`lang_src` is not shipped: the game never opens it).
 
 **Left out, on purpose:** the converter's lightmap pictures (`out/assets/lightmaps`, 730 files): the layer bakes a lit sprite's lightmap in
 memory and never opens them (planning step 196), which the 128-level sweep run from a package without them proves; the original's
@@ -147,7 +163,7 @@ the one path the Android manifest can name for the system's report of a run that
 prism folder belongs to another account. The half-written prism file has a name of its own per call, so two windows building one level
 cannot take each other's file.
 
-The player's saves (`scores.json`, `audio.json`, `achievements.json`, `controls.json`) stay where they were: the user data folder itself.
+The player's saves (`scores.json`, `audio.json`, `achievements.json`, `controls.json`, `language.json`) stay where they were: the user data folder itself.
 
 ## 6. Build options, and which belong in a release
 
@@ -239,7 +255,7 @@ either carries the Visual C++ redistributable's DLLs beside the program or tells
 without the developer tools ..."; `--help` does not list them, and names none of them in the text of its other entries (the `--controls` entry
 says what a developer's run is, and without the tools that is `--fixed-step` alone); an unknown flag is the engine's parser's to refuse, as before. What a player's
 build keeps: `--level`, `--root`, `--no-baked-paths`, `--levels`, `--art`, `--data`, `--original`, `--chapters`, `--achievements`, `--port-data`,
-`--padart`, `--saves`, `--controls`, `--profile`, `--help` and every flag of the engine (`--window`, `--fixed-step`, `--frames`, `--screenshot`
+`--padart`, `--saves`, `--controls`, `--lang`, `--profile`, `--help` and every flag of the engine (`--window`, `--fixed-step`, `--frames`, `--screenshot`
 ...). (`--saves` is described in `--help` as a developer's flag, and stays: a capture and a package proof need it.) The suites always build with
 the tools: `test_mp_routes` needs `Route.cpp`. The program is smaller (Linux, g++: 11,860,880 bytes against 11,986,016).
 

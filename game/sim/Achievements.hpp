@@ -24,6 +24,7 @@
 // Content::fromCompletion and fromLevelMedal - what the tool's own walk found a
 // save alone decides - stay as its cross-check (Unlocked).
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,10 @@ struct Secret {
     std::string title;
     std::string descriptionPrefix;    // then world + 1,
     std::string descriptionSeparator; // then level + 1
+    // A language's sentence for it (planning step 238), with {world} and {level} where they go; empty: the prefix, the number, the
+    // separator and the number, as the original composes it. Set by Localized from the translation's `secret` block (the gitignored overlay);
+    // never read from Enhanced's own file, and the committed string tables hold no word of it.
+    std::string descriptionTemplate;
     std::string icon;
 };
 
@@ -82,6 +87,46 @@ struct Content {
 // The tool's format 1, strictly: false with `error` when the file is missing,
 // unreadable or not that shape, leaving `out` as it was.
 bool Load(const std::string& path, Content& out, std::string& error);
+
+// ---- the list in another language (planning step 238, PORT-34) ------------------------------------------------------------------
+//
+// The titles and descriptions are Asantee's words, and so are their translations: a language's are a gitignored file beside the English one,
+// out/data/achievements.<code>.json, written by tools/l10n/make_achievement_languages.py from out/data/lang_src/<code>.json and shipped only in a
+// release's content package, never in git:
+//
+//   {"format": 1, "_about": [...], "language": "de",
+//    "secret": {"title": "...", "description": "... {world}-{level} ..."},
+//    "achievements": {"<id>": {"title": "...", "description": "..."}, ...}}
+//
+// It is keyed by the achievement's id and holds no English. `secret` is what the original shows for a locked secret achievement (the title, and
+// the sentence with the chapter {world} and the level {level} each once, the line break a \n): Asantee's words as well, so they are in this
+// overlay and in no committed file. The text is in logical order (the shaper of a right-to-left language runs at the draw, once: Strings::Display).
+struct Words {
+    std::string title;
+    std::string description;
+};
+
+struct Translation {
+    std::string code;
+    Words secret;               // the secret achievement's title and its sentence (with {world} and {level})
+    std::map<int, Words> words; // by id
+};
+
+// Reads <path> as `code`'s file. False, with `error`, for a file that is missing, is not JSON, is not format 1, names another language than
+// `code`, has no `secret` block with a non-empty title and a sentence that holds {world} and {level} once each and no other brace, or has an id
+// that is no integer or an entry whose title or description is not a non-empty string: `out` is then left as it was and the caller shows
+// English, saying so once.
+bool LoadTranslation(const std::string& path, const std::string& code, Translation& out, std::string& error);
+
+// `english` in a language: each entry's title and description are `language`'s where it has the id (a null language, or an id it lacks, keeps
+// the English of that entry - the ids it lacked are appended to `missing`), and the secret achievement's title and sentence are the language's
+// `secret` block (a null language keeps the original's, composed from the prefix). The result is logical text: it still has to go through
+// Strings::Display where it is drawn.
+Content Localized(const Content& english, const Translation* language, std::vector<int>* missing = nullptr);
+
+// The secret achievement's two texts as `content` will show them, for the font coverage of the Verdana slot: the title, and the sentence with
+// 0 for the chapter and the level (any digit is in the font anyway). Logical order, like the rest.
+std::vector<std::string> SecretSamples(const Content& content);
 
 // The ids the TOOL's walk says a save alone unlocks, ascending: its two tables
 // over the medals. Kept as the suites' cross-check of `Rules`; the game reads the
@@ -207,6 +252,10 @@ struct Rules {
         double unitsPerFontPx = 0.0;
         std::string unlockedMark;
         std::string lockedMark;
+        // The text's widest and tallest, in design units, 0 for no limit (planning step 238: the popup has no wrap, and a translation of
+        // three entries is longer than the English ones; Hud::FitUnitsPerFontPx scales the text to the smaller of the two).
+        double maxWidthUnits = 0.0;
+        double maxHeightUnits = 0.0;
         std::string closeSprite;
         double closeAtX = 0.0;
         double closeAtY = 0.0;

@@ -28,7 +28,7 @@ WHAT IT REFUSES, each with a message that names the cause:
 THE LAYOUT (docs/packaging.md; game/sim/AssetRoot.cpp Layout::Packaged is the same list):
     levels/            the converted levels             (<repo>/out/levels)
     assets/            what res:// stands for           (<repo>/out/assets: entities/ only; lightmaps/ is left out)
-    tables/            chapters.json, achievements.json (<repo>/out/data)
+    tables/            chapters.json, achievements.json, achievements.<code>.json (<repo>/out/data)
     data/              Enhanced's tables                (<repo>/data)
     port-data/         the port's own tables            (<repo>/game/data)
     original/          the original's files the game opens (<reference>/extracted/assets: sprites, entities, particles, data, soundfx)

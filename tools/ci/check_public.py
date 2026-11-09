@@ -18,6 +18,10 @@ allowed placeholder, an allow-listed file, a record file's words). HISTORY (only
 THE RULES, by id (each has a test that passes a repository and fails an edited copy of it: tools/ci/test_check_public.py):
   H1  no tracked name has an extension of EXTENSIONS: pictures, sounds, original-game data files, binaries, packages, keys and keystores.
   H2  no tracked file holds a NUL byte (a binary), and none is larger than MOST_BYTES; the ten largest are printed as NOTEs.
+      The ONE exception to H1 and H2 (planning step 237): a .ttf named <Family>-<Style>.ttf in game/data/fonts with OFL-<Family>.txt beside it, no larger than MOST_FONT_BYTES;
+      those OFL texts are exempt from H5 as LICENSE is. Nothing else widens (tests/test_check_public.py, FontFaces). This is a DELIBERATE WIDENING of the hard rule's mechanical
+      check, which cannot tell an OFL font from a Windows or an Asantee one by its name: tools/ci/test_fonts_pinned.py closes it from the other side (every .ttf of the folder is the
+      size and sha256 its README pins, an unlisted one is refused) and the owner must accept it (docs/languages.md).
   H3  no key or token shaped text (a PEM private key, GitHub and AWS tokens, a Slack token, a keystore password given as a literal) in any file but this tool's own source and tests,
       and the allow-listed files of ALLOWED_SECRETS (each with its reason, printed).
   H4  no path of the owner's PC: a Windows user folder (with / or \\), /home/<name>, /Users/<name>, /mnt/<drive>, and the name of the account that runs the check (read at run time,
@@ -80,6 +84,20 @@ zip jar class gz tar tga dds psd ttf otf'''.split())
 # H2. The largest tracked file today is 5.4 MB (the planning record); 8 MiB leaves room for it to grow and refuses anything that is not text a person wrote.
 MOST_BYTES = 8 * 1024 * 1024
 LARGEST_SHOWN = 10
+
+# H1 and H2, the one exception (planning step 237): the interface languages' faces. The original's own fonts are Asantee's and Microsoft's and are never committed; the
+# languages they cannot spell are drawn from four OPEN-licence subsets in game/data/fonts (README there: where each came from, its sha256, its licence). A .ttf is let through
+# only there, named <Family>-<Style>.ttf, with its SIL OFL text OFL-<Family>.txt beside it (a tracked file too), and no larger than MOST_FONT_BYTES (the Japanese subset
+# is the big one, about 330 000). The licence texts say "redistribution" and "written permission" as every OFL does, so they are exempt from H5 as LICENSE is.
+FONT_FACE_NAME = re.compile(r'^game/data/fonts/(?P<family>[A-Za-z0-9]+)-[A-Za-z]+\.ttf$')
+FONT_LICENCE_NAME = re.compile(r'^game/data/fonts/OFL-[A-Za-z0-9]+\.txt$')
+MOST_FONT_BYTES = 400 * 1000
+
+
+def font_face_licence(path):
+    """The licence text a font face of game/data/fonts has beside it, or None when `path` is not named like such a face."""
+    m = FONT_FACE_NAME.match(path)
+    return 'game/data/fonts/OFL-%s.txt' % m.group('family') if m else None
 
 # H3. (id, regex, what it is). The keystore password option takes a value that is not a reference (file:, env:, stdin) and not a placeholder.
 SECRET_PATTERNS = (
@@ -306,6 +324,14 @@ def rule_h1(ctx):
     out = []
     for path in ctx.tree.files:
         ext = extension_of(path)
+        licence = font_face_licence(path) if ext == 'ttf' else None
+        if licence is not None:
+            data = ctx.tree.raw(path)
+            if licence not in ctx.tree.files:
+                out.append(Finding(ERROR, 'H1', path, 0, 'a font face of the interface languages needs its licence text %s beside it' % licence))
+            elif data is not None and len(data) > MOST_FONT_BYTES:
+                out.append(Finding(ERROR, 'H1', path, 0, 'a font face of %d bytes: larger than the %d one of game/data/fonts may be' % (len(data), MOST_FONT_BYTES)))
+            continue
         if ext in EXTENSIONS:
             out.append(Finding(ERROR, 'H1', path, 0, 'a tracked file with the extension .%s (a picture, sound, binary, package, key or game data file is never committed)' % ext))
     return out
@@ -320,7 +346,7 @@ def rule_h2(ctx):
         sizes.append((len(data), path))
         if len(data) > MOST_BYTES:
             out.append(Finding(ERROR, 'H2', path, 0, '%d bytes: larger than the %d a tracked file may be' % (len(data), MOST_BYTES)))
-        if b'\0' in data and not data.startswith((b'\xff\xfe', b'\xfe\xff')):
+        if b'\0' in data and not data.startswith((b'\xff\xfe', b'\xfe\xff')) and font_face_licence(path) is None:
             out.append(Finding(ERROR, 'H2', path, 0, 'holds a NUL byte at offset %d: a binary file' % data.index(b'\0')))
     for size, path in sorted(sizes, reverse=True)[:LARGEST_SHOWN]:
         out.append(Finding(NOTE, 'H2', path, 0, 'one of the %d largest files: %d bytes' % (LARGEST_SHOWN, size)))
@@ -434,7 +460,7 @@ def rule_h4(ctx):
 def rule_h5(ctx):
     out = []
     for path in ctx.tree.files:
-        if is_self(path) or path in LICENCE_FILES:
+        if is_self(path) or path in LICENCE_FILES or FONT_LICENCE_NAME.match(path):
             continue
         text = ctx.tree.text(path)
         if not text:
@@ -815,7 +841,7 @@ def run_history(repo, accounts=None, budget=120.0):
     # H1 on every name ever added
     t = time.time()
     for path, commit in sorted(history_names(repo).items()):
-        if extension_of(path) in EXTENSIONS:
+        if extension_of(path) in EXTENSIONS and font_face_licence(path) is None:
             result.findings.append(Finding(HISTORY, 'H1', path, 0, 'added with the extension .%s in commit %s' % (extension_of(path), commit[:10])))
     result.seconds['H1 names'] = time.time() - t
     blobs = history_blobs(repo)
@@ -843,7 +869,7 @@ def run_history(repo, accounts=None, budget=120.0):
             header = proc.stdout.readline().split()
             data = proc.stdout.read(int(header[2]))
             proc.stdout.read(1)
-            self_file = is_self(path)
+            self_file = is_self(path) or font_face_licence(path) is not None
             if self_file:
                 continue
             binary = b'\0' in data and not data.startswith((b'\xff\xfe', b'\xfe\xff'))

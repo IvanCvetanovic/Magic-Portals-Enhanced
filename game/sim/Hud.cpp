@@ -2,6 +2,8 @@
 
 #include "core/BitmapFont.hpp"
 #include "core/Json.hpp"
+#include "sim/Strings.hpp"
+#include "sim/Utf8.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -374,7 +376,8 @@ double CaptionAlpha(const Rules& rules, double ageMs) {
     return Byte(1.0 - std::max(ageMs, 0.0) / rules.caption.fadeMs);
 }
 
-std::string CaptionText(const Rules& rules, int index) {
+std::string CaptionText(const Rules& rules, int index, const Strings::Table* strings) {
+    if (strings != nullptr) return strings->Show(Strings::Key::kHudPart, {{Strings::Placeholder::kN, std::to_string(index + 1)}});
     return rules.caption.prefix + std::to_string(index + 1);
 }
 
@@ -409,15 +412,16 @@ std::vector<Glyph> LayOutCaption(const Rules& rules, const Supersonic::BitmapFon
 }
 
 std::vector<Glyph> LayOutText(const Supersonic::BitmapFont& font, const std::string& text, const glm::dvec2& centre,
-                              double unitsPerFontPx) {
+                              double unitsPerFontPx, std::vector<std::uint32_t>* missing) {
     if (!font.IsLoaded()) return {};
     // ComputeTextBoxSize: the widest line's summed advances, by lineHeight a line.
-    const glm::dvec2 box = glm::dvec2(font.Measure(text)) * unitsPerFontPx;
-    return LayOutTextFrom(font, text, centre - box * 0.5, unitsPerFontPx);
+    const glm::dvec2 box = glm::dvec2(MeasureText(font, text)) * unitsPerFontPx;
+    return LayOutTextFrom(font, text, centre - box * 0.5, unitsPerFontPx, missing);
 }
 
 std::vector<Glyph> LayOutTextFrom(const Supersonic::BitmapFont& font, const std::string& text,
-                                  const glm::dvec2& topLeft, double unitsPerFontPx) {
+                                  const glm::dvec2& topLeft, double unitsPerFontPx,
+                                  std::vector<std::uint32_t>* missing) {
     std::vector<Glyph> glyphs;
     if (!font.IsLoaded()) return glyphs;
     const double scale = unitsPerFontPx;
@@ -426,14 +430,18 @@ std::vector<Glyph> LayOutTextFrom(const Supersonic::BitmapFont& font, const std:
 
     double pen = 0.0;
     double lineTop = 0.0;
-    for (const char c : text) {
+    // By code point and not by byte: the text is UTF-8 (Hud.hpp). An ASCII byte is its own code point, so English lays out as it always did.
+    for (const std::uint32_t c : Utf8::Decode(text)) {
         if (c == '\n') {
             pen = 0.0;
             lineTop += static_cast<double>(font.LineHeight());
             continue;
         }
-        const Supersonic::FontGlyph* found = font.Find(static_cast<uint32_t>(static_cast<unsigned char>(c)));
-        if (found == nullptr) continue;
+        const Supersonic::FontGlyph* found = font.Find(c);
+        if (found == nullptr) {
+            if (missing != nullptr) missing->push_back(c);
+            continue;
+        }
         if (found->width > 0 && found->height > 0) {
             Glyph glyph;
             glyph.rect.min = topLeft + glm::dvec2(pen + found->xoffset, lineTop + found->yoffset) * scale;
@@ -446,6 +454,35 @@ std::vector<Glyph> LayOutTextFrom(const Supersonic::BitmapFont& font, const std:
         pen += static_cast<double>(found->xadvance);
     }
     return glyphs;
+}
+
+glm::vec2 MeasureText(const Supersonic::BitmapFont& font, const std::string& text) {
+    if (!font.IsLoaded()) return glm::vec2(0.0f);
+    // BitmapFont::Measure's loop, over code points: float sums, the widest line, and a glyph the font lacks adds nothing.
+    float widest = 0.0f;
+    float pen = 0.0f;
+    int lines = 1;
+    for (const std::uint32_t c : Utf8::Decode(text)) {
+        if (c == '\n') {
+            widest = pen > widest ? pen : widest;
+            pen = 0.0f;
+            ++lines;
+            continue;
+        }
+        if (const Supersonic::FontGlyph* glyph = font.Find(c)) pen += static_cast<float>(glyph->xadvance);
+    }
+    widest = pen > widest ? pen : widest;
+    return glm::vec2(widest, static_cast<float>(lines * font.LineHeight()));
+}
+
+double FitUnitsPerFontPx(const Supersonic::BitmapFont& font, const std::string& text, double unitsPerFontPx, double maxWidthUnits,
+                         double maxHeightUnits) {
+    if (!font.IsLoaded() || (maxWidthUnits <= 0.0 && maxHeightUnits <= 0.0)) return unitsPerFontPx;
+    const glm::dvec2 box = glm::dvec2(MeasureText(font, text)) * unitsPerFontPx;
+    double fit = unitsPerFontPx;
+    if (maxWidthUnits > 0.0 && box.x > maxWidthUnits) fit = std::min(fit, unitsPerFontPx * (maxWidthUnits / box.x));
+    if (maxHeightUnits > 0.0 && box.y > maxHeightUnits) fit = std::min(fit, unitsPerFontPx * (maxHeightUnits / box.y));
+    return fit;
 }
 
 } // namespace MagicPortals::Hud

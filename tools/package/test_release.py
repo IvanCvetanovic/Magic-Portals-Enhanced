@@ -849,7 +849,7 @@ class TheWindowsArchive(ArchiveCase):
         archive = os.path.join(self.out, 'MagicPortals-%s-windows-x64.zip' % OTHER_VERSION)
         with zipfile.ZipFile(archive) as z:
             text = z.read('MagicPortals-%s-windows-x64/PLAYING.txt' % OTHER_VERSION).decode('utf-8')
-        for word in ('Start MagicPortals.exe', 'Vulkan 1.2', 'No Vulkan graphics driver was found', 'vulkan-1.dll', '%APPDATA%\\Magic Portals', '%TEMP%\\magicportals.log',
+        for word in ('Start MagicPortals.exe', 'Vulkan 1.2', 'No Vulkan graphics driver was found', 'vulkan-1.dll', '%APPDATA%\\Magic Portals', 'language.json', 'your language choice', '%TEMP%\\magicportals.log',
                      'magicportals.prev.log', 'does NOT carry it', 'VCRUNTIME140.dll', 'Media Feature Pack', 'has not been seen on a PC without a driver',
                      'were not seen on a PC that lacked', 'LICENSE and NOTICE.md', OTHER_VERSION):
             self.assertIn(word, text)
@@ -1024,7 +1024,7 @@ class TheLinuxArchive(ArchiveCase):
         self.assertEqual(self.assemble('linux', self.linux_program(glibc=('2.34', '2.38'), glibcxx=('3.4.32',)))[0], 0)
         with tarfile.open(self.archive(), 'r:gz') as tf:
             text = tf.extractfile('MagicPortals-%s-linux-x86_64/PLAYING.txt' % OTHER_VERSION).read().decode('utf-8')
-        for word in ('tar xzf', 'chmod +x MagicPortals', 'glibc 2.38 or newer', 'GLIBCXX 3.4.32', 'libvulkan.so.1', 'libasound.so.2', '~/.local/share/Magic Portals',
+        for word in ('tar xzf', 'chmod +x MagicPortals', 'glibc 2.38 or newer', 'GLIBCXX 3.4.32', 'libvulkan.so.1', 'libasound.so.2', '~/.local/share/Magic Portals', 'your language choice',
                      '$XDG_DATA_HOME', 'magicportals.log', 'GLFW could not report the required Vulkan instance extensions', 'VK_DRIVER_FILES', 'not on a PC without one', 'X11'):
             self.assertIn(word, text)
 

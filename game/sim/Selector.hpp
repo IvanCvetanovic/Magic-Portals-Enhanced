@@ -56,6 +56,7 @@ struct Rules {
         std::string font;
         double unitsPerFontPx = 0.0;
         glm::dvec2 atUnits{0.0}; // a centre or a top-left, as each says
+        double maxWidthUnits = 0.0; // 0: no limit (planning step 238; see Hud::FitUnitsPerFontPx)
     };
 
     MenuState::Bounce arrowBounce; // I4, on both screens' arrows
@@ -139,6 +140,9 @@ struct Board {
     std::vector<Chapter> chapters;
     std::vector<Tile> tiles;
     int highlighted = -1; // the last unlocked chapter or level: its bounce
+    // Chapter select's warning, "requires 60%", in the player's language: set by BuildChapters when it is handed a string table (planning step 238),
+    // with locking.json's percent in it. Empty: the rules' own words, as they always were.
+    std::string warningWords;
     int items = 0;
     int perPage = 1;
     int Pages() const { return items > 0 ? (items + perPage - 1) / perPage : 1; }
@@ -147,7 +151,10 @@ struct Board {
 // WorldSelector's: every chapter, open or locked, with its percent; the last
 // open one highlighted.
 Board BuildChapters(const Rules& rules, const Locking::Rules& locking, const Scores::Store& scores,
-                    const Chapters::Table& table);
+                    const Chapters::Table& table, const Strings::Table* strings = nullptr);
+// The warning's words for a string table ("requires 60%" in its language, the percent locking.json's), or empty for none: what BuildChapters puts in
+// Board::warningWords, for the layer to put in a board it already holds when the language changes.
+std::string WarningWords(const Locking::Rules& locking, const Strings::Table* strings);
 // PortalLevelSelector's for `world`: each level open when the one before has a
 // medal (findLastUnlockedLevel: the last of the unbroken run from level 0).
 Board BuildLevels(const Rules& rules, const Locking::Rules& locking, const Scores::Store& scores,
@@ -204,6 +211,7 @@ struct Piece {
     glm::dvec2 at{0.0};
     bool centred = false;
     double unitsPerFontPx = 0.0;
+    double maxWidthUnits = 0.0; // Text: the slot's limit, 0 for none; the layer fits the words to it
     glm::ivec3 rgbBytes{255};
     int alphaByte = 255;
 };

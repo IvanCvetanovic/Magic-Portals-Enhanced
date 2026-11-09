@@ -106,6 +106,9 @@ bool Fraction(const Supersonic::Json::Value& block, const char* key, glm::dvec2&
               const std::string& where);
 bool Positive(const Supersonic::Json::Value& block, const char* key, double& out, std::string& why,
               const std::string& where);
+// An OPTIONAL `max_width_units` (planning step 238: the languages' fit to width, Hud::FitUnitsPerFontPx): absent leaves `out` as it is
+// (0 is no limit); present it must be a number above zero. The limit is a width in design units.
+bool MaxWidth(const Supersonic::Json::Value& block, double& out, std::string& why, const std::string& where);
 // A whole number within 0..255.
 bool Byte(const Supersonic::Json::Value& block, const char* key, int& out, std::string& why,
           const std::string& where);

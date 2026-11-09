@@ -224,7 +224,7 @@ void NothingAPlayerNeedsIsOnTheList() {
     // The flags a player's build keeps (game/main.cpp): the game's own, the release's, and the engine's.
     // mutation: put any of them on the list.
     const char* const kept[] = {"--level",      "--root",     "--no-baked-paths", "--levels",   "--art",      "--data",   "--original", "--chapters",
-                                "--achievements", "--port-data", "--padart",      "--saves",    "--controls", "--profile", "--help",     "-h",
+                                "--achievements", "--port-data", "--padart",      "--saves",    "--controls", "--lang",    "--profile", "--help",     "-h",
                                 "--window",     "--fixed-step", "--frames",       "--screenshot", "--screenshot-ui", "--screenshot-every",
                                 "--hidden",     "--fullscreen", "--windowed",     "--scene",    "--record",   "--replay", "--import-assets"};
     for (const char* flag : kept) {

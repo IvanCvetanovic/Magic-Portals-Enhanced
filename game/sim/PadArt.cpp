@@ -150,6 +150,27 @@ bool Gear(V p) {
     return RoundBox({onDiagonal.x - kToothCentre, onDiagonal.y}, kToothHalf, kToothRound) <= 0.0;
 }
 
+// A globe, for the language entry: a ring, an equator, two parallels and one meridian (an ellipse). The ellipse's distance is the first-order
+// one, (f - 1) / |grad f| of f = (x/a)^2 + (y/b)^2, which is exact enough for a line a twelfth of the glyph wide, and needs only + - * / and sqrt.
+constexpr double kGlobeRadius = 0.46;
+constexpr double kGlobeLineHalf = 0.045;
+constexpr double kGlobeParallel = 0.25;
+constexpr double kGlobeMeridianA = 0.23; // the meridian's half width; its half height is the ring's radius
+
+bool Globe(V p) {
+    const double r = Length(p);
+    if (std::fabs(r - kGlobeRadius) <= 0.06) return true;
+    if (r > kGlobeRadius) return false;
+    if (std::fabs(p.y) <= kGlobeLineHalf) return true;                                   // the equator
+    if (std::fabs(std::fabs(p.y) - kGlobeParallel) <= kGlobeLineHalf * 0.9) return true; // the parallels, a touch finer
+    const double f = (p.x * p.x) / (kGlobeMeridianA * kGlobeMeridianA) + (p.y * p.y) / (kGlobeRadius * kGlobeRadius);
+    const double gx = 2.0 * p.x / (kGlobeMeridianA * kGlobeMeridianA);
+    const double gy = 2.0 * p.y / (kGlobeRadius * kGlobeRadius);
+    const double slope = std::sqrt(gx * gx + gy * gy);
+    // The centre is where the gradient vanishes; the equator already covers it.
+    return slope > 0.0 && std::fabs(f - 1.0) / slope <= kGlobeLineHalf;
+}
+
 bool OnGlyph(Glyph glyph, V p) {
     switch (glyph) {
     case Glyph::WalkLeft:
@@ -164,6 +185,8 @@ bool OnGlyph(Glyph glyph, V p) {
         return ClearPortals(p);
     case Glyph::Gear:
         return Gear(p);
+    case Glyph::Globe:
+        return Globe(p);
     }
     return false;
 }
@@ -258,6 +281,8 @@ const char* NameOf(Glyph glyph) {
         return "clear_portals";
     case Glyph::Gear:
         return "gear";
+    case Glyph::Globe:
+        return "globe";
     }
     return "?";
 }

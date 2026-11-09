@@ -1,6 +1,7 @@
 #include "sim/Credits.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Strings.hpp"
 
 #include <utility>
 
@@ -85,7 +86,8 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         if (!item.IsObject() || !Text(item, "words", line.words, why, "credits.tail.lines") ||
             !Text(item, "font", line.font, why, "credits.tail.lines") ||
             !Positive(item, "units_per_font_px", line.unitsPerFontPx, why, "credits.tail.lines") ||
-            !Positive(item, "centre_y_units", line.centreYUnits, why, "credits.tail.lines")) {
+            !Positive(item, "centre_y_units", line.centreYUnits, why, "credits.tail.lines") ||
+            !UiLayer::Read::MaxWidth(item, line.maxWidthUnits, why, "credits.tail.lines")) {
             if (why.empty()) why = "credits.tail.lines holds an entry that is not an object";
             return fail();
         }
@@ -93,6 +95,13 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         if (line.centreYUnits <= read.strip.sizeUnits.y || line.centreYUnits >= read.strip.sizeUnits.y + read.tail.heightUnits) {
             why = "credits.tail.lines: \"" + line.words + "\" is not between the picture's end and the strip's end";
             return fail();
+        }
+        if (item.Has("text_key")) {
+            if (!item["text_key"].IsString() || item["text_key"].AsString().empty()) {
+                why = "credits.tail.lines: \"" + line.words + "\" has a text_key that is not a name";
+                return fail();
+            }
+            line.textKey = item["text_key"].AsString();
         }
         read.tail.lines.push_back(std::move(line));
     }
@@ -134,13 +143,14 @@ double StripHeight(const Rules& rules) {
     return rules.strip.sizeUnits.y + rules.tail.heightUnits;
 }
 
-std::vector<Words> TailWords(const Rules& rules, const glm::dvec2& viewUnits, const Scroll& scroll) {
+std::vector<Words> TailWords(const Rules& rules, const glm::dvec2& viewUnits, const Scroll& scroll, const Strings::Table* strings) {
     std::vector<Words> words;
     const double x = ColumnX(rules, viewUnits) + rules.tail.centreXUnits;
     for (const Rules::Tail::Line& line : rules.tail.lines) {
         Words drawn;
-        drawn.text = line.words;
+        drawn.text = strings != nullptr && !line.textKey.empty() ? strings->Show(line.textKey) : line.words;
         drawn.font = line.font;
+        drawn.maxWidthUnits = line.maxWidthUnits;
         drawn.centre = glm::dvec2(x, scroll.y + line.centreYUnits);
         drawn.unitsPerFontPx = line.unitsPerFontPx;
         drawn.rgbByte = rules.tail.inkByte;

@@ -1292,8 +1292,8 @@ void TheEditorGlyphsAreEightPicturesOnOnePlate() {
                   PadArt::DrawEditor(PadArt::EditorGlyph::Back, 128, -0.01).Empty() && PadArt::DrawEditor(PadArt::EditorGlyph::Back, 128, std::numeric_limits<double>::quiet_NaN()).Empty(),
               "a size under 16 or over 1024 and a margin under 0, over a quarter or not a number are refused");
     CHECK_MSG(!PadArt::DrawEditor(PadArt::EditorGlyph::Back, 16, 0.0).Empty() && !PadArt::DrawEditor(PadArt::EditorGlyph::Back, 128, 0.25).Empty(), "and the smallest size and the largest margin are drawn");
-    // The editor glyphs are not among the six, which test_mp_padart holds to the plate's invariants.
-    CHECK_MSG(PadArt::kGlyphCount == 6u && PadArt::kGlyphs.size() == 6u, "the six are still six");
+    // The editor glyphs are not among the seven (the five controls', the gear and the globe), which test_mp_padart holds to the plate's invariants.
+    CHECK_MSG(PadArt::kGlyphCount == 7u && PadArt::kGlyphs.size() == 7u, "the seven are still seven");
     // The names, one each.
     std::set<std::string> names;
     for (const PadArt::EditorGlyph glyph : PadArt::kEditorGlyphs) names.insert(PadArt::NameOf(glyph));

@@ -109,8 +109,9 @@ std::optional<Button> ButtonAt(const Rules& rules, const Level& level, const Swi
 // silver, anything else bronze; empty for a level never finished.
 std::string MedalSprite(const Rules& rules, int savedMedal);
 
-// "Part N", and where its box is centred.
-std::string TitleText(const Rules& rules, const Level& level);
+// "Part N", and where its box is centred. A string table (planning step 238: the layer passes one for every language but English) makes the
+// words the table's hud.part; without one they are rules.title.prefix and the number.
+std::string TitleText(const Rules& rules, const Level& level, const Strings::Table* strings = nullptr);
 glm::dvec2 TitleCentre(const Rules& rules, const glm::dvec2& viewUnits);
 
 // The golden score, and where its box is centred: the plaque's anchor plus the

@@ -43,11 +43,14 @@ ABSENT = 'ABSENT'
 CASE_MISS_FATAL = 'CASE_MISS_FATAL'  # Windows finds it, Linux does not
 CASE_MISS_TIER = 'CASE_MISS_TIER'    # Windows picks one tier's file, Linux silently falls to a lower tier
 
+# out/data/achievements.<code>.json: a two-letter language code between the stem and the extension (and nothing in a sub-folder).
+ACHIEVEMENT_LANGUAGE_RE = re.compile(r'achievements\.[a-z]{2}\.json')
+
 # The seven places a reference can resolve in, by the names the plan uses.
 ORIGINAL = 'original'          # reference/extracted/assets
 OUT_ASSETS = 'out/assets'      # the converter's art
 OUT_LEVELS = 'out/levels'
-OUT_DATA = 'out/data'          # chapters.json, achievements.json
+OUT_DATA = 'out/data'          # chapters.json, achievements.json, achievements.<code>.json (the interface languages' translation, planning step 238)
 RAMPAGE = 'magic-rampage'      # reference/magic-rampage (controls/, editor/): optional
 PORT_DATA = 'game/data'
 DATA = 'data'
@@ -523,10 +526,16 @@ def build_plan(src, skip_top=('lightmaps',)):
     for rel, size in src[OUT_LEVELS].files.items():
         needed[(OUT_LEVELS, rel)] = size
         why.setdefault((OUT_LEVELS, rel), 'a level (chapters.json)')
-    for rel in ('chapters.json', 'achievements.json'):
-        if rel in src[OUT_DATA].files:
+    for rel in sorted(src[OUT_DATA].files):
+        if rel in ('chapters.json', 'achievements.json'):
             needed[(OUT_DATA, rel)] = src[OUT_DATA].files[rel]
             why.setdefault((OUT_DATA, rel), 'the level order / achievements table')
+        elif ACHIEVEMENT_LANGUAGE_RE.fullmatch(rel):
+            # The translation of the achievements into one of the interface languages (tools/l10n/make_achievement_languages.py): Asantee's words in
+            # another language, so it ships in the content package and nowhere else. The layer reads it as a sibling of achievements.json. The sources
+            # in out/data/lang_src are not shipped: the game never opens them.
+            needed[(OUT_DATA, rel)] = src[OUT_DATA].files[rel]
+            why.setdefault((OUT_DATA, rel), 'the achievements in an interface language (sibling of achievements.json)')
     for rel, size in src[DATA].files.items():
         needed[(DATA, rel)] = size
         why.setdefault((DATA, rel), 'Enhanced table (Game::LoadData)')

@@ -60,6 +60,10 @@ struct Rules {
             std::string font; // a file of the original's data/ folder
             double unitsPerFontPx = 0.0;
             double centreYUnits = 0.0; // from the strip's top
+            // The string table's key for this line's words (planning step 238), where the words are a sentence that is translated; empty
+            // for a name or an address, which every language keeps. The `words` stay as the English the line is laid out with.
+            std::string textKey;
+            double maxWidthUnits = 0.0; // 0: no limit (Hud::FitUnitsPerFontPx)
         };
         std::vector<Line> lines;
     } tail;
@@ -103,10 +107,12 @@ struct Words {
     std::string font;
     glm::dvec2 centre{0.0};
     double unitsPerFontPx = 0.0;
+    double maxWidthUnits = 0.0;
     int rgbByte = 0;
     int alphaByte = 255;
 };
-std::vector<Words> TailWords(const Rules& rules, const glm::dvec2& viewUnits, const Scroll& scroll);
+// With a string table (planning step 238: every language but English) the lines that name a `text_key` are the table's words, shaped.
+std::vector<Words> TailWords(const Rules& rules, const glm::dvec2& viewUnits, const Scroll& scroll, const Strings::Table* strings = nullptr);
 
 enum class Element { Background, Back, Papyrus, Strip };
 

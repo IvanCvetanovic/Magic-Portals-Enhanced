@@ -182,6 +182,11 @@ class ThePathRules(unittest.TestCase):
                'Magic Portals/scores.json', 'magicportals_gamedata.stamp', 'magicportals_args.txt', 'gamedata/a', 'GameDataX/a', 'engine2/a', 'GameData', 'engine']
     ACCEPTED = ['GameData/a', 'GameData/levels/level0.tscn', 'GameData/odd name/b c.png', 'engine/assets/shaders/x.spv', 'GameData/a.b.c', 'GameData/.hidden',
                 'GameData/caf\u00e9.png', 'GameData/..a', 'GameData/a..b']
+    # The interface languages (planning step 239) put the first SUB-FOLDERS under the port's own data (port-data/lang, port-data/fonts) and a translation of the
+    # achievements beside the English list: tests/test_mp_unpack.cpp accepts these same ten names, and so must the packager.
+    LANGUAGE_FILES = ['GameData/port-data/lang/languages.json', 'GameData/port-data/lang/en.json', 'GameData/port-data/lang/ar.json',
+                      'GameData/port-data/fonts/Kurale-Regular.ttf', 'GameData/port-data/fonts/NotoSansJP-Bold.ttf', 'GameData/port-data/fonts/OFL-NotoSansArabic.txt',
+                      'GameData/port-data/fonts/README.md', 'GameData/port-data/picker.json', 'GameData/tables/achievements.de.json', 'GameData/tables/achievements.ja.json']
 
     def test_refused(self):
         for p in self.REFUSED:
@@ -190,6 +195,17 @@ class ThePathRules(unittest.TestCase):
     def test_accepted(self):
         for p in self.ACCEPTED:
             self.assertIsNone(ap.safe_rel_path(p, ap.OWNED_ROOTS), repr(p))
+
+    def test_the_language_files_pass_at_their_depth_and_the_cpp_suite_lists_the_same_names(self):
+        for p in self.LANGUAGE_FILES:
+            self.assertIsNone(ap.safe_rel_path(p, ap.OWNED_ROOTS), repr(p))
+        for p in ('GameData/port-data/lang/../../../etc/x', 'GameData/port-data/fonts/../../..'):
+            self.assertIsNotNone(ap.safe_rel_path(p, ap.OWNED_ROOTS), repr(p))
+        import re
+        with open(os.path.join(REPO, 'tests', 'test_mp_unpack.cpp'), encoding='utf-8') as f:
+            text = f.read()
+        body = text[text.index('The interface languages (planning step 239)'):text.index('// ---- The run')]
+        self.assertEqual(sorted(re.findall(r'std::string\("(GameData/[^"]+)"\)', body)), sorted(self.LANGUAGE_FILES))
 
     def test_the_cpp_table_is_this_table(self):
         """The suite's refusals, read out of tests/test_mp_unpack.cpp, are all refused here too: the two lists cannot drift apart unseen."""
@@ -216,6 +232,29 @@ class ThePackage(TempCase):
         self.assertEqual(len(entries), 7)
         self.assertEqual(entries[0][0], 'assets/entities/tile_a.png')
         self.assertEqual(entries[0][1:], (6, sha(b'tile-a')))
+
+    def test_the_language_tables_the_faces_and_the_translated_achievements_load_and_list(self):
+        # planning step 239: a package with port-data/lang, port-data/fonts (a .ttf, a licence .txt, a .md), the picker's table and a translation of the
+        # achievements loads, and every one of them goes into the unpack list under GameData
+        files = {
+            'levels/level_a.tscn': b'[gd_scene]\n',
+            'tables/chapters.json': b'{"chapters": []}',
+            'tables/achievements.json': b'{"achievements": []}',
+            'tables/achievements.de.json': b'{"achievements": {}}',
+            'port-data/picker.json': b'{"entry": {"glyph": "language_globe"}}',
+            'port-data/lang/languages.json': b'{"languages": []}',
+            'port-data/lang/en.json': b'{"strings": {}}',
+            'port-data/fonts/Face.ttf': b'\0\1\0\0 a face',
+            'port-data/fonts/OFL-Face.txt': b'the licence',
+            'port-data/fonts/README.md': b'where the faces came from',
+        }
+        folder = make_package(self.path('pkg-lang'), files)
+        entries = ap.load_package(folder)
+        self.assertEqual(sorted(e[0] for e in entries), sorted(files))
+        stamp, text = ap.make_list([('GameData/' + rel, size, digest) for rel, size, digest in entries])
+        listed = [path for path, _size in ap.parse_list(text)[1]]
+        self.assertEqual(listed, sorted('GameData/' + rel for rel in files))
+        self.assertTrue(stamp)
 
     def refuses(self, folder, part):
         with self.assertRaises(ap.PackError) as ctx:

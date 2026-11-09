@@ -1,0 +1,87 @@
+{
+  "_about": [
+    "THE LANGUAGE PICKER and its two entries (planning step 239, PORT-35), read by sim/Picker.LoadRules, STRICTLY and apart from every other table: a typo here costs the picker and",
+    "never a run (the layer says why with one error line and offers no picker). An ENHANCEMENT: the original has one language and no picker. The screen is the credits' own",
+    "background and back button (ui.json credits, read by sim/Credits) with a title and eleven plates in the original's font, each plate the language's own name in its own script.",
+    "Places are fractions of the screen for a centre and units for a size or an offset (the view is 256 units tall, 2.8125 px a unit at 1280x720); a colour is r, g, b, a bytes.",
+    "Every number here is the port's own decision, so each object says so: the owner's eyes, not a measurement, settle the look. Nothing here names a picture or a font file of",
+    "the game: the globe is drawn by the game (sim/PadArt) under the stem below, and the names are drawn in an atlas baked at run time (sim/FontBake, languages.json picker_slot)."
+  ],
+  "entry": {
+    "_source": [
+      "at_screen [1, 0], origin [1, 0], offset_units [0, 36]: PORT. Under the Options gear, which holds the top-right corner (controls.json options.entry), flush with the right edge:",
+      "the column the gear heads is clear of the title's 256 x 256 box at 5:4 (its right edge is 288 of 320 units, the gear's left) and of the achievements button (y 224 and down), and",
+      "it needs no room beside the gear that a narrow screen does not have. size_units [32, 32]: PORT, the gear's size (90 px at 720p).",
+      "glyph: the STEM of the file the game draws the globe into (sim/PadArt, Glyph::Globe) in its scratch folder, '.png' added by the layer - a stem, so that no table names a",
+      "picture (tools/package/closure.py resolves any string that ends in .png as an original asset). glyph_px 128 and body_inset 0.109375: PORT, the generated glyphs' picture and",
+      "margin (controls.json art.generated), so that the globe's plate fills the button's box as the gear's does."
+    ],
+    "_guess": true,
+    "at_screen": [1, 0],
+    "origin": [1, 0],
+    "offset_units": [0, 36],
+    "size_units": [32, 32],
+    "glyph": "language_globe",
+    "glyph_px": 128,
+    "body_inset": 0.109375
+  },
+  "corner": {
+    "_source": [
+      "at_screen [1, 0], origin [1, 0], offset_units [0, 0], size_units [32, 32]: PORT. The Options screen's free corner: the top-right, where the gear the player pressed to come",
+      "here stands on the main menu. The screen's title is centred (controls.json options.title at 0.5) and its tiles are 160 wide about the middle, so the corner is clear of them",
+      "at every supported aspect (tests/test_mp_picker.cpp holds it for the nine of test_mp_options). The same picture as the entry's, flat on its box, no entrance."
+    ],
+    "_guess": true,
+    "at_screen": [1, 0],
+    "origin": [1, 0],
+    "offset_units": [0, 0],
+    "size_units": [32, 32]
+  },
+  "title": {
+    "_source": [
+      "font Matura84_shadow.fnt, units_per_font_px 0.5: PORT, the Options title's (controls.json options.title) - the role name the layer resolves in the language on the screen, so the",
+      "title is in the player's language and in the font that language is drawn in. y_at_screen 0.12: PORT, high enough to leave the grid its 160 units (the title's 84-px line is 42",
+      "units tall, so it spans about 10 to 52). Its words are the string table's language.title, never a field here. max_width_units 200: PORT, the grid's width less a margin: the",
+      "longest title of the ten translations is far inside it, and a longer one is scaled down to it (Hud::FitUnitsPerFontPx)."
+    ],
+    "_guess": true,
+    "font": "Matura84_shadow.fnt",
+    "units_per_font_px": 0.5,
+    "y_at_screen": 0.12,
+    "alpha_byte": 255,
+    "max_width_units": 200
+  },
+  "grid": {
+    "_source": [
+      "columns 3: PORT. Eleven plates in three columns are four rows (3, 3, 3 and 2, the last row centred), which the view's 256 units hold at every aspect from 5:4 up; two columns would",
+      "be six rows of plates under 26 units tall, too small to read a name in. plate_size_units [72, 34] and gap_units [6, 8]: PORT. Three plates and two gaps are 228 units across,",
+      "four rows and three gaps are 160 units tall. top_units 62: PORT, under the title.",
+      "clear_left_units 84: PORT, MEASURED against the credits' back button (ui.json credits.back_button, 64 units wide, placed by a fraction of the screen's width, so its right edge moves with",
+      "the shape of the window): its right edge is 76.8 units at 5:4, 77.9 at 4:3, 79.4 at 3:2 and 80.4 at 16:10, the widest of the nine supported shapes before the centred grid clears it by itself,",
+      "plus a margin of 4.6. The grid is centred on the screen and moved right only as far as it takes to clear that (from 16:10 it is not moved); at 5:4 it then ends at 312 of 320 units.",
+      "The title is centred on the grid (tests/test_mp_picker.cpp holds all of this at the nine shapes of test_mp_options)."
+    ],
+    "_guess": true,
+    "columns": 3,
+    "plate_size_units": [72, 34],
+    "gap_units": [6, 8],
+    "top_units": 62,
+    "clear_left_units": 84
+  },
+  "plate": {
+    "_source": [
+      "idle_frame_rgba and chosen_frame_rgba: PORT, the Options tiles' own (controls.json options.tile), so the lit language reads as the lit controls style does.",
+      "word_units_per_font_px 0.28: PORT, the tiles' 0.3 a little smaller, so the longest name (Ukrainian) is scaled less. idle_word_alpha_byte 170 and chosen_word_alpha_byte 255: PORT, the",
+      "tiles' own. max_width_units 62: PORT, a plate less a margin of 5 on each side; a name wider than that is scaled down to it (Hud::FitUnitsPerFontPx), and no name is scaled below",
+      "0.5 (tests/test_mp_picker.cpp). The names are drawn in the picker atlas: one font, so that Latin, Cyrillic, Japanese and Arabic names stand side by side whatever language is on",
+      "the screen."
+    ],
+    "_guess": true,
+    "idle_frame_rgba": [34, 30, 52, 190],
+    "chosen_frame_rgba": [96, 78, 156, 240],
+    "word_units_per_font_px": 0.28,
+    "idle_word_alpha_byte": 170,
+    "chosen_word_alpha_byte": 255,
+    "max_width_units": 62
+  }
+}

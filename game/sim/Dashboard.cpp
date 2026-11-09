@@ -1,6 +1,7 @@
 #include "sim/Dashboard.hpp"
 
 #include "core/Json.hpp"
+#include "sim/Strings.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -44,7 +45,7 @@ bool ReadText(const Json::Value& block, const char* atKey, Rules::Text& out, std
               const std::string& where) {
     return Text(block, "font", out.font, why, where) &&
            Positive(block, "units_per_font_px", out.unitsPerFontPx, why, where) &&
-           Pair(block, atKey, out.atUnits, why, where);
+           Pair(block, atKey, out.atUnits, why, where) && UiLayer::Read::MaxWidth(block, out.maxWidthUnits, why, where);
 }
 
 int Alpha(bool unlocked, int lockedByte) {
@@ -394,7 +395,7 @@ Outcome Tick(const Rules& rules, const Board& board, State& state, const glm::dv
 }
 
 std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& state, const glm::dvec2& viewUnits,
-                          double stateMs, double wallMs) {
+                          double stateMs, double wallMs, const Strings::Table* strings) {
     std::vector<Piece> pieces;
     const auto sprite = [&pieces](std::string file, const Hud::Rect& rect, int alphaByte, int rgbByte = 255) {
         Piece piece;
@@ -414,6 +415,7 @@ std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& s
         piece.at = at;
         piece.centred = centred;
         piece.unitsPerFontPx = style.unitsPerFontPx;
+        piece.maxWidthUnits = style.maxWidthUnits;
         piece.rgbBytes = rgb;
         piece.alphaByte = alphaByte;
         pieces.push_back(std::move(piece));
@@ -438,8 +440,10 @@ std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& s
         const glm::dvec2 pos(layout.columnAdvance, LineY(rules, viewUnits, index, state.scroll));
         if (line.header) {
             // Drawn before the loop's cull test, on or off the view.
-            text(rules.header, rules.headerPrefix + std::to_string(line.world + 1), pos + rules.header.atUnits, true,
-                 255);
+            text(rules.header,
+                 strings != nullptr ? strings->Show(Strings::Key::kDashboardChapter, {{Strings::Placeholder::kN, std::to_string(line.world + 1)}})
+                                    : rules.headerPrefix + std::to_string(line.world + 1),
+                 pos + rules.header.atUnits, true, 255);
             continue;
         }
         if (!LineShown(rules, viewUnits, index, state.scroll)) continue;
@@ -452,7 +456,8 @@ std::vector<Piece> Pieces(const Rules& rules, const Board& board, const State& s
             // ARGB(iTOb(max(127, GetTime() % 255)), 100, 255, 100).
             const auto ms = static_cast<unsigned long long>(std::max(wallMs, 0.0));
             const int wave = static_cast<int>(ms % static_cast<unsigned long long>(rules.newLabel.alphaPeriodMs));
-            text(rules.newLabel.text, rules.newLabel.words, bar + rules.newLabel.text.atUnits, false,
+            text(rules.newLabel.text, strings != nullptr ? strings->Show(Strings::Key::kDashboardNew) : rules.newLabel.words,
+                 bar + rules.newLabel.text.atUnits, false,
                  std::min(std::max(rules.newLabel.alphaFloorByte, wave), 255), rules.newLabel.rgbBytes);
         }
         const int words = Alpha(line.unlocked, rules.rows.lockedTextAlphaByte);

@@ -308,6 +308,8 @@
     "origin": [0.5, 1.0],
     "font": "Verdana40_shadow.fnt",
     "units_per_font_px": 0.3,
+    "max_width_units": 269.5,
+    "_max_width_source": "PORT (planning step 238): the language fit. The card is as wide as its text: the unlock card with the longest of Enhanced's 82 titles (id 75) after 'Achievement unlocked! ' is 269.4 units (Verdana40 advances x 0.3), which with the icon's pitch and the two ends of the background already fills a 5:4 view (320). 269.5 is that width, so English is not touched and no translation makes a wider card.",
     "text_offset_units": [0, 4],
     "icon_units": [22, 22],
     "background_units": [64, 32],
@@ -353,6 +355,9 @@
     "tile_rows": 3,
     "font": "Verdana40_shadow.fnt",
     "units_per_font_px": 0.4,
+    "max_width_units": 276,
+    "max_height_units": 150,
+    "_max_size_source": "PORT (planning step 238): the language fit. The popup is its text plus a 64-unit tile cut 3 x 3 (21.3 units a border), centred in a view that is 256 tall and at least 320 wide. Across the 59 levels that have achievements the widest English popup text is 275.2 units (level 4-9, Verdana40 advances x 0.4) and the tallest 112 (level 2-14, six lines): 276 and 150 leave the English alone (and keep a 150 + 43 box inside 256) and scale a longer translation down to the same room.",
     "unlocked_mark": "@",
     "locked_mark": "#",
     "close_button": {

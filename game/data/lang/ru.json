@@ -1,0 +1,23 @@
+{
+  "_about": [
+    "The 14 short interface strings of one language, keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
+    "PROVENANCE: machine-translated by a language model from English, terms aligned with the Magic Rampage Companion app, reviewed by a second model pass, NOT by a native speaker.",
+    "Native review is open (planning step 236, LEFT FOR THE OWNER). A key missing from this file shows the English one, and a placeholder that differs from the English one is refused for that key."
+  ],
+  "strings": {
+    "hud.part": "Уровень {n}",
+    "dashboard.chapter": "Глава {n}",
+    "dashboard.new": "Нов!",
+    "selector.requires": "нужно {percent}%",
+    "card.unlocked": "Достижение получено! {title}",
+    "card.locked_level": "Уровень заблокирован!",
+    "credits.enhanced": "улучшенная версия Magic Portals от Asantee Games",
+    "credits.engine": "улучшенная версия и движок Supersonic Engine",
+    "options.title": "Управление",
+    "options.modern": "Новое",
+    "options.classic": "Классика",
+    "options.adjust": "Настроить",
+    "hint.camera": "двигайте камеру",
+    "language.title": "Язык"
+  }
+}

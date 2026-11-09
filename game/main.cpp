@@ -19,6 +19,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -45,6 +46,8 @@
 #include "sim/Controls.hpp"
 #include "sim/EngineTuning.hpp"
 #include "sim/Files.hpp"
+#include "sim/Language.hpp"
+#include "sim/Strings.hpp"
 #include "sim/Scratch.hpp"
 #include "sim/StartChecks.hpp"
 
@@ -94,6 +97,14 @@ namespace {
 
 // The game's name: the manifest's title, the user data directory's and the message box's.
 constexpr const char* kTitle = "Magic Portals";
+
+// The language codes `--lang` takes, in the order of game/data/lang/languages.json: "en, de, es, ...". The codes are the table's (Strings::kLangCodes
+// is checked against the file on every load), so --help can name them before any data is read.
+std::string LangCodesText() {
+    std::string text;
+    for (const std::string_view code : MagicPortals::Strings::kLangCodes) text += (text.empty() ? "" : ", ") + std::string(code);
+    return text;
+}
 
 // The last run's log moved to `previous`, replacing the one before (the rule is Scratch::KeepPreviousLog's, which the Android entry uses too, planning
 // step 204): a log that cannot be kept costs that copy and says so, never the start.
@@ -301,6 +312,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // (docs/planning/2026-10-15-modern-controls.md 2.1, 2.2). Taken out here, before the engine's parser,
     // which refuses what it does not know; resolved below, once the rig's own flags are all read.
     std::optional<std::string> controlsFlag;
+    // `--lang <code>` (planning step 238, PORT-34): the language this run speaks, over the player's saved choice, which it neither reads nor
+    // writes. Taken out here, before the engine's parser; checked against game/data/lang/languages.json below, once the port's data is found.
+    std::optional<std::string> langFlag;
     // `--padart <absolute dir>` (planning step 184): the folder a modern run looks for Magic Rampage's five pictures in,
     // instead of the one the build was told. An empty folder is the way to see the next tiers (the original's own corner
     // sprites, then the drawn glyphs).
@@ -387,6 +401,20 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             }
             padArtGiven = true;
             padArtDir = value;
+            continue;
+        }
+        if (arg == "--lang") {
+            if (i + 1 >= argc) {
+                std::cerr << "--lang needs a language code: " << LangCodesText() << "\n";
+                return EXIT_FAILURE;
+            }
+            // Twice is a mistake, not an override, as it is for --controls: a capture that meant one language and ran the other would say
+            // nothing about either.
+            if (langFlag) {
+                std::cerr << "--lang is given twice; it takes one language code\n";
+                return EXIT_FAILURE;
+            }
+            langFlag = std::string(argv[++i]);
             continue;
         }
         if (arg == "--controls") {
@@ -748,6 +776,16 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    version a GPU may report). Without it the build's own: mobile in a\n"
                   << "                    phone's build, desktop in any other; with it a desktop run can try\n"
                   << "                    the phone's settings, and the other way round\n"
+                  << "  --lang <code>     the language this run speaks, over the one the player chose:\n"
+                  << "                    " << LangCodesText() << "\n"
+                  << "                    (English is the default and the original's). The run neither reads nor\n"
+                  << "                    writes the saved choice (language.json beside the other saves), which\n"
+                  << "                    the player makes in the game; for a capture or a test of one language.\n"
+                  << "                    --fixed-step, --route and --visit-levels runs without --lang are English\n"
+                  << "                    too, whatever the player chose: those three flags and no other. A run\n"
+                  << "                    with none of them and no --lang (a capture without --fixed-step\n"
+                  << "                    included) speaks the saved language, so a capture passes --fixed-step\n"
+                  << "                    or --lang\n"
                   << "  --levels <dir>    the converted levels (" << DefaultText(paths.levels) << ")\n"
                   << "  --chapters <file> chapters.json, the level order (" << DefaultText(paths.chapters) << ")\n"
                   << "  --achievements <file>\n"
@@ -928,6 +966,24 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         paths.original = resolved.original;
         if (!padArtGiven) padArtDir = resolved.padArt;
     }
+
+    // WHICH LANGUAGE (planning step 238): the flag, checked against the table of languages the port's own data holds. A code that table does not have is
+    // refused here, with the codes it has: a capture that asked for a language it did not get would say nothing about it.
+    if (langFlag) {
+        MagicPortals::Strings::LanguageTable languages;
+        std::string why;
+        if (MagicPortals::Strings::LoadLanguages(paths.portData + MagicPortals::Strings::kLanguagesFile, languages, why) &&
+            !languages.LangOfCode(*langFlag)) {
+            std::cerr << "--lang " << *langFlag << " is no language of this game; it takes one of: " << LangCodesText() << "\n";
+            return EXIT_FAILURE;
+        }
+    }
+    // WHAT THE RUN DOES WITH THE LANGUAGE (planning steps 238, 239): the flag as it was given (a table that will not read is the layer's to say: it logs the
+    // error and draws English), and, with no flag, a developer's or parity run (the rig's three flags) is forced to English so that the player's saved
+    // choice is neither read nor written by a capture or a route; a player's run offers the picker - the globe on the main menu and on Options and the screen
+    // behind them, with or without `--lang` (a forced run keeps its choice in memory only) - and a developer's run does not, as it has not the gear: a capture
+    // of the original's menus is the original's menus.
+    paths.language = MagicPortals::Language::ResolvePolicy(langFlag, paths.fixedStep, routeGiven, visitGiven);
 
     // WHICH CONTROLS THIS RUN PLAYS (planning step 181), resolved once and handed down: the flag and the kind
     // of run (the rig's three flags make it a developer's, whose controls are the classic ones whatever the

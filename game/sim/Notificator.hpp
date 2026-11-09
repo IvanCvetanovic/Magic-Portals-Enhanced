@@ -29,6 +29,9 @@ struct Rules {
     glm::dvec2 origin{0.5, 1.0};
     std::string font;
     double unitsPerFontPx = 0.0;
+    // The widest the card's text may be, in design units, at the scale the card settles at; 0 is no limit (planning step 238: a translation is
+    // fitted to it by Hud::FitUnitsPerFontPx, and the English is under it).
+    double maxWidthUnits = 0.0;
     glm::dvec2 textOffsetUnits{0.0};
     glm::dvec2 iconUnits{0.0};
     glm::dvec2 backgroundUnits{0.0}; // the background's whole picture

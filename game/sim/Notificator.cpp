@@ -70,6 +70,10 @@ bool LoadRules(const std::string& achievementsPath, const std::string& wellsPath
         return false;
     }
     read.font = block["font"].AsString();
+    if (block.Has("max_width_units") && (!Number(block, "max_width_units", read.maxWidthUnits) || !(read.maxWidthUnits > 0.0))) {
+        error = achievementsPath + ": notificator.max_width_units is not a number above zero";
+        return false;
+    }
     read.backgroundColumns = static_cast<int>(columns);
     read.musicFirstTrack = block["music_first_track"].AsString();
 

@@ -50,6 +50,30 @@ MAX_SANE_COUNT = 100_000
 MAX_SANE_STRING = 4096
 
 
+def decode_string(raw: bytes) -> str:
+    """A string constant of the saved module, as text.
+
+    AngelScript strings are BYTES. A constant that is valid UTF-8 is UTF-8 (ASCII is both; gs2d's BitmapFont decodes UTF-8 itself when it
+    draws, Video/BitmapFont.cpp:314-352), and one that is not is read as Latin-1: the byte 0xNN is U+00NN, the encoding an editor of that
+    time most plausibly saved it in. `decode("utf-8", "replace")`, which this used to be, turned every other byte into U+FFFD and lost it
+    for good: one real description (a number of degrees and then the byte 0xBA) came out with a replacement character, which the port then
+    drew as three Latin-1 glyphs.
+
+    That byte is 0xBA, U+00BA, the masculine ordinal indicator - not the degree sign U+00B0 the author plainly meant: the decode reports what
+    the bytes are. (A degree sign is one character in out/data/achievements.json or one special case here; it is the owner's to ask for.)
+    What the ORIGINAL draws for a lone 0xBA is not established: BitmapFont.cpp:314-352 hands bytes that are not valid UTF-8 to
+    utf8::utf8to32, whose checked decoder throws (Unicode/utf8/utf8/checked.h, utf8::next), so it may not draw the row at all.
+
+    The whole constant is one or the other, never a mixture: a constant with a stray byte is Latin-1 throughout. Regenerating the listing of
+    planning step 236 changed exactly one line of 98,778, that constant's, so none in the functions the extractors read mixes the two.
+    Never raises.
+    """
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
+
+
 class BytecodeError(Exception):
     """Raised when the stream stops making sense — i.e. the reader has desynced."""
 
@@ -132,7 +156,7 @@ class Reader:
             length = self.encoded_uint()
             if self.strict and length > MAX_SANE_STRING:
                 raise BytecodeError(f"implausible string length {length} at {self.pos}")
-            text = self.read(length).decode("utf-8", "replace")
+            text = decode_string(self.read(length))
             self.saved_strings.append(text)
             return text
         index = self.encoded_uint()

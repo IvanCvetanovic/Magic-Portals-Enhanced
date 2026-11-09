@@ -1,0 +1,157 @@
+{
+  "_about": [
+    "The UI languages, in the order of the Magic Rampage Companion app's picker and of Penumbra's Languages.hpp: en (the default) de es fr it pt ru tr uk ja ar.",
+    "sim/Strings.hpp's Lang enum has exactly these codes in exactly this order, and the load is refused otherwise. name_native is the language's own name in its own script (the picker draws it).",
+    "font_set: 'original' = the strings lie inside the original fonts' Latin-1 set (U+0020-007E, U+00A0-00FF), which the tests check; 'generated' = every font slot is drawn from a face the fonts step makes at run time.",
+    "fonts: how a 'generated' language is drawn (planning step 237, sim/FontBake): faces are the committed .ttf files of game/data/fonts (their OFL texts beside them), scripts are code point ranges (hex, inclusive) that route to a face of their own, and each slot is one of the original's font slots whose look the baked atlas reproduces. A code point in no script is drawn from the slot's text_face. Every language whose font_set is 'generated' is drawn by the same routing.",
+    "Never name a generated .fnt or .png here: tools/package/closure.py resolves such a name as an original asset and refuses the package."
+  ],
+  "fonts": {
+    "_about": [
+      "Every number below says where it came from. 'measured' = read off the original's font files in reference/extracted/assets/data (never copied: only the numbers are here); 'fitted' = least squares against the original's atlas; 'chosen' = a look decision made by eye against the original, tunable.",
+      "line_height, base, padding and spacing are the original's .fnt files' own (info padding=, spacing=, common lineHeight= and base=), so the baked fonts take the place of the original's with no change to any placement.",
+      "cap_height is the height of a capital H above the baseline in the original: the .fnt's base minus (the H glyph's yoffset plus the padding above it), measured on the glyph's opaque pixels.",
+      "shadow: the original's glyph carries a soft black shadow under it. dx, dy, sigma and alpha were FITTED to the visible shadow of twelve glyphs of each atlas (H A X o e d 2 8 a t P m): the glyph's own coverage moved by (dx, dy) and blurred by a Gaussian of sigma, at alpha of black.",
+      "chosen by eye (Step 237, the contact sheet against the original's 'Part 21'): embolden 0.6 of a pixel for Matura's slot, because Kurale Regular is far lighter than Matura MT Script Capitals Bold (0 keeps the face's own weight; the glyph grows a pixel at most on each side), and the Japanese face's reference ratio 1.0, the kanji for 'day' as tall as a capital.",
+      "Faces: Kurale (Matura's slot) is the nearest open-licence look to Matura's swash capitals; Noto Sans Bold stands in for Verdana Bold; Noto Sans JP and Noto Sans Arabic carry their scripts in both slots. Each face is sized so that its reference glyph is reference_height times the slot's cap height: the capital H for the Latin faces, the kanji for 'day' (U+65E5) for Japanese, the alef (U+0627) for Arabic."
+    ],
+    "folder": "fonts",
+    "faces": [
+      {
+        "id": "kurale",
+        "file": "Kurale-Regular.ttf",
+        "reference": "U+0048",
+        "reference_height": 1.0
+      },
+      {
+        "id": "noto_sans_bold",
+        "file": "NotoSans-Bold.ttf",
+        "reference": "U+0048",
+        "reference_height": 1.0
+      },
+      {
+        "id": "noto_sans_jp_bold",
+        "file": "NotoSansJP-Bold.ttf",
+        "reference": "U+65E5",
+        "reference_height": 1.0
+      },
+      {
+        "id": "noto_sans_arabic_bold",
+        "file": "NotoSansArabic-Bold.ttf",
+        "reference": "U+0627",
+        "reference_height": 1.0
+      }
+    ],
+    "scripts": [
+      {
+        "id": "japanese",
+        "ranges": ["3000-30FF", "31F0-31FF", "3400-4DBF", "4E00-9FFF", "FF00-FFEF"]
+      },
+      {
+        "id": "arabic",
+        "ranges": ["0600-06FF", "0750-077F", "FB50-FDFF", "FE70-FEFF"]
+      }
+    ],
+    "slots": [
+      {
+        "id": "matura",
+        "original_font": "Matura84_shadow",
+        "line_height": 84,
+        "base": 54,
+        "cap_height": 40,
+        "padding": [2, 8, 8, 2],
+        "spacing": [2, 2],
+        "page_size": 512,
+        "shadow": {"dx": 2.0, "dy": 2.0, "sigma": 2.0, "alpha": 0.99},
+        "embolden": 0.6,
+        "text_face": "kurale",
+        "script_faces": {"japanese": "noto_sans_jp_bold", "arabic": "noto_sans_arabic_bold"},
+        "_source": "Matura84_shadow.fnt: info padding=2,8,8,2 spacing=2,2; common lineHeight=84 base=54 scaleW=512; char id=72 (H) yoffset=12, top padding 2 -> cap 54-14=40. shadow: fitted."
+      },
+      {
+        "id": "verdana",
+        "original_font": "Verdana40_shadow",
+        "line_height": 40,
+        "base": 33,
+        "cap_height": 24,
+        "padding": [2, 6, 6, 2],
+        "spacing": [2, 2],
+        "page_size": 512,
+        "shadow": {"dx": 1.0, "dy": 1.0, "sigma": 1.25, "alpha": 0.99},
+        "embolden": 0.0,
+        "text_face": "noto_sans_bold",
+        "script_faces": {"japanese": "noto_sans_jp_bold", "arabic": "noto_sans_arabic_bold"},
+        "_source": "Verdana40_shadow.fnt: info padding=2,6,6,2 spacing=2,2; common lineHeight=40 base=33 scaleW=512; char id=72 (H) yoffset=7, top padding 2 -> cap 33-9=24. shadow: fitted."
+      }
+    ],
+    "picker_slot": "matura"
+  },
+  "languages": [
+    {
+      "code": "en",
+      "name_native": "English",
+      "rtl": false,
+      "font_set": "original"
+    },
+    {
+      "code": "de",
+      "name_native": "Deutsch",
+      "rtl": false,
+      "font_set": "original"
+    },
+    {
+      "code": "es",
+      "name_native": "Español",
+      "rtl": false,
+      "font_set": "original"
+    },
+    {
+      "code": "fr",
+      "name_native": "Français",
+      "rtl": false,
+      "font_set": "original"
+    },
+    {
+      "code": "it",
+      "name_native": "Italiano",
+      "rtl": false,
+      "font_set": "original"
+    },
+    {
+      "code": "pt",
+      "name_native": "Português",
+      "rtl": false,
+      "font_set": "original"
+    },
+    {
+      "code": "ru",
+      "name_native": "Русский",
+      "rtl": false,
+      "font_set": "generated"
+    },
+    {
+      "code": "tr",
+      "name_native": "Türkçe",
+      "rtl": false,
+      "font_set": "generated"
+    },
+    {
+      "code": "uk",
+      "name_native": "Українська",
+      "rtl": false,
+      "font_set": "generated"
+    },
+    {
+      "code": "ja",
+      "name_native": "日本語",
+      "rtl": false,
+      "font_set": "generated"
+    },
+    {
+      "code": "ar",
+      "name_native": "العربية",
+      "rtl": true,
+      "font_set": "generated"
+    }
+  ]
+}

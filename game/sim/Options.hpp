@@ -44,6 +44,7 @@ struct Rules {
         double unitsPerFontPx = 0.0;
         glm::dvec2 atScreen{0.5}; // the words' centre, as a fraction of the screen
         int alphaByte = 255;
+        double maxWidthUnits = 0.0; // 0: no limit (planning step 238; Hud::FitUnitsPerFontPx)
     } title;
 
     struct Tile {
@@ -54,6 +55,7 @@ struct Rules {
     glm::dvec2 tileSizeUnits{0.0};
     std::string wordFont;
     double wordUnitsPerFontPx = 0.0;
+    double wordMaxWidthUnits = 0.0; // 0: no limit
     glm::dvec2 wordAtUnits{0.0}; // the word's centre from the tile's top-left
     Colour idleFrame{};
     Colour chosenFrame{};
@@ -81,6 +83,7 @@ struct Rules {
         glm::dvec2 wordAtUnits{0.0}; // the word's centre from the button's top-left
         Colour frame{};
         int wordAlphaByte = 255;
+        double maxWidthUnits = 0.0; // 0: no limit
     } adjust;
 };
 
@@ -167,6 +170,7 @@ struct Piece {
     std::string words;
     std::string font;
     double unitsPerFontPx = 0.0;
+    double maxWidthUnits = 0.0;          // words: the slot's limit, 0 for none; the layer fits the words to it
     std::optional<Controls::Style> tile; // the tile a piece belongs to
     std::optional<Controls::Id> control;  // ThumbnailControl: which of the five
 };
@@ -174,9 +178,10 @@ struct Piece {
 // Every picture of the screen `stateMs` after its first frame, in drawing order: the credits' background, its back button (at its bounce
 // and press tint), the title, then each tile - frame, thumbnail base, the five controls, its word. The tile of `chosen` is lit; the widget
 // `held` (a touch went down on it and is still inside it) is drawn at the press tint. Where `adjustShown`, the adjustment button (its plate
-// and its word) comes last.
+// and its word) comes last. With a string table (planning step 238: every language but English) the title, the two tiles' words and the
+// adjustment button's word are the table's, shaped.
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,
                           const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held,
-                          bool adjustShown = false);
+                          bool adjustShown = false, const Strings::Table* strings = nullptr);
 
 } // namespace MagicPortals::Options

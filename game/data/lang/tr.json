@@ -1,0 +1,23 @@
+{
+  "_about": [
+    "The 14 short interface strings of one language, keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
+    "PROVENANCE: machine-translated by a language model from English, terms aligned with the Magic Rampage Companion app, reviewed by a second model pass, NOT by a native speaker.",
+    "Native review is open (planning step 236, LEFT FOR THE OWNER). A key missing from this file shows the English one, and a placeholder that differs from the English one is refused for that key."
+  ],
+  "strings": {
+    "hud.part": "Seviye {n}",
+    "dashboard.chapter": "Bölüm {n}",
+    "dashboard.new": "yeni!",
+    "selector.requires": "%{percent} gerekli",
+    "card.unlocked": "Başarı açıldı! {title}",
+    "card.locked_level": "Bu seviye kilitli!",
+    "credits.enhanced": "Asantee Games yapımı Magic Portals'ın geliştirilmiş sürümü",
+    "credits.engine": "geliştirilmiş sürüm ve Supersonic Engine",
+    "options.title": "Kontroller",
+    "options.modern": "Modern",
+    "options.classic": "Klasik",
+    "options.adjust": "Düğmeleri ayarla",
+    "hint.camera": "kamerayı kaydır",
+    "language.title": "Dil"
+  }
+}

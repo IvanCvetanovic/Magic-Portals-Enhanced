@@ -868,7 +868,13 @@ void WhatTheOptionsBlockRefuses() {
     Collect(root["options"], prefix, paths);
     CHECK_MSG(paths.size() > 30, "the block has " + std::to_string(paths.size()) + " keys");
     long refused = 0;
+    std::vector<Path> optionalLimits;
     for (const Path& path : paths) {
+        // The one OPTIONAL key of the block (planning step 238): a slot's `max_width_units`, the language fit. Absent is no limit; it is checked below.
+        if (path.back() == "max_width_units") {
+            optionalLimits.push_back(path);
+            continue;
+        }
         Controls::Rules c;
         Options::Rules o;
         std::string why;
@@ -877,7 +883,27 @@ void WhatTheOptionsBlockRefuses() {
         if (named) ++refused;
         CHECK_MSG(named, "removing " + Dotted(path) + " is refused, naming it: " + why);
     }
-    CHECK_MSG(refused == static_cast<long>(paths.size()), std::to_string(refused) + " keys refused of " + std::to_string(paths.size()));
+    CHECK_MSG(refused == static_cast<long>(paths.size() - optionalLimits.size()),
+              std::to_string(refused) + " keys refused of " + std::to_string(paths.size() - optionalLimits.size()));
+    // The three limits: removed, the block loads and the slot has none; a number that is not above zero, or no number, is refused, naming the key.
+    CHECK_MSG(optionalLimits.size() == 3u, "the block names three limits: title, tile and adjust_button: " + std::to_string(optionalLimits.size()));
+    for (const Path& path : optionalLimits) {
+        Controls::Rules c;
+        Options::Rules o;
+        std::string why;
+        CHECK_MSG(LoadBoth("limit-removed.json", Write(Edit(root, path, 0, std::nullopt)), c, o, why),
+                  "removing " + Dotted(path) + " leaves the block loadable: " + why);
+        CHECK_MSG(o.title.maxWidthUnits == (path[1] == "title" ? 0.0 : o.title.maxWidthUnits) && o.wordMaxWidthUnits == (path[1] == "tile" ? 0.0 : o.wordMaxWidthUnits) &&
+                      o.adjust.maxWidthUnits == (path[1] == "adjust_button" ? 0.0 : o.adjust.maxWidthUnits),
+                  Dotted(path) + " absent is no limit");
+        for (const Supersonic::Json::Value& bad : {Supersonic::Json::Value(0.0), Supersonic::Json::Value(-3.0), Supersonic::Json::Value(std::string("wide"))}) {
+            Controls::Rules cb;
+            Options::Rules ob;
+            std::string whyBad;
+            const bool loaded = LoadBoth("limit-bad.json", Write(Edit(root, path, 0, bad)), cb, ob, whyBad);
+            CHECK_MSG(!loaded && whyBad.find("max_width_units") != std::string::npos, Dotted(path) + " set to " + Write(bad) + " is refused, naming it: " + whyBad);
+        }
+    }
 
     // The table does not read the block: the same file without it is Controls::LoadRules' own business, which accepts it (so the block is the
     // Options reader's alone, and a typo in it cannot be the table's refusal).

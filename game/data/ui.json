@@ -1998,6 +1998,8 @@
       "warning": {
         "_source": "computeAccomplishmentWarningBlinkColor (365081..365279): alpha (t_ms mod 600) / 600 on the wall clock. MEASURED sawtooth 0.596 s (ui3 spec 0.7 I9).",
         "font": "Matura84_shadow.fnt", "units_per_font_px": 0.25, "centre_units": [46, 140],
+        "max_width_units": 91,
+        "_max_width_source": "PORT (planning step 238): the language fit. The word is centred 46 units into an icon that is 84 wide and its neighbour touches it, and the English 'requires 60%' (Matura84 advances x 0.25 = 90.75) already spills 7 units over: 91 is that width rounded up, so English is not touched and no translation is wider.",
         "words": "requires 60%", "sawtooth_ms": 600
       },
       "counter": {
@@ -2141,7 +2143,8 @@
         "PLACEMENT: PORT, _guess: the lines are centred in the 256-unit column under the Ethanon logo (which is centred), 40 units under its last row as the picture's own gap",
         "between its two logos; `height_units` is the strip's growth, so the loop is (512 + 212 + 256) / 22.7556 = 43.07 s instead of 33.75 s. Sizes are chosen so that the name",
         "is about as tall as the picture's own names (cap height about 19-20 units). Retune after a capture.",
-        "centre_y_units is measured from the strip's top, in strip units; centre_x_units from the column's left edge."
+        "centre_y_units is measured from the strip's top, in strip units; centre_x_units from the column's left edge.",
+        "LANGUAGES (planning step 238): a line with a text_key is a sentence the string table translates (game/data/lang), its `words` the English it is laid out with and the default of a table-less caller; the names, the brand and the address have none and every language keeps them. max_width_units 250 is the column's 256 less a margin of 3 units a side (the English lines are 202.6 and 167.8 wide)."
       ],
       "_guess": true,
       "height_units": 212,
@@ -2149,9 +2152,9 @@
       "ink_byte": 0,
       "lines": [
         {"words": "Magic Portals Enhanced", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.26, "centre_y_units": 560},
-        {"words": "an enhanced version of Magic Portals by Asantee Games", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.125, "centre_y_units": 580},
+        {"words": "an enhanced version of Magic Portals by Asantee Games", "text_key": "credits.enhanced", "max_width_units": 250, "font": "Matura84_shadow.fnt", "units_per_font_px": 0.125, "centre_y_units": 580},
         {"words": "Ivan Cvetanovic", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.36, "centre_y_units": 618},
-        {"words": "the enhanced version and the Supersonic Engine", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.13, "centre_y_units": 642},
+        {"words": "the enhanced version and the Supersonic Engine", "text_key": "credits.engine", "max_width_units": 250, "font": "Matura84_shadow.fnt", "units_per_font_px": 0.13, "centre_y_units": 642},
         {"words": "Supersonic Engine", "font": "Matura84_shadow.fnt", "units_per_font_px": 0.30, "centre_y_units": 684},
         {"words": "github.com/IvanCvetanovic/Supersonic-Engine", "font": "Verdana40_shadow.fnt", "units_per_font_px": 0.20, "centre_y_units": 706}
       ]
@@ -2244,7 +2247,9 @@
       "font": "Matura84_shadow.fnt",
       "units_per_font_px": 0.5,
       "prefix": "Chapter ",
-      "centre_units": [132, 32]
+      "centre_units": [132, 32],
+      "max_width_units": 200,
+      "_max_width_source": "PORT (planning step 238): the language fit. The header is centred 132 units in from the icon column's edge (61.6 at the narrowest view, 5:4 = 320 wide), so it has 126 units on its right there and 132 on its left: 200 leaves every language a margin, and the widest English header, 'Chapter 4' at 138.5, is far under it."
     },
     "title": {
       "_source": [
@@ -2256,7 +2261,9 @@
       ],
       "font": "Verdana40_shadow.fnt",
       "units_per_font_px": 0.375,
-      "offset_units": [9, 8]
+      "offset_units": [9, 8],
+      "max_width_units": 171,
+      "_max_width_source": "PORT (planning step 238): the language fit. The title starts 9 units into the bar and 'new!' stands 182 in on the same line, so the title ends by 173 at the latest; 171 is the widest English title, the longest of the 82 titles (id 75) at 170.25 (Verdana40 advances x 0.375), rounded up: English is not touched and a longer translation is scaled to it."
     },
     "description": {
       "_source": [
@@ -2266,7 +2273,9 @@
       ],
       "font": "Verdana40_shadow.fnt",
       "units_per_font_px": 0.3,
-      "offset_units": [13, 24]
+      "offset_units": [13, 24],
+      "max_width_units": 207,
+      "_max_width_source": "PORT (planning step 238): the language fit. The bar is 234.6 units wide at 16:9 (four row pitches; 196.8 at 5:4, where the widest English description line (id 54) at 206.4 (Verdana40 advances x 0.3) already runs past it) and the text starts 13 in: 207 is that width rounded up, so English is not touched and a longer translation is scaled to it."
     },
     "points": {
       "_source": [
@@ -2289,6 +2298,8 @@
       "font": "Verdana40_shadow.fnt",
       "units_per_font_px": 0.3,
       "offset_units": [182, 6],
+      "max_width_units": 52,
+      "_max_width_source": "PORT (planning step 238): the language fit. The label stands 182 units into a bar that is 234.6 wide at 16:9, so 52 remain; English 'new!' is 27.3.",
       "text": "new!",
       "rgb_bytes": [100, 255, 100],
       "alpha_floor_byte": 127,
