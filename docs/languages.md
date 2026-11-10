@@ -133,7 +133,11 @@ two credits lines) are this port's own words.
   2 shapes, 2340 x 1080 and 1280 x 1024). At 5:4 German, Spanish, French, Italian, Portuguese, Russian and Ukrainian overflow: the achievements' descriptions on the dashboard run past
   the bar to the edge of the screen (the fit width of 207 units assumes a bar that is not there at 5:4); the *new!* label is clipped in Spanish and Italian; the pause's title (`Niveau 1/32`,
   `Livello`, `Nivel`, `Seviye`, ...) touches or overlaps the golden-score plaque. English touches the edge once at 5:4 as well (documented). At 20:9
-  everything fits. The picker's grid also assumes a screen no narrower than 5:4. This is a known limit and is not fixed.
+  everything fits, and so it did at 16:9 (1280 x 720) when the release audit of the release that brought the languages clicked through the options, the picker, the credits strip, the chapter select, the whole
+  achievements list, the pause menu and 1-21's hint in all eleven languages on the shipped Linux build: no text past the list's bar, the plaque or another box. That look did not
+  reach the unlock popup, the game-finished card or Adjust controls, and no shape between 16:9 and 5:4. The picker's grid also assumes a screen no narrower than 5:4. This is a known limit and is not fixed.
+* **In Arabic a locked chapter's "requires 60%" is drawn with the percent sign left of the number (`%60`).** Found by the release audit of the release that brought the languages (a missing case of the
+  bidirectional rule for a percent sign next to digits in `ArabicShaping`); cosmetic, one label (`LANG-5`).
 * **A right-to-left hint can run under the right walk arrow.** 1-21's hint, mirrored to the right edge in Arabic, can pass under the right walk arrow at the larger sizes of the modern
   controls. Cosmetic, one hint (`LANG-7`).
 * **After a failed picker bake the globe does nothing.** If the picker's atlas cannot be made, the globe stays drawn and stays clickable, and the tap does nothing (`LANG-7`).
@@ -141,7 +145,7 @@ two credits lines) are this port's own words.
   did not read (`LANG-7`).
 * **Wording a native reader should look at first** (noted by the verification round of 2026-11-10, whose reading was not a native speaker's; `LANG-1`): Russian *new!* (a short form, `Nov!` transliterated) and *Modern*; Japanese *new!*
   ends in an ASCII `!` where the other Japanese strings use full-width marks, and the credits line for the engine adds a word the English does not have; Italian *requires N%* has `il`
-  written in (wrong for a number such as 80); French has no space before `!` and `%`; Arabic mixes the indefinite and the definite form and has a doubled *min*.
+  written in (wrong for a number such as 80); French has no space before `!` and `%`; Arabic mixes the indefinite and the definite form and has a doubled *min*; Italian leaves the achievement title *Like a Rolling Stone* in English (it may be a song title on purpose).
 * **Packaging hardening that was not done** (`LANG-8`). `tools/package/closure.py` ships an overlay `achievements.<code>.json` only if it is there: a release made from an incomplete
   `out/data` carries English-only achievements for that language and does not say so (the release recipe, `docs/releasing.md` step 5, now says to check the ten overlays). CI runs no
   test of `tools/l10n` or `tools/asbc`. The overlays' names are "two lowercase letters" in the closure's pattern, not derived from `languages.json`.
