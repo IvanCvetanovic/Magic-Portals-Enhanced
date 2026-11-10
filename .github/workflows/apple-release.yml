@@ -1,0 +1,223 @@
+name: Apple release archives
+
+# The Mac and iPhone DOWNLOADS of a release, made on a GitHub macOS machine (planning step 241). WRITTEN, NEVER RUN before the dispatch that makes the downloads of the release it was written
+# for: until that run is read, nothing in this file is known to work on a runner, and nothing here says that it does.
+#
+# WHY THIS FILE EXISTS. Every other release archive is assembled on the owner's PC from a program that release.yml built and the owner's content package (docs/releasing.md). A macOS
+# app cannot be: the game's data goes INSIDE the app, a signature covers every file of the app, and the PC has no codesign, so the app has to be signed again once the data is in
+# (docs/apple.md section 7, route 1: "a Mac assembles and signs it", here a hosted one). This workflow does exactly that, and nothing else, and it fails unless Apple's own
+# `codesign --verify --deep --strict` is satisfied by the app unpacked from the finished zip.
+#
+# NO GAME DATA IN THIS REPOSITORY, STILL. The data is taken from the release that is ALREADY PUBLISHED: the content folder of its Windows archive, which is the content package
+# itself (the same 923 files), fetched from the address the dispatch names and checked against the SHA-256 the dispatch names BEFORE anything is unpacked. So it is first run after
+# the release is published and sends nothing anywhere that the release has not already published. It reads no secret and uses no token: the shells are built in this very run, by
+# apple.yml, called as release.yml calls it, and downloaded as artifacts of this run.
+#
+# What it makes: MagicPortals-macOS.zip (the universal app, signed again, with the game inside) and MagicPortals-iOS.ipa (the device shell with the game at the root of the bundle;
+# a sideloading tool signs it again with the player's own Apple ID, so nothing here signs it), a SHA256SUMS.txt, and the logs. The owner (or the session that dispatched it) downloads
+# the artifact and attaches the two files to the release; this workflow creates no release and no tag and writes nothing outside its artifacts.
+#
+# What it RUNS: after the signing it starts the game from the unpacked app, with the data inside, on the runner (one small level, in English and in four other languages, 120 fixed
+# ticks each, one picture each, with a wall limit), and checks that every run finished clean, drew something and logged no refusal. That is a Mac of GitHub's, with a virtual
+# graphics card: it is not a player's Mac, and nothing it prints says how the game looks or sounds on one. The pictures are checked and thrown away; none is uploaded.
+#
+# DISPATCH ONLY: Actions -> Apple release archives -> Run workflow, with the version, the address of the published Windows archive and its SHA-256.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The release version, three numbers such as 1.2.3 (it must be the one project(MagicPortals VERSION ...) defines)
+        type: string
+        required: true
+      content_url:
+        description: The address of the PUBLISHED Windows archive of this version (its content folder is the content package)
+        type: string
+        required: true
+      content_sha256:
+        description: The SHA-256 of that archive, 64 hex digits, checked before it is unpacked
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    name: The version is the project's
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      REQUESTED: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Compare with the one definition
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          actual="$(python3 tools/package/version.py)"
+          echo "requested: $REQUESTED" | tee "$RUNNER_TEMP/logs/version.log"
+          echo "the project's one definition: $actual" | tee -a "$RUNNER_TEMP/logs/version.log"
+          if [ "$REQUESTED" != "$actual" ]; then echo "::error::the version asked for ($REQUESTED) is not the project's ($actual): change the one definition first (docs/packaging.md section 6)"; exit 1; fi
+          python3 tools/package/check_version.py 2>&1 | tee -a "$RUNNER_TEMP/logs/version.log"
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: version-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs
+
+  # The two shells are apple.yml's jobs, called as they are (one place for the macOS and iOS recipes); the macOS one also runs the suites, as in release.yml.
+  macos-shell:
+    name: Apple - macOS shell
+    needs: [version]
+    uses: ./.github/workflows/apple.yml
+    with:
+      job: macos
+
+  ios-shell:
+    name: Apple - iOS device shell
+    needs: [version]
+    uses: ./.github/workflows/apple.yml
+    with:
+      job: ios-device
+
+  assemble:
+    name: Assemble, sign again, check
+    needs: [version, macos-shell, ios-shell]
+    if: ${{ !cancelled() }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      RESULT_VERSION: ${{ needs.version.result }}
+      RESULT_MACOS: ${{ needs.macos-shell.result }}
+      RESULT_IOS: ${{ needs.ios-shell.result }}
+      CONTENT_URL: ${{ inputs.content_url }}
+      CONTENT_SHA256: ${{ inputs.content_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Folders
+        run: mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/final" "$RUNNER_TEMP/assembled" "$RUNNER_TEMP/seal" "$RUNNER_TEMP/again" "$RUNNER_TEMP/pictures"
+      - name: The jobs before this one succeeded
+        run: |
+          echo "version: $RESULT_VERSION, macos-shell: $RESULT_MACOS, ios-shell: $RESULT_IOS" | tee "$RUNNER_TEMP/logs/results.log"
+          test "$RESULT_VERSION" = success && test "$RESULT_MACOS" = success && test "$RESULT_IOS" = success
+      - name: Download the two shells
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/in
+      - name: What was downloaded
+        run: find "$RUNNER_TEMP/in" -type f | sort | tee "$RUNNER_TEMP/logs/downloaded.txt"
+
+      # The content package is the content folder of the published Windows archive. The archive is checked against the sum named in the dispatch before it is unpacked, and the package
+      # against its own manifest after.
+      - name: Fetch and check the content package
+        run: |
+          case "$CONTENT_SHA256" in (*[!0-9a-f]*|"") echo "::error::content_sha256 is not lowercase hex"; exit 1;; esac
+          test "${#CONTENT_SHA256}" = 64
+          curl -fsSL --retry 3 --max-time 600 -o "$RUNNER_TEMP/windows.zip" "$CONTENT_URL"
+          echo "$CONTENT_SHA256  $RUNNER_TEMP/windows.zip" | shasum -a 256 -c - | tee "$RUNNER_TEMP/logs/content-archive.log"
+          mkdir -p "$RUNNER_TEMP/windows"
+          unzip -q "$RUNNER_TEMP/windows.zip" -d "$RUNNER_TEMP/windows"
+          content="$(ls -d "$RUNNER_TEMP"/windows/*/content)"
+          echo "content package: $content"
+          python3 tools/package/package.py verify "$content" 2>&1 | tee "$RUNNER_TEMP/logs/content-verify.log"
+          echo "CONTENT=$content" >> "$GITHUB_ENV"
+
+      - name: Assemble the macOS archive
+        run: |
+          python3 tools/package/release.py assemble --platform macos --shell "$RUNNER_TEMP/in/macos-shell/MagicPortals-macOS-shell.zip" \
+            --content "$CONTENT" --out "$RUNNER_TEMP/assembled/macos" --resealed 2>&1 | tee "$RUNNER_TEMP/logs/assemble-macos.log"
+
+      # The signature: made again over the whole app now that the data is in, checked on the app in place, then the app is zipped as make_app.sh zips it (ditto keeps the executable
+      # bit and the seal), unpacked again as a player's Finder would unpack it, and checked once more, strictly. The files are the same before and after, the seal's own folder apart.
+      - name: Sign the app again and check it
+        run: |
+          plain="$(ls "$RUNNER_TEMP"/assembled/macos/MagicPortals-*-macos-universal.zip)"
+          name="$(basename "$plain")"
+          echo "ARCHIVE_NAME=$name" >> "$GITHUB_ENV"
+          ditto -x -k "$plain" "$RUNNER_TEMP/seal"
+          app="$RUNNER_TEMP/seal/MagicPortals/MagicPortals.app"
+          echo "== before: the seal as the packager left it (expected to be broken)" | tee "$RUNNER_TEMP/logs/codesign.log"
+          codesign --verify --deep --strict --verbose=2 "$app" >> "$RUNNER_TEMP/logs/codesign.log" 2>&1 || echo "(verify said no, as expected)" | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          codesign --force --sign - --timestamp=none "$app" 2>&1 | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          codesign --verify --deep --strict --verbose=2 "$app" 2>&1 | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          ditto -c -k --keepParent --norsrc --noextattr --noqtn --noacl "$RUNNER_TEMP/seal/MagicPortals" "$RUNNER_TEMP/final/$name"
+          ditto -x -k "$RUNNER_TEMP/final/$name" "$RUNNER_TEMP/again"
+          again="$RUNNER_TEMP/again/MagicPortals/MagicPortals.app"
+          echo "== after: unpacked from the finished zip" | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          codesign --verify --deep --strict --verbose=2 "$again" 2>&1 | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          codesign --display --verbose=2 "$again" 2>&1 | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          lipo -archs "$again/Contents/MacOS/MagicPortals" | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          test -x "$again/Contents/MacOS/MagicPortals"
+          plutil -lint "$again/Contents/Info.plist"
+          unzip -Z1 "$plain" | grep -v '_CodeSignature' | sed 's|/$||' | sort > "$RUNNER_TEMP/logs/names-before.txt"
+          unzip -Z1 "$RUNNER_TEMP/final/$name" | grep -v '_CodeSignature' | sed 's|/$||' | sort > "$RUNNER_TEMP/logs/names-after.txt"
+          diff "$RUNNER_TEMP/logs/names-before.txt" "$RUNNER_TEMP/logs/names-after.txt"
+          echo "the same $(wc -l < "$RUNNER_TEMP/logs/names-after.txt" | tr -d ' ') names before and after, the seal's folder apart" | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          echo "== what Gatekeeper says of an ad-hoc app (information; expected: rejected, it names no developer)" | tee -a "$RUNNER_TEMP/logs/codesign.log"
+          spctl --assess --type execute --verbose=4 "$again" >> "$RUNNER_TEMP/logs/codesign.log" 2>&1 || echo "(spctl exit code $?)" | tee -a "$RUNNER_TEMP/logs/codesign.log"
+
+      # The game from the finished app, with its data inside, on the runner. One small level in English and in four more languages, 120 fixed ticks, one picture each, a wall limit on
+      # every launch (the minutes are paid). A run is judged by its log and its picture, not by its exit code alone: it must say it finished clean, must name no refusal and no unreadable
+      # file, and must have drawn something. The pictures hold the original's art: they are checked here and never uploaded.
+      - name: Start the finished app with the game inside
+        run: |
+          exe="$RUNNER_TEMP/again/MagicPortals/MagicPortals.app/Contents/MacOS/MagicPortals"
+          cd "$RUNNER_TEMP"
+          for lang in en de ru ja ar; do
+            rc=0
+            perl -e 'alarm shift; exec @ARGV' 240 \
+              "$exe" --level level0 --window 1280x720 --fixed-step --frames 120 --lang "$lang" --screenshot "$RUNNER_TEMP/pictures/level0-$lang.png" \
+              > "$RUNNER_TEMP/logs/run-$lang.log" 2>&1 || rc=$?
+            echo "== $lang: exit code $rc"
+            tail -4 "$RUNNER_TEMP/logs/run-$lang.log"
+            test "$rc" = 0
+            grep -q 'finished: clean' "$RUNNER_TEMP/logs/run-$lang.log"
+            if grep -E 'refused|cannot read|cannot start' "$RUNNER_TEMP/logs/run-$lang.log"; then echo "::error::the $lang run logged a refusal"; exit 1; fi
+            python3 "$GITHUB_WORKSPACE/tools/apple/check_png.py" "$RUNNER_TEMP/pictures/level0-$lang.png" --min-size 640x360
+          done
+          rm -rf "$RUNNER_TEMP/pictures"
+
+      - name: Assemble the iOS archive
+        run: |
+          python3 tools/package/release.py assemble --platform ios --shell "$RUNNER_TEMP/in/ios-device-shell/MagicPortals-iOS-shell.ipa" \
+            --content "$CONTENT" --out "$RUNNER_TEMP/assembled/ios" 2>&1 | tee "$RUNNER_TEMP/logs/assemble-ios.log"
+          ipa="$(ls "$RUNNER_TEMP"/assembled/ios/MagicPortals-*-ios-arm64.ipa)"
+          unzip -tq "$ipa" | tee "$RUNNER_TEMP/logs/ipa-test.log"
+          cp "$ipa" "$RUNNER_TEMP/final/$(basename "$ipa")"
+
+      # The fixed names the release page uses, and the sums of what is uploaded.
+      - name: Name and sum
+        run: |
+          cd "$RUNNER_TEMP/final"
+          mv "$ARCHIVE_NAME" MagicPortals-macOS.zip
+          mv MagicPortals-*-ios-arm64.ipa MagicPortals-iOS.ipa
+          shasum -a 256 MagicPortals-macOS.zip MagicPortals-iOS.ipa | tee SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+          ls -l
+
+      - name: Upload the archives
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: apple-release
+          retention-days: 30
+          if-no-files-found: error
+          path: ${{ runner.temp }}/final
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: apple-release-logs
+          retention-days: 7
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/logs

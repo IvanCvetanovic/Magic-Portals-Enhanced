@@ -859,6 +859,7 @@ class TheWindowsArchive(ArchiveCase):
         texts = [rl.playing_windows('1.0.0', 'x64', [], True, False), rl.playing_windows('1.0.0', 'x64', ['MSVCP140.dll'], False, True),
                  rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38)}, True, False), rl.playing_linux('1.0.0', 'x86_64', {}, False, False),
                  rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True),
+                 rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True, True),
                  rl.intro_text(rl.MACOS, '1.0.0', 'universal', False), rl.intro_text(rl.IOS, '1.0.0', 'arm64', True), rl.developer_note(rl.Report('windows'))]
         words = ('permission', 'permitted', 'grant', phrase('rights', 'holder'), phrase('allowed', 'to', 'ship'), phrase('may', 'be', 'shipped'), phrase('may', 'ship'), 'asantee',
                  'original game', phrase('may', 'leave'), phrase('may', 'travel'), phrase('whether', 'the', 'data'))
@@ -889,7 +890,8 @@ class TheWindowsArchive(ArchiveCase):
         # an archive's text must be true of ANY program it is made for: how a build was made (its distribution, its compiler) is not read from the program, so it is not said
         texts = [rl.playing_windows('1.0.0', 'x64', [], True, False), rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38), 'GLIBCXX': (3, 4, 32)}, True, False),
                  rl.playing_linux('1.0.0', 'x86_64', {}, True, False), rl.intro_text(rl.MACOS, '1.0.0', 'universal', False), rl.intro_text(rl.IOS, '1.0.0', 'arm64', False),
-                 rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True)]
+                 rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True),
+                 rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True, True)]
         for text in texts:
             for phrase in ('Ubuntu 24.04', 'g++', 'GCC', 'built on', 'was built', 'were built', 'built with', 'notarised and not signed'):
                 self.assertNotIn(phrase, text)
@@ -1370,6 +1372,40 @@ class TheAppleLayouts(ArchiveCase):
         for invented in ('notarytool', 'productsign', 'altool', 'stapler', 'spctl', 'xattr', 'Developer ID', 'fastlane'):
             self.assertNotIn(invented, text, 'only the routes docs/apple.md section 7 names')
         self.assertIn('This text is also in the archive', out)
+
+    def test_a_resealed_mac_archive_says_it_was_signed_again_and_says_no_more_than_was_checked(self):
+        # --resealed is what .github/workflows/apple-release.yml passes: it signs the app again on a Mac and fails unless codesign is satisfied, so the archive may say the seal was remade
+        code, out, err = self.apple('macos', self.shell('macos'), '--resealed')
+        self.assertEqual(code, 0, err)
+        archive = os.path.join(self.out, 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION)
+        with zipfile.ZipFile(archive) as z:
+            text = z.read('MagicPortals/READ ME FIRST.txt').decode('utf-8')
+        for word in ('SIGNED AGAIN AFTER THE DATA WENT IN', 'codesign --force --sign - --timestamp=none', 'codesign --verify --deep --strict --verbose=2', 'WHAT THIS IS NOT',
+                     'not notarised', 'Open Anyway', 'xattr -dr com.apple.quarantine MagicPortals.app', 'None of this has been tried with this app', 'real Mac',
+                     'macOS 13.3 or newer', 'Contents/Resources/GameData'):
+            self.assertIn(word, text, word)
+            self.assertIn(word, out, 'the same words are printed: ' + word) if word == 'WHAT THIS IS NOT' else None
+        for gone in ('INVALID', 'SEAL IS NO LONGER VALID', 'CANNOT sign', 'is damaged', "the owner's decision", 'WITHOUT the game'):
+            self.assertNotIn(gone, text, gone)
+        # the words of the list that no archive text may hold (the same ones the other Apple texts are held to)
+        for word in ('permission', 'permitted', 'grant', 'asantee', 'original game', 'built on', 'was built', 'were built', 'built with', 'Ubuntu', 'g++', 'GCC'):
+            self.assertNotIn(word, text.lower() if word.islower() else text, word)
+        # the same bytes otherwise: the archive is the one the plain assembly writes, the READ ME apart
+        plain = os.path.join(self.path('plain'), 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION)
+        code2, _, err2 = self.apple('macos', self.shell('macos'), out=self.path('plain'))
+        self.assertEqual(code2, 0, err2)
+        a, b = rl.read_archive(archive), rl.read_archive(plain)
+        self.assertEqual(sorted(a), sorted(b))
+        self.assertEqual([n for n in a if a[n][0] != b[n][0]], ['MagicPortals/READ ME FIRST.txt'])
+
+    def test_resealed_is_refused_for_ios_and_for_a_shell_with_no_data(self):
+        code, _, err = self.apple('ios', self.shell('ios'), '--resealed')
+        self.assertEqual(code, 2)
+        self.assertIn('--resealed is for a macos archive with the game in it', err)
+        code, _, err = self.apple('macos', self.shell('macos'), '--resealed', content=False)
+        self.assertEqual(code, 2)
+        self.assertIn('--resealed is for a macos archive with the game in it', err)
+        self.assertFalse(os.path.exists(os.path.join(self.out, 'MagicPortals-%s-macos-universal.zip' % OTHER_VERSION)), 'nothing is written on a refusal')
 
     def test_the_ios_data_goes_to_the_root_of_the_bundle_and_the_ipa_starts_with_payload(self):
         code, out, err = self.apple('ios', self.shell('ios'))

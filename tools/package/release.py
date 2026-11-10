@@ -1099,8 +1099,26 @@ def developer_note(report):
             'carries -dev, and a release folder\'s sums refuse it. check-program said:\n\n' + '\n'.join('  - ' + t for t in report.developer()) + '\n')
 
 
-def seal_text(platform, version, with_data_dir, notices_beside):
-    """What the archive says about the data and the seal. Written into the archive, and printed. Names only what docs/apple.md section 7 names."""
+def seal_text(platform, version, with_data_dir, notices_beside, resealed=False):
+    """What the archive says about the data and the seal. Written into the archive, and printed. Names only what docs/apple.md section 7 names.
+
+    resealed is the macOS archive that .github/workflows/apple-release.yml writes: the workflow signs the app again on a Mac, after this tool has put the data in, and fails
+    unless `codesign --verify --deep --strict` is satisfied, so its archive says that instead of saying the seal is broken. It is given only by --resealed."""
+    if platform == MACOS and resealed:
+        return ('THE GAME\'S DATA IS IN THIS APP, AND THE APP WAS SIGNED AGAIN AFTER THE DATA WENT IN\n\n'
+                'tools/apple/make_app.sh signs MagicPortals.app ad hoc as the LAST step of making the shell. A signature covers every file in the bundle, and the packager then added the\n'
+                'folder %s to it, which breaks that seal. This archive was made by .github/workflows/apple-release.yml on a GitHub macOS machine, which signed the app ad hoc a second\n'
+                'time ("codesign --force --sign - --timestamp=none") and then ran "codesign --verify --deep --strict --verbose=2" on it, unpacked from the zip, and the job fails unless\n'
+                'that is satisfied. That is all that was checked.\n\n'
+                'WHAT THIS IS NOT. An ad-hoc signature names no developer, and the app is not notarised by Apple, so macOS stops it the first time with a message that it cannot check\n'
+                'the app for malicious software. The usual way past that for an app from outside the App Store: on macOS 15, double-click the app, dismiss the message, open System\n'
+                'Settings, Privacy & Security, find the line about MagicPortals and choose Open Anyway; on macOS 13 and 14, hold Control, click the app, choose Open, then Open. In the\n'
+                'Terminal, "xattr -dr com.apple.quarantine MagicPortals.app" takes off the mark that makes macOS ask. None of this has been tried with this app. The program (without the\n'
+                'game) has started one small test level on a GitHub macOS machine, on a virtual graphics card; nobody has started this app, with the game in it, on a real Mac, so a\n'
+                'first frame, a level and the sound are unseen. It needs macOS 13.3 or newer, and it is one file for Apple-silicon and Intel Macs (the Intel half has run only under\n'
+                'Rosetta on that GitHub machine).\n\n'
+                'The LICENSE and NOTICE.md beside the app are this archive\'s licence and notices; the bundle\'s own Resources/licenses folder holds them too, with the engine\'s.\n'
+                % with_data_dir)
     if platform == MACOS:
         return ('THE GAME\'S DATA IS IN THIS APP, AND THE APP\'S SEAL IS NO LONGER VALID\n\n'
                 'tools/apple/make_app.sh signs MagicPortals.app ad hoc as the LAST step of making the shell ("codesign --force --sign - --timestamp=none"). A signature covers\n'
@@ -1326,6 +1344,9 @@ def assemble_apple(args):
     version = vs.read_version(repo)
     if args.program or args.vc_redist or args.no_data or args.max_glibc:
         raise ReleaseError('--program, --vc-redist, --no-data and --max-glibc are for windows and linux; a %s archive is made of --shell (and --content)' % platform)
+    resealed = bool(getattr(args, 'resealed', False))
+    if resealed and (platform != MACOS or not args.content):
+        raise ReleaseError('--resealed is for a macos archive with the game in it (--content): it is what .github/workflows/apple-release.yml says, which signs the app again after this tool has run')
     if not args.shell:
         raise ReleaseError('give --shell <the zip or ipa make_app.sh made, or the folder it wrote>')
     shell_path = os.path.abspath(args.shell)
@@ -1391,7 +1412,7 @@ def assemble_apple(args):
         for n, d in sorted(notices.items()):
             entries.append((shell.top + n, d, FILE_MODE))
         text = (intro_text(platform, version, report.arch if platform == MACOS else 'arm64', shell.simulator)
-                + seal_text(platform, version, GAME_DATA_IN_BUNDLE[platform], bool(notices)))
+                + seal_text(platform, version, GAME_DATA_IN_BUNDLE[platform], bool(notices), resealed))
         entries.append((shell.top + READ_ME_FILE, text.encode('utf-8'), FILE_MODE))
     if dev:
         entries.append((shell.top + DEV_MARKER_FILE, developer_note(report).encode('utf-8'), FILE_MODE))
@@ -1417,7 +1438,7 @@ def assemble_apple(args):
                                                                                                                    shell.data_dir))
     print('  %s' % ('no %s written for a developer\'s archive' % SUMS_FILE if dev else '%s: %s' % (SUMS_FILE, ', '.join(sums))))
     print('')
-    for line in seal_text(platform, version, GAME_DATA_IN_BUNDLE[platform], bool(notices)).rstrip().split('\n'):
+    for line in seal_text(platform, version, GAME_DATA_IN_BUNDLE[platform], bool(notices), resealed).rstrip().split('\n'):
         print('  ' + line)
     print('  (This text is also in the archive, as %s.)' % READ_ME_FILE)
     return 0
@@ -1564,6 +1585,7 @@ def build_parser():
     a.add_argument('--allow-dev', action='store_true', help='accept a developer\'s build for a smoke check: DEVELOPER BUILD is written into the archive, whose name carries -dev')
     a.add_argument('--also-forbid', action='append', metavar='TEXT')
     a.add_argument('--max-glibc', metavar='X.Y', help='linux: refuse a program that asks the system for a glibc newer than this (as check-program --max-glibc)')
+    a.add_argument('--resealed', action='store_true', help='macos with --content: the READ ME says the app is signed again after the data went in (only .github/workflows/apple-release.yml, which does it on a Mac and fails unless codesign accepts the result, passes this)')
     a.add_argument('--repo')
     a.set_defaults(func=cmd_assemble)
 

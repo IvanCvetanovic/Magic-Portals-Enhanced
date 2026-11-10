@@ -54,6 +54,10 @@ DISPATCH, CALL = 'workflow_dispatch', 'workflow_call'
 REUSABLE = {'apple.yml'}  # called by release.yml: the macOS and iOS recipes are written once
 # Job -> the jobs it waits for. A job not named here waits for nothing; a file not named here has no job that waits.
 NEEDS = {
+    # the Mac and iPhone downloads (planning step 241): the two shells are apple.yml called, and the one job that assembles, signs again and checks waits for both
+    'apple-release.yml': {
+        'macos-shell': ['version'], 'ios-shell': ['version'], 'assemble': ['ios-shell', 'macos-shell', 'version'],
+    },
     'release.yml': {
         'linux': ['version'], 'windows': ['version'], 'android': ['version'], 'apple-macos': ['version'], 'apple-ios': ['version'],
         'collect': ['android', 'apple-ios', 'apple-macos', 'linux', 'version', 'windows'],

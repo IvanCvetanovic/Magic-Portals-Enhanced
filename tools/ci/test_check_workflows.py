@@ -155,7 +155,7 @@ class TheRealFiles(unittest.TestCase):
     @requires_yaml
     def test_every_workflow_of_the_repository_keeps_every_rule(self):
         results = cw.check_folder(WORKFLOWS)
-        self.assertEqual(sorted(results), ['android-emulator.yml', 'apple.yml', 'ci.yml', 'release.yml'])
+        self.assertEqual(sorted(results), ['android-emulator.yml', 'apple-release.yml', 'apple.yml', 'ci.yml', 'release.yml'])
         for name, problems in results.items():
             self.assertEqual([str(p) for p in problems], [], name)
 
