@@ -257,8 +257,8 @@ void runTests() {
 } // namespace
 
 // The floor is the suite's real one (40) where the original's fonts are, and the tables' half alone (it runs 14 checks) where they are not. CI has no copy of
-// the original, so the fit of the translations skips itself and says so; the harness's floor would call that skip a red run (the first release run of 0.1.7
-// failed on exactly that, macOS: "ran 14 checks, expected at least 40"). The tables' half is still held to its own floor, so a suite that quietly ran
+// the original, so the fit of the translations skips itself and says so; the harness's floor would call that skip a red run (the first release run that carried
+// the languages failed on exactly that, in the macOS job: "ran 14 checks, expected at least 40"). The tables' half is still held to its own floor, so a suite that quietly ran
 // nothing is still red in both places.
 static int mpSuiteEntry(int, char**) {
     runTests();
