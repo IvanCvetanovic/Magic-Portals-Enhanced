@@ -5117,3 +5117,22 @@ again, which is not a thing a quiet afternoon fixes.
 **Numbers:** 2 dispatches (1 failed, 1 green, 10 min 30 s), 2 files (35.9 + 29.1 MB), 988 file names before and after the second signing, 5 starts of the signed app, 923 game files byte-equal in both archives, 428 + 338 + 144 + 20 tests of the tools.
 **Inferred mood:** a guess - the owner wanted the Mac and iPhone buttons to stop saying "unavailable" and asked for it in passing, mid-release.
 **Where it stands / next:** v0.1.7 has eight files and the notes are current. Next: an independent read of the notes, README and docs for claims nobody checked (and fixes), then the memory file; nothing else is queued.
+
+### 2026-11-11 00:06 - Session 77, addendum 3: the published Apple text reviewed by four independent lenses and corrected - Step 241
+
+**Built:** nothing new in the game. After the Mac and iPhone files were attached and described, a workflow of four read-only lenses (`wf_b6159b3b-778`: the live notes sentence by sentence, the README and the docs, the two archives re-downloaded without a login and parsed byte by byte, a critic) read everything that was public. All four said GO_WITH_FIXES; none found a harm. The fixes were made at once: the release notes (`gh release edit`), the README's front and platform rows and its two buttons' labels ("macOS (unsigned)", "iPhone & iPad (sideload)"), the install guide, six more docs, the Step 241 record, `apple-release.yml` (a guard and its header), the pipe-race test's pattern, and the READ ME texts that `release.py` writes (for the next release).
+
+**Broke / dead ends:** the lenses found that I had written things stronger than the runs showed, in the first draft of the notes and docs that I had just published: macOS "stops" the app (nothing launched a quarantined copy: only `spctl --assess` said "rejected"), the app "was started" (the programs inside it were run from a command line, which the game's log calls "not a player's run"), "no audio device on the runner" (the log says CoreAudio opened and pulled 403,968 frames: nobody listened), "988 file names" (954 files and 34 folders, names only), "macOS 15" (a runner label), "two atlases" (two fonts), "least tested of the five" (the Windows program has never been started either), and an iPhone cell stating sideloading as a fact. Also stale text I had left: "the repository is still private" and "no Mac" in four docs. I wrote the notes from the run's logs without re-reading them against my own sentences; the independent read cost about 0.9 M tokens and was worth it.
+
+**Decision:** correct in place and say so (the notes and the records), keep the files as they are (the shipped `READ ME FIRST.txt` say less than the notes and cannot change without new hashes: the notes tell the reader), and add the cautions a stranger needs before a sideloading tool or an override of Gatekeeper: third-party tools that ask for an Apple ID, Developer Mode, a checksum check before any override, no promise about macOS 26 and later.
+
+**Not verified, NOT KNOWN:** unchanged from addendum 2 (a person's Mac and iPhone; everything about the iOS file; the new guard in the workflow has not run on a runner).
+
+**Assets check:** yes - only docs, README, three small scripts and a test changed; nothing from `reference/` or `out/` staged; no picture, sound or original-format file; `check_public.py` no ERROR; `check_version.py` ok.
+
+**Left for the owner:** as before, and the reviewers' list: the shipped files' own READ ME texts; `UIFileSharingEnabled` (APPLE-21); `docs/permission.md` is still its placeholder while the downloads and a PayPal button are public; the tag holds neither the workflow nor the script fix.
+**[CLIP] --:--** - none.
+**[BROLL]** - none.
+**Numbers:** 4 lenses, 235 tool calls, about 0.9 M subagent tokens, 13 + 13 + 10 + 12 findings (none a block), 1 round of fixes, 428 package tests, 145 apple tests, 338 ci tests.
+**Inferred mood:** a guess - the owner wants the downloads out and the page accurate, and has not looked at the wording.
+**Where it stands / next:** v0.1.7 has eight files; the notes, README and docs now say what the logs show and no more. Nothing is queued.

@@ -1109,14 +1109,15 @@ def seal_text(platform, version, with_data_dir, notices_beside, resealed=False):
                 'tools/apple/make_app.sh signs MagicPortals.app ad hoc as the LAST step of making the shell. A signature covers every file in the bundle, and the packager then added the\n'
                 'folder %s to it, which breaks that seal. This archive was made by .github/workflows/apple-release.yml on a GitHub macOS machine, which signed the app ad hoc a second\n'
                 'time ("codesign --force --sign - --timestamp=none") and then ran "codesign --verify --deep --strict --verbose=2" on it, unpacked from the zip, and the job fails unless\n'
-                'that is satisfied. That is all that was checked.\n\n'
-                'WHAT THIS IS NOT. An ad-hoc signature names no developer, and the app is not notarised by Apple, so macOS stops it the first time with a message that it cannot check\n'
+                'that is satisfied. The same workflow then starts the program inside the finished app, from a command line and not as a player would, with the game in it (one level, 120 fixed ticks,\n'
+                'in English, German, Russian, Japanese and Arabic, on a virtual graphics card) and fails unless each of those runs ends clean. Nothing more was checked.\n\n'
+                'WHAT THIS IS NOT. An ad-hoc signature names no developer, and the app is not notarised by Apple, so macOS is expected to stop it the first time with a message that it cannot check\n'
                 'the app for malicious software. The usual way past that for an app from outside the App Store: on macOS 15, double-click the app, dismiss the message, open System\n'
                 'Settings, Privacy & Security, find the line about MagicPortals and choose Open Anyway; on macOS 13 and 14, hold Control, click the app, choose Open, then Open. In the\n'
-                'Terminal, "xattr -dr com.apple.quarantine MagicPortals.app" takes off the mark that makes macOS ask. None of this has been tried with this app. The program (without the\n'
-                'game) has started one small test level on a GitHub macOS machine, on a virtual graphics card; nobody has started this app, with the game in it, on a real Mac, so a\n'
-                'first frame, a level and the sound are unseen. It needs macOS 13.3 or newer, and it is one file for Apple-silicon and Intel Macs (the Intel half has run only under\n'
-                'Rosetta on that GitHub machine).\n\n'
+                'Terminal, "xattr -dr com.apple.quarantine MagicPortals.app" takes off the mark that makes macOS ask. None of this has been tried with this app. Nobody has started this app\n'
+                'on a real Mac: a first frame on a real graphics card, a level played and the sound are unseen (the machine that started it had a virtual graphics card and nobody to listen). It\n'
+                'needs macOS 13.3 or newer, and it is one file for Apple-silicon and Intel Macs (the Intel half has run only under Rosetta on that GitHub machine, and only on a test level that\n'
+                'is not the game).\n\n'
                 'The LICENSE and NOTICE.md beside the app are this archive\'s licence and notices; the bundle\'s own Resources/licenses folder holds them too, with the engine\'s.\n'
                 % with_data_dir)
     if platform == MACOS:
@@ -1133,8 +1134,8 @@ def seal_text(platform, version, with_data_dir, notices_beside, resealed=False):
     return ('THE GAME\'S DATA IS IN THIS BUNDLE\n\n'
             'The folder %s was added at the root of the app after the shell was made and signed (ad hoc only). A sideloading tool (Sideloadly, AltStore, SideStore) signs the whole\n'
             'bundle again with the player\'s own Apple ID when it installs it, so the ad-hoc signature not covering the new files is expected to be harmless (docs/apple.md section 7:\n'
-            'inferred, never run). The packager that wrote this archive cannot sign, and nothing iOS has ever run on a device or a simulator. Which route the\n'
-            'data takes to a player is the owner\'s decision.\n' % with_data_dir)
+            'inferred, never run). The packager that wrote this archive cannot sign, and nothing iOS has ever been started on a device, in a simulator or on a test machine: no sideloading\n'
+            'tool has been given this file.\n' % with_data_dir)
 
 
 # ---- assemble: Windows and Linux ---------------------------------------------------------------------------------------------------------------
@@ -1328,7 +1329,11 @@ def classify_shell(files, platform):
     return Shell(files, bundle, exe, data_dir, top, platform, bundle.startswith('Payload/'), simulator)
 
 
-def intro_text(platform, version, arch, simulator):
+def intro_text(platform, version, arch, simulator, resealed=False):
+    if platform == MACOS and resealed:
+        return ('Magic Portals Enhanced %s - macOS (%s), WITH the game inside the app\n\n'
+                'The app is MagicPortals.app; the game\'s levels, pictures and sounds are in its Contents/Resources/GameData. Nothing here has ever been run on a person\'s Mac.\n'
+                'This archive was assembled on a GitHub macOS machine by .github/workflows/apple-release.yml, which also signed the app again (below). LICENSE and NOTICE.md are the licence and the notices.\n\n' % (version, arch))
     if platform == MACOS:
         return ('Magic Portals Enhanced %s - macOS (%s), WITH the game inside the app\n\n'
                 'The app is MagicPortals.app; the game\'s levels, pictures and sounds are in its Contents/Resources/GameData. Nothing here has ever been run on a Mac.\n'
@@ -1411,7 +1416,7 @@ def assemble_apple(args):
             entries.append((prefix_data + rel, os.path.join(content, *rel.split('/')), FILE_MODE))
         for n, d in sorted(notices.items()):
             entries.append((shell.top + n, d, FILE_MODE))
-        text = (intro_text(platform, version, report.arch if platform == MACOS else 'arm64', shell.simulator)
+        text = (intro_text(platform, version, report.arch if platform == MACOS else 'arm64', shell.simulator, resealed)
                 + seal_text(platform, version, GAME_DATA_IN_BUNDLE[platform], bool(notices), resealed))
         entries.append((shell.top + READ_ME_FILE, text.encode('utf-8'), FILE_MODE))
     if dev:

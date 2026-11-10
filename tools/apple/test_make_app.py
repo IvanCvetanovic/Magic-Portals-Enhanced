@@ -356,6 +356,10 @@ ONLY_DOT_UNDERSCORE_HALF = r'''    if printf '%s\n' "$LISTING" | grep -E '(^|/)\
 NEITHER_HALF = '    if false; then'
 
 
+# A pipe whose last reader stops before its writer is done: awk's exit, grep -q / -m / --quiet, sed's q, head, read. See the test that uses it.
+STOPS_EARLY = re.compile(r'\|\s*(\{\s*|\(\s*)?(awk\b.*\bexit\b|grep\b[^|]*(\s-[A-Za-z]*q|\s--quiet|\s--silent|\s-m\s*\d|\s-m\d|\s--max-count)|sed\b[^|]*(\bq\b|\d+q\b)|head\b|read\b)')
+
+
 class MakeAppTest(unittest.TestCase):
     def setUp(self):
         self.addCleanup(self._cleanup)
@@ -804,10 +808,22 @@ class MakeAppTest(unittest.TestCase):
         # everything and keeps the first (awk with a flag, grep with its output sent to /dev/null).
         with open(SCRIPT, encoding='utf-8') as f:
             lines = f.read().split('\n')
-        stops_early = re.compile(r'\|\s*(awk\b.*\bexit\b|grep\s+(-[A-Za-z]*q\b|--quiet)|sed\s+-n\b.*\bq\b|head\b)')
         found = [(n + 1, line.strip()) for n, line in enumerate(lines)
-                 if not line.lstrip().startswith('#') and stops_early.search(line)]
+                 if not line.lstrip().startswith('#') and STOPS_EARLY.search(line)]
         self.assertEqual(found, [], 'a pipe whose reader stops early: %r' % (found,))
+
+    def test_the_pattern_that_pins_it_knows_the_forms_of_an_early_reader(self):
+        # The pattern is only worth what it catches: each of these is a reader that leaves before its writer is done (found by the review of the first release of the Apple files), and each of the
+        # others reads to the end.
+        stops = ["x=$(printf '%s\\n' \"$A\" | awk '/a/ { print $2; exit }')", "if printf '%s' \"$A\" | grep -q foo; then", "if printf '%s' \"$A\" | grep -qE 'foo|bar'; then",
+                 "if printf '%s' \"$A\" | grep -F -q foo; then", "x=$(cmd | grep -m1 foo)", "x=$(cmd | grep -m 1 foo)", "x=$(cmd | grep --max-count=1 foo)", "x=$(cmd | grep --quiet foo)",
+                 "x=$(cmd | sed q)", "x=$(cmd | sed 1q)", "x=$(cmd | sed -n '1p;1q')", "x=$(cmd | head -1)", "cmd | head -n 3", "cmd | { read first; echo $first; }", "cmd | read first"]
+        reads_all = ["x=$(printf '%s\\n' \"$A\" | awk '/a/ && !done { print $2; done = 1 }')", "x=$(printf '%s\\n' \"$A\" | sed -n 1p)", "if printf '%s' \"$A\" | grep foo > /dev/null; then",
+                     "printf '%s\\n' \"$INFO\" | grep -E 'CFBundle(ShortVersionString|Version)' || true", "cmd | tail -n +2 | grep -v -E '^x'", "cmd | sort | uniq -c", "x=$(cmd | tr -d ' ')"]
+        for line in stops:
+            self.assertIsNotNone(STOPS_EARLY.search(line), line)
+        for line in reads_all:
+            self.assertIsNone(STOPS_EARLY.search(line), line)
 
     def test_the_script_names_nothing_of_the_sibling(self):
         with open(SCRIPT, encoding='utf-8') as f:

@@ -1,7 +1,8 @@
 name: Apple release archives
 
-# The Mac and iPhone DOWNLOADS of a release, made on a GitHub macOS machine (planning step 241). WRITTEN, NEVER RUN before the dispatch that makes the downloads of the release it was written
-# for: until that run is read, nothing in this file is known to work on a runner, and nothing here says that it does.
+# The Mac and iPhone DOWNLOADS of a release, made on a GitHub macOS machine (planning step 241). RUN TWICE on 2026-11-10: the first run failed in apple.yml's make_app.sh (a pipe race, fixed since),
+# the second succeeded and made the two files of that day's release (docs/ci.md section 10, docs/apple.md section 4c). ONE GUARD WAS ADDED AFTER THOSE RUNS and has never run on a runner: the step that
+# refuses a Windows archive whose folder is not this version's ("Fetch and check the content package"). Nothing else in this file has changed since the second run.
 #
 # WHY THIS FILE EXISTS. Every other release archive is assembled on the owner's PC from a program that release.yml built and the owner's content package (docs/releasing.md). A macOS
 # app cannot be: the game's data goes INSIDE the app, a signature covers every file of the app, and the PC has no codesign, so the app has to be signed again once the data is in
@@ -102,6 +103,7 @@ jobs:
       RESULT_IOS: ${{ needs.ios-shell.result }}
       CONTENT_URL: ${{ inputs.content_url }}
       CONTENT_SHA256: ${{ inputs.content_sha256 }}
+      REQUESTED_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Folders
@@ -128,6 +130,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/windows"
           unzip -q "$RUNNER_TEMP/windows.zip" -d "$RUNNER_TEMP/windows"
           content="$(ls -d "$RUNNER_TEMP"/windows/*/content)"
+          want="$RUNNER_TEMP/windows/MagicPortals-$REQUESTED_VERSION-windows-x64/content"
+          if [ "$content" != "$want" ]; then echo "::error::the archive is not this version's: its content folder is $content, not $want"; exit 1; fi
           echo "content package: $content"
           python3 tools/package/package.py verify "$content" 2>&1 | tee "$RUNNER_TEMP/logs/content-verify.log"
           echo "CONTENT=$content" >> "$GITHUB_ENV"

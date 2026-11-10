@@ -873,9 +873,13 @@ class TheWindowsArchive(ArchiveCase):
                      phrase('may', 'ship'), 'asantee', 'original game', phrase('may', 'leave'), phrase('may', 'travel')):
             self.assertNotIn(word, source, word)
         # what the Apple texts DO say of the owner's decision: the route
-        for text in (rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True), rl.seal_text(rl.IOS, '1.0.0', 'GameData', True)):
+        for text in (rl.seal_text(rl.MACOS, '1.0.0', 'Contents/Resources/GameData', True),):
             self.assertIn("Which route", text)
             self.assertIn("is the owner's decision", text)
+        # the iOS text says what nobody has done, and no longer leaves the route to the owner (the route was taken: docs/apple.md section 7)
+        ios = rl.seal_text(rl.IOS, '1.0.0', 'GameData', True)
+        self.assertIn('no sideloading', ios)
+        self.assertNotIn("owner's decision", ios)
 
     def test_the_text_of_an_archive_with_no_game_does_not_promise_a_manifest_or_sums(self):
         for text in (rl.playing_windows('1.0.0', 'x64', [], False, False), rl.playing_linux('1.0.0', 'x86_64', {'GLIBC': (2, 38)}, False, False)):
@@ -1387,6 +1391,10 @@ class TheAppleLayouts(ArchiveCase):
             self.assertIn(word, out, 'the same words are printed: ' + word) if word == 'WHAT THIS IS NOT' else None
         for gone in ('INVALID', 'SEAL IS NO LONGER VALID', 'CANNOT sign', 'is damaged', "the owner's decision", 'WITHOUT the game'):
             self.assertNotIn(gone, text, gone)
+        # the intro of that archive does not say that the packager made it on a PC, and the text says what the workflow does after the tool has run
+        for word in ('assembled on a GitHub macOS machine', "person's Mac", 'is expected to stop it the first time', 'starts the program inside the finished app'):
+            self.assertIn(word, text, word)
+        self.assertNotIn('cannot sign or notarise (it runs on a PC)', text)
         # the words of the list that no archive text may hold (the same ones the other Apple texts are held to)
         for word in ('permission', 'permitted', 'grant', 'asantee', 'original game', 'built on', 'was built', 'were built', 'built with', 'Ubuntu', 'g++', 'GCC'):
             self.assertNotIn(word, text.lower() if word.islower() else text, word)
