@@ -8,6 +8,8 @@
 
 <a href="#platforms"><img alt="Mac, iPhone and iPad: not released yet" height="36" src="https://img.shields.io/badge/Mac%20%C2%B7%20iPhone%20%26%20iPad-not%20released%20yet-4B5563?style=for-the-badge&labelColor=1B1F3B"></a>
 
+<a href="https://paypal.me/IvanCvetanovic"><img alt="Donate with PayPal" height="36" src="https://img.shields.io/badge/Donate%20with-PayPal-0070BA?style=for-the-badge&labelColor=1B1F3B&logo=paypal&logoColor=white"></a>
+
 **New to this?** After the download, follow the [step-by-step guide](docs/install.md): Windows and Android each ask for a few extra clicks the first time.
 
 ### [How to install: step by step](docs/install.md)
