@@ -797,6 +797,18 @@ class MakeAppTest(unittest.TestCase):
             for never in NEVER:
                 self.assertNotIn(never, tools)
 
+    def test_no_pipe_of_the_script_ends_in_a_reader_that_stops_early(self):
+        # The first dispatch of apple-release.yml died of this on a hosted Mac: `printf ... | awk '... { print $2; exit }'` closed the pipe while printf was still writing the long
+        # listing of a universal binary, printf said "Broken pipe", and `pipefail` with `set -e` ended the script. A reader that stops at its first match (awk's exit, grep -q,
+        # sed's q, head) makes the writer's status a race, and under pipefail a race in a check can also turn "found" into "not found". Whatever needs only the first match reads
+        # everything and keeps the first (awk with a flag, grep with its output sent to /dev/null).
+        with open(SCRIPT, encoding='utf-8') as f:
+            lines = f.read().split('\n')
+        stops_early = re.compile(r'\|\s*(awk\b.*\bexit\b|grep\s+(-[A-Za-z]*q\b|--quiet)|sed\s+-n\b.*\bq\b|head\b)')
+        found = [(n + 1, line.strip()) for n, line in enumerate(lines)
+                 if not line.lstrip().startswith('#') and stops_early.search(line)]
+        self.assertEqual(found, [], 'a pipe whose reader stops early: %r' % (found,))
+
     def test_the_script_names_nothing_of_the_sibling(self):
         with open(SCRIPT, encoding='utf-8') as f:
             text = f.read().lower()

@@ -175,7 +175,9 @@ run cp "$PLIST_SRC" "$PLIST"
 # The minimum OS the executable was linked for (LC_BUILD_VERSION), so the plist cannot promise more.
 ask OTOOL_L "      cmd LC_BUILD_VERSION
     minos 0.0" otool -l "$BIN/MagicPortals"
-MINOS="$(printf '%s\n' "$OTOOL_L" | awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "minos" { print $2; exit }')"
+# awk reads ALL of its input and keeps the first match: an `exit` at the match closes the pipe while printf is still writing the long listing of a universal binary, and printf's
+# "Broken pipe" fails the pipeline under `pipefail` and kills the script under `set -e` (it did, on a hosted runner, in the first dispatch of apple-release.yml).
+MINOS="$(printf '%s\n' "$OTOOL_L" | awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "minos" && !done { print $2; done = 1 }')"
 if [ -n "$MINOS" ]; then
     if [ "$PLATFORM" = macos ]; then
         run plutil -replace LSMinimumSystemVersion -string "$MINOS" "$PLIST"
@@ -340,7 +342,8 @@ else
         fail "MagicPortals links something outside the system"
     fi
     ask OTOOL_ENC "cryptid 0" otool -l "$CHECKED/MagicPortals"
-    if printf '%s\n' "$OTOOL_ENC" | grep -A4 LC_ENCRYPTION_INFO | grep -q 'cryptid 1'; then
+    # No `grep -q` here: it stops at the first match and the pipeline's earlier commands then die of SIGPIPE, which `pipefail` turns into "not encrypted".
+    if printf '%s\n' "$OTOOL_ENC" | grep -A4 LC_ENCRYPTION_INFO | grep 'cryptid 1' > /dev/null; then
         fail "MagicPortals is encrypted"
     fi
     run codesign --verify --strict --verbose=2 "$CHECKED"
@@ -355,7 +358,7 @@ else
         (cd "$WORK/ipa" && zip -q -r -y -X "$IPA" Payload)
     fi
     ask LISTING "Payload/" unzip -Z1 "$IPA"
-    if [ "$(printf '%s\n' "$LISTING" | head -1)" != "Payload/" ]; then
+    if [ "$(printf '%s\n' "$LISTING" | sed -n 1p)" != "Payload/" ]; then
         fail "$IPA does not start with Payload/"
     fi
     if printf '%s\n' "$LISTING" | grep -E '(^|/)__MACOSX/|(^|/)\._'; then
