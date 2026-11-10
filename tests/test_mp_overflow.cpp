@@ -256,7 +256,15 @@ void runTests() {
 
 } // namespace
 
-MP_TEST_MAIN("test_mp_overflow", 40)
+// The floor is the suite's real one (40) where the original's fonts are, and the tables' half alone (it runs 14 checks) where they are not. CI has no copy of
+// the original, so the fit of the translations skips itself and says so; the harness's floor would call that skip a red run (the first release run of 0.1.7
+// failed on exactly that, macOS: "ran 14 checks, expected at least 40"). The tables' half is still held to its own floor, so a suite that quietly ran
+// nothing is still red in both places.
+static int mpSuiteEntry(int, char**) {
+    runTests();
+    return ::test::summary("test_mp_overflow", OriginalFontsAreThere() ? 40 : 10);
+}
+static const ::MpSuite::Registration mpSuiteRegistration("test_mp_overflow", &mpSuiteEntry);
 
 // ---- the achievements -------------------------------------------------------------------------------------------------------------------
 
