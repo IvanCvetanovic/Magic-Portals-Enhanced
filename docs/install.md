@@ -2,13 +2,15 @@
 
 Free, with no ads and no accounts. There is no installer: you unpack a folder and start the game from it.
 
-Pick your device: [Windows PC](#windows-pc), [Android phone or tablet](#android-phone-or-tablet) or [Linux PC](#linux-pc). Mac, iPhone and iPad are not released yet (see [Platforms](../README.md#platforms)).
+Pick your device: [Windows PC](#windows-pc), [Android phone or tablet](#android-phone-or-tablet), [Linux PC](#linux-pc), [Mac](#mac) or [iPhone and iPad](#iphone-and-ipad). The Mac and iPhone files are new, carry no developer's signature, and have never been run on a real Mac or iPhone (see [Platforms](../README.md#platforms)).
 
 | | File | Download |
 |---|---|---|
 | Windows | `MagicPortals-Windows.zip` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Windows.zip) |
 | Android | `MagicPortals-Android.apk` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk) |
 | Linux | `MagicPortals-Linux.tar.gz` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz) |
+| Mac | `MagicPortals-macOS.zip` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-macOS.zip) |
+| iPhone and iPad | `MagicPortals-iOS.ipa` | [Download](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-iOS.ipa) |
 
 Every release also has a [`SHA256SUMS.txt`](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/SHA256SUMS.txt) with the checksum of each file, and the [Releases page](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases) lists them all. Each download holds the whole game. The Windows and Linux archives hold the program, a `content` folder with the levels, pictures and sounds, a `PLAYING.txt` with a shorter version of this help, and the licence and notices; the Android file is the app itself, with the game inside.
 
@@ -97,13 +99,43 @@ sudo apt install libvulkan1 mesa-vulkan-drivers libasound2
 
 </details>
 
+## Mac
+
+**You need:** macOS 13.3 or newer. One app runs on Apple-silicon and on Intel Macs. **What is known:** nobody has started it on a real Mac. A GitHub test Mac signed the app again with the game inside it and started it in five languages on a virtual graphics card; how it looks, plays and sounds on a real Mac is not known, and the Intel half has not run with the game in it at all.
+
+**[Download for Mac](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-macOS.zip)**
+
+1. **Open the zip** (double-click it in Finder). It holds a folder `MagicPortals` with `MagicPortals.app`, a `READ ME FIRST.txt`, and the licence and notices. Put the app wherever you like.
+2. **Open the app.** macOS stops it the first time and says it cannot check the app for malicious software. The app is signed only "ad hoc", which names no developer, and Apple has not notarised it. That is a fact about the file and not a finding about its contents; the checksums let you check that you have the file that was published.
+3. **To allow it,** on macOS 15: dismiss the message, open *System Settings*, *Privacy & Security*, find the line about MagicPortals and choose **Open Anyway**. On macOS 13 and 14: hold **Control**, click the app, choose **Open**, then **Open** again. None of this has been tried with this app.
+4. **Or, in the Terminal,** `xattr -dr com.apple.quarantine MagicPortals.app` takes off the mark that makes macOS ask.
+
+<details>
+<summary>It didn't open or start?</summary>
+
+- **"Damaged and can't be opened":** the file may have been changed on the way. Download it again, check it against `SHA256SUMS.txt` (`shasum -a 256 MagicPortals-macOS.zip`) and open the zip with Finder.
+- **Anything else:** [report a problem](#reporting-a-problem) with your Mac's model, its processor (Apple silicon or Intel) and its macOS version. The game's log is in the temporary folder (`magicportals.log`).
+
+</details>
+
+## iPhone and iPad
+
+**You need:** iOS or iPadOS 16.3 or newer on a 64-bit iPhone or iPad with Metal, a computer with a **sideloading tool** (Sideloadly, AltStore or SideStore), and an Apple ID. **What is known:** nothing beyond the file itself. It has never been installed or started anywhere, not on a device, not in a simulator and not on a test machine; whether it installs, starts and plays is the open question, and the steps below are what those tools document for any app from outside the App Store, not something tried with this one.
+
+**[Download for iPhone and iPad](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-iOS.ipa)**
+
+1. **Install a sideloading tool** and follow its own instructions. The file cannot be installed as it is: the tool signs it again with your own Apple ID when it puts it on your device.
+2. **Give the tool `MagicPortals-iOS.ipa`** and install it on your iPhone or iPad.
+3. **Trust it on the device** (*Settings*, *General*, *VPN & Device Management*) and, on iOS 16 and newer, turn on *Developer Mode* (*Settings*, *Privacy & Security*) if the device asks, as the tools describe.
+4. **A free Apple ID** limits an app installed this way to seven days: after that it stops opening and has to be installed again (that is how the tools and Apple document it; not tried here). The icon is a placeholder.
+
 ## Playing
 
 The modern on-screen controls are the default: the two arrows in the bottom corners walk, a touch or click where you want a portal shoots it, and the buttons at the top restart, pause and clear your portals. On a desktop the mouse stands in for a finger, and `←` `→` or `A` `D` walk, `R` restarts the level and `Esc` pauses. The original's classic layout is one tile away in Options, where *Adjust controls* also changes the size, opacity and place of the modern ones. [The README](../README.md#controls) has the list.
 
 ## Where the game keeps things
 
-Your medals, the sound and music switches, your achievements, your choice of controls and your choice of language (`language.json`) are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, and in the app's own storage on Android (uninstalling the app removes them). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
+Your medals, the sound and music switches, your achievements, your choice of controls and your choice of language (`language.json`) are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, `~/Library/Application Support/Magic Portals` on a Mac, and in the app's own storage on Android and on an iPhone or iPad (uninstalling the app removes them; on an iPhone this is inferred, never seen). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
 
 ## Reporting a problem
 
