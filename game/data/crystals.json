@@ -31,7 +31,7 @@
     "_source": [
       "MainCharacter::crystalPicker, ins 111-203, and ETHCallback_crystal, ins 40-56, in Enhanced's out/parity/asbc/all_functions.txt (the listing data/player.json cites by the md5 48fe65ce8baea16b94ed84d8d7be84b0;",
       "THE COPY THIS DECODE WAS RE-READ AGAINST (planning step 246) is the local out/parity/asbc/all_functions.txt, whose md5 is 38e5e2186300b4183aabf4d90fd662fd. The md5 48fe65ce... that this",
-      "table cited at step 243 and that the other tables cite is the figure of another copy of the listing, which was not compared with the local one (the cause of the difference was not looked into). Every instruction",
+      "table cited at step 243 and that the other tables cite is the figure of another copy of the listing, out/parity/asbc/decoder_scratch/all_functions.txt (compared in the follow-up of step 246: both have 98,777 lines and differ in ONE line, 55313, a string constant of an achievement's text, whose one non-ASCII character is U+00BA in the local copy and the replacement character U+FFFD in the scratch one, so the scratch copy is one byte longer; with that line taken out of both, the md5 is the same, 73c27ea346a641bd2eeaa64a9a61dcc4, so every instruction cited here reads alike in either). Every instruction",
       "number cited in this file (crystalPicker 111-203 with 112-120, 117-118, 145-146, 172-173 and 186-203; ETHCallback_crystal 40-56; applyForces 38-56 and Game::preLoop 416-427) was",
       "re-read against the LOCAL copy and holds there (the byte range named below holds in it too);",
       "bytes 133241..134236 for crystalPicker). The push order of a call's arguments is last first (docs/ethanon-formats.md:916 and 2697, 00_order 8.0 rule 3). An investigator and a sceptic read the",

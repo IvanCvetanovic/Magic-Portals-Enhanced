@@ -7,7 +7,7 @@
 //
 //   MagicPortals --root <repo>/tests/fixtures/ci --port-data <repo>/game/data --level ci_level --window 1280x720 --fixed-step --frames 300 --screenshot <abs>.png
 //
-// exits 0 and writes a picture. (The port's own 45 tables are the repository's game/data, named by --port-data and NOT copied into the fixture: the game refuses to start a level
+// exits 0 and writes a picture. (The port's own tables, 49 top-level *.json files at this writing, are the repository's game/data, named by --port-data and NOT copied into the fixture: the game refuses to start a level
 // without them, and a copy would put their notes, which name other projects, into the repository a second time.) It can only say "the shell starts, loads a level, ticks and draws"; it cannot say the game plays (docs/apple.md).
 //
 // WHAT THIS SUITE PINS, with no window and no converted level (it NEVER skips):

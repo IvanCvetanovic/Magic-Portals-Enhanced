@@ -7,7 +7,7 @@
     "~255) while the player, who turned left on 186, is already at x 420. Left along the anchor (186-) and onto spinning_platform_890, which tips under him left-down (tick 236, crystal_ent_950 on the way); he slides off its",
     "end onto single_block_plat_945 (tick 256, 224 u down) and walks left until moving_platform_942's side stops him at x 264. That platform swings 32 u about y 208 as linearMotion does (G3), y = 208 + 32 cos(0.016 t), so its",
     "top is at 176 on tick 262 and he waits there, pressing left, until its descent has brought its top within the capsule's round foot (9.1 u) of the floor he stands on: he steps onto it on ~345 and rides it, pressed against the",
-    "face of block00_936 (x 200), down to its lowest (392) and up again; on ~537 its top is within a capsule radius of block00_936's top (y 162) and he rolls over the block's corner onto it (crystal_ent_954 on 532),",
+    "face of block00_936 (x 200), down to its lowest (392) and up again; on ~537 its top is within a capsule radius of block00_936's top (y 162) and he rolls over the block's corner onto it (crystal_ent_954 on 532, and on 505 since the pickup rule of planning step 243),",
     "walks along the block, drops off its left end at x 128 (567), lands on the floor (576) and walks into the door: won on tick 589. No fireball reaches him after the first: the one spat on 365 bursts at x 373 on tick 437 (the",
     "plank stands on end where he left it, by the place of the burst; he is at x 200 then) and the third (547) is 380 u behind him when he drops. The platform's second rise sets the pace: nothing wins before tick ~537,",
     "since the first rise ends on 250, while he is still on the plank.",

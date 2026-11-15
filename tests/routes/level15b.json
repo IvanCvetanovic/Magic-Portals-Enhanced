@@ -5,7 +5,7 @@
     "Ten shots, none refused or wasted, and no shock diamond strikes a knight. The corridor's floor is shut by two stone blocks (block00_low_emissive_1749, x 480 to 544, and _1750, x 640 to 704, tops at y 162),",
     "by the lift door at x 383 to 413 (raised for 6 s by button_1737 at x 339 to 365: no tap on it) and by knights; the player cannot jump, so he is carried over each obstacle the way F14 shows the original",
     "does at this level's start: a portal in the open air above the place he wants to reach (y 100 is row 0, and a knight sees only the row it stands in), then a portal beside himself.",
-    "Tap 32 at (140, 40): a portal over the double block (shot on 33, in place on 82). Tap 88 at (80, 205), beside him: through on 90, down on the block at x 140, the crystal taken on 100.",
+    "Tap 32 at (140, 40): a portal over the double block (shot on 33, in place on 82). Tap 88 at (80, 205), beside him: through on 90, down on the block at x 140, the crystal taken on 100 (on 99 since the pickup rule of planning step 243).",
     "Tap 122 at (350, 100): a portal in the air over the button (in place on 182). Knight B (minion_spawn_913) stands at x 295 until about 365 and then walks left to x 198 (there on ~475): tap 403 at (132, 122), beside him,",
     "goes through on 405 and lands on the button with B walking away from him. The lift starts rising on 418 and clears his head from about 590: he stands against it from 435 (a bump of 1.44) and walks under it",
     "to x 424.3 in front of block 1749 (the walk ends on 609). Tap 619 at (500, 100) (in place on 654; from this x the line clears the block's top-left corner at (480, 162), from against its face it does not)",
