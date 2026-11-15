@@ -335,6 +335,8 @@ void ALocaleTextNamesOneOfTheElevenOrNone() {
         {"pt-BR", "pt"}, {"pt-PT", "pt"}, {"ar-EG", "ar"}, {"ja-JP", "ja"}, {"uk-UA", "uk"}, {"es-419", "es"}, {"de-AT", "de"}, {"en-US", "en"},
         // Android gives the two letters alone
         {"pt", "pt"}, {"en", "en"}, {"uk", "uk"}, {"ja", "ja"}, {"ar", "ar"}, {"tr", "tr"}, {"ru", "ru"}, {"it", "it"}, {"fr", "fr"}, {"es", "es"}, {"de", "de"},
+        // the dot ends the language too (an encoding with no region, and a dot with nothing after it): without these rows no check reached that separator
+        {"pt.UTF-8", "pt"}, {"de.utf8", "de"}, {"ja.", "ja"},
         // mixed case, and the blanks an environment variable may carry
         {"PT_br", "pt"}, {"Pt", "pt"}, {"UK", "uk"}, {"JA_jp.UTF-8", "ja"}, {"  pt_BR \n", "pt"}, {"\tde", "de"},
         // none of the eleven: a language the game does not have (the region is not read), and text that is no locale at all
@@ -355,7 +357,7 @@ void ALocaleTextNamesOneOfTheElevenOrNone() {
         const std::string lower(code);
         std::string upper = lower;
         for (char& c : upper) c = static_cast<char>(c - 'a' + 'A');
-        const std::string spellings[] = {lower, upper, lower + "_XX", lower + "-XX", lower + "_XX.UTF-8", lower + "-Latn-XX", upper + "_" + lower, lower + "@x", " " + lower + " "};
+        const std::string spellings[] = {lower, upper, lower + "_XX", lower + "-XX", lower + "_XX.UTF-8", lower + "-Latn-XX", upper + "_" + lower, lower + "@x", lower + ".UTF-8", " " + lower + " "};
         for (const std::string& spelling : spellings) {
             CHECK_MSG(Language::CodeForLocale(spelling) == lower, "'" + spelling + "' names " + lower);
         }

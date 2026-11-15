@@ -251,7 +251,8 @@ public:
         Controls::Policy controls;
 
         // WHICH LANGUAGE THE RUN SPEAKS (planning step 238, PORT-34; sim/Language.hpp): `--lang <code>` forces one for the run and keeps the
-        // saved choice out of it; without it the run speaks the player's saved choice, else English. The default is "no flag", and a bare
+        // saved choice out of it; without it the run speaks the player's saved choice, else the system's language if the policy carries one
+        // (planning step 245: main.cpp gives one to a player's run only), else English. The default is "no flag", and a bare
         // layer has no save directory, so it speaks English and writes nothing.
         Language::Policy language;
     };

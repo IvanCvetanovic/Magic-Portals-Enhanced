@@ -25,7 +25,8 @@ namespace MagicPortals::Language {
 
 // WHICH LANGUAGE THE RUN SPEAKS (planning step 238), as Controls::Policy says which controls it plays. `--lang <code>` forces a language for ONE run:
 // it wins over the saved choice, the run neither reads nor writes language.json (a capture's flag, like `--controls modern`), and the choice made in a
-// forced run is kept in memory only. Without it the run reads the store and speaks the player's choice, else English. Handed in `Paths::language`;
+// forced run is kept in memory only. Without it the run reads the store and speaks the player's choice, else the system's language when `systemDefault` (below) carries one, else
+// English. Handed in `Paths::language`;
 // every suite's bare Paths is "no flag, nothing saved" (the layer is also handed no save directory), so the suites are deterministic.
 struct Policy {
     std::optional<std::string> forced; // the code as the flag gave it; main has checked it against the language table

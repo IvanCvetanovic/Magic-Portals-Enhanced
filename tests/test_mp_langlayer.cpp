@@ -1,6 +1,6 @@
 // The layer speaks the language (planning step 238, PORT-34).
 //
-// PART ONE - the snapshot guard. English is the default and must stay what it was, to the quad: every menu screen, the level caption, the pause
+// PART ONE - the snapshot guard. English, which is what a bare layer (no system default, the rig's runs) speaks, must stay what it was, to the quad: every menu screen, the level caption, the pause
 // with its title and its achievements popup, the hint, the two cards and the options screens are driven through the layer's own emit functions,
 // and each frame's quad list (the rectangle, the uv, the colour and the turn of every quad, the picture's file NAME as a hash, the clamp) is
 // compared with tests/golden/menu_screens.json within a tolerance: a thousandth of the window on the rectangle (about a pixel), a
