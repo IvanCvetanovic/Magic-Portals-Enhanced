@@ -51,7 +51,7 @@ def good_files():
     """The files of a repository that every rule passes. A test copies this dict, edits one entry, and builds the repository from the copy."""
     return {
         'README.md': '# Name\n\nFront.\n\n## Local setup after cloning\n\nSteps.\n\n## Run it\n\nGo. See [the build](docs/building.md#building-it) and [platforms](docs/platforms.md).\n\n## Parity work\n\nMore.\n',
-        'LICENSE': 'MIT No Attribution\n\nCopyright (c) 2026 Somebody\n\nPermission is hereby granted ... to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies.\n',
+        'LICENSE': 'MIT License\n\nCopyright (c) 2026 Somebody\n\nPermission is hereby granted ... to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies.\n',
         'NOTICE.md': '# Notices\n\nThird-party code: a library, MIT, with its notice.\n',
         'CONTRIBUTING.md': '# Contributing\n\nBuild it. Test it.\n',
         'SECURITY.md': '# Security\n\nReport a vulnerability privately.\n\n' + cp.PLACEHOLDER + '\n',

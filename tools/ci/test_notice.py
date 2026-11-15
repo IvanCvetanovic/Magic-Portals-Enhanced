@@ -5,7 +5,7 @@ Run:   python -m unittest discover -s tools/ci -p "test_*.py" -v           (stan
 WHAT THIS PROVES. Each licence text in NOTICE.md is announced by a comment `<!-- verbatim: <path> [first-last] -->` and a fenced block; the text of the block is compared, line by line,
 with the whole file or with those lines (1-based, inclusive) of the file in the engine's tree, comment marks and a common indent removed on both sides. So a licence text cannot be
 mistyped, and a move of the engine pin that changes a licence file turns this test red until NOTICE.md is brought up to date. Every component in the engine's own list
-(engine/THIRD_PARTY_LICENSES.md) is in NOTICE.md's table. LICENSE is the engine's licence text, and a clone made with core.autocrlf=true (a Windows machine) still has LICENSE and NOTICE.md with Unix line ends. NOTICE.md stands alone: it links to no file of the repository.
+(engine/THIRD_PARTY_LICENSES.md) is in NOTICE.md's table. LICENSE is the MIT text with its holder and year (the engine keeps its own MIT No Attribution licence, which is a different text), and a clone made with core.autocrlf=true (a Windows machine) still has LICENSE and NOTICE.md with Unix line ends. NOTICE.md stands alone: it links to no file of the repository.
 WHAT IT CANNOT PROVE. That the table says the right thing about a program it was not made from (the table says which entries are from a link line and which are from the engine's list);
 the blocks that come from outside the repository (the NDK, the GCC runtime exception, AngelScript's header, Ethanon's source) are named `external:` and are not compared with a file, because those files are not in a clone (the GCC exception is pinned by its parts).
 The licence texts of the fonts this repository ships (game/data/fonts/OFL-<Name>.txt, planning step 237) are compared with those files, which are in a clone; no other path of the repository is a source.
@@ -82,14 +82,23 @@ def blocks(text):
 
 
 class TheLicence(unittest.TestCase):
-    def test_license_is_the_mit_no_attribution_text_of_the_engine_with_its_holder_and_year(self):
+    def test_license_is_the_mit_text_with_its_holder_and_year_and_the_condition_that_keeps_the_notice(self):
+        # the owner chose the MIT text on 2026-11-15, not MIT No Attribution: the one sentence that differs is the condition that the copyright line and the permission notice stay in every copy
         text = read(os.path.join(REPO, 'LICENSE'))
-        self.assertTrue(text.startswith('MIT No Attribution\n\nCopyright (c) 2026 Ivan Cvetanovic\n\nPermission is hereby granted, free of charge,'), text[:120])
+        self.assertTrue(text.startswith('MIT License\n\nCopyright (c) 2026 Ivan Cvetanovic\n\nPermission is hereby granted, free of charge,'), text[:120])
+        self.assertIn('furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS"', text)
+        self.assertNotIn('No Attribution', text)
         self.assertTrue(text.rstrip().endswith('SOFTWARE.'))
+
+    def test_the_engine_licence_is_an_mit_text_of_the_same_holder(self):
+        # LICENSE used to be the engine's text byte for byte; it is not pinned to it any more (the engine's licence is the engine's, in its own repository: it is MIT No Attribution at the
+        # pin of 2026-11-15, and a later engine commit may switch it to the MIT text). Either text asks nothing of a program that LICENSE, with the same holder and year, does not already say.
         engine_licence = os.path.join(ENGINE, 'LICENSE')
         if not os.path.isfile(engine_licence):
-            self.skipTest('the engine is not checked out: LICENSE was compared with nothing (git submodule update --init)')
-        self.assertEqual(text, read(engine_licence), "LICENSE differs from the engine's licence text")
+            self.skipTest('the engine is not checked out: its licence was read from nothing (git submodule update --init)')
+        text = read(engine_licence)
+        self.assertTrue(text.startswith(('MIT License\n\n', 'MIT No Attribution\n\n')), text[:40])
+        self.assertIn('Copyright (c) 2026 Ivan Cvetanovic\n', text)
 
     def test_license_is_a_plain_text_file_with_unix_line_ends(self):
         with open(os.path.join(REPO, 'LICENSE'), 'rb') as f:

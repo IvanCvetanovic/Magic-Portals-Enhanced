@@ -6,7 +6,7 @@ Magic Portals is a game by Asantee Games, created by Andre Santee. Magic Portals
 
 Ethanon, the engine the original game was built on, is under the MIT licence. Its source was read to decode the original game's file formats. The two places where code of this repository follows Ethanon's or AngelScript's source closely are listed, with their notices, in the last section of this file.
 
-This project's own licence is in the file `LICENSE`. The software below is not part of this project: each component keeps its own licence, which is reproduced here.
+This project's own licence, the MIT licence, is in the file `LICENSE`. The software below is not part of this project: each component keeps its own licence, which is reproduced here.
 
 ## Third-party components in a program
 

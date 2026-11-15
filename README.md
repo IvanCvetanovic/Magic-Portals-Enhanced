@@ -19,7 +19,7 @@ The Windows download is not code-signed yet, so Windows asks you to confirm befo
 
 Something not working? [Report a problem](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/issues/new/choose): the form asks for what a fix needs (your system, your graphics card and the game version).
 
-[![Licence: MIT-0](https://img.shields.io/badge/licence-MIT--0-1F6FEB)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white) ![Vulkan](https://img.shields.io/badge/Vulkan-1.2-AC162C?logo=vulkan&logoColor=white)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-1F6FEB)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white) ![Vulkan](https://img.shields.io/badge/Vulkan-1.2-AC162C?logo=vulkan&logoColor=white)
 
 </div>
 
@@ -116,7 +116,7 @@ Ethanon, the engine the original was built on, is by Andre Santee and MIT-licens
 
 ## Licence
 
-[LICENSE](LICENSE) is the MIT No Attribution licence, for the code of this repository; it does not cover the original game's art, sound or levels, which belong to their makers. The notices of the software the game contains are in [NOTICE.md](NOTICE.md).
+[LICENSE](LICENSE) is the MIT licence, for the code of this repository: free to use, with the copyright line and the licence text kept in copies. It does not cover the original game's art, sound or levels, which belong to their makers. The notices of the software the game contains are in [NOTICE.md](NOTICE.md).
 
 ## Contributing
 

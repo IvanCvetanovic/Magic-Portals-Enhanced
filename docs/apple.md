@@ -192,7 +192,7 @@ The fixture can only say "the shell starts, loads a level, ticks and draws"; the
 `make_app.sh` copies, into `Resources/licenses` (iOS: the bundle's `licenses`): the repository's `LICENSE` and `NOTICE.md` (the game's licence, and the notices of the software it contains, with the
 notices of the two places where the tools follow Ethanon's and AngelScript's source: planning step 210), the engine's `LICENSE` and `THIRD_PARTY_LICENSES.md` (which names every library the engine vendors,
 GLFW and the stb and dr_libs headers among them), MoltenVK's licence text when `--moltenvk-license` hands it over (MoltenVK is Apache-2.0 and is **linked into the program**; the engine's list does not
-name it, because the engine links it only when a build asks), and a `README.txt` that says which file is which. The licence is the one proposed in planning step 210 until the owner confirms it (D10). The
+name it, because the engine links it only when a build asks), and a `README.txt` that says which file is which. The licence is the MIT text the owner chose on 2026-11-15 (planning step 210 had proposed another one, D10; backlog PORT12-3). The
 sibling's licence list (its own MIT-0 file, its LGPL and GPL texts) is for its game logic and is not carried.
 
 ## 7. Getting the data into a shell: the three routes, one of them taken
