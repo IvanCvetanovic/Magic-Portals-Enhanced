@@ -157,9 +157,10 @@ two credits lines) are this port's own words.
 * **A first run in Russian, Turkish, Ukrainian, Japanese or Arabic bakes its fonts before the first frame.** The two atlases of a generated language are made while the game starts
   (60-90 ms on the Linux machine of step 245's launches, from an empty scratch folder; a language already baked is read from the cache). Never timed on a phone. If they cannot be made,
   the run speaks English and says why in the log, as a pick does (`LANG-7`), and the next start tries again.
-* **None of the system reads was run on a phone, a Mac, an iPhone or Windows.** Linux's was run (`LC_ALL`, `LC_MESSAGES`, `LANG`, a saved file, `--lang`, `--fixed-step`, `C`, `zh_CN`);
-  the Android, Windows and Apple reads are written and unproved: the Android and Windows branches were not compiled by the step (the Windows one was checked against stubs of its four
-  names), and the Apple ones cannot be compiled without a Mac.
+* **None of the system reads was run on a phone, a Mac, an iPhone or Windows.** Linux's was run on the built program (`LC_ALL`, `LC_MESSAGES`, `LANG`, a saved file, `--lang`,
+  `--fixed-step`, `--frames`, `--saves`, `--screenshot`, `C`, `zh_CN`, an unset environment); the Android, Windows and Apple reads are written and unproved. Android's two files were
+  parsed (not built) against NDK 28.2's headers, whose glue sets the configuration before the game starts; Windows' calls were checked by reading the SDK's headers, not by building;
+  the Apple ones were never compiled (no Mac).
 * **English is as before, with one character excepted.** The description of achievement 60 holds, in the original, one byte that is not valid UTF-8 (a lone Latin-1 byte;
   `docs/ethanon-formats.md` section 24). The achievements table used to carry U+FFFD for it, which the byte-wise text drew as three Latin-1 glyphs (the three bytes of U+FFFD's
   UTF-8 form); it now carries U+00BA, one glyph. So that one description is not byte for byte what it was before the languages, and nothing else in English moved.
