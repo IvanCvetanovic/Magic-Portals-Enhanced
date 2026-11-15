@@ -1630,6 +1630,18 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
         entt::entity e = thrown.body;
         destroy(e);
     }
+    // THE KNIGHTS' BODIES, which a retry, a skip and a menu exit left in the registry until planning step 242 (RESTART-1): LevelBuilder::BuildRigidCircle
+    // adds the body to no Built ("the caller owns it", LevelBuilder.hpp), and Minions::State::Spawn and Summon are callers that never hand it on, so the
+    // loop above never saw them. Each one stayed behind as an invisible, solid, dynamic sphere: it pressed every button its box overlapped (a button
+    // counts any dynamic body, whoever owns it) and held the next life's knights up short of their waypoints. A marker's knight and a boss's escort
+    // share the list. The guard is the same one: a knight the floor, a stone or a shot took (Minions Cull, Take, Burn) was destroyed at that moment and its
+    // handle is stale.
+    for (const Minions::Minion& minion : m_level.minions.minions) {
+        entt::entity e = minion.body;
+        destroy(e);
+    }
+    // And the knights a rolling stone crushed on this tick, which latchImpacts kept for Game::Crush: handles into the level that is going.
+    m_crushedNow.clear();
     for (const Boss::Rock& rock : m_level.boss.rocks) {
         entt::entity e = rock.body;
         destroy(e);

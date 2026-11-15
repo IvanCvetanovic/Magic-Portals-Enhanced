@@ -784,10 +784,12 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step, const 
         //
         // And when it holds, NO velocity is set: the original leaves the body to
         // carry on and to friction, which is how a frictionless minion coasts the
-        // last stretch in. This port's bodies grip (kBodyFriction 1), so its guard
-        // stops about where the drive stops, some 15 px out, and never arrives.
-        // The difference is written down in minions.json rather than papered over
-        // with a zero the original never writes.
+        // last stretch in. This port's bodies gripped (kBodyFriction 1) until planning
+        // step 152, so its guard stopped about where the drive stopped, some 15 px
+        // out, and never arrived; minions.json says what that did to 3-01 and 3-29.
+        // Since then materials.json gives the minion group its .ent's friction 0
+        // (apply_decoded_friction: it applies even while the other bodies' friction is held), so the guard
+        // coasts as the original's does, with no zero the original never writes.
         //
         // Horizontal only: the original's moveVec is (+-1, 0), and it takes -1
         // when the two x's are exactly equal. What it falls at is the world's,

@@ -396,6 +396,12 @@ add_mp_test(test_mp_frontdoor)
 add_mp_test(test_mp_info)
 add_mp_test(test_mp_select)
 
+# A level that is left takes its bodies with it (planning step 242, RESTART-1): the knights' bodies were built outside every Built and nothing destroyed them
+# when a level was retried, skipped or left for the menu, so they stayed in the registry as invisible solid spheres. A census of the registry of a fresh load against
+# one after three retries and one after a skip and the grid's button back, over every level that places a knight (found from the converted levels), the detach of
+# every level of the game, and two behaviours the leak caused. Reads the converted levels, so it skips with 77 without them.
+add_mp_test(test_mp_restart SKIPS_WITH_77)
+
 # The layer, attached to a bare registry: no window, no Vulkan. It drives taps
 # through the camera, and plays level30 from the spawn to the exit.
 add_mp_test(test_mp_layer SKIPS_WITH_77)
