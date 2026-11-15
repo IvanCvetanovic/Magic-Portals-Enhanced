@@ -102,7 +102,8 @@ struct Overrides {
     std::optional<bool> assetWatching;                // --asset-watching <on|off>
     std::optional<bool> spriteReport;                 // --sprite-report <on|off>
     float perfLogSeconds = 0.0f;                      // --perf-log <seconds>: the engine's frame statistics every so often (0: none)
-    // Planning step 205 (PORT-7): what a run COSTS, never what it does, so a developer can measure the owner's open decisions without editing the file.
+    // Planning step 205 (PORT-7): what a run COSTS, never what it does, so a developer can measure the scene's sample cap (still the owner's decision) and dynamic resolution (on for the phone profile
+    // since step 244, on the owner's general word of 2026-11-15, with no start budget; whether it helps is not known and only a phone can show it) without editing the file.
     std::optional<std::uint32_t> sceneSamples;        // --scene-samples <1|2|4>: the scene target's sample cap (4 is the engine's own)
     std::optional<bool> dynamicResolution;            // --dynamic-res <on|off>: with the mobile block's numbers when on (inert for a capture or --fixed-step, as the engine has it)
     std::optional<bool> perfOverlay;                  // --perf-overlay <on|off>: the engine's frame readout over the picture

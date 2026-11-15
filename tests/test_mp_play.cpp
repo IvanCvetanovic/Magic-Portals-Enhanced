@@ -1227,8 +1227,8 @@ void ThreeElevensStackedPairIsTakenFromTheFloor() {
 void TheNewReachContainsTheOldExceptASliverAtItsWaist() {
     // A sweep of 0.5 round crystal_1546 on level10b: every point the old rule took and the new one does not lies at the
     // waist between the two discs (|dy| < 2), where the old box was 23.1 wide and the discs are 21.9; and what the new takes
-    // that the old did not is two orders more. So no walker who got a crystal loses it, and one who met the sliver gets it a tick later
-    // at most (the next case).
+    // that the old did not is two orders more. So no walker who got a crystal loses it, and one who met the sliver, walking at the walk's speed, gets it a tick later
+    // at most (the next case; a player who creeps can wait longer: planning step 246 has the figures of the recorded routes).
     PickupRig rig;
     std::string error;
     CHECK_MSG(BeginPickup(rig, "level10b", error), error);
@@ -1262,7 +1262,7 @@ void TheNewReachContainsTheOldExceptASliverAtItsWaist() {
 }
 
 void AWalkerOnTheSliverIsTakenWithinATickOfTheOldRule() {
-    // The sliver costs nothing but a tick: crystal_1545 at (112, 208) from a floor walker at y 206.4 (1.6 under its centre) was in
+    // The sliver costs a walker at the walk's speed nothing but a tick (a creeping player can wait longer, planning step 246): crystal_1545 at (112, 208) from a floor walker at y 206.4 (1.6 under its centre) was in
     // the old rule's reach to x 135.1 and is in the new one's to x 134.85, a quarter of a unit, and a tick of his walk is 2.4.
     PickupRig rig;
     std::string error;
@@ -1284,7 +1284,7 @@ void AWalkerOnTheSliverIsTakenWithinATickOfTheOldRule() {
         CHECK_MSG(oldTick >= 0 && newTick >= oldTick, "phase " + std::to_string(phase) + ": the new rule is not before the old");
         worst = std::max(worst, newTick - oldTick);
     }
-    CHECK_MSG(worst <= 1, "and never more than a tick after it: " + std::to_string(worst));
+    CHECK_MSG(worst <= 1, "and, at the walk's speed, never more than a tick after it: " + std::to_string(worst));
 }
 
 void ThePickupIsTheDecodedRuleAndStrict() {

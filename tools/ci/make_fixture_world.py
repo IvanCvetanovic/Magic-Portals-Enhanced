@@ -6,8 +6,8 @@
 
 WHY. The content packager (tools/package/package.py) reads the converter's output and the extracted assets, both the owner's and neither in this repository. The Android
 packager and the release packager take its result. A CI job that wants to build an APK, or an archive, that the game can start from (the fixture level) has no such result, so
-this writes the miniature of one: the CI fixture level and its tables (tests/fixtures/ci, hand-written), Enhanced's own tables the fixture carries, the port's own 45 tables
-(game/data) as the package's port-data, and one INVENTED stub file in each tree the packager requires to be non-empty. Nothing of the original is read or copied, and the
+this writes the miniature of one: the CI fixture level and its tables (tests/fixtures/ci, hand-written), Enhanced's own tables the fixture carries, the port's own 49 tables
+(the top-level game/data/*.json files, and the folders beside them: lang, fonts) as the package's port-data, and one INVENTED stub file in each tree the packager requires to be non-empty. Nothing of the original is read or copied, and the
 stubs are text that says so (their names end in .bin_png so that no tool takes them for a picture). The result is a package the game starts from with no flag but --level, and
 which shows the fixture level and a one-world menu; it is no part of the game and says so in its name.
 

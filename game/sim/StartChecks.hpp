@@ -65,7 +65,7 @@ inline constexpr std::array<std::string_view, 19> kDeveloperFlags = {
     "--route",        "--route-trace", "--tap",           "--hold",        "--drag",         "--press",
     "--place",        "--burn-dragon", "--visit-levels",  "--visit-passes", "--light-masks-off",
     "--shadow-maps",  "--sprites-only", "--asset-watching", "--sprite-report", "--perf-log",
-    "--scene-samples", "--dynamic-res", "--perf-overlay",  // planning step 205: what a run COSTS, for the owner's open decisions (sim/EngineTuning.hpp)
+    "--scene-samples", "--dynamic-res", "--perf-overlay",  // planning step 205: what a run COSTS, to measure the sample cap (still the owner's) and dynamic resolution (on for the phone profile since step 244; whether it helps only a phone can show), sim/EngineTuning.hpp
 };
 
 // Whether `arg` is one of kDeveloperFlags (an exact match: "--routes" is not "--route").

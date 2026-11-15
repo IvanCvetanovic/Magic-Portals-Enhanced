@@ -22,7 +22,7 @@
     "Windows (the others fixed, the win and the achievement kept; a tap's window is the ticks it can go on): taps 32 from 25 to 39, 88 from 81 to 96, 122 from 114 to 140, 403 from 391 to 409 (the lift's clock starts when he lands), 619 from 601 to 630, 664 from 653 to 679,",
     "705 from 690 to 716, 772 from 761 to 788, 814 from 798 to 826, 856 from 844 to 876; the walks: right from 411 to 439 and to 603 to 621, right from 776 to 804 and to 790 to 817, left from 844 to 868 and to 858 to 882, right from 976 to 1004.",
     "Points: tap 32 x 120 to 150, 122 x 335 to 365, 619 x 486 to 514, 664 x 420 to 444, 705 x 670 to 703, 814 x 656 to 696 (700 is not won), 856 y 196 to 220. A tap before tick 25 is refused (the 400 ms from the level's start).",
-    "Medal 2 (silver): one of the three crystals, 10 portals, 17,440 ms. The aim's drift is 0.63 px."
+    "Medal 2 (silver): two of the three crystals, 10 portals, 17,440 ms (since the pickup rule of planning step 243 the route also takes crystal_ent_1756, on tick 775 in the run of test_mp_routes of step 246; it took one of the three before). The aim's drift is 0.63 px."
   ],
   "level": "level15b",
   "win_by": 1103,

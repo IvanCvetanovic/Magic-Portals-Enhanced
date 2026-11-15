@@ -104,8 +104,11 @@
       "Enhanced's E41 and E47 (its game/main.cpp), and have NOT been measured on this port or on any phone: min_scale 0.3, target_fps 58.0 (E41); relaxed_rise true,",
       "min_target_height 360, emergency_below_fps 30.0 (E47, found on a Galaxy A05). start_max_pixels is 0 and NOT the sibling's 2200000: 0 is NO start budget (the engine lowers",
       "the start scale only when the budget is above 0 and under the window's pixel count, SupersonicApp.cpp), and a budget under a phone's window (1,152,000 pixels at 1600x720)",
-      "would downscale EVERY phone for good on a driver that offers only a display-paced present, where the controller can only fall. So a run starts at the full size and the",
-      "controller steps down on a phone that needs it, at the price of a few seconds of slow frames on the weakest. The controller needs an unpaced loop to rise, and the HUD and",
+      "would downscale EVERY phone, and for good one whose display is 60 or 90 Hz and whose driver offers only a display-paced present (FIFO), where a rise needs 110 fps. So a run starts",
+      "at the full size and the controller steps down on a phone that needs it, at the price of a few seconds of slow frames on the weakest. On a loop the display paces the relaxed",
+      "rise is off, whatever relaxed_rise says (engine/src/core/DynamicResolution.cpp), so a rise opens only at the engine's headroom_fps, 110 (this table does not set it), and",
+      "needs windows at that rate for about 8 s on end: a 120 Hz display can show that when the GPU keeps up, a 60 or 90 Hz one never, so on a 60 or 90 Hz phone with such a",
+      "driver the scale only falls for the rest of the run. On an unpaced loop (Mailbox) the relaxed rise opens at 72.5 fps. The HUD and",
       "the touch controls are drawn into the smaller picture and blur with it (the platform research's PL-09). TO TURN IT OFF: set enabled false here. A run can turn it off or on",
       "without editing the file with `--dynamic-res off` or `on` (these numbers). The engine never applies it to a capture, a --fixed-step run, a replay or a recording, so no",
       "captured pixel can move."

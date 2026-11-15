@@ -7,7 +7,8 @@
     "carries the key from the same point) is STRICTLY within `range_px` of EITHER of two points, the crystal's own point shifted by `offset_px` one way and the other. The port's",
     "own rule until step 243 was the Godot project's (a body inside crystal.ent's 28 x 24 box, Trigger::Overlaps), which reaches 30.1 units above and below a crystal (its 12 and the capsule's 18.1) and 23.1 to",
     "its sides (14 and 9.1); the original's two discs reach 40 and 26, and at the waist between them (|dy| < 2.07) 21.9, narrower than the box. crystal.ent has no body and no callback that",
-    "reads its <Collision> 28 x 24; the box is still what the exit and the layer use.",
+    "reads its <Collision> 28 x 24. Crystal::box (the node's own trigger, 28 x 24) is read only by the layer's marker (which uses its centre, not its size) and by tests: the exit",
+    "tests its own Goals::exit box, and the half-size of a crystal's box is vestigial (corrected at planning step 246: this table said the exit and the layer use it).",
     "",
     "WHY IT MATTERS. 3-11 (level10b) has a stacked pair of crystals beyond its locked door, 32 apart over a floor whose top is y 224. The engine rests the player 0.5 into the floor (his",
     "centre at y 206.4, tests/routes/level10b.json's trace), so his capsule's top is 0.3 under the upper crystal's box and the old rule never took it from the floor; the original's",
@@ -28,7 +29,11 @@
     "_offset_px": "[x, y], in the original's y-down units; the two points are the crystal's minus and plus it, so the sign does not matter. crystalPicker ins 112-120 build the offset with vector2: scale(14) is pushed FIRST (ins 117) and 0 SECOND (ins 118), and a call pushes its last argument first, so y = scale(14) and x = 0. Two other places in the same listing build a vector2 the same way and show which end is which: SideScrollerCharacter::applyForces ins 38-56 builds vector2(moveVec.x * speedScale, linearVel.y) by pushing linearVel.y (ins 40-42) before the x (ins 43-50), and Game::preLoop ins 416-427 builds SetGravity(vector2(0, scale(10))) by pushing scale(10) before 0 (a gravity is vertical). It is a vector, and not an axis name, because the axis is a decode fact and not a tunable.",
     "_strict": "Both tests are strict, as the listing's: ins 145-146 (CMPf; JNS) for the first point and ins 172-173 (CMPf; TS) for the second, against the squared distance (squaredDistance, a plain dot product of the difference), so a character exactly 26 units from a point has NOT taken it.",
     "_source": [
-      "MainCharacter::crystalPicker, ins 111-203, and ETHCallback_crystal, ins 40-56, in Enhanced's out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0, the listing data/player.json cites;",
+      "MainCharacter::crystalPicker, ins 111-203, and ETHCallback_crystal, ins 40-56, in Enhanced's out/parity/asbc/all_functions.txt (the listing data/player.json cites by the md5 48fe65ce8baea16b94ed84d8d7be84b0;",
+      "THE COPY THIS DECODE WAS RE-READ AGAINST (planning step 246) is the local out/parity/asbc/all_functions.txt, whose md5 is 38e5e2186300b4183aabf4d90fd662fd. The md5 48fe65ce... that this",
+      "table cited at step 243 and that the other tables cite is the figure of another copy of the listing, which was not compared with the local one (the cause of the difference was not looked into). Every instruction",
+      "number cited in this file (crystalPicker 111-203 with 112-120, 117-118, 145-146, 172-173 and 186-203; ETHCallback_crystal 40-56; applyForces 38-56 and Game::preLoop 416-427) was",
+      "re-read against the LOCAL copy and holds there (the byte range named below holds in it too);",
       "bytes 133241..134236 for crystalPicker). The push order of a call's arguments is last first (docs/ethanon-formats.md:916 and 2697, 00_order 8.0 rule 3). An investigator and a sceptic read the",
       "listing independently (planning step 243); both took the shift to be vertical, from the two precedents above and from the owner's report, which a horizontal shift (discs at x 98 and 126) cannot explain."
     ],

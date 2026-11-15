@@ -28,7 +28,7 @@
 // 2026-11-15 ("you are allowed to fix everytihn , commit and push under my name only and make a new release."), and this suite pins THAT DECISION where step 205
 // pinned its absence: a phone's run resolves with it on, a desktop run (any kind) still with it off, `--dynamic-res off` still turns it off for one run, and the one
 // fact about its numbers that is a rule and not a tuning value: start_max_pixels is 0, no start budget (a budget under a phone's own pixel count is a blanket
-// downscale of EVERY phone, and on a driver that offers only a display-paced present it is permanent, because the controller can only fall there). The other
+// downscale of EVERY phone, and on a 60 or 90 Hz phone whose driver offers only a display-paced present it is for good, because a rise needs 110 fps for about 8 s there). The other
 // numbers are the sibling's (Penumbra E41 and E47), marked "_guess" in the file, measured on no phone, and still not pinned: a designer retunes them. What the
 // engine does with the block is the engine's: it makes no controller for a capture, a --fixed-step run, a replay or a recording (engine/src/core/SupersonicApp.cpp,
 // the gate at :350-355), which this suite cannot see (it is free of the engine); the Step records the probes of the built exe that do.
@@ -176,7 +176,7 @@ void TheShippedTableReadsAndKeepsWhatParityWorkNeeds() {
         CHECK_MSG(phone.dynamicResolution.enabled && table.mobile.dynamicResolution && table.mobile.dynamicResolution->enabled,
                   "and turns dynamic resolution on (step 244, the owner's general word of 2026-11-15)");
         CHECK_MSG(phone.dynamicResolution.startMaxPixels == 0u,
-                  "with NO start budget: one under a phone's own pixel count is a blanket downscale of every phone, permanent on a driver that offers only a display-paced present");
+                  "with NO start budget: one under a phone's own pixel count is a blanket downscale of every phone, and for good on a 60 or 90 Hz phone whose driver offers only a display-paced present (a rise needs 110 fps there)");
         CHECK_MSG(phone.perfLogSeconds == desktop.perfLogSeconds && !phone.perfOverlay && !desktop.perfOverlay, "and asks for no perf log or readout");
         CHECK_MSG(desktop.sceneSamples == 0 && !desktop.dynamicResolution.enabled, "while the desktop run asks for neither either");
         CHECK_MSG(desktop.minimumVulkanMinor == 0, "and the desktop run does not ask for a Vulkan minimum: the engine's own 1.2");

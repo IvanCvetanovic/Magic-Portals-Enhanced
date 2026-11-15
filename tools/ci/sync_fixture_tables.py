@@ -7,7 +7,7 @@
 WHY THE FIXTURE HOLDS COPIES OF THESE TWO. `MagicPortals --root tests/fixtures/ci --port-data game/data --level ci_level ...` starts from the fixture folder, and --root fills every path the game
 reads from the root alone: `data/` is Enhanced's tables, of which the game reads three (Game::LoadData): the role table (the fixture's own, written for it, with invented names), the player's
 tuning and the portals' rules. Those two are Enhanced's, committed in this repository, and a --data flag would replace the whole folder (and with it the fixture's role table), so the fixture holds them,
-byte for byte. The port's own 45 tables (game/data) are NOT copied: the run names them with --port-data, so that nothing of theirs (their notes name other projects) is committed a second time.
+byte for byte. The port's own 49 top-level tables (game/data/*.json, and the lang and fonts folders beside them) are NOT copied: the run names them with --port-data, so that nothing of theirs (their notes name other projects) is committed a second time.
 Copies drift, so the suite compares them to the originals and fails with this command's name when they differ.
 
 Standard library only. Writes only under tests/fixtures/ci/ and refuses any other target.
