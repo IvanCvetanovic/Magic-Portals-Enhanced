@@ -378,7 +378,9 @@ std::string Describe(const Resolved& resolved) {
     if (resolved.perfOverlay) out << ", perf overlay on";
     if (resolved.dynamicResolution.enabled) {
         const DynamicResolutionBlock& dr = resolved.dynamicResolution;
-        out << ", dynamic resolution on (start budget " << dr.startMaxPixels << " px, floor " << dr.minScale << ", target " << dr.targetFps << " fps, relaxed rise "
+        // A budget of 0 is NO budget (the engine's own: SupersonicApp.cpp acts on it only above 0), and the log of a player's run must not read as one of nothing.
+        out << ", dynamic resolution on (" << (dr.startMaxPixels == 0 ? std::string("no start budget") : "start budget " + std::to_string(dr.startMaxPixels) + " px")
+            << ", floor " << dr.minScale << ", target " << dr.targetFps << " fps, relaxed rise "
             << (dr.relaxedRise ? "on" : "off") << ", floor " << dr.minTargetHeight << " lines, emergency below " << dr.emergencyBelowFps << " fps)";
     } else {
         out << ", dynamic resolution off";

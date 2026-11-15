@@ -19,10 +19,19 @@
 // PLANNING STEP 205 (PORT-7) makes the profile TAKE EFFECT and adds what the owner's open decisions need to be measured. The phone block gained
 // sprites_only_scene_pipelines and sprite_report (plain true/false for both kinds of run: the shipped file turns the first ON and the second OFF, which this
 // suite pins as the step's rule), scene_samples (1, 2 or 4; ABSENT in the shipped file) and dynamic_resolution (seven required keys; enabled FALSE in the
-// shipped file): the last two are the owner's decisions and the suite pins that the shipped file takes neither. The flags --scene-samples, --dynamic-res and
+// shipped file at step 205 and TRUE since step 244, below): the sample cap is the owner's decision and the suite pins that the shipped file takes none. The flags --scene-samples, --dynamic-res and
 // --perf-overlay change what a run costs for one run; the perf-diagnostic build's two defaults are a pure function (ApplyPerfDiag). Each pin says in
 // "mutation:" the change that turns it red. Resolve with mobile false is still the rule as it was for every pair, now over a grid that also sets every NEW
 // block key and, separately, every new flag.
+//
+// PLANNING STEP 244 (the phone profile gets the engine's dynamic resolution) turns the shipped block's dynamic_resolution ON, under the owner's general word of
+// 2026-11-15 ("you are allowed to fix everytihn , commit and push under my name only and make a new release."), and this suite pins THAT DECISION where step 205
+// pinned its absence: a phone's run resolves with it on, a desktop run (any kind) still with it off, `--dynamic-res off` still turns it off for one run, and the one
+// fact about its numbers that is a rule and not a tuning value: start_max_pixels is 0, no start budget (a budget under a phone's own pixel count is a blanket
+// downscale of EVERY phone, and on a driver that offers only a display-paced present it is permanent, because the controller can only fall there). The other
+// numbers are the sibling's (Penumbra E41 and E47), marked "_guess" in the file, measured on no phone, and still not pinned: a designer retunes them. What the
+// engine does with the block is the engine's: it makes no controller for a capture, a --fixed-step run, a replay or a recording (engine/src/core/SupersonicApp.cpp,
+// the gate at :350-355), which this suite cannot see (it is free of the engine); the Step records the probes of the built exe that do.
 //
 // NOT TESTED, and why: main.cpp cannot be linked into a suite, so the wiring from a flag to this module's Overrides, and from Resolved to
 // the engine's GameManifest, rests on probes of the built exe (the engine's own log says "Created 4 x 16x16 shadow map layer(s)", and
@@ -152,23 +161,28 @@ void TheShippedTableReadsAndKeepsWhatParityWorkNeeds() {
               "the shipped phone profile asks for Vulkan 1.1, so that a phone whose driver reports 1.1 is not refused");
     // THE STEP'S RULE (planning step 205, which lifted step 201's "the profile turns nothing on that could change a picture" on purpose): the shipped phone profile
     // builds the scene pipelines sprites-only (byte for byte the desktop's pictures: the step's G1) and keeps the sprite report quiet (no pixel, no tick), and it
-    // takes NONE of the owner's open decisions: no sample cap (the key is absent), dynamic resolution present and OFF, and no perf readout or log (a diagnostic
-    // build asks for those, never the table). The numbers of the dynamic-resolution block are not pinned: they are the sibling's and a designer retunes them.
-    // mutation: write sprites_only_scene_pipelines false or sprite_report true into the shipped block; write a scene_samples key; set dynamic_resolution.enabled true.
+    // takes no sample cap (the key is absent: still the owner's decision) and no perf readout or log (a diagnostic build asks for those, never the table). STEP 244
+    // turned dynamic resolution ON for the phone profile, with NO start budget (start_max_pixels 0): the first is the decision and the second the rule that keeps it
+    // from being a blanket downscale of every phone. The other numbers of the block are not pinned: they are the sibling's, marked as guesses in the file, and a
+    // designer retunes them.
+    // mutation: write sprites_only_scene_pipelines false or sprite_report true into the shipped block; write a scene_samples key; set dynamic_resolution.enabled false
+    // (or take the object out); give start_max_pixels any value above 0.
     for (const bool attended : {true, false}) {
         const EngineTuning::Resolved desktop = EngineTuning::Resolve(table, attended, false, EngineTuning::Overrides{});
         const EngineTuning::Resolved phone = EngineTuning::Resolve(table, attended, true, EngineTuning::Overrides{});
         CHECK_MSG(phone.spritesOnlyScenePipelines, "the shipped phone profile builds the scene pipelines sprites-only");
         CHECK_MSG(!phone.spriteReport, "and keeps the sprite report quiet, for both kinds of run");
         CHECK_MSG(phone.sceneSamples == 0 && !table.mobile.sceneSamples, "and does not cap the scene target's samples: the owner's decision, the key is absent");
-        CHECK_MSG(!phone.dynamicResolution.enabled && (!table.mobile.dynamicResolution || !table.mobile.dynamicResolution->enabled),
-                  "and does not turn dynamic resolution on: the owner's decision");
+        CHECK_MSG(phone.dynamicResolution.enabled && table.mobile.dynamicResolution && table.mobile.dynamicResolution->enabled,
+                  "and turns dynamic resolution on (step 244, the owner's general word of 2026-11-15)");
+        CHECK_MSG(phone.dynamicResolution.startMaxPixels == 0u,
+                  "with NO start budget: one under a phone's own pixel count is a blanket downscale of every phone, permanent on a driver that offers only a display-paced present");
         CHECK_MSG(phone.perfLogSeconds == desktop.perfLogSeconds && !phone.perfOverlay && !desktop.perfOverlay, "and asks for no perf log or readout");
         CHECK_MSG(desktop.sceneSamples == 0 && !desktop.dynamicResolution.enabled, "while the desktop run asks for neither either");
         CHECK_MSG(desktop.minimumVulkanMinor == 0, "and the desktop run does not ask for a Vulkan minimum: the engine's own 1.2");
         CHECK_MSG(phone.minimumVulkanMinor == 1, "while the phone run asks for 1.1");
     }
-    CHECK_MSG(table.mobile.dynamicResolution.has_value(), "the shipped phone block documents the dynamic-resolution numbers (inert), so a typo in them fails where the file is read");
+    CHECK_MSG(table.mobile.dynamicResolution.has_value(), "the shipped phone block holds the dynamic-resolution object (all seven keys), so a typo in it fails where the file is read");
     // The same file under the developer's flags: nothing the table leaves off is on for want of a flag the table cannot see.
     {
         EngineTuning::Overrides flags;
@@ -177,6 +191,13 @@ void TheShippedTableReadsAndKeepsWhatParityWorkNeeds() {
         CHECK_MSG(tried.dynamicResolution.enabled && tried.dynamicResolution.startMaxPixels == table.mobile.dynamicResolution->startMaxPixels &&
                       tried.dynamicResolution.minTargetHeight == table.mobile.dynamicResolution->minTargetHeight,
                   "--dynamic-res on over the shipped file turns it on with the block's numbers");
+    }
+    // The other way, over a phone's run: the A/B of this decision (one exe, one setting changed) is still there.
+    {
+        EngineTuning::Overrides flags;
+        flags.dynamicResolution = false;
+        const EngineTuning::Resolved without = EngineTuning::Resolve(table, true, true, flags);
+        CHECK_MSG(!without.dynamicResolution.enabled, "--dynamic-res off over the shipped phone profile turns it off for that run");
     }
 }
 
@@ -815,6 +836,11 @@ void TheLogLineSaysWhatTheRunAskedFor() {
                   on.find("relaxed rise on") != std::string::npos && on.find("floor 360 lines") != std::string::npos && on.find("emergency below 30 fps") != std::string::npos &&
                   on.find("perf overlay on") != std::string::npos,
               "and with its numbers when on: " + on);
+    // Step 244: the shipped phone block's budget is 0, which is no budget, and the line a player's log carries must not read as a budget of nothing.
+    r.dynamicResolution.startMaxPixels = 0;
+    const std::string noBudget = EngineTuning::Describe(r);
+    CHECK_MSG(noBudget.find("dynamic resolution on (no start budget, floor") != std::string::npos && noBudget.find("start budget 0") == std::string::npos,
+              "a start budget of 0 is said as none: " + noBudget);
 }
 
 void runTests() {

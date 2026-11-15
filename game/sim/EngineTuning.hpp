@@ -81,7 +81,7 @@ struct MobileBlock {
     // Planning step 205 (PORT-7). A plain true/false for BOTH kinds of run, like asset_watching:
     std::optional<bool> spritesOnlyScenePipelines;    // sprites_only_scene_pipelines
     std::optional<bool> spriteReport;                 // sprite_report
-    // Documented and INERT as shipped (the owner's decision): absent, or enabled false.
+    // scene_samples: ABSENT as shipped (still the owner's decision). dynamic_resolution: ON as shipped since step 244 (the owner's general word of 2026-11-15), with no start budget.
     std::optional<std::uint32_t> sceneSamples;        // scene_samples: 1, 2 or 4; absent is the desktop's answer (the engine's own, 4)
     std::optional<DynamicResolutionBlock> dynamicResolution; // dynamic_resolution: {enabled, start_max_pixels, min_scale, target_fps, relaxed_rise, min_target_height, emergency_below_fps}
 };

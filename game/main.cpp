@@ -1138,7 +1138,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     manifest.perfLogSeconds = tuning.perfLogSeconds;
     manifest.perfOverlay = tuning.perfOverlay;
     // The scene target's sample cap and dynamic resolution (planning step 205): asked for only where the table's phone block or a flag asks, so that every run that asks
-    // for neither leaves the manifest as it was. The phone block ships with neither on: the owner's decision.
+    // for neither leaves the manifest as it was. The phone block ships without a sample cap (the owner's decision) and with dynamic resolution on (step 244; the engine
+    // makes no controller for a capture, a --fixed-step run, a replay or a recording, so no captured pixel moves).
     if (tuning.sceneSamples != 0) manifest.sceneSamples = tuning.sceneSamples;
     if (tuning.dynamicResolution.enabled) {
         manifest.dynamicResolution.enabled = true;

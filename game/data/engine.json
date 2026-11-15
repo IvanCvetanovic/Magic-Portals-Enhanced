@@ -47,8 +47,9 @@
     "described in the block itself. Nothing in it has been measured on a phone: no phone has run this port.",
     "",
     "Step 205 turned two of the declined candidates above ON for the phone profile only, on the strength of the same byte-for-byte picture rule: the block's",
-    "sprites_only_scene_pipelines true and sprite_report false. The top-level values above stay what they are (the desktop's). The sample cap and dynamic",
-    "resolution have keys now and are OFF: they are the owner's decision (see the block's _owner_decisions)."
+    "sprites_only_scene_pipelines true and sprite_report false. The top-level values above stay what they are (the desktop's). The sample cap has a key and is",
+    "ABSENT: it is still the owner's decision (see the block's _owner_decisions). Dynamic resolution has its keys and, since step 244, is ON for the phone profile",
+    "(the block's _decided says on whose word and why: a trade of the HUD's sharpness against a GPU's speed, measured on no phone)."
   ],
   "shadow_map_resolution": 16,
   "sprites_only_scene_pipelines": false,
@@ -98,12 +99,16 @@
       "arithmetic and the platform research's section 3b); what a smaller cap does to this port's PIXELS is measured in step 205 with `--scene-samples` and is the owner's to",
       "judge, together with edge_cover.enabled (game/data/edge_cover.json: its strips were built around 4 samples). `--scene-samples <1|2|4>` tries a value for one run.",
       "",
-      "dynamic_resolution (planning step 205; enabled FALSE, the owner's decision NOT yet taken): the scene target sized by how fast the GPU draws it",
+      "dynamic_resolution (planning step 205 built it; step 244 turned it ON, enabled TRUE): the scene target sized by how fast the GPU draws it",
       "(engine/src/core/DynamicResolution.hpp). All seven keys are required when the object is present. The NUMBERS ARE THE SIBLING'S, Penumbra and the Castle of Shadows",
-      "Enhanced's E41 and E47 (its game/main.cpp), and have NOT been measured on this port or on any phone: start_max_pixels 2200000, min_scale 0.3, target_fps 58.0 (E41);",
-      "relaxed_rise true, min_target_height 360, emergency_below_fps 30.0 (E47, found on a Galaxy A05). The controller needs an unpaced loop to rise, and the HUD and the touch",
-      "controls are drawn into the smaller picture and blur with it (the platform research's PL-09). TO TURN IT ON: set enabled true here. A run can try it without editing the",
-      "file with `--dynamic-res on` (these numbers). The engine never applies it to a capture or a --fixed-step run, so no captured pixel can move."
+      "Enhanced's E41 and E47 (its game/main.cpp), and have NOT been measured on this port or on any phone: min_scale 0.3, target_fps 58.0 (E41); relaxed_rise true,",
+      "min_target_height 360, emergency_below_fps 30.0 (E47, found on a Galaxy A05). start_max_pixels is 0 and NOT the sibling's 2200000: 0 is NO start budget (the engine lowers",
+      "the start scale only when the budget is above 0 and under the window's pixel count, SupersonicApp.cpp), and a budget under a phone's window (1,152,000 pixels at 1600x720)",
+      "would downscale EVERY phone for good on a driver that offers only a display-paced present, where the controller can only fall. So a run starts at the full size and the",
+      "controller steps down on a phone that needs it, at the price of a few seconds of slow frames on the weakest. The controller needs an unpaced loop to rise, and the HUD and",
+      "the touch controls are drawn into the smaller picture and blur with it (the platform research's PL-09). TO TURN IT OFF: set enabled false here. A run can turn it off or on",
+      "without editing the file with `--dynamic-res off` or `on` (these numbers). The engine never applies it to a capture, a --fixed-step run, a replay or a recording, so no",
+      "captured pixel can move."
     ],
     "minimum_vulkan_minor": 1,
     "shadow_map_resolution": 16,
@@ -111,8 +116,10 @@
     "sprites_only_scene_pipelines": true,
     "sprite_report": false,
     "dynamic_resolution": {
-      "enabled": false,
-      "start_max_pixels": 2200000,
+      "_guess": true,
+      "_provenance": "EVERY number here is a guess: measured on no phone. min_scale 0.3 and target_fps 58.0 are the sibling's E41 (Penumbra, Castle of Shadows Enhanced); relaxed_rise true, min_target_height 360 and emergency_below_fps 30.0 are its E47 (a Galaxy A05). start_max_pixels 0 is this port's own (step 244), not the sibling's 2200000: see the block's _about. What they come to on a phone held in landscape (a window 720 lines high): the floor of 360 lines is a scale of 0.5 (800x360 at 1600x720), reached from 1.0 in one step at most (a step at most halves the scale), and the emergency floor of 0.3 (480x216) only on a window that ran under 30 fps AT that floor. Cost follows the pixel count in the sibling's measurement (an Adreno 640: half the width and height, about 4x the speed), which is not this port on a PowerVR.",
+      "enabled": true,
+      "start_max_pixels": 0,
       "min_scale": 0.3,
       "target_fps": 58.0,
       "relaxed_rise": true,
@@ -121,11 +128,12 @@
     },
     "_decided": {
       "sprites_only_scene_pipelines": "IN for the phone profile (step 205): byte-identical in every picture of this port on a desktop (steps 190 and 205), the measured gain is the sibling's. Costs the developer's lit boxes, which draw flat.",
-      "sprite_report": "IN for the phone profile (step 205): false. Changes no pixel and no tick."
+      "sprite_report": "IN for the phone profile (step 205): false. Changes no pixel and no tick.",
+      "dynamic_resolution": "ON for the phone profile (step 244), under the owner's general word of 2026-11-15, verbatim: \"you are allowed to fix everytihn , commit and push under my name only and make a new release.\" That is a delegation and not a ruling of his on this lever: it was taken as the word to turn on the sibling's mitigation for one player's report, a Galaxy A03 Core (SM-A032M/DS, PowerVR GE8322, 2 GB, Android 11 Go) whose first level runs 'frame by frame'. THE CAUSE OF THAT REPORT IS NOT ESTABLISHED: nothing was measured on any phone, and the lever helps only if the lag is pixel-bound (the level draws every blended sprite into a window-sized RGBA16F 4x-MSAA target, which a menu does not; that is an inference). The price: the HUD and the touch controls blur with the scaled target (the sibling's A05 tester complained of pixelation), each step down recreates the target (a hitch), and the controller needs a few seconds of slow frames to judge. One key undoes it: enabled false."
     },
     "_owner_decisions": {
-      "scene_samples": "STILL THE OWNER'S, with edge_cover.enabled and dynamic resolution as one bundle (the platform research's PL-05, owner decision 1): 1 or 2 samples would save 44 or 24 B per pixel of the scene target but move some edge pixels in a project whose gate is pixels. Step 205 built the key (absent here) and the flag and MEASURED the pixel cost; it decided nothing.",
-      "dynamic_resolution.enabled": "STILL THE OWNER'S (owner decisions 1 and 3): the HUD and the controls blur with the scene target. The numbers above are written with their provenance and the block is OFF.",
+      "scene_samples": "STILL THE OWNER'S, with edge_cover.enabled (the platform research's PL-05, owner decision 1; dynamic resolution left this bundle at step 244, see _decided): 1 or 2 samples would save 44 or 24 B per pixel of the scene target but move some edge pixels in a project whose gate is pixels. Step 205 built the key (absent here) and the flag and MEASURED the pixel cost; it decided nothing, and step 244 did not touch it.",
+      "dynamic_resolution.enabled": "TAKEN at step 244 under the owner's general word of 2026-11-15 (see _decided), not ruled on by him: whether the HUD and the controls may blur with the scene target (the platform research's PL-09, owner decision 3) is the part of it he was not asked, and to reverse the whole decision is the one key enabled false. The numbers are the sibling's, written with their provenance and marked as guesses.",
       "edge_cover.enabled": "STILL THE OWNER'S: game/data/edge_cover.json is not touched by the phone profile."
     }
   }
