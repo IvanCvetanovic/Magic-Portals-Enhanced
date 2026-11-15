@@ -423,8 +423,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // ui.json is the port's own and committed, so a HUD that will not read is a
     // fault in this repository and stops the start as loudly as a missing level.
     m_hudReady = read;
-    // Which language it speaks (planning step 238): the flag, else the saved choice, else English; its strings, its fonts and the achievements'
-    // translation. After the tables, whose font names it loads, and before any level or menu is built.
+    // Which language it speaks (planning step 238): the flag, else the saved choice, else (a player's run, planning step 245) the system's language if it is one
+    // of the eleven, else English; its strings, its fonts and the achievements' translation. After the tables, whose font names it loads, and before any level or menu is built.
     if (read) startLanguage();
     // The language picker's table and its globe (planning step 239), in a run that offers it: after the language, whose table it needs.
     if (read) loadPickerRules();
@@ -5199,13 +5199,29 @@ void MagicPortalsLayer::startLanguage() {
         std::string opened;
         m_languageStore.Open(std::string(), languages, opened);
     } else {
-        if (std::string opened; !m_languageStore.Open(m_paths.saveDir, languages, opened)) {
+        std::string opened;
+        const bool read = m_languageStore.Open(m_paths.saveDir, languages, opened);
+        if (!read) {
             SUPERSONIC_LOG_WARN("Magic Portals") << "language not read, English kept: " << opened << std::endl;
         } else if (m_languageStore.FromFile()) {
             SUPERSONIC_LOG_INFO("Magic Portals") << "language: " << languages.CodeOf(m_languageStore.Language()) << " (the player's choice, read from "
                                                  << m_languageStore.Path() << ")" << std::endl;
         }
         start = m_languageStore.Language();
+        // THE SYSTEM'S LANGUAGE (planning step 245, LANG-3), and only here: a player's run, no `--lang`, and NO language.json. The player has chosen nothing, so the
+        // game follows the system until they do, and the store is not told: Chosen() stays empty and nothing is written, so a phone whose language changes changes the
+        // game's with it, and the first pick writes the file and ends it. A saved choice (English too) never gets here, and neither does a file that would not read: that
+        // is English, as before, and left alone. A code the table of languages does not hold is English, said once.
+        if (read && !m_languageStore.FromFile() && !m_paths.language.systemDefault.empty()) {
+            if (const std::optional<Strings::Lang> system = languages.LangOfCode(m_paths.language.systemDefault)) {
+                start = *system;
+                SUPERSONIC_LOG_INFO("Magic Portals") << "language: " << m_paths.language.systemDefault
+                                                     << " (the system's language: no language.json and no --lang; nothing is written until the player chooses)" << std::endl;
+            } else {
+                SUPERSONIC_LOG_ERROR("Magic Portals") << "language: the system's language '" << m_paths.language.systemDefault
+                                                      << "' is no language of game/data/lang/languages.json, English is drawn" << std::endl;
+            }
+        }
     }
     SetLanguage(start);
 }

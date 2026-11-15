@@ -26,6 +26,45 @@ Policy ResolvePolicy(const std::optional<std::string>& langFlag, bool fixedStep,
     return policy;
 }
 
+namespace {
+
+// ASCII only, by hand: the C library's tolower follows the program's locale, and a locale text is not a place for that to matter.
+bool IsAsciiLetter(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+char FoldAscii(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
+bool IsAsciiSpace(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+// What a locale text puts between its language and the rest: `pt_BR`, `pt-BR`, `pt.UTF-8`, `pt@euro`.
+bool EndsTheLanguage(char c) { return c == '_' || c == '-' || c == '.' || c == '@'; }
+
+bool SameLettersIgnoringCase(std::string_view text, std::string_view code) {
+    if (text.size() != code.size()) return false;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (FoldAscii(text[i]) != code[i]) return false;
+    }
+    return true;
+}
+
+} // namespace
+
+std::string CodeForLocale(std::string_view locale) {
+    while (!locale.empty() && IsAsciiSpace(locale.front())) locale.remove_prefix(1);
+    while (!locale.empty() && IsAsciiSpace(locale.back())) locale.remove_suffix(1);
+    std::size_t end = 0;
+    while (end < locale.size() && IsAsciiLetter(locale[end])) ++end;
+    // Letters, and then the end of the text or a separator: `pt1` and `pt:en` are not a locale, and an empty language (`_BR`, `.UTF-8`) is none.
+    if (end < locale.size() && !EndsTheLanguage(locale[end])) return {};
+    const std::string_view subtag = locale.substr(0, end);
+    for (const std::string_view code : Strings::kLangCodes) {
+        if (SameLettersIgnoringCase(subtag, code)) return std::string(code);
+    }
+    return {};
+}
+
+void ApplySystemLocale(Policy& policy, bool attended, std::string_view locale) {
+    policy.systemDefault.clear();
+    if (!attended || policy.forced) return;
+    policy.systemDefault = CodeForLocale(locale);
+}
+
 bool Store::Open(const std::string& directory, const Strings::LanguageTable& languages, std::string& error) {
     m_languages = languages;
     m_chosen.reset();

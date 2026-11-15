@@ -10,6 +10,10 @@
 //    per line or several on a line, double quotes around a token with spaces). Unpack::TakeFlagsFile reads, parses and consumes it (renamed to
 //    magicportals_args.used, so a scripted run does not become every later launch). adb writes the private file through run-as, which only a debuggable
 //    APK allows: a release APK has no way to receive flags. A scripted run never meets the unpack's failure dialog (nobody would close it).
+//  - THE SYSTEM'S LANGUAGE (planning step 245, LANG-3). An activity's environment has no LANG, so the phone's own configuration is asked
+//    (AConfiguration_getLanguage, as the sibling port does) and handed to the game as a text through MagicPortalsSetSystemLocale, before
+//    MagicPortalsMain. NOT as `--lang`: that forces a language for the run and would hide every saved choice. What the game does with it - the
+//    language of a first run that has no language.json, until the player picks one - is sim/Language.hpp's.
 //  - NOTHING ELSE. The saves go where the engine puts a user's data on Android, <files>/Magic Portals/ (internal storage: they survive the app being
 //    stopped and are removed only by uninstalling); the log and the generated files go to <files>/Magic Portals/scratch (sim/Scratch.hpp, main.cpp).
 //    No --saves is passed: it is a developer's flag, and it would make the run "not a player's", which suppresses the dialog a start that cannot
@@ -19,6 +23,7 @@
 // the log of a start that stopped in the unpack are Unpack's (planning step 204, D3), where a host compiler builds them and a suite runs them.
 
 #include <android/asset_manager.h>
+#include <android/configuration.h>
 #include <android/native_activity.h>
 #include <android_native_app_glue.h>
 
@@ -185,6 +190,13 @@ int SupersonicMain(int argc, char** argv) {
         std::error_code ec;
         fs::current_path(files / kEngineFolder, ec);
         if (ec) SUPERSONIC_LOG_ERROR(kLogTag) << "Cannot enter " << (files / kEngineFolder).string() << ": " << ec.message();
+
+        // The phone's language: two letters with no NUL and no region ("pt"), which is a locale text as it stands. Not an answer when the glue has no configuration yet.
+        if (app != nullptr && app->config != nullptr) {
+            char language[2] = {0, 0};
+            AConfiguration_getLanguage(app->config, language);
+            if (language[0] != 0) MagicPortalsSetSystemLocale(std::string(language, 2));
+        }
 
         std::vector<std::string> args = Unpack::LaunchArguments(argc > 0 && argv != nullptr ? argv[0] : nullptr, (files / kContentFolder).string(), devFlags.args);
         std::vector<char*> pointers;

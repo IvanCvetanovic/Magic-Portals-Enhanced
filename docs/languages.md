@@ -1,10 +1,11 @@
 # Languages
 
 The original game is in English only. Magic Portals Enhanced shows its interface in eleven languages, in the order of the Magic Rampage
-Companion app's picker: **English** (the default and the original's), **Deutsch, Español, Français, Italiano, Português, Русский, Türkçe,
-Українська, 日本語, العربية** (`en de es fr it pt ru tr uk ja ar`). This page is the design, how to add a language, where the translations came from,
-and what is not translated. The record of how it was built, step by step, with its gates, is Steps 236-239 of
-[the remaster plan](planning/2026-09-11-magic-portals-remaster.md); the open questions are `LANG-1` to `LANG-5` in
+Companion app's picker: **English** (the original's, and what a system that speaks none of the others gets), **Deutsch, Español, Français, Italiano,
+Português, Русский, Türkçe, Українська, 日本語, العربية** (`en de es fr it pt ru tr uk ja ar`). A first run speaks the system's language when it is one of
+the eleven (below); the globe on the main menu changes it. This page is the design, how to add a language, where the translations came from,
+and what is not translated. The record of how it was built, step by step, with its gates, is Steps 236-239 and 245 of
+[the remaster plan](planning/2026-09-11-magic-portals-remaster.md); the open questions are `LANG-1` to `LANG-8` in
 [parity-backlog.md](parity-backlog.md) section 7.
 
 ## What a player sees
@@ -13,18 +14,38 @@ and what is not translated. The record of how it was built, step by step, with i
   screen. It opens a screen of eleven plates, each the language's own name in its own script; the one in use is lit. A tap changes the words and the
   fonts at once, on that screen, and the choice is kept. The back button, or `Esc`, returns to the screen that opened it. The globe is a picture the
   game draws itself, in the same style as the gear; nothing is stored.
-* **English is the default, and it is what it always was.** There is no detection of the system's language: a player who never chooses has English,
-  and English is drawn as before (35 recorded frames of every menu screen and level text, kept as numbers and compared within a tolerance, hold that: `tests/golden/menu_screens.json`;
+* **A first run speaks the system's language when the game has it, and follows it until the player picks** (`LANG-3`, planning step 245). A player's run
+  that has no `language.json` and no `--lang` asks the system which language it speaks and, if that is one of the eleven, speaks it. Any other language
+  (Chinese, Hebrew, Polish, Korean ...), no answer, and a system that says `C` or `POSIX` give **English, as it always was.** **Nothing is written for the system's
+  language**: the store holds no choice, so a phone whose language changes changes the game's with it, and the first pick in the picker writes `language.json`
+  and ends that. A saved choice always wins, a saved English included (a player who picked English on a Portuguese phone has English, on every later run). Picking
+  the language the system already gave is a choice too and is written, so it outlives a change of the system's. A `language.json` that will not read is English, as
+  before, and **not** the system's: the file is there and is left alone, with its reason in the log. The log says what the system answered and what became of it
+  (`system language: 'pt_BR.UTF-8' -> pt`, then `language: pt (the system's language ...)`).
+* **Where the system's language is read** (the text is turned into one of the eleven codes by `Language::CodeForLocale`, which makes a pure function of every spelling the
+  platforms use: the language subtag before the first of `_ - . @`, compared whole and ignoring case, so `pt_BR`, `pt-PT`, `pt_BR.UTF-8`, `PT_br` and a bare `pt` are
+  Portuguese, `ukr` and `zh_CN` are none; the region is not read, so Portuguese from Portugal gets the one Portuguese there is, `LANG-4`): **Windows** the first of the
+  user's preferred UI languages (`GetUserPreferredUILanguages`), the regional-format locale only when that list cannot be had; **Android** `AConfiguration_getLanguage`
+  in `game/android/AndroidMain.cpp`, handed to the game as a locale text through `MagicPortalsSetSystemLocale` and **never as `--lang`** (a forced run neither reads nor
+  writes `language.json`, so it would hide every saved choice); **macOS and iOS** `[NSLocale preferredLanguages]`, first entry, in `MacMain.mm` and `IOSMain.mm` (Foundation,
+  which both already import; **written, never compiled**); **Linux and the other POSIX systems** `LC_ALL`, then `LC_MESSAGES`, then `LANG`: the first that is set and not
+  empty decides, even when it says `C` (a player who set `LC_ALL=C` did not ask for their `LANG`'s language); `LANGUAGE` is not read.
+* **Only a player's run follows the system.** `Language::ApplySystemLocale` gives a default to an attended run (`RunKind.hpp`'s `AttendedRun`: no `--frames`, `--screenshot`,
+  `--record`, `--replay`, `--hidden`, `--saves`, script flag or `--light-masks-off`) with no forced language. `--lang`, `--fixed-step`, `--route` and `--visit-levels` (English,
+  forced) and every capture and script get none, whatever the system says, and the system is not even asked: a capture or a route is the same pictures on every machine, and the
+  suites (whose bare `Paths` carry no default) do not depend on the machine's language.
+* **English is drawn as before** (35 recorded frames of every menu screen and level text, kept as numbers and compared within a tolerance, hold that: `tests/golden/menu_screens.json`;
   one character of one achievement's description is the exception, see *Known limits*). The 15 frames that draw the achievements' words are kept WITHOUT their glyph quads, because a
   glyph's place on the original's font page spells the character: the committed file holds their other quads, their glyph counts, the rectangle their glyphs fill and one fingerprint of
   all their glyphs together, and the glyphs themselves are compared with the gitignored `out/data/menu_screens_text_golden.json` when it is there (below, *What is committed*).
 * **Kept in `language.json`** in the same folder as the medals (`scores.json`) and the switches (`audio.json`): `{"version":1,"language":"de"}`.
-  Nothing is written until the player chooses; a file that will not read is English, with the reason in the log, and is left alone.
+  Nothing is written until the player chooses (the system's language is not a choice); a file that will not read is English, with the reason in the log, and is left alone.
 * **`--lang <code>`** forces a language for one run and neither reads nor writes `language.json` (a capture's flag, like `--controls modern`). A choice
   made in the picker during such a run is kept in memory only. A developer's or parity run (`--fixed-step`, `--route`, `--visit-levels`) **without** `--lang` is
   forced to English the same way (`Language::ResolvePolicy`): the saved choice of whoever runs a capture or a route is never read, so a capture compared with the
   original does not change with the language the machine's player chose. Those three flags and no other: the capture helpers (`--press`, `--hold`, `--tap`, `--drag`, `--place`,
   `--burn-dragon`) do not make a run a developer's, so a capture without `--fixed-step` reads the saved language and is offered the picker, and a capture passes `--fixed-step` or `--lang`.
+  Such a capture does not take the SYSTEM's language, though (it is not an attended run, above): only a language somebody saved.
 * **Where the picker is not offered:** a developer's run (`--fixed-step`, `--route`, `--visit-levels`) and every test's bare layer, as they have no gear:
   a capture of the original's menus is the original's menus. It does not depend on the modern controls' tables, so a run that has no Options still has it.
 
@@ -87,7 +108,8 @@ Each file says so. Expect wrong register, awkward phrasing and the occasional mi
 * **Proper nouns:** the game's name, the developer's, the engine's, the names of the people in the credits.
 * **Developer and failure text:** the start-up error dialog (it runs before any language is known), the log, `--help`, and the failure labels. These are English.
 * **A card already on screen** when the language changes keeps its words until it goes.
-* **No system-language default** (`LANG-3`): a first run is English by design.
+* **A system language the game does not have** (`LANG-3`, closed by step 245 for the eleven it has): Chinese, Hebrew, Polish, Korean and every other language get English.
+  Only the FIRST of Windows' preferred UI languages is read (a Windows whose list is `zh-CN`, `de-DE` gets English, not German), and macOS' and iOS' first too.
 
 ## Arabic
 
@@ -126,6 +148,18 @@ two credits lines) are this port's own words.
 
 ## Known limits, and the owner's calls
 
+* **A first run now meets the ten machine translations without choosing them** (`LANG-1`, step 245). A German, Spanish, French, Italian, Portuguese, Russian, Turkish, Ukrainian,
+  Japanese or Arabic system now starts in words that no native reader has read, where before a player met them only by opening the globe. Leaving the system's language out is one
+  line (`main.cpp`'s call of `Language::ApplySystemLocale`) and the tests that pin it say what would change; whether to keep it until a reviewer has read them is the owner's call.
+* **The main menu is still English in every language, so a first run in another language is a mixed screen** (`LANG-2`). The main menu draws no word of the string table at all
+  (TAP START and *Achievements* are pixels of the original's pictures); the translated surface is the 14 interface strings and the 82 achievements: the Options screen, the picker,
+  the level captions, the dashboard and the cards. A player who says the game is "always English" may be seeing the menu and the pictures, which this does not change.
+* **A first run in Russian, Turkish, Ukrainian, Japanese or Arabic bakes its fonts before the first frame.** The two atlases of a generated language are made while the game starts
+  (60-90 ms on the Linux machine of step 245's launches, from an empty scratch folder; a language already baked is read from the cache). Never timed on a phone. If they cannot be made,
+  the run speaks English and says why in the log, as a pick does (`LANG-7`), and the next start tries again.
+* **None of the system reads was run on a phone, a Mac, an iPhone or Windows.** Linux's was run (`LC_ALL`, `LC_MESSAGES`, `LANG`, a saved file, `--lang`, `--fixed-step`, `C`, `zh_CN`);
+  the Android, Windows and Apple reads are written and unproved: the Android and Windows branches were not compiled by the step (the Windows one was checked against stubs of its four
+  names), and the Apple ones cannot be compiled without a Mac.
 * **English is as before, with one character excepted.** The description of achievement 60 holds, in the original, one byte that is not valid UTF-8 (a lone Latin-1 byte;
   `docs/ethanon-formats.md` section 24). The achievements table used to carry U+FFFD for it, which the byte-wise text drew as three Latin-1 glyphs (the three bytes of U+FFFD's
   UTF-8 form); it now carries U+00BA, one glyph. So that one description is not byte for byte what it was before the languages, and nothing else in English moved.

@@ -13,6 +13,10 @@
 //   the run's policy  ResolvePolicy: a player's run (no flag, none of the rig's three) reads the store and offers the picker; --fixed-step,
 //                  --route or --visit-levels without --lang is forced to English and offers no picker; --lang wins in every kind of run
 //   tidy           no temporary, no .bak is left beside the file
+//   the system's language (planning step 245, LANG-3)  CodeForLocale: every spelling of a locale the platforms use names one of the eleven codes or none
+//                  (`pt_BR`, `pt-PT`, `pt_BR.UTF-8`, `uk_UA`, `ar-EG`, `PT_br`, a bare `pt`; `zh_CN`, `C`, `POSIX`, `ukr`, empty and text that is no locale: none), derived
+//                  from the code table so a twelfth language is covered; ApplySystemLocale: only an attended run with no forced language gets a default, a
+//                  forced run (`--lang` or a developer's English) or an unattended one keeps none, ResolvePolicy never sets one, and nothing else of the policy moves
 //
 // Free of the engine, like the store: a scratch directory and no window.
 
@@ -29,6 +33,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -314,7 +319,100 @@ void TheStoreKeepsItsOwnCopyOfTheTable() {
     CHECK_MSG(!empty.Open(dir.string(), Strings::LanguageTable{}, error) && empty.Language() == Lang::En, "an unloaded table recognises nothing: " + error);
 }
 
+// ---- the system's language (planning step 245, LANG-3) ----------------------------------------------------------------------------------
+
+void ALocaleTextNamesOneOfTheElevenOrNone() {
+    const Strings::LanguageTable table = Languages();
+    // Every spelling the platforms use, and what each names. An empty code is "none of the eleven": that run is English, as it always was.
+    const struct {
+        const char* text;
+        const char* code;
+    } rows[] = {
+        // Linux and macOS terminals: language_REGION.ENCODING@MODIFIER
+        {"pt_BR", "pt"}, {"pt_PT", "pt"}, {"pt_BR.UTF-8", "pt"}, {"pt_BR.utf8", "pt"}, {"de_DE@euro", "de"}, {"fr_CA.UTF-8", "fr"}, {"it_CH", "it"},
+        {"en_US.UTF-8", "en"}, {"en_GB", "en"}, {"es_419", "es"}, {"ru_RU.UTF-8", "ru"}, {"tr_TR", "tr"}, {"uk_UA", "uk"}, {"ja_JP", "ja"}, {"ar_EG", "ar"},
+        // Windows and Apple: BCP 47 with hyphens, and scripts
+        {"pt-BR", "pt"}, {"pt-PT", "pt"}, {"ar-EG", "ar"}, {"ja-JP", "ja"}, {"uk-UA", "uk"}, {"es-419", "es"}, {"de-AT", "de"}, {"en-US", "en"},
+        // Android gives the two letters alone
+        {"pt", "pt"}, {"en", "en"}, {"uk", "uk"}, {"ja", "ja"}, {"ar", "ar"}, {"tr", "tr"}, {"ru", "ru"}, {"it", "it"}, {"fr", "fr"}, {"es", "es"}, {"de", "de"},
+        // mixed case, and the blanks an environment variable may carry
+        {"PT_br", "pt"}, {"Pt", "pt"}, {"UK", "uk"}, {"JA_jp.UTF-8", "ja"}, {"  pt_BR \n", "pt"}, {"\tde", "de"},
+        // none of the eleven: a language the game does not have (the region is not read), and text that is no locale at all
+        {"zh_CN", ""}, {"zh-Hans-CN", ""}, {"zh-TW", ""}, {"he_IL", ""}, {"nb_NO", ""}, {"pl_PL", ""}, {"hi", ""}, {"ko_KR", ""}, {"nl", ""}, {"und", ""},
+        {"C", ""}, {"C.UTF-8", ""}, {"POSIX", ""}, {"", ""}, {"   ", ""}, {"_BR", ""}, {".UTF-8", ""}, {"-", ""}, {"@euro", ""},
+        // a subtag is compared whole: a longer word that begins with a code is none, and so is a code that something else follows
+        {"ukr", ""}, {"tur", ""}, {"por", ""}, {"portuguese", ""}, {"ptBR", ""}, {"pt1", ""}, {"pt:en", ""}, {"pt en", ""}, {"p", ""}, {"t", ""}, {"ptr", ""},
+        // bytes beyond ASCII are never a letter of a code
+        {"pt\xC3\xA9", ""}, {"p\xC3\xA9", ""}, {"\xC3\xA9", ""},
+    };
+    for (const auto& row : rows) {
+        const std::string got = Language::CodeForLocale(row.text);
+        CHECK_MSG(got == row.code, std::string("locale text '") + row.text + "' names '" + row.code + "', not '" + got + "'");
+    }
+    // Derived from the table of codes, so a language added to Strings::kLangCodes is covered without a row: its code in every spelling, in capitals, and with a
+    // region and an encoding after it; and every answer is a code the table of languages holds.
+    for (const std::string_view code : Strings::kLangCodes) {
+        const std::string lower(code);
+        std::string upper = lower;
+        for (char& c : upper) c = static_cast<char>(c - 'a' + 'A');
+        const std::string spellings[] = {lower, upper, lower + "_XX", lower + "-XX", lower + "_XX.UTF-8", lower + "-Latn-XX", upper + "_" + lower, lower + "@x", " " + lower + " "};
+        for (const std::string& spelling : spellings) {
+            CHECK_MSG(Language::CodeForLocale(spelling) == lower, "'" + spelling + "' names " + lower);
+        }
+        CHECK_MSG(table.LangOfCode(Language::CodeForLocale(lower)).has_value(), lower + " is a code of the table of languages");
+        // and a letter more or fewer is not it
+        CHECK_MSG(Language::CodeForLocale(lower + "x").empty() && Language::CodeForLocale(lower.substr(0, 1)).empty(), lower + ": a longer or a shorter word is none");
+    }
+    // English is a language the system may name; the default it asks for is English itself, which changes nothing and is still a code.
+    CHECK_MSG(Language::CodeForLocale("en_US.UTF-8") == std::string(Strings::kLangCodes[Strings::IndexOf(Strings::kDefaultLang)]), "English is named like the others");
+}
+
+void TheSystemDefaultIsOnlyForAPlayersRunWithNoFlag() {
+    // Nothing is set by default: every suite's bare Paths, and what ResolvePolicy makes (it never asks the system).
+    CHECK_MSG(Language::Policy{}.systemDefault.empty(), "a bare policy has no system default");
+    for (int mask = 0; mask < 8; ++mask) {
+        const bool fixedStep = (mask & 1) != 0, route = (mask & 2) != 0, visit = (mask & 4) != 0;
+        CHECK_MSG(Language::ResolvePolicy(std::nullopt, fixedStep, route, visit).systemDefault.empty() && Language::ResolvePolicy(std::string("ja"), fixedStep, route, visit).systemDefault.empty(),
+                  "ResolvePolicy leaves the default empty (mask " + std::to_string(mask) + ")");
+    }
+    // A player's, attended run with no flag follows the system: and nothing else of the policy moves.
+    {
+        Language::Policy policy = Language::ResolvePolicy(std::nullopt, false, false, false);
+        Language::ApplySystemLocale(policy, true, "pt_BR.UTF-8");
+        CHECK_MSG(policy.systemDefault == "pt", "a player's run on a Portuguese system defaults to Portuguese: '" + policy.systemDefault + "'");
+        CHECK_MSG(!policy.forced && policy.SaveAllowed() && policy.picker, "and still reads and writes the saved choice, and still offers the picker");
+        // The system changes and the answer changes with it; a system with none of the eleven clears it, and so does an empty text.
+        Language::ApplySystemLocale(policy, true, "uk_UA");
+        CHECK_MSG(policy.systemDefault == "uk", "a second look replaces the first");
+        Language::ApplySystemLocale(policy, true, "zh_CN");
+        CHECK_MSG(policy.systemDefault.empty() && !policy.forced && policy.picker, "a system language the game lacks leaves no default");
+        Language::ApplySystemLocale(policy, true, "ja_JP");
+        Language::ApplySystemLocale(policy, true, "");
+        CHECK_MSG(policy.systemDefault.empty(), "and so does no text");
+        // An unattended run (a capture with --frames or --screenshot, a script, --saves) never has one, and is cleared of one it had.
+        Language::ApplySystemLocale(policy, true, "ar-EG");
+        CHECK(policy.systemDefault == "ar");
+        Language::ApplySystemLocale(policy, false, "ar-EG");
+        CHECK_MSG(policy.systemDefault.empty() && !policy.forced && policy.SaveAllowed(), "an unattended run asks nothing of the system and is cleared of an answer");
+    }
+    // `--lang` wins in every kind of run: a forced run has no default, whatever the system says and whoever is at it.
+    for (int mask = 0; mask < 8; ++mask) {
+        Language::Policy policy = Language::ResolvePolicy(std::string("de"), (mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0);
+        Language::ApplySystemLocale(policy, true, "pt_BR");
+        CHECK_MSG(policy.systemDefault.empty() && policy.forced && *policy.forced == "de", "--lang de keeps its language and has no default (mask " + std::to_string(mask) + ")");
+    }
+    // A developer's run is forced to English: no default either, even if someone called it attended.
+    for (int mask = 1; mask < 8; ++mask) {
+        Language::Policy policy = Language::ResolvePolicy(std::nullopt, (mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0);
+        Language::ApplySystemLocale(policy, true, "pt_BR");
+        CHECK_MSG(policy.systemDefault.empty() && policy.forced && *policy.forced == "en" && !policy.picker,
+                  "a developer's run (mask " + std::to_string(mask) + ") stays English and has no default");
+    }
+}
+
 void runTests() {
+    ALocaleTextNamesOneOfTheElevenOrNone();
+    TheSystemDefaultIsOnlyForAPlayersRunWithNoFlag();
     AMemoryOnlyStoreWritesNothing();
     AFolderWithNoFileIsEnglishAndANeverChosenStoreWritesNone();
     EveryLanguageIsKeptAndReadBack();

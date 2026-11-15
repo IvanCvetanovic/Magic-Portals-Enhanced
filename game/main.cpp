@@ -214,7 +214,54 @@ constexpr const char* kBuildType = "Release";
 constexpr const char* kBuildType = "Debug";
 #endif
 
+// What the platform's shell said the system's language is (MagicPortalsSetSystemLocale), empty where none did.
+std::string g_shellLocale;
+
+#if defined(_WIN32)
+// A locale name as ASCII text: Windows gives wide strings ("pt-BR"), and a name with a character beyond ASCII is no locale name this game knows.
+std::string NarrowLocaleName(const wchar_t* wide) {
+    std::string narrow;
+    for (; *wide != L'\0'; ++wide) {
+        if (*wide > 0x7F) return {};
+        narrow.push_back(static_cast<char>(*wide));
+    }
+    return narrow;
+}
+#endif
+
+// The system's language as the platform words it, for Language::ApplySystemLocale (planning step 245, LANG-3); what that makes of the text is the sim's, and
+// asked ONLY for a player's run. The shell's own answer first (Android, a Mac and an iPhone hand one over: their processes carry no LANG). Windows: the first of
+// the user's preferred UI languages, the one Windows itself is shown in, and when that list cannot be had the regional-format locale (a Brazilian format on an
+// English Windows is not a Portuguese one, which is why it is second). Android: nothing but the shell's answer. Elsewhere the environment, by POSIX's order for
+// the messages category: LC_ALL, then LC_MESSAGES, then LANG, the first that is set and not empty - even when it says "C", which means no language and ends the
+// look (a player who set LC_ALL=C did not ask for their LANG's). LANGUAGE (gettext's list) is not read.
+std::string SystemLocaleText() {
+    if (!g_shellLocale.empty()) return g_shellLocale;
+#if defined(_WIN32)
+    ULONG count = 0;
+    ULONG size = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, nullptr, &size) && size > 1) {
+        std::wstring list(size, L'\0');
+        // A list of NUL-ended names with one more NUL at its end: the first is what the player is shown.
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &count, list.data(), &size) && count > 0) return NarrowLocaleName(list.c_str());
+    }
+    wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
+    if (GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH) > 0) return NarrowLocaleName(name);
+    return {};
+#elif defined(__ANDROID__)
+    return {};
+#else
+    for (const char* variable : {"LC_ALL", "LC_MESSAGES", "LANG"}) {
+        const char* value = std::getenv(variable);
+        if (value != nullptr && *value != '\0') return value;
+    }
+    return {};
+#endif
+}
+
 } // namespace
+
+void MagicPortalsSetSystemLocale(const std::string& locale) { g_shellLocale = locale; }
 
 // The game. main below wraps it in the one try that every uncaught exception ends at.
 static int RunGame(int argc, char** argv, FatalContext& fatal) {
@@ -984,6 +1031,12 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // behind them, with or without `--lang` (a forced run keeps its choice in memory only) - and a developer's run does not, as it has not the gear: a capture
     // of the original's menus is the original's menus.
     paths.language = MagicPortals::Language::ResolvePolicy(langFlag, paths.fixedStep, routeGiven, visitGiven);
+    // THE SYSTEM'S LANGUAGE (planning step 245, LANG-3): what a player's run speaks until the player picks, when there is no language.json and no `--lang`.
+    // After the line above, which replaces the whole struct. Asked of the system only for a run that may use it (an attended one with no forced language:
+    // Language::ApplySystemLocale is the rule, pinned by test_mp_language), so a capture, a route or a scripted run never reads the machine's language.
+    std::string systemLocale;
+    if (fatal.attended && !paths.language.forced) systemLocale = SystemLocaleText();
+    MagicPortals::Language::ApplySystemLocale(paths.language, fatal.attended, systemLocale);
 
     // WHICH CONTROLS THIS RUN PLAYS (planning step 181), resolved once and handed down: the flag and the kind
     // of run (the rig's three flags make it a developer's, whose controls are the classic ones whatever the
@@ -1098,6 +1151,13 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // in the box of a player's run; planning step 203, PORT2-3 (d).)
     SUPERSONIC_LOG_INFO("Magic Portals") << assetRoot.why << std::endl;
     SUPERSONIC_LOG_INFO("Magic Portals") << scratch.note << std::endl;
+    // What the system said its language was, and what became of it: the one line that tells a report from a player whose game came up in a language they did
+    // not choose, or in English on a phone that speaks another. The layer says which language it then spoke ("language: ...").
+    if (fatal.attended && !paths.language.forced) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << "system language: " << (systemLocale.empty() ? std::string("none given") : "'" + systemLocale.substr(0, 64) + "'") << " -> "
+                                             << (paths.language.systemDefault.empty() ? std::string("none of the game's languages") : paths.language.systemDefault)
+                                             << " (used only when there is no language.json and no --lang)" << std::endl;
+    }
 
     // WHAT THE RUN ASKS OF THE ENGINE'S OPTIONAL FEATURES (planning step 190): game/data/engine.json for this kind of run, then the flags over
     // it. A table that will not read leaves the engine as it was (Table{} is that), and the log says so below.

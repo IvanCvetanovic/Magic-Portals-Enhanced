@@ -2372,6 +2372,170 @@ void theFlagAndTheSavedChoiceAndEnglish() {
     }
 }
 
+// ---- the system's language, followed until the player picks (planning step 245, LANG-3) --------------------------------------------------
+
+void theSystemLanguageIsFollowedUntilThePlayerPicks() {
+    if (!originalArtIsThere()) {
+        std::printf("  theSystemLanguageIsFollowedUntilThePlayerPicks SKIPPED - needs the original's extracted assets\n");
+        return;
+    }
+    // A player's run, as main builds it, with `systemDefault` what ApplySystemLocale made of the system: here handed in directly, and below through the real function.
+    const auto systemPaths = [](const std::string& name, const std::string& systemDefault, const std::filesystem::path& saves) {
+        MagicPortalsLayer::Paths paths = langPaths("system-" + name);
+        paths.language.systemDefault = systemDefault;
+        if (!saves.empty()) paths.saveDir = saves.string();
+        return paths;
+    };
+    // The language file only: the other stores of a layer with a save folder may make files of their own, which is not what is asked here.
+    const auto nothingWritten = [](const std::filesystem::path& dir) {
+        std::error_code ec;
+        return !std::filesystem::exists(dir / Language::kStoreFileName, ec);
+    };
+    const std::string fileOfGerman = "{\"version\":1,\"language\":\"de\"}";
+
+    // No file, a Portuguese system: the layer speaks Portuguese, the store holds no choice, and nothing is written. The next run follows the system again.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-1");
+        MagicPortalsLayer::Paths paths = systemPaths("1", "pt", dir);
+        {
+            Run run(paths, "");
+            const MagicPortalsLayer& layer = run.layer;
+            CHECK_MSG(layer.CurrentLanguage() == Lang::Pt && layer.RequestedLanguage() == Lang::Pt && layer.StringTable().Language() == Lang::Pt,
+                      "no file and a Portuguese system: Portuguese");
+            CHECK_MSG(layer.StringTable().Get(Strings::Key::kDashboardNew) != "new!", "with Portuguese words, not English ones");
+            CHECK_MSG(!layer.LanguageStore().Chosen() && !layer.LanguageStore().FromFile() && layer.LanguageStore().Persists() && layer.LanguageStore().SaveCount() == 0,
+                      "it is the system's language and not the player's choice: the store holds none");
+            CHECK_MSG(nothingWritten(dir), "and starting writes nothing");
+        }
+        paths.language.systemDefault = "de";
+        Run again(paths, "");
+        CHECK_MSG(again.layer.CurrentLanguage() == Lang::De && nothingWritten(dir), "a system that changed its language changes the game's: still no file, so it follows");
+    }
+    // The player picks: the choice is written once, and it wins over the system on every later run.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-2");
+        MagicPortalsLayer::Paths paths = systemPaths("2", "pt", dir);
+        {
+            Run run(paths, "");
+            CHECK(run.layer.CurrentLanguage() == Lang::Pt);
+            CHECK_MSG(run.layer.ChooseLanguage(Lang::Fr) && run.layer.CurrentLanguage() == Lang::Fr, "the player picks French");
+            CHECK_MSG(fileText(dir / Language::kStoreFileName) == "{\"version\":1,\"language\":\"fr\"}" && run.layer.LanguageStore().SaveCount() == 1,
+                      "the pick is written, once");
+        }
+        Run again(paths, "");
+        CHECK_MSG(again.layer.CurrentLanguage() == Lang::Fr && again.layer.LanguageStore().FromFile(), "and the next run, on the same Portuguese system, speaks the pick");
+    }
+    // Picking the language the system already gave is a choice too: it is kept, and then outlives the system's.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-3");
+        MagicPortalsLayer::Paths paths = systemPaths("3", "pt", dir);
+        {
+            Run run(paths, "");
+            CHECK_MSG(run.layer.ChooseLanguage(Lang::Pt) && run.layer.CurrentLanguage() == Lang::Pt, "the lit language is picked");
+            CHECK_MSG(fileText(dir / Language::kStoreFileName) == "{\"version\":1,\"language\":\"pt\"}" && run.layer.LanguageStore().SaveCount() == 1,
+                      "and written: pressing the lit plate is a choice");
+        }
+        paths.language.systemDefault = "de";
+        Run again(paths, "");
+        CHECK_MSG(again.layer.CurrentLanguage() == Lang::Pt, "so a system that moves on to German leaves the player in Portuguese");
+    }
+    // A saved choice wins over the system, English included: a saved English is a choice, not "none".
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-4");
+        const std::string fileOfEnglish = "{\"version\":1,\"language\":\"en\"}";
+        { std::ofstream(dir / Language::kStoreFileName) << fileOfEnglish; }
+        Run run(systemPaths("4", "pt", dir), "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::En && run.layer.LanguageStore().FromFile() && run.layer.LanguageStore().Chosen() == Lang::En,
+                  "a saved English on a Portuguese system is English");
+        CHECK_MSG(fileText(dir / Language::kStoreFileName) == fileOfEnglish && run.layer.LanguageStore().SaveCount() == 0, "and the file is as it was");
+        const std::filesystem::path other = scratchDir("langlayer-system-saves-4b");
+        { std::ofstream(other / Language::kStoreFileName) << fileOfGerman; }
+        Run german(systemPaths("4b", "pt", other), "");
+        CHECK_MSG(german.layer.CurrentLanguage() == Lang::De && fileText(other / Language::kStoreFileName) == fileOfGerman, "a saved German on a Portuguese system is German");
+    }
+    // A file that will not read is English, as before, and not the system's: the file is there and is left alone, with its reason kept.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-5");
+        { std::ofstream(dir / Language::kStoreFileName) << "not json"; }
+        Run run(systemPaths("5", "pt", dir), "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::En && !run.layer.LanguageStore().Reason().empty() && fileText(dir / Language::kStoreFileName) == "not json",
+                  "a corrupt file on a Portuguese system is English with the reason kept, and the file is untouched");
+    }
+    // `--lang` wins. A hand-built policy that carries both (main never builds one) still speaks the flag; the real function never makes the pair.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-6");
+        { std::ofstream(dir / Language::kStoreFileName) << fileOfGerman; }
+        MagicPortalsLayer::Paths both = systemPaths("6", "pt", dir);
+        both.language.forced = std::string("fr");
+        Run run(both, "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::Fr && !run.layer.LanguageStore().Persists(), "a forced language beats a default in the layer too");
+        MagicPortalsLayer::Paths real = systemPaths("6b", "", dir);
+        real.language = Language::ResolvePolicy(std::string("ja"), false, false, false);
+        Language::ApplySystemLocale(real.language, true, "pt_BR");
+        Run japanese(real, "");
+        CHECK_MSG(real.language.systemDefault.empty() && japanese.layer.CurrentLanguage() == Lang::Ja && fileText(dir / Language::kStoreFileName) == fileOfGerman,
+                  "through the real policy: --lang ja on a Portuguese system speaks Japanese, and the saved German is not read or touched");
+    }
+    // A developer's run stays English whatever the system says and whatever is saved: the route, the capture and the visit are the same pictures on every machine.
+    {
+        const struct {
+            const char* name;
+            bool fixedStep;
+            bool route;
+            bool visit;
+        } rigs[] = {{"fixed-step", true, false, false}, {"route", false, true, false}, {"visit-levels", false, false, true}};
+        for (const auto& rig : rigs) {
+            const std::filesystem::path dir = scratchDir(std::string("langlayer-system-saves-7-") + rig.name);
+            { std::ofstream(dir / Language::kStoreFileName) << fileOfGerman; }
+            MagicPortalsLayer::Paths paths = systemPaths(std::string("7-") + rig.name, "", dir);
+            paths.language = Language::ResolvePolicy(std::nullopt, rig.fixedStep, rig.route, rig.visit);
+            Language::ApplySystemLocale(paths.language, true, "pt_BR.UTF-8");
+            Run run(paths, "");
+            CHECK_MSG(paths.language.systemDefault.empty() && run.layer.CurrentLanguage() == Lang::En && !run.layer.LanguageStore().Persists() && !run.layer.LanguageAvailable(),
+                      std::string(rig.name) + ": English, with no default, no saved choice read and no picker, on a Portuguese system");
+            CHECK_MSG(fileText(dir / Language::kStoreFileName) == fileOfGerman, std::string(rig.name) + ": and the saved German is as it was");
+        }
+        // A run nobody is at (a capture with --frames or --screenshot, a script, --saves) gets none either: its flags make it English only when they are the rig's three,
+        // so it reads its own folder and, with no file there, is English as before.
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-7-unattended");
+        MagicPortalsLayer::Paths paths = systemPaths("7-unattended", "", dir);
+        paths.language = Language::ResolvePolicy(std::nullopt, false, false, false);
+        Language::ApplySystemLocale(paths.language, false, "pt_BR");
+        Run run(paths, "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::En && nothingWritten(dir), "an unattended run on a Portuguese system is English, and writes nothing");
+    }
+    // A code the table does not hold, or none: English, and nothing is written.
+    for (const char* code : {"xx", "", "PT", "portuguese"}) {
+        const std::filesystem::path dir = scratchDir(std::string("langlayer-system-saves-8-") + code);
+        Run run(systemPaths(std::string("8-") + code, code, dir), "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::En && nothingWritten(dir), std::string("a default of '") + code + "' is English, and nothing is written");
+    }
+    // Memory only (no save folder): the system's language is spoken and a pick is kept in memory, as the flag's is.
+    {
+        Run run(systemPaths("9", "es", std::filesystem::path()), "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::Es && !run.layer.LanguageStore().Persists(), "no save folder: Spanish from the system, nothing to write to");
+        CHECK_MSG(run.layer.ChooseLanguage(Lang::It) && run.layer.CurrentLanguage() == Lang::It && run.layer.LanguageStore().SaveCount() == 0, "and a pick lasts the run");
+    }
+    // A system language that is set in a generated font: its fonts are baked at the start, and nothing is written.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-10");
+        Run run(systemPaths("10", "ru", dir), "");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::Ru && run.layer.GeneratedFonts() && nothingWritten(dir), "a Russian system: Russian, in baked fonts, nothing stored");
+    }
+    // And when the fonts cannot be made (no scratch folder): English is shown with the note, Russian is still what was asked for, and the player can still pick.
+    {
+        const std::filesystem::path dir = scratchDir("langlayer-system-saves-11");
+        MagicPortalsLayer::Paths paths = systemPaths("11", "ru", dir);
+        paths.prisms.clear();
+        Run run(paths, "");
+        const MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.CurrentLanguage() == Lang::En && layer.RequestedLanguage() == Lang::Ru && !layer.GeneratedFonts(), "no scratch folder: English is shown, Russian was asked for");
+        bool said = false;
+        for (const std::string& note : layer.LanguageNotes()) said = said || note.find("English is shown instead") != std::string::npos;
+        CHECK_MSG(said && nothingWritten(dir) && !layer.LanguageStore().Chosen(), "the notes say why, and nothing is written or chosen");
+    }
+}
+
 // ---- the achievements' translation, whole and in part -------------------------------------------------------------------------------
 
 std::string jsonString(const std::string& text) {
@@ -2731,6 +2895,7 @@ void runTests() {
     aFailingBakeFallsBackToEnglishLoudly();
     theHintIsMirroredInArabic();
     theFlagAndTheSavedChoiceAndEnglish();
+    theSystemLanguageIsFollowedUntilThePlayerPicks();
     aShortTranslationShowsEnglishForWhatItLacks();
     theOptionsWordsAreDrawnInsideTheirSlots();
     theDashboardsTitlesAreFittedOnTheScreen();

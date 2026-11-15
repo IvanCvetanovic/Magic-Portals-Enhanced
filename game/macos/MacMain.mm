@@ -138,6 +138,11 @@ int main(int argc, char** argv) {
             }
         }
 
+        // THE SYSTEM'S LANGUAGE (planning step 245, LANG-3): the first language of the user's list in System Settings ("pt-BR"). A process the Finder starts has no
+        // LANG, so the environment cannot say. Foundation, which this file already imports: no new framework. NOT COMPILED, NOT RUN, like the rest of this file.
+        NSString* language = [NSLocale preferredLanguages].firstObject;
+        if (language != nil) MagicPortalsSetSystemLocale(language.UTF8String);
+
         std::vector<char*> pointers;
         pointers.reserve(args.size() + 1);
         for (std::string& arg : args) pointers.push_back(arg.data());

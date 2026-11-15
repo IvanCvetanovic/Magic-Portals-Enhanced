@@ -8,16 +8,18 @@
 //
 //   {"version":1,"language":"de"}
 //
-// WHAT IT DECIDES AND WHAT IT DOES NOT. It keeps a choice and answers with a language. There is NO detection of the operating system's
-// language anywhere in the layer (the suites must be deterministic, and English is the default): a player who never chose is English. Which
-// run may read or write the file, and the `--lang <code>` flag that forces a language for one run and writes nothing (as `--controls
-// modern` does), are Policy's below (planning step 238, Paths::language); this store is handed an empty directory for a run that must
-// not touch a file.
+// WHAT IT DECIDES AND WHAT IT DOES NOT. It keeps a choice and answers with a language. It never reads the operating system's language: the
+// store holds what the PLAYER chose, and a player who never chose has no choice (Chosen() is empty) and Language() answers English. The system's
+// language is a separate fact, Policy::systemDefault below (planning step 245, LANG-3): the layer speaks it for a player's run that has no
+// saved file, and the store is not told, so nothing is written until the player picks. Which run may read or write the file, and the
+// `--lang <code>` flag that forces a language for one run and writes nothing (as `--controls modern` does), are Policy's below
+// (planning step 238, Paths::language); this store is handed an empty directory for a run that must not touch a file.
 
 #include "sim/Strings.hpp"
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace MagicPortals::Language {
 
@@ -32,6 +34,12 @@ struct Policy {
     // does; a developer's run (the rig's three flags) and every suite's bare Paths do not, so a capture of the original's menus is the original's
     // menus and no pinned frame moves. It does not depend on the controls feature: the gear needs the modern controls' tables and the picker needs none.
     bool picker = false;
+    // The language the operating system speaks, as one of the eleven codes, or empty (planning step 245, LANG-3): what a player's run speaks when there
+    // is NO language.json and no `--lang`, until the player picks one. It FOLLOWS the system: the file is not written for it, so a phone whose language
+    // changes changes the game's with it until the player has chosen. A saved choice (even English) wins over it, a corrupt file is English as before and
+    // not this, and `--lang` and a developer's run never carry one (ApplySystemLocale). Empty by default, which is every suite's bare Paths: no suite or
+    // capture depends on the machine's language. A code the table of languages does not hold is English, with a line in the log.
+    std::string systemDefault;
 };
 
 // The policy a run gets from its command line: `langFlag` is the `--lang` code main has checked against the table, and the three booleans are the
@@ -44,6 +52,19 @@ struct Policy {
 // a capture made with them and without `--fixed-step` reads the saved language (the player's own save folder, or the one `--saves` names) and is offered
 // the picker: a capture must pass `--fixed-step` (or `--lang`). A build without MAGICPORTALS_DEV_TOOLS has no `--route` or `--visit-levels`, and main passes false for both there.
 Policy ResolvePolicy(const std::optional<std::string>& langFlag, bool fixedStep, bool route, bool visitLevels);
+
+// The code of the language a system's locale text names, or empty when it names none of the eleven (planning step 245, LANG-3). Pure: no operating-system
+// call, so every spelling the platforms use is a test case. The language subtag is the letters before the first of `_ - . @`: `pt_BR`, `pt-PT`, `pt_BR.UTF-8`,
+// `PT_br` and the bare `pt` Android gives are all Portuguese, `uk_UA` Ukrainian, `ar-EG` Arabic. It is compared as ASCII, ignoring case, with the codes of
+// Strings::kLangCodes, exactly and never as a prefix, so `ukr` and `tur` are none. Text that is not a locale (`C`, `C.UTF-8`, `POSIX`, empty,
+// `zh_CN` and every language the game does not have, a subtag followed by anything else) names none: that run is English, as it always was. The region is
+// ignored: `pt_PT` speaks the one Portuguese there is, whose register no native reader has looked at (LANG-1).
+std::string CodeForLocale(std::string_view locale);
+
+// Sets `policy.systemDefault` from the system's locale text, or clears it. ONLY an attended run (a player's, RunKind.hpp's AttendedRun: no capture, no
+// script, no `--saves`) with no forced language gets one; a forced run (`--lang`, or a developer's run's English) and an unattended run keep an empty
+// default, whatever the system says. Here, and not in main, so that a suite can pin it: main.cpp is not linked into test_mp, and it only gathers the text.
+void ApplySystemLocale(Policy& policy, bool attended, std::string_view locale);
 
 // The file, inside whichever directory the game was handed.
 inline constexpr const char* kStoreFileName = "language.json";

@@ -155,6 +155,11 @@ int SupersonicMain(int argc, char** argv) {
         args = AppleLayout::WithRoot(std::move(args), choice.folder);
     }
 
+    // THE SYSTEM'S LANGUAGE (planning step 245, LANG-3): the first language of the user's list in Settings ("pt-BR"); an iPhone's process has no LANG. Foundation,
+    // which this file already imports: no new framework. NOT COMPILED, NOT RUN, like the rest of this file.
+    NSString* language = [NSLocale preferredLanguages].firstObject;
+    if (language != nil) MagicPortalsSetSystemLocale(language.UTF8String);
+
     std::vector<char*> pointers;
     pointers.reserve(args.size() + 1);
     for (std::string& arg : args) pointers.push_back(arg.data());
