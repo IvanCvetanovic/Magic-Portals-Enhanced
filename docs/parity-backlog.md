@@ -338,7 +338,7 @@ work no step of §7 owns, and the owner's calls:
   the ball, which the original makes at the torch; and the gameplay rows this run filed for the owner without
   changing them - 12.1's barrel-bomb restock (4-32 cannot be won without it; built in step 116 under the program's
   rule, the original's), its summon clock and its wound's shot
-  at the torch, 12.2's fire against the ghost, 11.3's death before the door, 10.2's pickup rule, 10.3's carriers and
+  at the torch, 12.2's fire against the ghost, 11.3's death before the door, 10.2's pickup rule (BUILT in step 243), 10.3's carriers and
   the keyhole's visible clock, 11.1's four (`destroyable` stones, 3-20's destroyier, the lift door's rise and status
   machine, the beholder's filter) and its two unbuilt wall breaks, Q.2's minion spawn point and the engine's staged
   braking, 13.1's off-screen kill, 11.2's zero-g recoil speed, 13.2's exit sensor (beside R21) and step 73's ring
@@ -1524,16 +1524,26 @@ work no step of §7 owns, and the owner's calls:
       `red_waves` and the hourglass would start a tick late too (no footage frame). 16.7 ms, picture only. Next: the
       effects runtime - such a picture first drawn on its tick + 1 at age 0, with a test; beside 11.3's "what
       `GameStateController` adds draws a frame early".
-- [ ] **Order 10.2, the pickup rule** (step 106, deviation 3; GAMEPLAY no batch owns): the port takes a crystal when the
-      player's body overlaps its trigger box (Goals, the Godot project's rule); `MainCharacter::crystalPicker` takes it when the
-      character's point is within `squaredRange` of the crystal's point shifted `scale(14)` either way (#111-177). The
-      burst follows whichever takes it. Next: the owner.
+- [x] **Order 10.2, the pickup rule** (step 106, deviation 3; GAMEPLAY no batch owns; **BUILT in step 243**, on the owner's
+      3-11 report of 2026-11-15, "this was possible in the original", and his word to fix): the port took a crystal when the
+      player's body overlapped its trigger box (Goals, the Godot project's rule); `MainCharacter::crystalPicker` takes it when the
+      character's point is STRICTLY within `squaredRange` (26, `ETHCallback_crystal` #40-56) of either of two points, the crystal's
+      own shifted 14 up and 14 down (#111-177). This row and step 106 wrote "shifted `scale(14)` either way" and never said the axis:
+      it is vertical, from the push order of `crystalPicker` #117-118 and of `applyForces` #38-56 and `Game::preLoop` #416-427, and
+      **not confirmed on the original** (the measurement is in step 243's LEFT FOR THE OWNER). Built from `game/data/crystals.json` in
+      `Goals::State::Tick`, for every crystal of the 128 levels: the box reached 30.1 over and under a crystal and 23.1 beside it, the
+      discs reach 40 and 26 and 21.9 at their waist, so a 0.5 sweep round 3-11's upper crystal finds 10,903 points in both, 3,111 new
+      and 22 old only (|dy| up to 1.5, |dx| from 22.0, a quarter of a unit and a tick of walking). Over the 128 recorded routes: all 128 win
+      on the same ticks, the six medal pins hold, the crystals taken go from 251 to 261 (ten routes take one more; 3-11's takes the whole
+      stacked pair from the floor) and 1-07, 3-08 and 4-21, which no pin covers, now read medal 3. **Not built, recorded**: the crystal's
+      +-1.5 unit bob (the placed point is tested) and the one-pick-a-frame rule (two crystals in reach go on one tick; the original's
+      order is its bucket's, which the port does not have). Burst and sound follow whichever takes it, as before.
 - [ ] **Order 10.2 deviations, and tidy** (step 106): the expiry tick is the port's (Goals' `leftS` reaching 0 against
       the timer's strict `>` on floored frame ms, step 68's note; deviation 2); the crystal's point is the tick before's,
       at most 0.05 u of bob (4). For later, from its verification: a per-system pool count in `EffectReport` (so the
       suites pin {5, 2} and {1, 2}, not the sum); the effect's depth read from the node's `eth_z` rather than the lighting
       look's `lookZ` (a level whose lighting read failed would put the burst at a flat 20; all 128 read today; 10.3 and
-      10.4 read the same field).
+      10.4 read the same field). Step 243: the bob of (4) is still not fed into the pickup, which tests the placed point.
 - [ ] **Order 10.3, gameplay rows** (step 107, deviations 3 and 4): several carriers in range on one frame - the
       original's loop adds a `key_pick` for each and the last owns the key; `Carry::Acquire` takes the first. And the
       keyhole's 1500 ms counts only while it is on screen in the original (`keyhole.ent` is static, so its callback runs
@@ -7018,7 +7028,7 @@ stone that hits the player fast enough kills him (step 160); and the seven steal
 `docs/permission.md` (gates handing a build to anyone else); camera dragging (his 2026-09-11 ruling "no dragging"
 against the decode's 2x-swipe pan on 127 of 128 levels); R24/R25; step 110's fire-signal orbit and the put-out test at
 the ball; the port-wide floored clock and the picture a tick behind; 12.1's summon clock; 11.3's death before the door;
-10.2's pickup rule and 10.3's carriers; 11.1's four; Q.2's spawn point; 13.1's off-screen kill; the zero-g recoil
+10.2's pickup rule (BUILT in step 243) and 10.3's carriers; 11.1's four; Q.2's spawn point; 13.1's off-screen kill; the zero-g recoil
 speed; the pause's Achievements button on every level; 4-02's easter-egg popup; target platforms. *Added by wave 1*:
 the hole the omitted Facebook button leaves in GameFinishedPopup's art (step 119); a music switch turned back on
 resuming the track the game had stopped, as the original does (step 121); whether the original's timed motions run

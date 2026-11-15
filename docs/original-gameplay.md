@@ -214,6 +214,21 @@ rejected — consistent with the antiportal fields.
 32 levels. **IDENTIFIER.** `crystalCounter`, `_numCrystals`, `_maxCrystals`,
 `getCrystalCount`, `crystalPicker`, `crystal_pick.ent`, `crystal_vanish.ent`.
 
+**DECODED** (planning step 243). **A crystal is taken by a distance poll, not by a contact.**
+`MainCharacter::update` calls `crystalPicker` every frame, after `SideScrollerCharacter::update`,
+and it takes a crystal when the character's point (the centre of its compound: the port's capsule
+centre) is strictly within 26 units of EITHER of two points, the crystal's own point shifted 14
+units up and 14 down (`ETHCallback_crystal` ins 40-56 sets the range, `crystalPicker` ins 112-177
+makes the two tests, each a squared distance below `squaredRange`). A crystal is therefore reached
+from 40 units over or under it and 26 beside it, against the 30.1 and 23.1 of the 28 x 24
+box the Godot project used; between the two points, at the waist (|dy| < 2.07), it is narrower
+(21.9 against 23.1). The shift is VERTICAL by the push order: `crystalPicker` pushes `scale(14)`
+first and 0 second, a call pushes its last argument first, and `applyForces` and `Game::preLoop` build
+their own `vector2`s the same way (not measured on the original). It takes ONE crystal a frame
+(ins 186-203, in its bucket's order) and measures from the crystal's bobbed point (+-1.5 units).
+Built in step 243 (`game/data/crystals.json`, `Goals`), except those last two. On 3-11 a man walking
+the floor under the stacked pair takes both crystals.
+
 ⚠ **UNRESOLVED:** whether the exit requires all crystals. No identifier settles it.
 Modelled as a data switch (`portals.json` → `level.exit_requires_all_crystals`, default
 `false`).

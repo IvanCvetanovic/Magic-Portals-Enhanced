@@ -19,7 +19,7 @@
     "Windows (the others fixed; the win on 215 and no sighting kept): tap 34 from 25 to 42 (before 25 the 400 ms refuses it; from 43 its shot is still flying at tap 70 and the hourglass refuses the second),",
     "its y from 50 to 102 (the win is on 215 for 58 to 78 and 98 to 102, on 217 to 219 for 50 to 54 and 82 to 94), the right walk's start 26 to 35 and end 64 to 82 (it must last about 31 ticks to reach the key, so start and end are one window), tap 70 from 63 on (the win comes 145 ticks after it), its x from 372 to 404 and y from 176 to 224",
     "(230 is sighted and he dies), the left walk's start 70 to 140 (from 150 the win is later, and 60 is not won).",
-    "Medal 2 (silver): one of the three crystals (the others are at (112, 176) and (512, 112), on the knight's platform), 2 portals, 3,440 ms. The aim's drift is 0.98 px."
+    "Medal 2 (silver): TWO of the three crystals since planning step 243, whose pickup is the original's (a floor walker takes the stacked pair, (112, 208) on 191 and (112, 176) on 192; before it, one), and the third, on the knight's platform at (512, 112), needs a portal under either rule; 2 portals, 3,440 ms. The aim's drift is 0.98 px."
   ],
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[0].from 32 -> 38, holds[0].to 66 -> 67 (largest move 6 ticks) and it wins on tick 215 with win_by 260. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level10b",

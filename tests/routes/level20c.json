@@ -19,7 +19,7 @@
     "Tap 3 (190, at (465, 150)) opens a portal over the bared button on 254, a shot after the wall has gone (184), and tap 4",
     "(256, on himself, 2 ticks after it lands) puts him out of it on 258: the crystal at (480, 152) on 259 and the button",
     "pressed on landing (door_lift_1721 opens on 258). Right held from 262 he presses on the door's face from 273, drifts under",
-    "it once its bottom clears his head, and reaches the exit on tick 360. Four of the five crystals, medal 2, 4 portals, no",
+    "it once its bottom clears his head, and reaches the exit on tick 360. All five crystals since planning step 243, whose pickup is the original's (four before it), medal 3, 4 portals, no",
     "achievement (as the old route). EXCEPTIONAL: a KNIFE-EDGE. The stone's first touch must come fast, and a stone set",
     "down a little lower touches the wall late and slowly and the wall holds (aim (395, 200.8): 0.54 m/s). The exit's aim wins",
     "for y 198.5 to 200.5 at x 395 and for x 392 to 401 at y 199.5, a band that slides right as y rises (speeds 1.5 to 2.2);",

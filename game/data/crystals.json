@@ -1,0 +1,41 @@
+{
+  "_about": [
+    "WHEN A CRYSTAL IS TAKEN (planning step 243; game/sim/Goals.{hpp,cpp} says what the code does with it).",
+    "",
+    "DECODED. The original takes a crystal by a DISTANCE POLL, not by a contact: MainCharacter::update calls crystalPicker every frame, after SideScrollerCharacter::update, and",
+    "crystalPicker takes a crystal when the character's entity point (GetPositionXY, the centre of dark_mage.ent's compound: the capsule's centre in the port, game/sim/Game.cpp",
+    "carries the key from the same point) is STRICTLY within `range_px` of EITHER of two points, the crystal's own point shifted by `offset_px` one way and the other. The port's",
+    "own rule until step 243 was the Godot project's (a body inside crystal.ent's 28 x 24 box, Trigger::Overlaps), which reaches 30.1 units above and below a crystal (its 12 and the capsule's 18.1) and 23.1 to",
+    "its sides (14 and 9.1); the original's two discs reach 40 and 26, and at the waist between them (|dy| < 2.07) 21.9, narrower than the box. crystal.ent has no body and no callback that",
+    "reads its <Collision> 28 x 24; the box is still what the exit and the layer use.",
+    "",
+    "WHY IT MATTERS. 3-11 (level10b) has a stacked pair of crystals beyond its locked door, 32 apart over a floor whose top is y 224. The engine rests the player 0.5 into the floor (his",
+    "centre at y 206.4, tests/routes/level10b.json's trace), so his capsule's top is 0.3 under the upper crystal's box and the old rule never took it from the floor; the original's",
+    "discs take it from x 91.8 to x 132.2 and the lower one from x 89.1 to x 134.9. The owner: \"this was possible in the original, I guess because the diamonds have a wider area to",
+    "get picked up\".",
+    "",
+    "NOT DONE, and recorded (Goals.hpp says the same): (1) the crystal's bob. The original tests the crystal's CURRENT point, which linearMotion moves up and down 1.5 units at a random",
+    "phase per run (motions.json crystal); the port tests the placed point, the bob's middle, and the layer owns the motion. At most 1.5 units of reach either way. (2) ONE PICK A",
+    "FRAME. The original's loop returns after the first crystal it takes (crystalPicker ins 186-203), in the order its bucket holds them, which the port has no equivalent of; two",
+    "crystals in reach on one tick are both taken on that tick here, and in the original the second a frame later. A pick feeds nothing into the simulation, so nothing but the",
+    "burst's and the sound's frame can differ. (3) The picker runs inside MainCharacter::update; Goals::Tick runs after the physics step of the same tick."
+  ],
+
+  "pickup": {
+    "range_px": 26.0,
+    "offset_px": [0.0, 14.0],
+    "_range_px": "ETHCallback_crystal ins 40-56: squaredRange = scale(26) x scale(26), SetFloat on the crystal's own 'squaredRange' datum (1104150528 is 26.0f), on the first call only, inside the CheckCustomData('speed') == 0 guard; no placed crystal carries a 'speed' datum (470 crystals in 120 levels, scanned). The test reads that datum back (crystalPicker ins 112-177: e.GetFloat('squaredRange')). The units are the level's, as keys.json range_px (the same scale(26), the same listing): scale() is the screen's factor over the level's.",
+    "_offset_px": "[x, y], in the original's y-down units; the two points are the crystal's minus and plus it, so the sign does not matter. crystalPicker ins 112-120 build the offset with vector2: scale(14) is pushed FIRST (ins 117) and 0 SECOND (ins 118), and a call pushes its last argument first, so y = scale(14) and x = 0. Two other places in the same listing build a vector2 the same way and show which end is which: SideScrollerCharacter::applyForces ins 38-56 builds vector2(moveVec.x * speedScale, linearVel.y) by pushing linearVel.y (ins 40-42) before the x (ins 43-50), and Game::preLoop ins 416-427 builds SetGravity(vector2(0, scale(10))) by pushing scale(10) before 0 (a gravity is vertical). It is a vector, and not an axis name, because the axis is a decode fact and not a tunable.",
+    "_strict": "Both tests are strict, as the listing's: ins 145-146 (CMPf; JNS) for the first point and ins 172-173 (CMPf; TS) for the second, against the squared distance (squaredDistance, a plain dot product of the difference), so a character exactly 26 units from a point has NOT taken it.",
+    "_source": [
+      "MainCharacter::crystalPicker, ins 111-203, and ETHCallback_crystal, ins 40-56, in Enhanced's out/parity/asbc/all_functions.txt (md5 48fe65ce8baea16b94ed84d8d7be84b0, the listing data/player.json cites;",
+      "bytes 133241..134236 for crystalPicker). The push order of a call's arguments is last first (docs/ethanon-formats.md:916 and 2697, 00_order 8.0 rule 3). An investigator and a sceptic read the",
+      "listing independently (planning step 243); both took the shift to be vertical, from the two precedents above and from the owner's report, which a horizontal shift (discs at x 98 and 126) cannot explain."
+    ],
+    "_unverified": [
+      "The VERTICAL axis rests on the push order of three places in one listing and on the owner's report, not on footage of the original. What would settle it: on the emulator rig (docs/parity.md",
+      "sections 1-2), open 3-11's lock with the recorded 2-portal key route, walk left along the floor, and note the frame each timed crystal vanishes. The vertical reading predicts both",
+      "stacked crystals go within a window of about 40 units (x 133 down to x 91); a horizontal shift of 14 predicts the upper one is never taken from the floor. Not run."
+    ]
+  }
+}

@@ -1137,6 +1137,272 @@ void AClosedExitWaitsForANewEntry() {
     CHECK_MSG(play.goals.exitEntries == 2 && play.goals.completed, "and back in, and the level completes");
 }
 
+// ---- The pickup rule (planning step 243) ------------------------------------
+
+// A level's crystals and a player of the real shape (the capsule Player::Spawn builds), which is never stepped: a case puts him
+// where it asks and reads what Goals does with that. Apart from level30, the suite's own level.
+struct PickupRig {
+    Game::Data data;
+    entt::registry registry;
+    entt::entity player = entt::null;
+    Goals::State goals;
+};
+
+bool BeginPickup(PickupRig& rig, const std::string& level, std::string& error) {
+    if (!Game::LoadData(kLevels + "/" + level + ".tscn", kData,
+                        std::filesystem::temp_directory_path() / "supersonic-test-mp-play", rig.data, error)) {
+        return false;
+    }
+    rig.player = Player::Spawn(rig.registry, glm::dvec2(0.0), rig.data.tuning);
+    return Goals::Find(rig.data.scene, rig.data.roles, rig.data.goals, rig.goals, error);
+}
+
+void PutAt(PickupRig& rig, double x, double y) {
+    rig.registry.get<TransformComponent>(rig.player).position = Units::ToWorld(x, y);
+}
+
+// Whether a player centred on (x, y) takes `name` in one tick. Asked of a COPY of the state: `collected` is sticky, and a probe
+// that left it set would make the next one pass for nothing.
+bool TakesAt(PickupRig& rig, double x, double y, const char* name) {
+    Goals::State probe = rig.goals;
+    PutAt(rig, x, y);
+    probe.Tick(rig.registry, rig.player, 0.016);
+    const Goals::Crystal* crystal = probe.FindCrystal(name);
+    return crystal != nullptr && crystal->collected;
+}
+
+// The port's old rule, kept as the layer and the exit still use the box: the capsule against crystal.ent's 28x24.
+bool OldRuleTakes(PickupRig& rig, double x, double y, const char* name) {
+    PutAt(rig, x, y);
+    const Goals::Crystal* crystal = rig.goals.FindCrystal(name);
+    return crystal != nullptr && Trigger::Overlaps(rig.registry, rig.player, crystal->box);
+}
+
+// The engine leaves a player walking a floor with his centre this far down: level10b's route holds 206.4 on every tick from 132 to 214
+// (tests/routes/level10b.json's trace), where the geometry says 205.9 (a 224 floor less his 18.1) and Box2D would rest him at 205.65.
+constexpr double kLevel10bFloorY = 206.4;
+
+void ThreeElevensStackedPairIsTakenFromTheFloor() {
+    // Off level10b.tscn (3-11): the stacked pair beyond the locked door, crystal_1545 at (112, 208) and crystal_1546 at (112, 176),
+    // 32 apart, over a floor whose top is y 224; and the one on the knights' platform, crystal_ent_1548 at (512, 112).
+    // The original's MainCharacter::crystalPicker takes a crystal when the character's point is within 26 of its point shifted 14
+    // up or down (ins 112-177), so a man walking that floor takes the upper one of the pair. The owner's report: "this was
+    // possible in the original".
+    PickupRig rig;
+    std::string error;
+    CHECK_MSG(BeginPickup(rig, "level10b", error), error);
+    if (rig.player == entt::null) return;
+    CHECK_EQ(static_cast<int>(rig.goals.crystals.size()), 3);
+    const struct {
+        const char* name;
+        double x;
+        double y;
+    } crystals[] = {{"crystal_1545", 112.0, 208.0}, {"crystal_1546", 112.0, 176.0}, {"crystal_ent_1548", 512.0, 112.0}};
+    for (const auto& expected : crystals) {
+        const Goals::Crystal* crystal = rig.goals.FindCrystal(expected.name);
+        const glm::vec3 at = Units::ToWorld(expected.x, expected.y);
+        CHECK_MSG(crystal != nullptr && crystal->box.centre == glm::vec2(at.x, at.y), std::string(expected.name) + " is where the level puts it");
+    }
+
+    // The old rule's miss, which is what the owner met: his capsule's top, 206.4 - 18.1 = 188.3, is 0.3 below the box's bottom, 188.0,
+    // at every x.
+    CHECK_MSG(!OldRuleTakes(rig, 112.0, kLevel10bFloorY, "crystal_1546") && !OldRuleTakes(rig, 100.0, kLevel10bFloorY, "crystal_1546"),
+              "the box and the capsule miss crystal_1546 from the floor, by 0.3");
+
+    // The upper one: from x 120 and x 100, and not from x 60 or 140. Its window on this floor is |x - 112| < sqrt(26^2 - 16.4^2) = 20.17,
+    // measured to the lower of its two points, 14 under it.
+    for (const double x : {120.0, 100.0, 112.0, 92.0, 132.0}) {
+        CHECK_MSG(TakesAt(rig, x, kLevel10bFloorY, "crystal_1546"), "crystal_1546 is taken from the floor at x " + std::to_string(x));
+    }
+    for (const double x : {60.0, 140.0, 91.5, 132.5}) {
+        CHECK_MSG(!TakesAt(rig, x, kLevel10bFloorY, "crystal_1546"), "and not from x " + std::to_string(x));
+    }
+    // The lower one, whose own window is wider (12.4 under its upper point): from x 134, and not from 136.
+    CHECK_MSG(TakesAt(rig, 134.0, kLevel10bFloorY, "crystal_1545"), "crystal_1545 is taken from x 134");
+    CHECK_MSG(!TakesAt(rig, 136.0, kLevel10bFloorY, "crystal_1545"), "and not from x 136");
+    // The one on the knights' platform needs a portal under either rule: the best a man can do without one is the floor, 94 under it.
+    CHECK_MSG(!TakesAt(rig, 512.0, kLevel10bFloorY, "crystal_ent_1548"), "crystal_ent_1548, on the knights' platform, is not taken from the floor under it");
+}
+
+void TheNewReachContainsTheOldExceptASliverAtItsWaist() {
+    // A sweep of 0.5 round crystal_1546 on level10b: every point the old rule took and the new one does not lies at the
+    // waist between the two discs (|dy| < 2), where the old box was 23.1 wide and the discs are 21.9; and what the new takes
+    // that the old did not is two orders more. So no walker who got a crystal loses it, and one who met the sliver gets it a tick later
+    // at most (the next case).
+    PickupRig rig;
+    std::string error;
+    CHECK_MSG(BeginPickup(rig, "level10b", error), error);
+    if (rig.player == entt::null) return;
+    int oldOnly = 0;
+    int newOnly = 0;
+    int both = 0;
+    double widestOldOnlyDy = 0.0;
+    double nearestOldOnlyDx = 1e9;
+    for (int iy = -100; iy <= 100; ++iy) {
+        for (int ix = -80; ix <= 80; ++ix) {
+            const double dx = ix * 0.5;
+            const double dy = iy * 0.5;
+            const bool before = OldRuleTakes(rig, 112.0 + dx, 176.0 + dy, "crystal_1546");
+            const bool after = TakesAt(rig, 112.0 + dx, 176.0 + dy, "crystal_1546");
+            if (before && after) ++both;
+            if (before && !after) {
+                ++oldOnly;
+                widestOldOnlyDy = std::max(widestOldOnlyDy, std::fabs(dy));
+                nearestOldOnlyDx = std::min(nearestOldOnlyDx, std::fabs(dx));
+            }
+            if (!before && after) ++newOnly;
+        }
+    }
+    const std::string counts = std::to_string(both) + " in both, " + std::to_string(oldOnly) + " in the old only, " + std::to_string(newOnly) + " in the new only";
+    std::printf("test_mp_play: crystal_1546's 0.5 grid, %s (the old only: |dy| up to %.1f, |dx| from %.1f)\n", counts.c_str(), widestOldOnlyDy,
+                nearestOldOnlyDx);
+    CHECK_MSG(oldOnly == 0 || (widestOldOnlyDy < 2.0 && nearestOldOnlyDx > 21.5), "the old rule's own points are the new one's but the waist's: " + counts);
+    CHECK_MSG(newOnly > 1000 && oldOnly * 20 < newOnly, "and the new reach is far the wider: " + counts);
+    CHECK_MSG(both > 4000, "and they share the rest: " + counts);
+}
+
+void AWalkerOnTheSliverIsTakenWithinATickOfTheOldRule() {
+    // The sliver costs nothing but a tick: crystal_1545 at (112, 208) from a floor walker at y 206.4 (1.6 under its centre) was in
+    // the old rule's reach to x 135.1 and is in the new one's to x 134.85, a quarter of a unit, and a tick of his walk is 2.4.
+    PickupRig rig;
+    std::string error;
+    CHECK_MSG(BeginPickup(rig, "level10b", error), error);
+    if (rig.player == entt::null) return;
+    CHECK_MSG(OldRuleTakes(rig, 135.0, kLevel10bFloorY, "crystal_1545") && !TakesAt(rig, 135.0, kLevel10bFloorY, "crystal_1545"),
+              "at x 135 the old rule took crystal_1545 and the new one does not");
+    const double perTick = WalkPx() * static_cast<double>(kStep);
+    int worst = 0;
+    for (int phase = 0; phase < 8; ++phase) {
+        // Coming in from the right, one tick's walk at a time; the first tick each rule takes it on.
+        int oldTick = -1;
+        int newTick = -1;
+        for (int tick = 0; tick < 80 && (oldTick < 0 || newTick < 0); ++tick) {
+            const double x = 160.0 + phase * perTick / 8.0 - tick * perTick;
+            if (oldTick < 0 && OldRuleTakes(rig, x, kLevel10bFloorY, "crystal_1545")) oldTick = tick;
+            if (newTick < 0 && TakesAt(rig, x, kLevel10bFloorY, "crystal_1545")) newTick = tick;
+        }
+        CHECK_MSG(oldTick >= 0 && newTick >= oldTick, "phase " + std::to_string(phase) + ": the new rule is not before the old");
+        worst = std::max(worst, newTick - oldTick);
+    }
+    CHECK_MSG(worst <= 1, "and never more than a tick after it: " + std::to_string(worst));
+}
+
+void ThePickupIsTheDecodedRuleAndStrict() {
+    // crystals.json's numbers arrive in the rules: 26 and (0, 14), as crystalPicker ins 112-177 and ETHCallback_crystal ins 40-56
+    // give them (the vertical axis is the decode's push order; the table says so).
+    PickupRig rig;
+    std::string error;
+    CHECK_MSG(BeginPickup(rig, "level10b", error), error);
+    if (rig.player == entt::null) return;
+    const Goals::Pickup& pickup = rig.data.goals.pickup;
+    CHECK_MSG(pickup.rangePx == 26.0 && pickup.offsetPx == glm::dvec2(0.0, 14.0), "26 units, shifted (0, 14)");
+    const Goals::Crystal* upper = rig.goals.FindCrystal("crystal_1546");
+    CHECK_MSG(upper != nullptr && upper->pointPx == glm::dvec2(112.0, 176.0), "crystal_1546's point is its node's, (112, 176), in doubles");
+
+    // The test, in exact doubles, strict: 26 away from a disc's centre is OUT, a hair under is IN. The discs are at (112, 162) and (112, 190).
+    const glm::dvec2 at(112.0, 176.0);
+    CHECK(!Goals::InPickupRange(pickup, glm::dvec2(138.0, 162.0), at));
+    CHECK(Goals::InPickupRange(pickup, glm::dvec2(std::nextafter(138.0, 0.0), 162.0), at));
+    CHECK(!Goals::InPickupRange(pickup, glm::dvec2(86.0, 190.0), at));
+    CHECK(Goals::InPickupRange(pickup, glm::dvec2(std::nextafter(86.0, 200.0), 190.0), at));
+    CHECK(!Goals::InPickupRange(pickup, glm::dvec2(112.0, 136.0), at));
+    CHECK(Goals::InPickupRange(pickup, glm::dvec2(112.0, std::nextafter(136.0, 200.0)), at));
+    CHECK(!Goals::InPickupRange(pickup, glm::dvec2(112.0, 216.0), at));
+    CHECK(Goals::InPickupRange(pickup, glm::dvec2(112.0, std::nextafter(216.0, 0.0)), at));
+    // Between the discs it is only the waist: 14 from each, so within 21.9 of the crystal's own point and not at 21.95.
+    CHECK(Goals::InPickupRange(pickup, glm::dvec2(112.0 + 21.9, 176.0), at));
+    CHECK(!Goals::InPickupRange(pickup, glm::dvec2(112.0 + 21.95, 176.0), at));
+    // And it reads the VECTOR, not an axis name: a shift of (14, 0) puts the discs at x 98 and 126, and then a point 14 above the
+    // crystal is the far one.
+    const Goals::Pickup across{26.0, glm::dvec2(14.0, 0.0)};
+    CHECK(Goals::InPickupRange(across, glm::dvec2(98.0, 176.0 + 25.0), at));
+    CHECK(!Goals::InPickupRange(across, glm::dvec2(112.0, 176.0 - 25.0), at));
+    CHECK(Goals::InPickupRange(pickup, glm::dvec2(112.0, 176.0 - 25.0), at));
+    // A Pickup nobody loaded has no range and takes nothing, even from a player on the crystal's own point.
+    CHECK(!Goals::InPickupRange(Goals::Pickup{}, at, at));
+
+    // Through a tick, with the player's float position between: 0.01 either side of the 26 of a disc 14 under the crystal's point.
+    CHECK_MSG(TakesAt(rig, 112.0 + 25.99, 176.0 + 14.0, "crystal_1546"), "25.99 from the lower disc's centre, taken");
+    CHECK_MSG(!TakesAt(rig, 112.0 + 26.01, 176.0 + 14.0, "crystal_1546"), "and 26.01, not");
+    CHECK_MSG(TakesAt(rig, 112.0, 176.0 - 14.0 - 25.99, "crystal_1546"), "25.99 over the upper disc's centre, taken");
+    CHECK_MSG(!TakesAt(rig, 112.0, 176.0 - 14.0 - 26.01, "crystal_1546"), "and 26.01, not");
+
+    // A crystal that is gone cannot be taken, and one already taken stays taken: the guards the old test had are kept.
+    Goals::State gone = rig.goals;
+    for (Goals::Crystal& crystal : gone.crystals) crystal.expired = crystal.name == "crystal_1546";
+    PutAt(rig, 112.0, 176.0);
+    gone.Tick(rig.registry, rig.player, 0.016);
+    const Goals::Crystal* goneUpper = gone.FindCrystal("crystal_1546");
+    const Goals::Crystal* stillLower = gone.FindCrystal("crystal_1545");
+    CHECK_MSG(goneUpper != nullptr && stillLower != nullptr && !goneUpper->collected && stillLower->collected,
+              "a gone crystal is not taken, and the stacked one under it is");
+    // A player with no position takes nothing and costs nothing; a state with no player ticks its clocks only.
+    Goals::State bare = rig.goals;
+    bare.Tick(rig.registry, entt::null, 0.016);
+    CHECK_MSG(bare.Remaining() == 3, "no player, nothing taken");
+}
+
+void Level30sCrystalsKeepTheirPlacedPoint() {
+    // On a level the suite already pins: every crystal's point is the node's own, the number the box's centre is made from.
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    const struct {
+        const char* name;
+        double x;
+        double y;
+    } crystals[] = {{"crystal_ent_998", 664.0, 118.0}, {"crystal_ent_999", 400.0, 208.0}, {"crystal_ent_1001", 432.0, 208.0},
+                    {"crystal_ent_1031", 482.0, 106.0}, {"crystal_ent_1032", 480.0, 146.0}};
+    for (const auto& expected : crystals) {
+        const Goals::Crystal* crystal = play.goals.FindCrystal(expected.name);
+        CHECK_MSG(crystal != nullptr && crystal->pointPx == glm::dvec2(expected.x, expected.y), std::string(expected.name) + "'s point");
+    }
+    // crystal_ent_999 and crystal_ent_1001 stand 32 apart, which is inside the 26 + 14 either way: a player on one is in reach of both.
+    if (play.player == entt::null) return;
+    PutPlayer(play, glm::dvec2(416.0, 208.0));
+    play.goals.Tick(play.registry, play.player, 0.016);
+    const Goals::Crystal* left = play.goals.FindCrystal("crystal_ent_999");
+    const Goals::Crystal* right = play.goals.FindCrystal("crystal_ent_1001");
+    CHECK_MSG(left != nullptr && right != nullptr && left->collected && right->collected,
+              "a player midway between the two on level30 takes both on the one tick (the original's one a frame is not built)");
+}
+
+void ThePickupTableIsReadStrictly() {
+    const auto write = [](const std::string& name, const std::string& text) {
+        const std::filesystem::path path = std::filesystem::temp_directory_path() / ("supersonic-test-mp-play-" + name);
+        std::ofstream(path, std::ios::binary) << text;
+        return path.string();
+    };
+    Goals::Rules rules;
+    rules.exitRequiresAllCrystals = true;
+    std::string error;
+    CHECK_MSG(Goals::LoadPickup(write("crystals-good.json", R"({"pickup": {"range_px": 26, "offset_px": [0, 14]}})"), rules, error) &&
+                  rules.pickup.rangePx == 26.0 && rules.pickup.offsetPx == glm::dvec2(0.0, 14.0) && rules.exitRequiresAllCrystals,
+              "a good file is read, into the pickup alone: " + error);
+    const Goals::Pickup untouched = rules.pickup;
+    const auto refused = [&](const std::string& name, const std::string& text, const char* mentions) {
+        const bool refusedIt = !Goals::LoadPickup(write(name, text), rules, error);
+        const bool named = error.find(mentions) != std::string::npos;
+        const bool kept = rules.pickup.rangePx == untouched.rangePx && rules.pickup.offsetPx == untouched.offsetPx;
+        CHECK_MSG(refusedIt && named && kept, name + " is refused, names " + mentions + " and leaves what was read alone: " + error);
+    };
+    refused("crystals-norange.json", R"({"pickup": {"offset_px": [0, 14]}})", "range_px");
+    refused("crystals-nooffset.json", R"({"pickup": {"range_px": 26}})", "offset_px");
+    refused("crystals-text.json", R"({"pickup": {"range_px": "26", "offset_px": [0, 14]}})", "range_px");
+    refused("crystals-zero.json", R"({"pickup": {"range_px": 0, "offset_px": [0, 14]}})", "range_px");
+    refused("crystals-negrange.json", R"({"pickup": {"range_px": -26, "offset_px": [0, 14]}})", "range_px");
+    refused("crystals-negoffset.json", R"({"pickup": {"range_px": 26, "offset_px": [0, -14]}})", "offset_px");
+    refused("crystals-negx.json", R"({"pickup": {"range_px": 26, "offset_px": [-1, 14]}})", "offset_px");
+    refused("crystals-one.json", R"({"pickup": {"range_px": 26, "offset_px": [14]}})", "offset_px");
+    refused("crystals-three.json", R"({"pickup": {"range_px": 26, "offset_px": [0, 14, 0]}})", "offset_px");
+    refused("crystals-axis.json", R"({"pickup": {"range_px": 26, "offset_px": "y"}})", "offset_px");
+    refused("crystals-textpart.json", R"({"pickup": {"range_px": 26, "offset_px": [0, "14"]}})", "offset_px");
+    refused("crystals-none.json", R"({"other": {}})", "pickup");
+    CHECK_MSG(!Goals::LoadPickup(std::filesystem::temp_directory_path().string() + "/supersonic-test-mp-play-no-such-crystals.json", rules, error) &&
+                  error.find("cannot open") != std::string::npos,
+              "a file that is not there is refused: " + error);
+}
+
 // ---- Portals ----------------------------------------------------------------
 
 void TriggersAreExactAgainstATurnedBox() {
@@ -2012,6 +2278,12 @@ void runTests() {
     ThePlayerCollectsACrystal();
     TheExitReportsTheEntry();
     AClosedExitWaitsForANewEntry();
+    ThreeElevensStackedPairIsTakenFromTheFloor();
+    TheNewReachContainsTheOldExceptASliverAtItsWaist();
+    AWalkerOnTheSliverIsTakenWithinATickOfTheOldRule();
+    ThePickupIsTheDecodedRuleAndStrict();
+    Level30sCrystalsKeepTheirPlacedPoint();
+    ThePickupTableIsReadStrictly();
     TriggersAreExactAgainstATurnedBox();
     Level30sPortalsAndWhoTravels();
     AtTheCapTheOldestGivesWay();

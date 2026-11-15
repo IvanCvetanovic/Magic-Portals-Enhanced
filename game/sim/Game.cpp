@@ -150,6 +150,8 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Player::LoadTuning(dataDirectory + "/player.json", read.tuning, error)) return false;
     if (!LevelBuilder::LoadMaterials(portDataDirectory + "/materials.json", read.materials, error)) return false;
     if (!Goals::LoadRules(dataDirectory + "/portals.json", read.goals, error)) return false;
+    // After it, which starts the rules afresh: what takes a crystal, decoded (MainCharacter::crystalPicker, planning step 243).
+    if (!Goals::LoadPickup(portDataDirectory + "/crystals.json", read.goals, error)) return false;
     if (!Portals::LoadRules(dataDirectory + "/portals.json", read.portals, error)) return false;
     // Enhanced's portals.json marks its transit block a guess. The port plays
     // the original's rule, decoded, from its own transit.json.
