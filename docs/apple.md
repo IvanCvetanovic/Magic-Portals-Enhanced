@@ -178,7 +178,7 @@ MagicPortals --root <repo>/tests/fixtures/ci --port-data <repo>/game/data --leve
 ```
 
 **Why `--port-data` is on the command.** `--root` fills every path the game reads from the root alone, and the game refuses to start a level when one of its tables is missing: it reads the port's own tables
-(`game/data`: its 49 top-level `*.json` files at this writing, with the `lang` and `fonts` folders beside them) and three of Enhanced's (`data/`: the role table, the player's tuning, the portals' rules). A fixture that was complete by itself would hold copies of every one of them, which would put the notes of the port's tables (they name other
+(`game/data`: its 50 top-level `*.json` files at this writing, with the `lang` and `fonts` folders beside them) and three of Enhanced's (`data/`: the role table, the player's tuning, the portals' rules). A fixture that was complete by itself would hold copies of every one of them, which would put the notes of the port's tables (they name other
 projects, and the original's makers) into the repository a second time. So the folder holds only what is the fixture's, and the run names the rest: the port's tables from the checkout by `--port-data`.
 
 **Why the folder holds two copies anyway** (`data/player.json`, `data/portals.json`): `--data` would replace the whole `data` folder, and with it the fixture's own role table (invented names, so that no name of the original is in the level), so the two

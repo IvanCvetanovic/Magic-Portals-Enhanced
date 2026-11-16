@@ -5185,20 +5185,29 @@ struct MagicPortalsLayer::PictureState {
     std::map<std::string, std::string> baked;      // "<code>|<picture>" -> the baked file, or empty: the shipped picture stays (the failure was said once)
 };
 
+namespace {
+
+// The table of recipes, read on the first ask and never again, whatever came of it: a table that is missing or refused is the English pictures, said once, so an older
+// package folder without it still starts. ONE place for it, because wordedPicture and refreshWordedPictures both need the table before either bakes anything, and
+// two copies could drift (a different message, a missing reset).
+void ensurePictureRecipes(PictureBake::Recipes& recipes, bool& tried, const std::string& portData) {
+    if (tried) return;
+    tried = true;
+    std::string why;
+    if (!PictureBake::LoadRecipes(portData + PictureBake::kRecipesFile, recipes, why)) {
+        recipes = PictureBake::Recipes{};
+        SUPERSONIC_LOG_ERROR("Magic Portals") << "picture bake: the table of recipes could not be read, the pictures stay English: " << why << std::endl;
+    }
+}
+
+} // namespace
+
 std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std::string& original) const {
     // ENGLISH IS NEVER BAKED: the shipped file, and nothing below runs, so the English path is what it always was and the tests/golden/menu_screens.json frames hold.
     if (m_language == Strings::kDefaultLang || !m_stringsReady) return original;
     if (!m_pictures) m_pictures = std::make_shared<PictureState>();
     PictureState& state = *m_pictures;
-    if (!state.tried) {
-        state.tried = true;
-        std::string why;
-        if (!PictureBake::LoadRecipes(m_paths.portData + PictureBake::kRecipesFile, state.recipes, why)) {
-            // A table that is missing or refused is the English pictures, said once: an older package folder without it still starts.
-            state.recipes = PictureBake::Recipes{};
-            SUPERSONIC_LOG_ERROR("Magic Portals") << "picture bake: the table of recipes could not be read, the pictures stay English: " << why << std::endl;
-        }
-    }
+    ensurePictureRecipes(state.recipes, state.tried, m_paths.portData);
     if (!state.recipes.loaded) return original;
     const PictureBake::Recipe* recipe = state.recipes.Find(file);
     if (recipe == nullptr) return original;
@@ -5249,14 +5258,7 @@ void MagicPortalsLayer::refreshWordedPictures() {
         const std::string file = key.compare(0, folder.size(), folder) == 0 ? key.substr(folder.size()) : key;
         if (!m_pictures) m_pictures = std::make_shared<PictureState>();
         PictureState& state = *m_pictures;
-        if (!state.tried) {
-            state.tried = true;
-            std::string why;
-            if (!PictureBake::LoadRecipes(m_paths.portData + PictureBake::kRecipesFile, state.recipes, why)) {
-                state.recipes = PictureBake::Recipes{};
-                SUPERSONIC_LOG_ERROR("Magic Portals") << "picture bake: the table of recipes could not be read, the pictures stay English: " << why << std::endl;
-            }
-        }
+        ensurePictureRecipes(state.recipes, state.tried, m_paths.portData);
         return state.recipes.loaded && state.recipes.Find(file) != nullptr;
     };
     // The menu's: taken out, and put back by menuPicture at the first draw of each (the bake is paid for there, and not for a picture nobody shows).

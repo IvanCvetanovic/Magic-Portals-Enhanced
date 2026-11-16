@@ -109,7 +109,7 @@ for this step from the Magic Rampage Companion app's terms (*tap*, *skill points
 a SHORTER wording chosen only so that the phrase fits its picture at a readable size: *game over* in Russian, Ukrainian, French and Italian (the longer, more usual phrases needed a
 scale under the floor), and *portals created* in Turkish (`yaratılan portallar` for the longer `oluşturulan portallar`). In Japanese a space inside *level finished*, *portals created* and *game over*
 is a place the line may break and is **never drawn**; whether those three are what a Japanese player expects (and whether *Select chapter*, which uses *chapter* written as a loanword,
-should say *stage* or *chapter*) is a native reader's call. The Ukrainian *Select chapter* says `розділ` (the game's own dashboard word) where the Companion says `главу`.
+should say *stage* or *chapter*) is a native reader's call. The Ukrainian *Select chapter* says `розділ` (the game's own dashboard word) where the Companion says `главу`, and the Ukrainian *points* is `очки`, the Russian word letter for letter: a native Ukrainian reader should decide whether it is Ukrainian enough.
 
 ## What is not translated
 
@@ -131,10 +131,12 @@ menu and in the pause), *Select chapter*, *points* (`achievement_points.png`, th
 * **What is done.** `game/sim/PictureBake` decodes the sprite's hd twin and, by the sprite's recipe in `game/data/picture_recipes.json`: **erases** the English word and draws the phrase in
   its place (TAP START, *Achievements*, *Select chapter*: the plate under the word is a model made of the picture's OWN text-free rows and columns, `row_lerp` or `separable`, with no donor
   picture and no ink detection; *points* is `level_button.png` moved by (-2, -3), which is bit-exactly the same plate without the word, `twin`); or **generates** the picture (*level finished*,
-  *portals created*, *game over*: the picture is only words on a transparent ground, so no pixel of the original is read, and the phrase is drawn with the look of the original's lettering,
+  *portals created*, *game over*: the picture is only words on a transparent ground, so none of the original's pixels reaches the output (the sprite is still decoded and checked by its size and digest, so a machine without it, or with another version of it, keeps the English picture), and the phrase is drawn with the look of the original's lettering,
   white with a soft shadow). The phrase is drawn with the committed faces (Kurale, Noto Sans, Noto Sans JP and Noto Sans Arabic, by the slot's routing; Arabic shaped by `Strings::Display`),
   with a drop shadow like the original's, and shrunk step by step from its natural size to the recipe's box, never below the recipe's floor. The result is a same-size PNG in the scratch folder
   (`<scratch>/pictures/<id>_<code>_<hash>.png`, the hash over the algorithm, the table, the phrase, the language and the faces' bytes), and the layer draws it instead of the shipped file.
+  **A generated picture still needs the original's sprite on the machine**: it is decoded and checked by its size and digest on every ask, though none of its pixels is used, so a machine without the
+  sprite, or with another version of it, keeps the English picture (and logs why). The sprite is the original's, which the game needs anyway.
 * **English is never baked.** The hook is in `MagicPortalsLayer::menuImage` and `originalAsset`, and the first thing it does is return the shipped path for English (and for any picture no
   recipe names), so the English path is what it always was: the tests' English frames (`tests/golden/menu_screens.json`) are unchanged and a run in English makes no folder of baked pictures.
   Switching back to English gives the shipped files back.
@@ -149,8 +151,12 @@ menu and in the pause), *Select chapter*, *points* (`achievement_points.png`, th
   refused `picture_recipes.json` (an older package folder, say) do the same: the pictures stay English, the game starts, and the log says why once.
 * **The floors.** TAP START 0.55, *Select chapter* and *Achievements* 0.52, *points* 0.66, *level finished*, *portals created* and *game over* 0.60 (a fraction of the size at which the original's
   word is drawn). The tightest shipped phrase of each, measured with stb_truetype on the Linux machine: TAP START French 0.634, *Select chapter* French 0.790, *Achievements* Arabic 0.942, *points*
-  German 0.918, *level finished* Turkish 0.715, *portals created* Russian 0.784, *game over* Ukrainian 0.808. A phrase that would need less is a defect of the TRANSLATION, not a run-time fall-back:
+  German 0.918, *level finished* Turkish 0.715, *portals created* Russian 0.784, *game over* Spanish 0.715. A phrase that would need less is a defect of the TRANSLATION, not a run-time fall-back:
   `tests/test_mp_overflow.cpp` fails it. French TAP START has the least margin (0.634 against 0.55, about 14 percent; it is also the smallest word, about 17 screen pixels of cap height at 720p).
+* **The lost screen.** *Game over* is placed at (640, 252) of the 1280 x 720 view and the restart and list buttons at (512, 432) and (768, 432), 1.405 screen px per hd px (`game/data/ui.json`,
+  `level_end/lost`), so the buttons' visible top is at hd row about 201 of the 256-pixel picture and the shadow reaches about 12 rows past the ink. The recipe's safe rectangle therefore ends at row
+  186 and is symmetric about the anchor (it ended at 204 at first, and a French title touched the restart button); `test_mp_picturebake_original` fails a title of any language, shadow included, that
+  reaches row 201 (the longest shipped one ends at row 193). The other two stacked pictures keep the original's own room.
 * **The cost.** A switch bakes nothing: a picture is made at its first draw, and one already made is found again in the scratch folder. Measured on the Linux machine (bake and PNG encode, least of
   three, Russian): TAP START 3.9 ms, *Achievements* 1.9, *Select chapter* 2.0, *points* 1.2, *portals created* 2.4, and **12 to 19 ms for *level finished* and *game over*** (their canvases are large).
   **Never timed on a phone** (the caveat of *The bake is synchronous on the tap*, in the known limits below, applies here too).

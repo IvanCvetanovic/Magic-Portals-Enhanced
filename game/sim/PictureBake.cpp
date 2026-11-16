@@ -1328,7 +1328,27 @@ struct Placement {
     std::vector<Placed> placed;
     int lines = 0;
     std::vector<std::string> lineTexts;
+    double lineGap = kNoLineGap;  // Outcome::lineGap
 };
+
+// How far apart two lines' solid ink really is, measured on the layout that was drawn and not on FitPitch's own sums (it shares ColumnEdges and the solid threshold with
+// FitPitch, not its growth of the lower line or its steps): per canvas column both reach, the free rows
+// between the upper line's lowest solid pixel and the lower line's highest, in picture pixels; the least over the columns. (ox, oy) is where each raster's corner went.
+double MeasureLineGap(const LineRaster& upper, int upperX, int upperY, const LineRaster& lower, int lowerX, int lowerY) {
+    std::vector<int> upperTop;
+    std::vector<int> upperBottom;
+    std::vector<int> lowerTop;
+    std::vector<int> lowerBottom;
+    ColumnEdges(upper, upperTop, upperBottom);
+    ColumnEdges(lower, lowerTop, lowerBottom);
+    int least = std::numeric_limits<int>::max();
+    for (int x = 0; x < upper.w; ++x) {
+        const int lx = upperX + x - lowerX;
+        if (lx < 0 || lx >= lower.w || upperBottom[Z(x)] == kNoRow || lowerTop[Z(lx)] == -kNoRow) continue;
+        least = std::min(least, (lowerY + lowerTop[Z(lx)]) - (upperY + upperBottom[Z(x)]) - 1);
+    }
+    return least == std::numeric_limits<int>::max() ? kNoLineGap : static_cast<double>(least) / kSupersample;
+}
 
 void NotePlaced(const LineRaster& raster, int line, int ox, int oy, Placement& out) {
     for (const Run& run : raster.runs) {
@@ -1391,6 +1411,7 @@ bool LayOutStack(const Set& set, const std::vector<std::vector<std::uint32_t>>& 
     }
     const double shift = text.anchorY - (top + bottom) / 2.0;
     std::vector<unsigned char> canvas(Z(set.width * kSupersample) * Z(set.height * kSupersample), 0);
+    std::vector<int> corners(Z(n) * 2, 0); // where each raster's top-left corner went: x, y
     for (int i = 0; i < n; ++i) {
         int first = 0;
         int end = 0;
@@ -1401,9 +1422,12 @@ bool LayOutStack(const Set& set, const std::vector<std::vector<std::uint32_t>>& 
         const double inkCentre = (static_cast<double>(first) + end) / 2.0;
         const int ox = RoundInt(text.anchorX * kSupersample - inkCentre);
         const int oy = RoundInt((baselines[Z(i)] + shift) * kSupersample - rasters[Z(i)].baseY);
+        corners[Z(i) * 2] = ox;
+        corners[Z(i) * 2 + 1] = oy;
         PutLine(canvas, set.width * kSupersample, set.height * kSupersample, rasters[Z(i)], ox, oy);
         NotePlaced(rasters[Z(i)], i, ox, oy, out);
     }
+    if (n == 2) out.lineGap = MeasureLineGap(rasters[0], corners[0], corners[1], rasters[1], corners[2], corners[3]);
     out.cov = Downsample(canvas, set.width * kSupersample, set.height * kSupersample);
     out.ink = InkBox(out.cov, text.inkThreshold);
     out.lines = n;
@@ -1731,6 +1755,7 @@ Outcome FitPhrase(const Request& request) {
     outcome.lines = fitted.placement.lines;
     outcome.lineTexts = fitted.placement.lineTexts;
     outcome.ink = fitted.placement.ink;
+    outcome.lineGap = fitted.placement.lineGap;
     outcome.placed = std::move(fitted.placement.placed);
     outcome.touched = request.recipe->erase.rect;
     return outcome;
@@ -1756,6 +1781,7 @@ Outcome Render(const Request& request, const Image& source, const Image* twin) {
     outcome.lines = fitted.placement.lines;
     outcome.lineTexts = fitted.placement.lineTexts;
     outcome.ink = fitted.placement.ink;
+    outcome.lineGap = fitted.placement.lineGap;
     outcome.placed = std::move(fitted.placement.placed);
     outcome.touched = recipe.erase.rect;
     return outcome;

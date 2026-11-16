@@ -12,11 +12,14 @@
 //   drawing      the phrase is drawn inside the rectangle and the box of the recipe, the picture outside the rectangle is byte for byte the source, the fit is monotone (a
 //                longer phrase never gets a larger scale), lands on the recipe's grid of scales, and stops at the floor (a phrase that needs less is refused, with its
 //                scale in the reason); the bytes are deterministic and the PNG is the recipe's size
+//   the look     the drop shadow is drawn (darker round the word on a plate, down and to the right; black with alpha on a transparent canvas, capped); the ink of two stacked
+//                lines is at least the recipe's gap apart, measured on what was put down, and the pitch grows only where it must; a word is shrunk for its height alone
 //   languages    Arabic is drawn in the shaped, visual order (and a stack breaks it in LOGICAL order, so the first word is on the first line); a space in Japanese leaves no
 //                gap and U+200B is never drawn; a no-break space is a gap that does not break
 //   fail closed  a wrong size, a wrong digest, a code point no face holds, an empty phrase, a phrase that is not UTF-8, a face the slot does not draw with: each keeps the
 //                English picture (ok is false, the reason names what, there is no picture), and Ensure leaves no file behind when the folder cannot be made or the target
-//                cannot be put in place, finds a whole file without rendering, and renders again over a cut-short one
+//                cannot be put in place, finds a whole file without rendering, and renders again over a cut-short one, over one whose signature, width or height is wrong, and never
+//                serves a cached file for another version (digest or size) of the sprite; a changed face file is another file name
 //   the words    every shipped phrase of every language is drawn from glyphs its faces hold (the fit finds none missing)
 //   where named  the seven sprites are named in the tables only where a language switch remakes the layer's cached path of them (the cache audit as a test)
 //
@@ -24,7 +27,9 @@
 // stack, the picture's digest, its size, a missing glyph drawn as the face's notdef, the twin's guards (outside the window, inside it, its digest), Arabic unshaped and
 // reversed twice, the Japanese space drawn, U+200B drawn, a temporary file left behind, the PNG check of a cached file cut to its signature, ink allowed past the rectangle,
 // and the layer's hook, its refresh loops (the menus', the pause's and end screens', the popups', English coming back, the lazy re-insert), the missing-key rule and the
-// remembered failure. Each is failed by this suite or by test_mp_langlayer / test_mp_pickerlayer (the record is the step's, in the planning document).
+// remembered failure. Each is failed by this suite or by test_mp_langlayer / test_mp_pickerlayer (the record is the step's, in the planning document). The review of the
+// step found seven more alive and they were closed by the cases above: the drop shadow left out, the face bytes left out of a file's name, the pitch of two lines fixed, the
+// height of a word ignored by the fit, the source check left out of Ensure, and the width and height and the signature of a cached file left unchecked.
 //
 // No non-ASCII character is written in this file: MSVC is built without /utf-8 here, so the text under test is read from the JSON or spelt as code points.
 
@@ -65,6 +70,12 @@ namespace fs = std::filesystem;
 
 const std::string kData = MAGICPORTALS_PORT_DATA_DIR;
 const std::string kOriginal = MAGICPORTALS_ORIGINAL_DIR;
+
+// The alpha at which a pixel of a baked picture is VISIBLE on a screen (a shadow's last faint ring is not), and the row of game_over.png at which the lost screen's buttons
+// begin: the title is placed at (640, 252) and the buttons at (512, 432) and (768, 432), 1.405 screen px per hd px, and a button's visible top is then at hd row about 201
+// (game/data/ui.json, level_end/lost: the measurements are there).
+constexpr int kVisibleAlpha = 12;
+constexpr int kRestartButtonTopRow = 201;
 
 bool Contains(const std::string& text, const std::string& part) {
     return text.find(part) != std::string::npos;
@@ -355,6 +366,36 @@ PB::Recipe WordRecipe(const std::string& id, const PB::Image& picture, const PB:
     text.shadow.sigma = 0.10;
     text.shadow.gain = 0.95;
     text.shadow.cap = 1.0;
+    return recipe;
+}
+
+// A recipe for a stack of up to two lines on a transparent canvas of the picture's size, with the look of the shipped plaque (no offset, a halo around the ink), for the
+// cases that need a generated picture. The caller sets the numbers it is about.
+PB::Recipe StackRecipe(const PB::Image& canvas) {
+    PB::Recipe recipe = WordRecipe("syn_stack", canvas, PB::Rect{0, 0, canvas.width, canvas.height}, 12.0, 0.6);
+    recipe.erase.rule = PB::Rule::Generated;
+    PB::Text& text = recipe.text;
+    text.layout = PB::Layout::Stack;
+    text.slot = "matura";
+    text.px = 12.0;
+    text.anchorX = 65.0;
+    text.anchorY = 62.0;
+    text.step = 0.97;
+    text.inkThreshold = 0.02;
+    text.maxWidth = 112.0;
+    text.firstBaseline = 56.0;
+    text.pitch = 28.0;
+    text.gap = 0.08;
+    text.maxLines = 2;
+    text.safe = PB::Rect{6, 20, 122, 108};
+    text.shadow.dx = 0.0;
+    text.shadow.dy = 0.0;
+    text.shadow.sigma = 0.12;
+    text.shadow.sigmaMin = 1.5;
+    text.shadow.gain = 1.5;
+    text.shadow.cap = 0.7;
+    text.shadow.roundOffsets = true;
+    text.faces = {PB::FaceTuning{"kurale", 1.0, 0x78, 0.065}};
     return recipe;
 }
 
@@ -755,30 +796,8 @@ void AStackIsCentredOnItsAnchorAndTheMostLinesThatFitAreUsed() {
     const World& world = TheWorld();
     if (!world.ok) return;
     PB::Image canvas = PB::Blank(128, 128);
-    PB::Recipe recipe = WordRecipe("syn_stack", canvas, PB::Rect{0, 0, 128, 128}, 12.0, 0.6);
-    recipe.erase.rule = PB::Rule::Generated;
+    PB::Recipe recipe = StackRecipe(canvas);
     PB::Text& text = recipe.text;
-    text.layout = PB::Layout::Stack;
-    text.slot = "matura";
-    text.px = 12.0;
-    text.anchorX = 65.0;
-    text.anchorY = 62.0;
-    text.step = 0.97;
-    text.inkThreshold = 0.02;
-    text.maxWidth = 112.0;
-    text.firstBaseline = 56.0;
-    text.pitch = 28.0;
-    text.gap = 0.08;
-    text.maxLines = 2;
-    text.safe = PB::Rect{6, 20, 122, 108};
-    text.shadow.dx = 0.0;
-    text.shadow.dy = 0.0;
-    text.shadow.sigma = 0.12;
-    text.shadow.sigmaMin = 1.5;
-    text.shadow.gain = 1.5;
-    text.shadow.cap = 0.7;
-    text.shadow.roundOffsets = true;
-    text.faces = {PB::FaceTuning{"kurale", 1.0, 0x78, 0.065}};
     const PB::Outcome outcome = PB::Render(RequestFor(recipe, Lang::En, "portals created"), canvas, nullptr);
     CHECK_MSG(outcome.ok, "a stack is drawn: " + outcome.reason);
     if (!outcome.ok) return;
@@ -833,6 +852,142 @@ void AStackIsCentredOnItsAnchorAndTheMostLinesThatFitAreUsed() {
     tight.text.maxWidth = 30.0;
     const PB::Outcome none = PB::FitPhrase(RequestFor(tight, Lang::En, "portals created"));
     CHECK_MSG(!none.ok && Contains(none.reason, "floor"), "none where not even two reach the floor: " + none.reason);
+}
+
+// ---- the look: the shadow, the distance between two lines, the height of a word -------------------------------------------------------------------
+
+// The baseline of the first glyph of `line` (the recipe's pitch is the distance between two of these), or -1 when the outcome has none.
+double BaselineOfLine(const PB::Outcome& outcome, int line) {
+    for (const PB::Placed& placed : outcome.placed) {
+        if (placed.line == line) return placed.baseline;
+    }
+    return -1.0;
+}
+
+// THE DROP SHADOW is a stated part of the look ("a drop shadow like the original's"), and a bake that drew the ink alone would pass every other check in this file. It
+// lives where the ink's own coverage is nil, so it is looked for OUTSIDE the ink's box: on an opaque plate it darkens the plate there (black under white, down and to the
+// right of the word because the offset is), and on a transparent canvas it is the only thing there, black with alpha.
+void TheDropShadowIsDrawn() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    {
+        const RowPlate plate = MakeSeparablePlate();
+        PB::Image erased;
+        std::string why;
+        CHECK_MSG(PB::EraseWords(plate.recipe, plate.picture, nullptr, erased, why), "the plate is erased: " + why);
+        const PB::Outcome outcome = PB::Render(RequestFor(plate.recipe, Lang::En, "TAP START"), plate.picture, nullptr);
+        CHECK_MSG(outcome.ok, "the phrase is drawn: " + outcome.reason);
+        if (!outcome.ok || erased.Empty()) return;
+        const PB::Rect rect = plate.recipe.erase.rect;
+        int behind = 0; // shaded pixels right of or below the ink's box, where the offset puts the shadow
+        int before = 0; // and left of or above it
+        int lighter = 0;
+        for (int y = rect.y0; y < rect.y1; ++y) {
+            for (int x = rect.x0; x < rect.x1; ++x) {
+                if (outcome.ink.Contains(x, y)) continue;
+                int darker = 0;
+                int brighter = 0;
+                for (int c = 0; c < 3; ++c) {
+                    const int d = static_cast<int>(erased.At(x, y)[c]) - static_cast<int>(outcome.image.At(x, y)[c]);
+                    darker = std::max(darker, d);
+                    brighter = std::max(brighter, -d);
+                }
+                lighter += brighter > 1 ? 1 : 0;
+                if (darker < 6) continue;
+                if (x >= outcome.ink.x1 || y >= outcome.ink.y1) {
+                    ++behind;
+                } else {
+                    ++before;
+                }
+            }
+        }
+        CHECK_MSG(behind >= 40, "the plate is darker round the word than the erased plate is: " + std::to_string(behind) + " pixels by 6 levels or more");
+        CHECK_MSG(before * 3 <= behind, "and the shadow falls down and to the right: " + std::to_string(behind) + " behind the word, " + std::to_string(before) + " before it");
+        CHECK_MSG(lighter == 0, "nothing outside the ink is lighter than the erased plate: " + std::to_string(lighter));
+    }
+    {
+        PB::Image canvas = PB::Blank(128, 128);
+        const PB::Recipe recipe = StackRecipe(canvas);
+        const PB::Outcome outcome = PB::Render(RequestFor(recipe, Lang::En, "portals created"), canvas, nullptr);
+        CHECK_MSG(outcome.ok, "the stack is drawn: " + outcome.reason);
+        if (!outcome.ok) return;
+        int halo = 0;
+        int strongest = 0;
+        int coloured = 0;
+        for (int y = 0; y < canvas.height; ++y) {
+            for (int x = 0; x < canvas.width; ++x) {
+                if (outcome.ink.Contains(x, y)) continue;
+                const unsigned char* px = outcome.image.At(x, y);
+                if (px[3] < 10) continue;
+                ++halo;
+                strongest = std::max(strongest, static_cast<int>(px[3]));
+                coloured += (px[0] != 0 || px[1] != 0 || px[2] != 0) ? 1 : 0;
+            }
+        }
+        CHECK_MSG(halo >= 150, "a halo of soft pixels round the ink of a generated picture: " + std::to_string(halo));
+        CHECK_MSG(coloured == 0, "the shadow is black: " + std::to_string(coloured) + " coloured pixels");
+        CHECK_MSG(strongest >= 100 && strongest <= 180, "and its alpha reaches the recipe's cap (0.7) and no more: " + std::to_string(strongest));
+    }
+}
+
+// THE DISTANCE BETWEEN TWO LINES. A stack's pitch is pushed apart where the first line's descenders reach into the second line's ascenders, and the ink of the two lines
+// must not touch (the tall marks of Arabic and Japanese are why the pitch is fitted and not fixed). `gggg llll` set at a pitch tighter than its glyphs would overlap;
+// the layout must say how far apart the ink really is, measured on what was put down, and that must be what the recipe's gap asks for.
+void TwoStackedLinesStayApart() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    PB::Image canvas = PB::Blank(128, 128);
+    PB::Recipe recipe = StackRecipe(canvas);
+    PB::Text& text = recipe.text;
+    text.safe = PB::Rect{6, 4, 122, 124};
+    const double wanted = text.gap * text.px; // pixels at scale 1
+    // Tighter than the glyphs: the pitch has to grow.
+    text.firstBaseline = 53.0;
+    text.pitch = 18.0;
+    const PB::Outcome tight = PB::FitPhrase(RequestFor(recipe, Lang::En, "gggg llll"));
+    CHECK_MSG(tight.ok && tight.lines == 2 && tight.scale == 1.0, "a stack of two lines at full size: " + tight.reason);
+    if (tight.ok) {
+        const double pitch = BaselineOfLine(tight, 1) - BaselineOfLine(tight, 0);
+        CHECK_MSG(pitch > text.pitch + 2.0, "the pitch grew past the recipe's " + std::to_string(text.pitch) + " to keep the lines apart: " + std::to_string(pitch));
+        CHECK_MSG(tight.lineGap > 0.0 && tight.lineGap < PB::kNoLineGap && tight.lineGap >= wanted - 0.5, "and the ink of the two lines is at least the gap apart: " + std::to_string(tight.lineGap) + " against " + std::to_string(wanted));
+    }
+    // Where the recipe's pitch already keeps them apart it is left as it is.
+    text.firstBaseline = 40.0;
+    text.pitch = 44.0;
+    const PB::Outcome loose = PB::FitPhrase(RequestFor(recipe, Lang::En, "gggg llll"));
+    CHECK_MSG(loose.ok && loose.lines == 2, "the same two lines at a loose pitch: " + loose.reason);
+    if (loose.ok) {
+        const double pitch = BaselineOfLine(loose, 1) - BaselineOfLine(loose, 0);
+        CHECK_MSG(std::fabs(pitch - text.pitch * loose.scale) <= 0.5, "the recipe's pitch is kept where it is enough: " + std::to_string(pitch));
+        CHECK_MSG(loose.lineGap < PB::kNoLineGap && loose.lineGap >= wanted * loose.scale - 0.5, "and the lines are further apart than the gap: " + std::to_string(loose.lineGap));
+    }
+    // One line has no gap to speak of.
+    const PB::Outcome single = PB::FitPhrase(RequestFor(recipe, Lang::En, "gggg"));
+    CHECK_MSG(single.ok && single.lines == 1 && single.lineGap == PB::kNoLineGap, "one line reports no gap: " + single.reason);
+}
+
+// THE HEIGHT OF A WORD is a limit of its own: a narrow, tall phrase is shrunk for its height alone. The step is coarse so that a fit that ignored the height could not hide in
+// the rounding of a scale that is a hair above the answer.
+void AWordTallerThanItsBoxIsShrunkForItsHeightAlone() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    RowPlate plate = MakeSeparablePlate();
+    PB::Text& text = plate.recipe.text;
+    text.step = 0.8;
+    text.minScale = 0.3;
+    text.maxWidth = 112.0;
+    text.maxHeight = 9.0; // the capitals of two M are 12 pixels tall at full size, and about 30 wide
+    const PB::Outcome outcome = PB::FitPhrase(RequestFor(plate.recipe, Lang::En, "MM"));
+    CHECK_MSG(outcome.ok, "a phrase is drawn that is narrow and too tall: " + outcome.reason);
+    if (outcome.ok) {
+        CHECK_MSG(outcome.scale < 1.0, "it is shrunk: " + std::to_string(outcome.scale));
+        CHECK_MSG(outcome.ink.Height() <= text.maxHeight, "until its ink is inside the box's height: " + std::to_string(outcome.ink.Height()));
+        CHECK_MSG(outcome.ink.Width() * 3 < text.maxWidth, "and the width was never the limit: " + std::to_string(outcome.ink.Width()));
+    }
+    // A floor above the scale the height needs refuses it, for the height.
+    text.minScale = 0.7;
+    const PB::Outcome shut = PB::FitPhrase(RequestFor(plate.recipe, Lang::En, "MM"));
+    CHECK_MSG(!shut.ok && Contains(shut.reason, "below the recipe's floor"), "a floor above what the height needs refuses it: " + shut.reason);
 }
 
 // ---- failing closed ----------------------------------------------------------------------------------------------------------------------------
@@ -997,6 +1152,36 @@ void EnsureWritesWholeOrNothing() {
     recipes.fileHash = "another-table";
     CHECK_MSG(PB::Ensure(wanted("TAP START", out)).path != first.path, "another table is another file");
     recipes.fileHash = "synthetic-table";
+    // Another FACE is another file: the bytes of the faces the slot draws with are in the name, and the scratch folder outlives an update of the app, so a font file that has
+    // changed must never find the picture drawn with the old one. (A copy of the fonts folder with one byte appended to the slot's text face: stb_truetype ignores it, so
+    // the picture is the same and only the name can tell.)
+    {
+        const FontBake::Plan& plan = TheWorld().languages.Fonts();
+        const FontBake::SlotSpec* slot = plan.Slot(plate.recipe.text.slot);
+        const FontBake::FaceSpec* face = slot != nullptr ? plan.Face(slot->textFace) : nullptr;
+        CHECK_MSG(face != nullptr, "the slot's text face is in the plan");
+        if (face != nullptr) {
+            const fs::path same = root / "fonts-same";
+            const fs::path changed = root / "fonts-changed";
+            std::error_code copied;
+            fs::copy(kData + "/" + plan.folder, same, fs::copy_options::recursive, copied);
+            CHECK_MSG(!copied, "the fonts folder is copied: " + copied.message());
+            fs::copy(kData + "/" + plan.folder, changed, fs::copy_options::recursive, copied);
+            CHECK_MSG(!copied, "and copied again: " + copied.message());
+            {
+                std::ofstream append(changed / face->file, std::ios::binary | std::ios::app);
+                append.put('\0');
+            }
+            PB::Wanted fromCopy = wanted("TAP START", out);
+            fromCopy.fontsDir = same.string();
+            const PB::Written unchanged = PB::Ensure(fromCopy);
+            CHECK_MSG(unchanged.ok && unchanged.cached && unchanged.path == first.path, "a copy of the fonts folder, byte for byte, finds the same file: " + unchanged.reason);
+            PB::Wanted fromChanged = wanted("TAP START", out);
+            fromChanged.fontsDir = changed.string();
+            const PB::Written changedFile = PB::Ensure(fromChanged);
+            CHECK_MSG(changedFile.ok && !changedFile.cached && changedFile.path != first.path, "a face that changed by one byte is another file: " + changedFile.reason);
+        }
+    }
     // A file cut short is found NOT whole and made again; so is an empty one and one with the wrong signature.
     for (const std::size_t keep : {static_cast<std::size_t>(0), static_cast<std::size_t>(7), static_cast<std::size_t>(40), baked.rgba.size() / 100}) {
         std::string whole;
@@ -1008,6 +1193,42 @@ void EnsureWritesWholeOrNothing() {
         CHECK_MSG(healed.ok && !healed.cached, "a file cut to " + std::to_string(keep) + " bytes is rendered again: " + healed.reason);
         PB::Image check;
         CHECK_MSG(PB::ReadImage(first.path, check, why) && check.rgba == baked.rgba, "and is whole again");
+    }
+    // A cached file is served for the picture it was made from, and only if it LOOKS whole. (1) The sprite on the disk is another picture now (another version of the
+    // art, the same name): the file of the same name is NOT served and the ask fails closed - the name holds no digest of the sprite, so only the check made on every ask
+    // can tell. (2) The same for a sprite of another size.
+    {
+        const fs::path elsewhere = root / "other-sources";
+        fs::create_directories(elsewhere);
+        std::string wrongBytes;
+        CHECK(PB::EncodePng(plate.truth, wrongBytes));
+        WriteText(elsewhere / plate.recipe.sprite, wrongBytes);
+        PB::Wanted swapped = wanted("TAP START", out);
+        swapped.sourcePath = (elsewhere / plate.recipe.sprite).string();
+        const PB::Written refused = PB::Ensure(swapped);
+        CHECK_MSG(!refused.ok && !refused.cached && Contains(refused.reason, "digest"), "a cached file is not served for another version of the sprite: " + refused.reason);
+        std::string smallBytes;
+        CHECK(PB::EncodePng(PB::Blank(plate.picture.width - 1, plate.picture.height), smallBytes));
+        WriteText(elsewhere / plate.recipe.sprite, smallBytes);
+        const PB::Written resized = PB::Ensure(swapped);
+        CHECK_MSG(!resized.ok && !resized.cached && Contains(resized.reason, "159 x 48"), "nor for a sprite of another size: " + resized.reason);
+        CHECK_MSG(fs::is_regular_file(first.path), "and the cached file is left where it was");
+    }
+    // A file with the right length and the right last chunk but a wrong header is not whole either: one bit of the signature, of the width and of the height.
+    const auto readWhole = [](const std::string& path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    for (const auto& [offset, what] : std::vector<std::pair<std::size_t, std::string>>{{0, "signature"}, {19, "width"}, {23, "height"}}) {
+        std::string held = readWhole(first.path);
+        CHECK(held.size() > 40);
+        if (held.size() <= 40) continue;
+        held[offset] = static_cast<char>(held[offset] ^ 1);
+        WriteText(first.path, held);
+        const PB::Written healed = PB::Ensure(wanted("TAP START", out));
+        CHECK_MSG(healed.ok && !healed.cached, "a file with one bit of its " + what + " wrong is rendered again: " + healed.reason);
+        PB::Image check;
+        CHECK_MSG(PB::ReadImage(first.path, check, why) && check.rgba == baked.rgba, "and is whole again (" + what + ")");
     }
     // A failed write leaves nothing: a folder that cannot be made (a file is in its way), and a target that cannot be put in place (a folder is there).
     {
@@ -1151,6 +1372,9 @@ void runFreeCases() {
     AnArabicWordIsDrawnInTheShapedOrder();
     ASpaceInJapaneseLeavesNoGapAndAZeroWidthSpaceIsNeverDrawn();
     AStackIsCentredOnItsAnchorAndTheMostLinesThatFitAreUsed();
+    TheDropShadowIsDrawn();
+    TwoStackedLinesStayApart();
+    AWordTallerThanItsBoxIsShrunkForItsHeightAlone();
     AnythingWrongKeepsTheEnglishPicture();
     TheBytesAreDeterministicAndThePngIsTheRecipesSize();
     EnsureWritesWholeOrNothing();
@@ -1333,8 +1557,16 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
             twin = ReadOriginal(recipe.erase.twinSprite);
             twinPtr = &twin;
         }
+        // The plate as the erase leaves it, to tell the shadow (what the bake adds round the ink) from the plate.
+        PB::Image erased;
+        if (recipe.erase.rule != PB::Rule::Generated) {
+            std::string why;
+            CHECK_MSG(PB::EraseWords(recipe, source, twinPtr, erased, why), recipe.id + ": " + why);
+        }
         double tightest = 9.0;
         std::string tightestLanguage;
+        double closest = PB::kNoLineGap; // the least distance between two lines' ink, over the languages
+        double lowestRow = 0.0;          // the lowest row any visible pixel reaches, over the languages
         for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
             const Lang lang = static_cast<Lang>(i);
             Strings::Table table;
@@ -1375,6 +1607,31 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
                 CHECK_MSG(ring <= 4, name + ": the shadow is not cut by the picture's edge: " + std::to_string(ring));
                 CHECK_MSG(soft > 0 && same * 50 < soft, name + ": no pixel of the original is reused: " + std::to_string(same) + " of " + std::to_string(soft));
             }
+            // THE SHADOW is there: pixels outside the ink's box that the bake made (a generated picture) or changed (a plate), by more than the ink's own antialiasing.
+            int shaded = 0;
+            int lowest = -1;
+            for (int y = 0; y < a.image.height; ++y) {
+                for (int x = 0; x < a.image.width; ++x) {
+                    const unsigned char* px = a.image.At(x, y);
+                    if (recipe.erase.rule == PB::Rule::Generated && px[3] >= kVisibleAlpha) lowest = y; // a plate is opaque to its last row: only a generated picture has a bottom
+                    if (a.ink.Contains(x, y)) continue;
+                    if (recipe.erase.rule == PB::Rule::Generated) {
+                        shaded += px[3] >= 10 ? 1 : 0;
+                    } else if (!erased.Empty()) {
+                        int d = 0;
+                        for (int c = 0; c < 4; ++c) d = std::max(d, std::abs(static_cast<int>(px[c]) - static_cast<int>(erased.At(x, y)[c])));
+                        shaded += d >= 8 ? 1 : 0;
+                    }
+                }
+            }
+            CHECK_MSG(shaded >= 40, name + ": a drop shadow is drawn round the ink: " + std::to_string(shaded) + " pixels");
+            lowestRow = std::max(lowestRow, static_cast<double>(lowest));
+            // TWO LINES NEVER TOUCH: the ink of the second is at least the recipe's gap (less the half pixel a whole step of the pitch and a rounded column can take) below the first's.
+            if (a.lines == 2) {
+                const double wanted = recipe.text.gap * recipe.text.px * a.scale;
+                CHECK_MSG(a.lineGap > 0.0 && a.lineGap < PB::kNoLineGap && a.lineGap >= wanted - 0.5, name + ": the two lines' ink is at least the gap apart: " + std::to_string(a.lineGap) + " px, the gap " + std::to_string(wanted));
+                closest = std::min(closest, a.lineGap - wanted);
+            }
             // Twice is the same bytes.
             const PB::Outcome b = PB::Render(RequestFor(recipe, lang, phrase), source, twinPtr);
             std::string again;
@@ -1386,7 +1643,14 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
                 WriteText(dir / (recipe.id + ".png"), png);
             }
         }
-        std::printf("  %-16s tightest scale %.3f (%s), floor %.2f\n", recipe.id.c_str(), tightest, tightestLanguage.c_str(), recipe.text.minScale);
+        std::printf("  %-16s tightest scale %.3f (%s), floor %.2f", recipe.id.c_str(), tightest, tightestLanguage.c_str(), recipe.text.minScale);
+        if (recipe.erase.rule == PB::Rule::Generated) std::printf("; lowest visible row %.0f", lowestRow);
+        if (closest < PB::kNoLineGap) std::printf("; two lines at least %+.2f px beyond the gap", closest);
+        std::printf("\n");
+        if (recipe.id == "game_over") {
+            // THE LOST SCREEN: the restart and list buttons begin at hd row kRestartButtonTopRow of this picture, and no language's title - ink or shadow - may reach them.
+            CHECK_MSG(lowestRow < kRestartButtonTopRow, recipe.id + ": the title (its shadow too) ends above the lost screen's buttons: row " + std::to_string(static_cast<int>(lowestRow)));
+        }
         CHECK_MSG(tightest >= recipe.text.minScale, recipe.id + ": every language is at or above the floor");
     }
     if (!dump.empty()) std::printf("  the baked pictures were written under %s (MP_PICTUREBAKE_DUMP): delete them when done, they are made from the original's\n", dump.c_str());

@@ -10,8 +10,10 @@
 //   - a PLATE (the picture is a plate with a word on it): the English word is ERASED from the decoded picture by a model made of the picture's own text-free
 //     rows and columns (no donor picture and no ink detection: a rectangle is replaced by `row_lerp`, `separable` or `twin`, below), then the translated
 //     phrase is DRAWN into the rectangle with the committed faces, with the drop shadow the original's word had;
-//   - a GENERATED picture (the picture is only words on a transparent ground): no pixel of the original is read at all; the phrase is drawn on a transparent
-//     canvas of the same size, with the look the original's lettering had (white ink, a soft shadow, the shade along the top and left edges);
+//   - a GENERATED picture (the picture is only words on a transparent ground): no pixel of the original reaches the output. The sprite is still decoded and
+//     checked by its size and digest, so that a machine without the original's picture, or with another version of it, keeps the English one; none of its pixels
+//     is used. The phrase is drawn on a transparent canvas of the same size, with the look the original's lettering had (white ink, a soft shadow, the shade
+//     along the top and left edges);
 //   - the result is a same-size PNG in the scratch folder, under a name that carries the recipe, the language and a hash of every input.
 //
 // WHAT IT DOES NOT DO. English is never baked: the layer asks for the shipped file and gets it, byte for byte (the layer's hook, MagicPortalsLayer::wordedPicture).
@@ -102,8 +104,9 @@ struct Span {
     int b = 0;
 };
 
-// How the English word leaves the picture. The first three READ THE PICTURE and replace a rectangle of it; Generated reads nothing: the picture is made of the
-// words alone. (A later step adds rules as enumerators and data: the loader refuses a rule it does not know.)
+// How the English word leaves the picture. The first three READ THE PICTURE and replace a rectangle of it; Generated uses none of its pixels: the picture is made of the
+// words alone (CheckSource still refuses a sprite of another size or digest, but none of its pixels is used). (A later step adds rules as enumerators and
+// data: the loader refuses a rule it does not know.)
 enum class Rule {
     // The plate under the word is flat along x: a row of the picture is filled with the line between the mean of two text-free column bands, one each side.
     RowLerp,
@@ -235,6 +238,9 @@ struct Placed {
     double baseline = 0.0;
 };
 
+// What Outcome::lineGap says when there are not two lines (or no column holds ink of both).
+inline constexpr double kNoLineGap = 1e9;
+
 struct Outcome {
     bool ok = false;
     std::string reason;           // one line naming what refused, when !ok
@@ -243,6 +249,10 @@ struct Outcome {
     int lines = 0;
     std::vector<std::string> lineTexts; // each line as it was set, logical order, spaces that only break removed
     Rect ink;                     // the ink's box where the coverage reaches the recipe's threshold, in the picture's pixels
+    // Two lines: the least free distance, in the picture's pixels, between the upper line's lowest solid ink and the lower line's highest in a column both reach,
+    // measured on what was put down (negative: they touch or overlap); kNoLineGap otherwise. The pitch's promise (the lines stay the recipe's `gap` apart), as a
+    // number that a test can hold it to.
+    double lineGap = kNoLineGap;
     Rect touched;                 // the rectangle every changed pixel is inside
     std::vector<Placed> placed;
 };
