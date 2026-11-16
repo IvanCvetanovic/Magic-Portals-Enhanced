@@ -588,6 +588,13 @@ void ThePopupSaysWhatTheLevelHas() {
     CHECK(Achievements::FromLevel(content, 0, -1).empty() && Achievements::FromLevel(content, 2, 2).empty());
     Is(Achievements::PopupText(rules, content, level, {1}), "@ T1:\nT1 said\n\n# S:\nP1~3", 536);
     Is(Achievements::PopupText(rules, content, level, {1, 2}), "@ T1:\nT1 said\n\n@ T2:\nT2 said", 537);
+    // The marks are the font's (planning step 249): the rules' own ('@', '#') through the overload that has none, and whatever the caller names through the one that has.
+    // The default is the overload with the rules' marks, byte for byte, and the marks given are used in place of them and of nothing else.
+    const Achievements::PopupMarks own{rules.popup.unlockedMark, rules.popup.lockedMark};
+    Is(Achievements::PopupText(rules, content, level, {1}, own), Achievements::PopupText(rules, content, level, {1}), 538);
+    const Achievements::PopupMarks icons{"\xEE\x80\x80", "\xEE\x80\x81"};
+    Is(Achievements::PopupText(rules, content, level, {1}, icons), "\xEE\x80\x80 T1:\nT1 said\n\n\xEE\x80\x81 S:\nP1~3", 539);
+    Is(Achievements::PopupText(rules, content, level, {}, icons), "\xEE\x80\x81 T1:\nT1 said\n\n\xEE\x80\x81 S:\nP1~3", 540);
 }
 
 void runTests() {

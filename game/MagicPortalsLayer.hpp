@@ -2090,6 +2090,11 @@ private:
     mutable std::shared_ptr<PictureState> m_pictures;
     // The keys a switch took out of m_menuPictures, which menuPicture puts back at their first draw.
     mutable std::set<std::string> m_pictureLazy;
+    // Whether the picture `file` (a name within sprites/) is one whose words are baked in the language on the screen: a recipe names it, and the language is not English.
+    // True does not mean it was baked, only that it would be, so a cache may leave it to the moment it is drawn (planning step 249).
+    bool hasWordedRecipe(const std::string& file) const;
+    // A popup picture's file: m_popupImages' entry, or, for one in m_popupLazy, resolved now (originalAsset, which bakes it), once. Empty when it cannot be read.
+    const std::string& popupPicture(const std::string& file) const;
 
     // The entities' particle systems: built with a level's art, carried per
     // FRAME, and taken away with the level.
@@ -2416,7 +2421,7 @@ private:
     void restoreEdgeCulls(entt::registry& registry);
     // An image's size, read once per file (Sprites::ImageSize); zero when it
     // cannot be read.
-    glm::dvec2 imageSizePx(const std::string& path);
+    glm::dvec2 imageSizePx(const std::string& path) const;
     // An image the port draws for itself, by the name its data gives: the file the
     // original's loader draws for it (the tier file where one exists, Sprites::Drawn
     // over m_tierRules), and its size in whole units. Read once per name; texels and
@@ -2531,7 +2536,7 @@ private:
     std::string m_artError;
     bool m_showBoxes{false};
     int m_playerSlot{0}; // the drawing slot the player takes among the sprites
-    std::map<std::string, glm::dvec2> m_imageSizes;
+    mutable std::map<std::string, glm::dvec2> m_imageSizes; // mutable: imageSizePx is a cache, and popupPicture (const) reads through it
     std::map<std::string, Sprites::Image> m_drawnImages; // drawnImage's, by the name asked for
     Art::Rules m_artRules;                  // the port's art.json
     Sky::Rules m_skyRules;                  // the port's sky.json
@@ -3902,7 +3907,11 @@ private:
     PopupScreen m_popup;
     // Each popup picture's file resolved once per level, the hd twin where one
     // exists; empty for one that cannot be read, which is then not drawn.
-    std::map<std::string, std::string> m_popupImages;
+    // Mutable with m_popupLazy: popupPicture resolves a picture whose words are baked at the moment it is raised or drawn (planning step 249).
+    mutable std::map<std::string, std::string> m_popupImages;
+    // The popup pictures whose words are baked for the language on the screen and have NOT been, left out of m_popupImages until popupPicture is asked for them: the
+    // game-finished card is baked when it is raised, not at every level load (a player meets it once per playthrough).
+    mutable std::set<std::string> m_popupLazy;
     // The level's help blocks: each entity's place and collision box, in units.
     struct HelpBlock {
         glm::dvec2 atUnits{0.0};

@@ -26,6 +26,11 @@
 // advance FLOORED to a whole pixel, so the joined letters of Arabic overlap rather than gap (BMFont's xadvance is an integer, and the
 // engine draws at the glyph's integer positions). No kerning: the original applies none.
 //
+// ICONS (planning step 249). Besides letters, a slot may carry icons the plan names (IconSpec): two glyphs of our own at private-use code points, drawn from vector
+// shapes and not from any face, standing in a generated atlas for the two glyph codes ('@', '#') the original's Verdana bitmap gives icons. They go through the same
+// cell, padding, thickening, shadow and composition as a letter, are part of the input hash only in a slot that carries them (so Matura's atlases are what they were),
+// and are never in a face's `missing` list. The shapes use + - * and sqrt only, so the same inputs make the same coverage on every compiler that does not fuse them.
+//
 // DETERMINISTIC. The same inputs give the same bytes: glyphs are packed in a fixed order and the PNG encoder is stb's, whose output is a
 // function of the pixels. A cached bake is found by an input hash written into the .fnt (a `bake` record the engine's reader skips), and
 // Ensure writes nothing when the files on disk already hold that hash - the precedent is the layer's generated pictures
@@ -102,16 +107,59 @@ struct SlotSpec {
     std::vector<std::pair<std::string, std::string>> scriptFaces; // script id -> face id
 };
 
+// ---- the icons (planning step 249) ---------------------------------------------------------------------------------------------------------
+//
+// The original's Verdana40_shadow bitmap font gives two glyph codes an icon where a letter would be: '@' draws a check mark and '#' a padlock (the achievements popup
+// writes one before each achievement, achievements.json popup.unlocked_mark / locked_mark, decoded from AchievementsPopup). A generated atlas cannot read the
+// original's glyphs (they are Asantee's and Microsoft's: nothing is copied or derived from them), and its faces draw an '@' and a '#' as themselves, which is what a
+// player saw before this step. So the plan names two icons of OUR OWN, drawn by code - vector shapes rasterised with supersampling into the atlas cell, white over
+// the slot's baked shadow like a letter, as tall as the slot's capital - at two code points in the private-use area that no text uses. `stands_for` is the
+// original's glyph code the icon takes the place of, and the one place that says so: the layer asks the plan which code point to write for a language drawn from a
+// generated atlas (Strings::Table::OriginalGlyph), and writes the original's own code everywhere else.
+enum class IconKind { Check, Padlock };
+
+struct IconSpec {
+    std::string id;                  // "check"
+    IconKind kind = IconKind::Check;
+    std::uint32_t codePoint = 0;     // in the private-use area, outside every script's ranges and the base set
+    std::string standsFor;           // the original's glyph code this icon replaces: one ASCII character
+    std::vector<std::string> slots;  // the slots that carry the icon (only a slot that names it draws it)
+    double advance = 0.0;            // the pen's step, in the slot's cap heights
+    double bearing = 0.0;            // the ink starts this far right of the pen, in cap heights
+    std::vector<double> shape;       // the kind's numbers, in the order IconShapeNames(kind) gives, in cap heights (x from the ink's left edge, y up from the baseline)
+
+    // The shape's number called `name` (0.0 for a name the kind has not).
+    double Value(std::string_view name) const;
+};
+
+// The names of a kind's shape numbers, in order. A check mark is two round-capped strokes: left end (stroke / 2, left_y), knee (knee_x, knee_y) and right end (width -
+// stroke / 2, 1 - stroke / 2). A padlock is a rounded body, an arch over it (outer radius width / 2 - inset, whose top is the capital's height) and a keyhole cut out of
+// the body: a disc and a slot under it.
+const std::vector<std::string_view>& IconShapeNames(IconKind kind);
+std::string_view IconKindName(IconKind kind);
+bool ParseIconKind(std::string_view name, IconKind& out);
+
+struct Plan;
+// Whether `icon` is a well-formed icon of `plan`: its shape numbers are the kind's, within the glyph's box and each other; its code point is in the private-use area
+// U+E000-F8FF and in no script's ranges; its slots are the plan's; and it takes the place of one printable ASCII character that is no letter or digit. `why` says how not.
+bool CheckIcon(const Plan& plan, const IconSpec& icon, std::string& why);
+
 struct Plan {
     std::string folder; // below the port's data directory: "fonts"
     std::vector<FaceSpec> faces;
     std::vector<ScriptSpec> scripts;
     std::vector<SlotSpec> slots;
     std::string pickerSlot; // the slot the language picker's names are baked in
+    std::vector<IconSpec> icons; // optional: a plan without any draws every glyph code as its face does
     bool loaded = false;
 
     const FaceSpec* Face(std::string_view id) const;
     const SlotSpec* Slot(std::string_view id) const;
+    // The icon at `codePoint` (null for none), and the one that takes the place of the original's glyph code `original` (a one-character string).
+    const IconSpec* IconAt(std::uint32_t codePoint) const;
+    const IconSpec* IconStandingFor(std::string_view original) const;
+    // The icons `slot` carries, in the plan's order.
+    std::vector<const IconSpec*> IconsOf(const SlotSpec& slot) const;
 };
 
 // "U+0048" -> 0x48 (four to six hex digits), and "3000-30FF" -> a range. False for anything else.
@@ -124,6 +172,9 @@ const std::string& FaceIdOf(const Plan& plan, const SlotSpec& slot, std::uint32_
 // Digits, ASCII punctuation, the ASCII letters, the space and the no-break space: what every slot holds whatever the strings say, since text is composed
 // with numbers and with the separators around them, a table falls back to English for a key it lacks, and the credits and the brand are English.
 std::set<std::uint32_t> BaseSet();
+
+// What a bake of `slot` over `codePoints` draws: those, the base set, and the code points of the icons the slot carries.
+std::set<std::uint32_t> WantedPoints(const Plan& plan, const SlotSpec& slot, const std::set<std::uint32_t>& codePoints);
 
 // ---- the bake -----------------------------------------------------------------------------------------------------------------------
 
@@ -143,8 +194,8 @@ struct Baked {
     std::string hash;               // of the inputs; also in the .fnt
 };
 
-// The hash that names a bake's inputs: the plan's slot, the bytes of every face the slot uses, the code points (BaseSet added) and the
-// name. Cheap; Ensure computes it to find out whether it must bake.
+// The hash that names a bake's inputs: the plan's slot, the bytes of every face the slot uses, the code points (BaseSet and the slot's icons added),
+// the icons' shapes and the name. Cheap; Ensure computes it to find out whether it must bake.
 std::string InputHash(const Plan& plan, const SlotSpec& slot, const std::vector<FaceBytes>& faces, const std::set<std::uint32_t>& codePoints,
                       std::string_view name);
 

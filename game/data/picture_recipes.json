@@ -983,7 +983,8 @@
         "min_scale": 0.7,
         "step": 0.97,
         "ink_threshold": 0.02,
-        "gap": 0.05,
+        "gap": 0.15,
+        "_gap": "Step 249: the least clear distance between two lines of a band, as a fraction of the band's px (scaled with the fit): 0.15. It was 0.05, which left 0.66 hd px between the lines of the design band and 1.3 between the heading's two (the g-loop of 'Agradecimientos' and the p of 'especiales' 1.7 apart in es and pt), and lines that nearly touched in pt and de. MEASURED on the original's own English design band (read-only, on the extracted sprite, in scratch; nothing of it is kept): its two lines of x-height 13.2 hd px stand at least 3 free rows apart in a column both reach and at least 2.0 hd px apart by distance (the glyphs taken as 8-connected components of alpha above 127, assigned to the upper line when their centroid is above the middle of the baselines 64.5 and 90.7); 2.0 / 13.2 = 0.15. The pitch still starts at the original's 26.2 (the heading's 40) and grows only where the ink needs it to keep this distance, in the 0.5 px steps FitPitch takes; where the grown block no longer fits the band's ink rows the fit takes the next scale (step 0.97), at most down to the floor.",
         "left": 64.0,
         "max_right": 470.0,
         "digit_face": "noto_sans_bold",
@@ -1054,6 +1055,12 @@
               598
             ],
             "break": "space",
+            "balance": {
+              "_source": "Step 249 (the QA of step 248). A heading that wraps to two lines is anchored by its LAST baseline (565), so it grew upward: in es, fr, it, pt, ru and uk it began at rows 489-490, 11 to 18 rows under the '3D modelling' line (whose ink ends at row 470 or 478), and ended 22 to 26 rows above the first name ('Bruno Fernandes', whose ink begins at row 600 in every language: the sprite's own row), so it read as belonging to the wrong block. A heading of two lines is now placed so that the free rows above it (to the ink of band 3, as drawn in the language) equal the free rows below it (to row 600), its block's ink centred between them; a one-line heading keeps its baseline (English 46 rows above and 20 below; de, tr, ja and ar the same). The window of rows [488, 598) still bounds the ink.",
+              "above_band": 3,
+              "below_row": 600,
+              "min_lines": 2
+            },
             "faces": {
               "kurale": {
                 "ratio": 1.0,

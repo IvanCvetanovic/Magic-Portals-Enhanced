@@ -29,6 +29,13 @@
 //               achievement title and description and the secret achievement's two texts - is baked into BOTH slots without a hole. A MUTATION runs the same check with Arabic's
 //               face removed from the routing, and with Japanese's, and requires holes: the check can fail
 //
+//   icons       (planning step 249) the plan names two icons of the suite's own drawing - a check mark at U+E000 standing for the original's '@' and a padlock at U+E001
+//               standing for '#' - carried by Verdana's slot alone: both are in its atlas, ink, as tall as a capital H and standing on the baseline like it, a cell of a
+//               capital's height plus the padding, told apart by a stated metric (the share of the ink box's lower half they fill, their left-right balance), the keyhole is
+//               a cut, two bakes are byte for byte equal, every other glyph has the same metrics and the same pixels as with no icons, Matura's slot and its hash are what
+//               they were, the hash sees each number of each icon, and the geometry's refusals (a stroke, a knee, an arch, a keyhole, a code point outside the private-use
+//               area or in a script's ranges, a glyph code that is a letter...) each fail with their reason
+//
 // MP_TEST_PORTDATA (TEST ONLY, as test_mp_strings) points the suite at a copy of game/data, so that a changed translation or a face taken
 // out of the folder shows up in a real run. MP_FONTBAKE_DUMP=<existing folder> (a developer's switch, not a test) additionally writes the sample
 // fonts of the bake case there as matura_<language>.fnt/png and verdana_<language>.fnt/png, so that they can be looked at beside the original's.
@@ -53,6 +60,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <map>
 #include <set>
@@ -396,9 +404,8 @@ void BakesEveryScriptWithTheOriginalsMetrics() {
 
         // Every requested code point, and the base set, has a glyph of nonzero size, except where a glyph is only an advance.
         const std::map<std::uint32_t, Char> chars = Chars(baked.fnt);
-        CodePoints wanted = sample.points;
-        const CodePoints base = FontBake::BaseSet();
-        wanted.insert(base.begin(), base.end());
+        // (The base set, and the icons the slot carries since step 249 - the Verdana slot's two - which the bake adds by itself.)
+        const CodePoints wanted = FontBake::WantedPoints(plan, slot, sample.points);
         for (const std::uint32_t c : wanted) {
             const auto it = chars.find(c);
             CHECK_MSG(it != chars.end(), std::string(sample.name) + ": " + Hex(c) + " is in the font");
@@ -451,7 +458,7 @@ void BakesEveryScriptWithTheOriginalsMetrics() {
         // The advances are the faces' own, floored, checked against stb_truetype itself.
         for (const std::uint32_t c : wanted) {
             const auto it = chars.find(c);
-            if (it == chars.end()) continue;
+            if (it == chars.end() || plan.IconAt(c) != nullptr) continue; // an icon has no face: its advance is checked with the icons' own case
             const Oracle oracle = OracleFor(plan, slot, world.faces, FontBake::FaceIdOf(plan, slot, c));
             CHECK_MSG(oracle.ok, "an oracle for " + Hex(c));
             if (!oracle.ok) continue;
@@ -916,11 +923,328 @@ void TheCoverageCheckCanFail() {
     CHECK_MSG(HolesOf(mutated, russian, world.faces, {}, drawn).empty(), "Russian needs only the text faces: dropping the scripts' faces leaves it whole");
 }
 
+// ---- the icons (planning step 249) -------------------------------------------------------------------------------------------------------
+
+constexpr std::uint32_t kCheckPoint = 0xE000;
+constexpr std::uint32_t kPadlockPoint = 0xE001;
+
+// What a glyph's cell shows of its ink: white pixels (opaque and bright: the shadow is black and the edge's blend is not counted), their box in the cell, how much of the box's
+// lower half they fill, and how much of the ink is in the box's left half.
+struct Ink {
+    bool any = false;
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0; // the box, [x0, x1) x [y0, y1), in cell pixels
+    int count = 0;
+    double lowerFill = 0.0;
+    double leftShare = 0.0;
+    std::vector<int> columns; // the ink pixels of each cell column, from column 0 of the cell
+};
+
+Ink InkOf(const FontBake::Baked& baked, std::uint32_t id) {
+    Ink ink;
+    const std::map<std::uint32_t, Char> chars = Chars(baked.fnt);
+    const auto found = chars.find(id);
+    if (found == chars.end() || found->second.w <= 0) return ink;
+    const Char& c = found->second;
+    const Image page = Decode(baked.pages[static_cast<std::size_t>(c.page)]);
+    const auto white = [&](int x, int y) {
+        const std::size_t at = (static_cast<std::size_t>(c.y + y) * page.w + (c.x + x)) * 4;
+        return page.rgba[at + 3] >= 128 && page.rgba[at] >= 128;
+    };
+    ink.x0 = c.w;
+    ink.y0 = c.h;
+    ink.columns.assign(static_cast<std::size_t>(c.w), 0);
+    for (int y = 0; y < c.h; ++y) {
+        for (int x = 0; x < c.w; ++x) {
+            if (!white(x, y)) continue;
+            ++ink.columns[static_cast<std::size_t>(x)];
+            ink.any = true;
+            ink.x0 = std::min(ink.x0, x);
+            ink.y0 = std::min(ink.y0, y);
+            ink.x1 = std::max(ink.x1, x + 1);
+            ink.y1 = std::max(ink.y1, y + 1);
+            ++ink.count;
+        }
+    }
+    if (!ink.any) return ink;
+    const int mid = (ink.y0 + ink.y1) / 2;
+    const int centre = (ink.x0 + ink.x1) / 2;
+    int lower = 0;
+    int left = 0;
+    for (int y = ink.y0; y < ink.y1; ++y) {
+        for (int x = ink.x0; x < ink.x1; ++x) {
+            if (!white(x, y)) continue;
+            lower += y >= mid ? 1 : 0;
+            left += x < centre ? 1 : 0;
+        }
+    }
+    const int lowerArea = (ink.y1 - mid) * (ink.x1 - ink.x0);
+    ink.lowerFill = lowerArea > 0 ? static_cast<double>(lower) / lowerArea : 0.0;
+    ink.leftShare = static_cast<double>(left) / ink.count;
+    return ink;
+}
+
+void TheIconsAreOurOwnShapesDrawnByCode() {
+    World& world = TheWorld();
+    if (!world.ok) return;
+    const FontBake::Plan& plan = world.languages.Fonts();
+    const FontBake::SlotSpec& verdana = Slot(plan, Strings::kSlotVerdana);
+    const FontBake::SlotSpec& matura = Slot(plan, Strings::kSlotMatura);
+
+    // The plan: two icons, at the two private-use code points, each standing for one of the original's glyph codes, carried by Verdana's slot alone.
+    CHECK_EQ(static_cast<int>(plan.icons.size()), 2);
+    const FontBake::IconSpec* check = plan.IconAt(kCheckPoint);
+    const FontBake::IconSpec* padlock = plan.IconAt(kPadlockPoint);
+    CHECK_MSG(check != nullptr && padlock != nullptr, "the plan has an icon at U+E000 and at U+E001");
+    if (check == nullptr || padlock == nullptr) return;
+    CHECK_MSG(check->kind == FontBake::IconKind::Check && padlock->kind == FontBake::IconKind::Padlock && check->id == "check" && padlock->id == "padlock", "a check mark and a padlock");
+    CHECK_MSG(plan.IconStandingFor("@") == check && plan.IconStandingFor("#") == padlock && plan.IconStandingFor("!") == nullptr && plan.IconStandingFor("@#") == nullptr,
+              "the check mark takes the place of the original's '@' and the padlock of its '#', and nothing else is taken");
+    CHECK_MSG(plan.IconAt(0xE002) == nullptr && plan.IconAt('@') == nullptr, "and no other code point is an icon");
+    CHECK_MSG(plan.IconsOf(verdana).size() == 2 && plan.IconsOf(matura).empty(), "Verdana's slot carries both, Matura's neither");
+    CHECK_MSG(FontBake::IconShapeNames(FontBake::IconKind::Check).size() == 5 && FontBake::IconShapeNames(FontBake::IconKind::Padlock).size() == 9, "five numbers a check mark, nine a padlock");
+    for (const FontBake::IconSpec& icon : plan.icons) {
+        std::string why;
+        CHECK_MSG(FontBake::CheckIcon(plan, icon, why), "the shipped icon is well formed: " + why);
+        CHECK_MSG(icon.advance >= icon.bearing + icon.Value("width"), icon.id + ": the pen steps past the ink");
+    }
+    for (const FontBake::IconSpec& icon : plan.icons) {
+        for (std::size_t i = 0; i < icon.shape.size(); ++i) {
+            CHECK_MSG(icon.Value(FontBake::IconShapeNames(icon.kind)[i]) == icon.shape[i], icon.id + ": Value(name) is the shape's number in the order the names give");
+        }
+    }
+    CHECK_MSG(check->Value("no_such_number") == 0.0, "a name the kind has not is zero");
+
+    // The bake of Verdana's slot over some Cyrillic: both icons are in the atlas, are no hole in it, and are ink.
+    FontBake::Baked baked;
+    std::string error;
+    CHECK_MSG(FontBake::Bake(plan, verdana, world.faces, Drawn(Lang::Ru, kRuAchievement), "icons", baked, error), "verdana bakes: " + error);
+    if (baked.fnt.empty()) return;
+    CHECK_MSG(baked.missing.empty(), "an icon is no code point a face lacks: " + ShowSet(baked.missing));
+    const std::map<std::uint32_t, Char> chars = Chars(baked.fnt);
+    CHECK_MSG(chars.count(kCheckPoint) == 1 && chars.count(kPadlockPoint) == 1, "both icons are in the descriptor");
+    const Ink h = InkOf(baked, 'H');
+    const Ink tick = InkOf(baked, kCheckPoint);
+    const Ink lock = InkOf(baked, kPadlockPoint);
+    CHECK_MSG(h.any && tick.any && lock.any, "a capital H, the check mark and the padlock all have ink");
+    if (!h.any || !tick.any || !lock.any) return;
+    const double cap = verdana.capHeight;
+    // Sized like a capital: as tall as the H (within a pixel), standing on the baseline like it, and about as wide as a capital.
+    for (const std::uint32_t id : {kCheckPoint, kPadlockPoint}) {
+        const Ink& ink = id == kCheckPoint ? tick : lock;
+        const Char& c = chars.at(id);
+        CHECK_MSG(std::abs((ink.y1 - ink.y0) - (h.y1 - h.y0)) <= 1, Hex(id) + ": as tall as a capital H (" + std::to_string(ink.y1 - ink.y0) + " against " + std::to_string(h.y1 - h.y0) + ")");
+        CHECK_MSG(std::abs((verdana.base - c.yoffset - ink.y1)) <= 1, Hex(id) + ": its ink stands on the baseline");
+        CHECK_MSG(std::abs((verdana.base - chars.at('H').yoffset - h.y1)) <= 1, "(the capital H does too, so the check above compares like with like)");
+        CHECK_MSG(ink.x1 - ink.x0 >= static_cast<int>(0.6 * cap) && ink.x1 - ink.x0 <= static_cast<int>(1.05 * cap), Hex(id) + ": its width is about a capital's: " + std::to_string(ink.x1 - ink.x0));
+        CHECK_MSG(c.h == static_cast<int>(std::ceil(cap)) + verdana.padUp + verdana.padDown,
+                  Hex(id) + ": the cell is a capital's height plus the slot's padding (a cap-height-sized cell): " + std::to_string(c.h));
+        CHECK_MSG(c.xadvance == static_cast<int>(std::floor((id == kCheckPoint ? check : padlock)->advance * cap)) && c.xadvance > c.xoffset + ink.x1,
+                  Hex(id) + ": the pen steps past the ink by the plan's advance: " + std::to_string(c.xadvance));
+    }
+    // The two are told apart by a stated metric: the share of the box's lower half the ink fills (a padlock's body is solid there; a check mark's lower half is its short arm) and
+    // the left-right balance (a padlock is symmetric; a check mark's long arm is on the right).
+    CHECK_MSG(lock.lowerFill > 0.75 && tick.lowerFill < 0.6, "lower-half fill: padlock " + std::to_string(lock.lowerFill) + " against check mark " + std::to_string(tick.lowerFill));
+    CHECK_MSG(std::abs(lock.leftShare - 0.5) < 0.05 && tick.leftShare < 0.48 && tick.leftShare < lock.leftShare - 0.02, "left share: padlock " + std::to_string(lock.leftShare) + " (symmetric), check mark " + std::to_string(tick.leftShare) + " (long arm right)");
+    CHECK_MSG(lock.count > tick.count / 2 && tick.count > 20, "and each has real ink: " + std::to_string(tick.count) + " and " + std::to_string(lock.count));
+    // The check mark's SHORT ARM: the ink left of the knee is a share of the whole between a ninth and a third (the long arm carries the rest), where a mark with no short arm has
+    // none. The knee's column is the shape's knee_x of the capital from the ink's left edge in the cell (the padding's).
+    {
+        const int kneeColumn = verdana.padLeft + static_cast<int>(std::lround(check->Value("knee_x") * cap)) - 1; // from the cell's own edge: a mark that lost its short arm starts further right
+        int shortArm = 0;
+        for (int x = 0; x < kneeColumn && x < static_cast<int>(tick.columns.size()); ++x) shortArm += tick.columns[static_cast<std::size_t>(x)];
+        const double share = static_cast<double>(shortArm) / tick.count;
+        std::printf("  the check mark: %d ink pixels, short arm %.2f of them, lower-half fill %.2f, left share %.2f; the padlock: %d, lower-half fill %.2f, left share %.2f\n", tick.count, share,
+                    tick.lowerFill, tick.leftShare, lock.count, lock.lowerFill, lock.leftShare);
+        CHECK_MSG(share > 0.11 && share < 0.45, "the check mark has a short arm and a long one: the ink left of the knee is " + std::to_string(share) + " of the whole");
+    }
+    // The keyhole is a cut in the body (the ink of the padlock is less than its box's body would fill).
+    {
+        FontBake::Plan solid = plan;
+        for (FontBake::IconSpec& icon : solid.icons) {
+            if (icon.kind != FontBake::IconKind::Padlock) continue;
+            for (std::size_t i = 0; i < icon.shape.size(); ++i) {
+                if (FontBake::IconShapeNames(icon.kind)[i] == "hole") icon.shape[i] = 0.0001; // too small to cut anything
+                if (FontBake::IconShapeNames(icon.kind)[i] == "slot") icon.shape[i] = 0.0;
+            }
+        }
+        FontBake::Baked plain;
+        CHECK_MSG(FontBake::Bake(solid, *solid.Slot(Strings::kSlotVerdana), world.faces, Drawn(Lang::Ru, kRuAchievement), "icons", plain, error), "a padlock with no keyhole bakes: " + error);
+        const Ink without = InkOf(plain, kPadlockPoint);
+        CHECK_MSG(without.count > lock.count + 3, "the keyhole is cut out of the body: " + std::to_string(lock.count) + " ink pixels with it, " + std::to_string(without.count) + " without");
+    }
+
+    // Deterministic, whatever order the faces came in, and the ink does not depend on the other glyphs asked for.
+    FontBake::Baked again;
+    const std::vector<FontBake::FaceBytes> reversed(world.faces.rbegin(), world.faces.rend());
+    CHECK_MSG(FontBake::Bake(plan, verdana, reversed, Drawn(Lang::Ru, kRuAchievement), "icons", again, error), "bake again: " + error);
+    CHECK_MSG(again.fnt == baked.fnt && again.pages == baked.pages && again.hash == baked.hash, "two bakes of the same inputs are byte for byte equal");
+    FontBake::Baked other;
+    CHECK_MSG(FontBake::Bake(plan, verdana, world.faces, Drawn(Lang::Ja, kJaPart), "icons", other, error), "a bake over other letters: " + error);
+    const Ink tickElsewhere = InkOf(other, kCheckPoint);
+    CHECK_MSG(tickElsewhere.count == tick.count && tickElsewhere.x1 - tickElsewhere.x0 == tick.x1 - tick.x0 && tickElsewhere.y1 - tickElsewhere.y0 == tick.y1 - tick.y0,
+              "the icon is the same in an atlas of other letters (its ink is its own)");
+
+    // Every other glyph is what it was without the icons: the same metrics and the same pixels in its cell (only the packing moves).
+    FontBake::Plan without = plan;
+    without.icons.clear();
+    FontBake::Baked old;
+    CHECK_MSG(FontBake::Bake(without, *without.Slot(Strings::kSlotVerdana), world.faces, Drawn(Lang::Ru, kRuAchievement), "icons", old, error), "bake without the icons: " + error);
+    const std::map<std::uint32_t, Char> oldChars = Chars(old.fnt);
+    CHECK_MSG(oldChars.size() + 2 == chars.size(), "the icons add two glyphs and nothing else: " + std::to_string(oldChars.size()) + " and " + std::to_string(chars.size()));
+    std::size_t identical = 0;
+    for (const auto& [id, was] : oldChars) {
+        const auto now = chars.find(id);
+        if (now == chars.end()) continue;
+        const bool same = was.w == now->second.w && was.h == now->second.h && was.xoffset == now->second.xoffset && was.yoffset == now->second.yoffset && was.xadvance == now->second.xadvance;
+        CHECK_MSG(same, Hex(id) + ": the same metrics with and without the icons");
+        if (!same || was.w == 0) continue;
+        const Image a = Decode(old.pages[static_cast<std::size_t>(was.page)]);
+        const Image b = Decode(baked.pages[static_cast<std::size_t>(now->second.page)]);
+        bool pixels = true;
+        for (int y = 0; y < was.h && pixels; ++y) {
+            for (int x = 0; x < was.w; ++x) {
+                const std::size_t ia = (static_cast<std::size_t>(was.y + y) * a.w + (was.x + x)) * 4;
+                const std::size_t ib = (static_cast<std::size_t>(now->second.y + y) * b.w + (now->second.x + x)) * 4;
+                if (!std::equal(a.rgba.begin() + static_cast<std::ptrdiff_t>(ia), a.rgba.begin() + static_cast<std::ptrdiff_t>(ia) + 4, b.rgba.begin() + static_cast<std::ptrdiff_t>(ib))) {
+                    pixels = false;
+                    break;
+                }
+            }
+        }
+        CHECK_MSG(pixels, Hex(id) + ": the same pixels in its cell with and without the icons");
+        ++identical;
+    }
+    CHECK_MSG(identical > 60, "a good many glyphs were compared: " + std::to_string(identical));
+
+    // Matura's slot carries no icon: its atlas is what it was, an icon's code point asked of it is simply missing, and its hash is the plan's without icons.
+    FontBake::Baked maturaBaked;
+    CodePoints asked = Drawn(Lang::Ru, kRuPart);
+    asked.insert(kCheckPoint);
+    CHECK_MSG(FontBake::Bake(plan, matura, world.faces, asked, "icons", maturaBaked, error), "matura bakes: " + error);
+    CHECK_MSG(std::find(maturaBaked.missing.begin(), maturaBaked.missing.end(), kCheckPoint) != maturaBaked.missing.end() && Chars(maturaBaked.fnt).count(kCheckPoint) == 0,
+              "an icon's code point asked of a slot that does not carry it is missing, not drawn");
+    CHECK_MSG(FontBake::InputHash(plan, matura, world.faces, Drawn(Lang::Ru, kRuPart), "m") == FontBake::InputHash(without, *without.Slot(Strings::kSlotMatura), world.faces, Drawn(Lang::Ru, kRuPart), "m"),
+              "Matura's hash is the same with and without icons in the plan (the picker's and Matura's atlases keep their names)");
+    CHECK_MSG(FontBake::InputHash(plan, verdana, world.faces, Drawn(Lang::Ru, kRuAchievement), "v") != FontBake::InputHash(without, *without.Slot(Strings::kSlotVerdana), world.faces, Drawn(Lang::Ru, kRuAchievement), "v"),
+              "and Verdana's is not");
+    // The hash sees every number of every icon.
+    const std::string hashed = FontBake::InputHash(plan, verdana, world.faces, Drawn(Lang::Ru, kRuAchievement), "v");
+    for (std::size_t which = 0; which < plan.icons.size(); ++which) {
+        const auto changedPlan = [&](const std::function<void(FontBake::IconSpec&)>& edit) {
+            FontBake::Plan edited = plan;
+            edit(edited.icons[which]);
+            return FontBake::InputHash(edited, *edited.Slot(Strings::kSlotVerdana), world.faces, Drawn(Lang::Ru, kRuAchievement), "v");
+        };
+        const std::string id = plan.icons[which].id;
+        CHECK_MSG(changedPlan([](FontBake::IconSpec& icon) { icon.advance += 0.05; }) != hashed, id + ": the advance is in the hash");
+        CHECK_MSG(changedPlan([](FontBake::IconSpec& icon) { icon.bearing += 0.05; }) != hashed, id + ": the bearing is in the hash");
+        CHECK_MSG(changedPlan([](FontBake::IconSpec& icon) { icon.codePoint += 2; }) != hashed, id + ": the code point is in the hash");
+        for (std::size_t number = 0; number < plan.icons[which].shape.size(); ++number) {
+            CHECK_MSG(changedPlan([number](FontBake::IconSpec& icon) { icon.shape[number] += 0.001; }) != hashed,
+                      id + ": the shape number '" + std::string(FontBake::IconShapeNames(plan.icons[which].kind)[number]) + "' is in the hash");
+        }
+    }
+    // And a changed shape is a changed picture, not only a changed name.
+    {
+        FontBake::Plan fatter = plan;
+        for (FontBake::IconSpec& icon : fatter.icons) {
+            if (icon.kind == FontBake::IconKind::Check) icon.shape[1] += 0.05; // the stroke
+        }
+        FontBake::Baked thick;
+        CHECK_MSG(FontBake::Bake(fatter, *fatter.Slot(Strings::kSlotVerdana), world.faces, Drawn(Lang::Ru, kRuAchievement), "icons", thick, error), "a thicker check mark bakes: " + error);
+        CHECK_MSG(InkOf(thick, kCheckPoint).count > tick.count, "a thicker stroke has more ink");
+    }
+}
+
+void TheIconsRefusalsAreErrorsThatSayWhy() {
+    World& world = TheWorld();
+    if (!world.ok) return;
+    const FontBake::Plan& plan = world.languages.Fonts();
+    struct Case {
+        const char* what;
+        std::function<void(FontBake::Plan&, FontBake::IconSpec&)> edit;
+        const char* needle;
+    };
+    const auto set = [](FontBake::IconSpec& icon, std::string_view name, double value) {
+        const std::vector<std::string_view>& names = FontBake::IconShapeNames(icon.kind);
+        for (std::size_t i = 0; i < names.size(); ++i) {
+            if (names[i] == name) icon.shape[i] = value;
+        }
+    };
+    const std::vector<Case> checks = {
+        {"a stroke of nothing", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "stroke", 0.0); }, "stroke"},
+        {"a stroke as wide as the mark", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "stroke", 0.95); }, "stroke"},
+        {"a knee left of the box", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "knee_x", 0.01); }, "knee"},
+        {"a knee below the baseline", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "knee_y", 0.0); }, "knee"},
+        {"a left end above the capital", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "left_y", 0.99); }, "left"},
+        {"a shape number that is not a number", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.shape[0] = std::nan(""); }, "shape number"},
+        {"a shape number below zero", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.shape[1] = -0.1; }, "shape number"},
+        {"a shape of the wrong length", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.shape.pop_back(); }, "shape numbers"},
+        {"an advance short of the ink", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.advance = 0.5; }, "advance"},
+        {"a code point below the private-use area", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.codePoint = 0xDFFF; }, "private-use"},
+        {"a code point above it", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.codePoint = 0xF900; }, "private-use"},
+        {"a code point of a letter", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.codePoint = 'H'; }, "private-use"},
+        {"a code point a script routes to a face", [&](FontBake::Plan& p, FontBake::IconSpec& i) { p.scripts[0].ranges.push_back({i.codePoint, i.codePoint + 3}); }, "script"},
+        {"standing for a letter", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.standsFor = "A"; }, "stands_for"},
+        {"standing for a digit", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.standsFor = "7"; }, "stands_for"},
+        {"standing for two characters", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.standsFor = "@@"; }, "stands_for"},
+        {"standing for a space", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.standsFor = " "; }, "stands_for"},
+        {"standing for a non-ASCII byte", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.standsFor = "\xC3"; }, "stands_for"},
+        {"no slot", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.slots.clear(); }, "slots"},
+        {"a slot nobody defined", [&](FontBake::Plan&, FontBake::IconSpec& i) { i.slots = {"nobody"}; }, "nobody"},
+        {"a code point another icon has", [&](FontBake::Plan& p, FontBake::IconSpec& i) { p.icons[&i == &p.icons[0] ? 1u : 0u].codePoint = i.codePoint; }, "one icon"},
+        {"a glyph code another icon takes", [&](FontBake::Plan& p, FontBake::IconSpec& i) { p.icons[&i == &p.icons[0] ? 1u : 0u].standsFor = i.standsFor; }, "one icon"},
+    };
+    for (const Case& c : checks) {
+        for (std::size_t which = 0; which < plan.icons.size(); ++which) {
+            // The shape cases are about the kind they name: a check mark's names are not a padlock's.
+            if (std::string(c.needle) == "knee" || std::string(c.needle) == "left") {
+                if (plan.icons[which].kind != FontBake::IconKind::Check) continue;
+            }
+            FontBake::Plan edited = plan;
+            c.edit(edited, edited.icons[which]);
+            std::string why;
+            CHECK_MSG(!FontBake::CheckIcon(edited, edited.icons[which], why) && why.find(c.needle) != std::string::npos,
+                      std::string(c.what) + " (" + plan.icons[which].id + ") is refused and says why: '" + why + "'");
+        }
+    }
+    // The padlock's own geometry.
+    const std::vector<Case> locks = {
+        {"a body as tall as the capital", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "body_height", 1.0); }, "body"},
+        {"a corner larger than the body allows", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "corner", 0.4); }, "corner"},
+        {"an arch with no hole in it", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "stroke", 0.5); }, "arch"},
+        {"an arch whose centre is below the body's top", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "inset", 0.0); set(i, "body_height", 0.7); }, "arch"},
+        {"a keyhole out of the body", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "hole_y", 0.57); }, "keyhole"},
+        {"a keyhole slot wider than its disc", [&](FontBake::Plan&, FontBake::IconSpec& i) { set(i, "slot", 0.5); }, "keyhole"},
+    };
+    for (const Case& c : locks) {
+        for (std::size_t which = 0; which < plan.icons.size(); ++which) {
+            if (plan.icons[which].kind != FontBake::IconKind::Padlock) continue;
+            FontBake::Plan edited = plan;
+            c.edit(edited, edited.icons[which]);
+            std::string why;
+            CHECK_MSG(!FontBake::CheckIcon(edited, edited.icons[which], why) && why.find(c.needle) != std::string::npos, std::string(c.what) + " is refused and says why: '" + why + "'");
+        }
+    }
+    // The control: the unedited icons pass, so every refusal above is the edit's.
+    for (const FontBake::IconSpec& icon : plan.icons) {
+        std::string why;
+        CHECK_MSG(FontBake::CheckIcon(plan, icon, why), "the unedited icon passes: " + why);
+    }
+    // An icon with no code point at all, or an unknown kind, never gets to the plan: the names parse only as spelled.
+    FontBake::IconKind kind = FontBake::IconKind::Check;
+    CHECK(FontBake::ParseIconKind("padlock", kind) && kind == FontBake::IconKind::Padlock && FontBake::ParseIconKind("check", kind) && kind == FontBake::IconKind::Check);
+    CHECK_MSG(!FontBake::ParseIconKind("Check", kind) && !FontBake::ParseIconKind("lock", kind) && !FontBake::ParseIconKind("", kind), "a kind is spelled as the table spells it");
+    CHECK(FontBake::IconKindName(FontBake::IconKind::Check) == "check" && FontBake::IconKindName(FontBake::IconKind::Padlock) == "padlock");
+}
+
 void runTests() {
     ThePlanIsTheOriginalsNumbers();
     BakesEveryScriptWithTheOriginalsMetrics();
     ABakeIsDeterministicAndItsHashSeesEveryInput();
     TheEnginesOwnReaderLoadsIt();
+    TheIconsAreOurOwnShapesDrawnByCode();
+    TheIconsRefusalsAreErrorsThatSayWhy();
     TheCacheWritesNothingTheSecondTime();
     ATornPageIsBakedAgain();
     ATinyBlurIsNoBlur();

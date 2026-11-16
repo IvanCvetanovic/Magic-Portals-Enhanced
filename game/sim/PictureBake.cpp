@@ -698,7 +698,7 @@ bool ReadBands(Reader& in, const Json::Value& block, const std::string& where, R
     for (std::size_t i = 0; i < block["bands"].AsArray().size(); ++i) {
         const Json::Value& item = block["bands"].AsArray()[i];
         const std::string at = where + ".bands[" + std::to_string(i) + "]";
-        if (!in.Only(item, at, {"key", "px", "first_baseline", "anchor", "pitch", "max_lines", "ink_rows", "break", "faces"})) return false;
+        if (!in.Only(item, at, {"key", "px", "first_baseline", "anchor", "pitch", "max_lines", "ink_rows", "break", "faces", "balance"})) return false;
         Band band;
         std::string anchor;
         std::string breakAt;
@@ -715,6 +715,20 @@ bool ReadBands(Reader& in, const Json::Value& block, const std::string& where, R
         if (band.firstBaseline < 0.0 || band.firstBaseline > recipe.height) return in.Fail(at + ".first_baseline", "is not inside the picture");
         if (!text.bands.empty() && band.inkRows.a < text.bands.back().inkRows.b) return in.Fail(at + ".ink_rows", "overlaps the band before it: the bands' windows ascend and do not meet");
         if (item.Has("faces") && !ReadFaces(in, item, at, band.faces)) return false;
+        if (item.Has("balance")) {
+            const Json::Value& balance = item["balance"];
+            const std::string where2 = at + ".balance";
+            if (!balance.IsObject()) return in.Fail(where2, "is not an object");
+            if (!in.Only(balance, where2, {"above_band", "below_row", "min_lines"})) return false;
+            if (!in.WholeMember(balance, where2, "above_band", band.balanceAbove) || !in.Number(balance, where2, "below_row", band.balanceBelow) ||
+                !in.WholeMember(balance, where2, "min_lines", band.balanceMinLines)) {
+                return false;
+            }
+            if (band.balanceAbove < 0 || static_cast<std::size_t>(band.balanceAbove) >= text.bands.size()) return in.Fail(where2 + ".above_band", "is not the index of an earlier band");
+            if (band.balanceMinLines < 2 || band.balanceMinLines > band.maxLines) return in.Fail(where2 + ".min_lines", "is at least two and at most the band's max_lines (one line has nothing to balance)");
+            if (band.balanceBelow < static_cast<double>(band.inkRows.b) || band.balanceBelow > recipe.height) return in.Fail(where2 + ".below_row", "is not a row at or below the band's ink window and inside the picture");
+            band.balanced = true;
+        }
         text.bands.push_back(std::move(band));
     }
     return true;
@@ -2640,7 +2654,8 @@ Text BandText(const Text& base, const Band& band) {
 
 // One band: at each scale from 1 down, for 1 line up to the band's most, the cut with the narrowest widest line, left-aligned; the first that is within the right edge and the
 // band's ink rows is taken (wrapping wins over shrinking).
-bool FitBand(const Set& set, const Recipe& recipe, const Band& band, const std::string& phrase, Fitted& out, std::string& why) {
+// `aboveBottom` is the first free row under the ink of the band this one balances against (Band::balanceAbove), or negative when the band balances against none.
+bool FitBand(const Set& set, const Recipe& recipe, const Band& band, const std::string& phrase, double aboveBottom, Fitted& out, std::string& why) {
     const Text& text = *set.text;
     std::vector<std::vector<Arrangement>> byLines;
     if (!Arrange(set, phrase, band.breakAt, band.maxLines, byLines, why)) return false;
@@ -2676,7 +2691,23 @@ bool FitBand(const Set& set, const Recipe& recipe, const Band& band, const std::
             spec.window = window;
             Placement placement;
             if (!LayOutBlock(set, best->shown, scale, spec, placement, why)) return false;
-            if (!placement.ink.Valid() || placement.ink.x1 > static_cast<int>(std::floor(text.maxRight)) || placement.ink.y0 < band.inkRows.a || placement.ink.y1 > band.inkRows.b) continue;
+            const auto inside = [&](const Placement& p) {
+                return p.ink.Valid() && p.ink.x1 <= static_cast<int>(std::floor(text.maxRight)) && p.ink.y0 >= band.inkRows.a && p.ink.y1 <= band.inkRows.b;
+            };
+            if (!inside(placement)) continue;
+            // WHAT FITS IS DECIDED BY THE BASELINE'S LAYOUT, as it always was (the scale, the lines, which cut): a band that wraps to enough lines is then MOVED, the same lines at
+            // the same size, to between the ink above it and the row where the ink below it begins, its block's ink centred there. Moved after the fit, not fitted there, so that
+            // the room the move frees does not turn a heading of one line into one of two, or make a heading larger than it was (step 249 changes where it stands, not what it is).
+            // A move that would leave the band's ink rows keeps the baseline's placement.
+            if (band.balanced && aboveBottom >= 0.0 && static_cast<int>(best->texts.size()) >= band.balanceMinLines) {
+                BlockSpec moved = spec;
+                moved.anchorY = (aboveBottom + band.balanceBelow) / 2.0;
+                moved.centreBlock = true;
+                moved.slide = false;
+                Placement balanced;
+                if (!LayOutBlock(set, best->shown, scale, moved, balanced, why)) return false;
+                if (inside(balanced)) placement = std::move(balanced);
+            }
             placement.lineTexts = best->texts;
             out.scale = scale;
             out.placement = std::move(placement);
@@ -2712,7 +2743,8 @@ bool FitBands(const Request& request, std::vector<BandFit>& out, std::string& wh
         made.text = BandText(recipe.text, band);
         Set set;
         if (!MakeSet(request, made.text, set, why)) return false;
-        if (!FitBand(set, recipe, band, phrase, made.fit, why)) {
+        const double aboveBottom = band.balanced ? static_cast<double>(out[Z(band.balanceAbove)].fit.placement.ink.y1) : -1.0;
+        if (!FitBand(set, recipe, band, phrase, aboveBottom, made.fit, why)) {
             why = band.key + ": " + why;
             return false;
         }
@@ -2936,6 +2968,7 @@ void NoteBands(const Recipe& recipe, std::vector<BandFit>& fits, Outcome& outcom
         result.lines = placement.lines;
         result.lineTexts = placement.lineTexts;
         result.ink = placement.ink;
+        result.lineGap = placement.lineGap;
         outcome.bands.push_back(std::move(result));
         outcome.scale = std::min(outcome.scale, fits[i].fit.scale);
         outcome.lines += placement.lines;

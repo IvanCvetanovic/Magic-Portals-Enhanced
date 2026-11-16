@@ -322,6 +322,15 @@ std::string ListOf(const std::vector<int>& ids);
 std::string PopupText(const Rules& rules, const Content& content, const std::vector<const Entry*>& entries,
                       const std::vector<int>& unlocked);
 
+// The two marks the text puts before an entry, as the font in use draws them (planning step 249): the rules' own ('@' and '#', the original's glyph codes for a check mark
+// and a padlock) where the original's bitmap font is the font, and the code points of FontBake's own icons where a generated atlas is (Strings::Table::OriginalGlyph).
+struct PopupMarks {
+    std::string unlocked;
+    std::string locked;
+};
+std::string PopupText(const Rules& rules, const Content& content, const std::vector<const Entry*>& entries,
+                      const std::vector<int>& unlocked, const PopupMarks& marks);
+
 // The saved set, kept between runs: AchievementManager's m_list.
 class Store {
 public:

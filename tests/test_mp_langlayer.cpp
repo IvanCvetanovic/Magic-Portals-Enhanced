@@ -1866,11 +1866,17 @@ void theCaptionAndThePauseSpeakEachLanguage() {
         const MagicPortals::Chapters::Level* level = layer.Current();
         CHECK(level != nullptr);
         if (level == nullptr) continue;
+        // The text before shaping, with the marks the language's font draws (planning step 249): FontBake's icons in a generated atlas, the original's glyph codes else.
+        const Achievements::PopupMarks marks{layer.StringTable().OriginalGlyph(layer.AchievementRules().popup.unlockedMark),
+                                             layer.StringTable().OriginalGlyph(layer.AchievementRules().popup.lockedMark)};
         const std::string logical = Achievements::PopupText(layer.AchievementRules(), *layer.AchievementsContent(),
                                                             Achievements::FromLevel(*layer.AchievementsContent(), level->world, level->index),
-                                                            layer.AchievementStore().Sorted());
+                                                            layer.AchievementStore().Sorted(), marks);
         CHECK_MSG(layer.AchievementsPopupText() == layer.StringTable().Shape(logical), std::string(code) + ": the popup is the logical text, shaped once");
         CHECK_MSG((layer.AchievementsPopupText() != logical) == (std::string(code) == "ar"), std::string(code) + ": and it differs from the logical text exactly where a language is shaped");
+        // Step 249: the original's two glyph codes are the original's bitmap font's alone ('@' a check mark, '#' a padlock): a generated atlas has no icon there, and a literal one is what QA saw.
+        CHECK_MSG(layer.AchievementsPopupText().find('@') == std::string::npos && layer.AchievementsPopupText().find('#') == std::string::npos,
+                  std::string(code) + ": a generated font's popup shows no literal '@' or '#' before an achievement");
     }
 }
 
@@ -3286,6 +3292,210 @@ void aPictureThatFailsItsCheckStaysEnglishWithOneLogLine() {
     }
 }
 
+// ---- the popup's marks, and the pictures that are baked when they are shown (planning step 249) -----------------------------------------------
+
+const std::string kCheckIcon = "\xEE\x80\x80";   // U+E000: the check mark FontBake draws in a generated atlas (languages.json fonts.icons)
+const std::string kPadlockIcon = "\xEE\x80\x81"; // U+E001: the padlock
+
+std::size_t countOf(const std::string& text, const std::string& part) {
+    std::size_t count = 0;
+    for (std::size_t at = text.find(part); at != std::string::npos; at = text.find(part, at + part.size())) ++count;
+    return count;
+}
+
+// A save in which achievement 13 - the one 1-31 names - is unlocked (the others are as a fresh save has them).
+std::string savesWithAchievement13(const std::string& name) {
+    const std::filesystem::path dir = scratchDir(name);
+    Achievements::Rules rules;
+    std::string error;
+    CHECK_MSG(Achievements::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/achievements.json", rules, error), error);
+    Achievements::Store store;
+    CHECK_MSG(store.Open(dir.string(), rules.save, error), error);
+    CHECK(store.Add(13));
+    CHECK_MSG(store.Save(error), error);
+    return dir.string();
+}
+
+// 1-31 with the pause's achievements popup up over it; false when it did not come up.
+bool openThePopup(Run& run) {
+    MagicPortalsLayer& layer = run.layer;
+    rest(layer, run.registry, 120);
+    Hud::Rect control;
+    if (!layer.ControlRect(MagicPortalsLayer::Control::Menu, control)) return false;
+    tickWith(layer, run.registry, screenOfView(layer, control.Centre()), {MagicPortalsLayer::kTap}, {MagicPortalsLayer::kTap});
+    rest(layer, run.registry, 60);
+    return layer.Paused() && layer.PressPause(run.registry, MagicPortals::Pause::Button::Achievements) && layer.AchievementsPopupOpen();
+}
+
+// What the original's bitmap fonts draw as an icon, the popup writes as '@' (a check mark) and '#' (a padlock); a generated atlas has no such glyph and the popup writes
+// FontBake's own icons there. For each of the eleven languages, an entry locked and one unlocked.
+void thePopupsMarksAreTheFontsOwn() {
+    if (!dataIsThere("thePopupsMarksAreTheFontsOwn")) return;
+    for (std::size_t i = 0; i < Strings::kLangCount; ++i) {
+        const Lang lang = static_cast<Lang>(i);
+        const std::string code = codeOf(lang);
+        for (const bool unlocked : {false, true}) {
+            const std::string name = "marks-" + code + (unlocked ? "-open" : "-locked");
+            MagicPortalsLayer::Paths paths = langPaths(name, code);
+            if (unlocked) paths.saveDir = savesWithAchievement13("langlayer-" + name + "-saves");
+            Run run(paths, "level30");
+            MagicPortalsLayer& layer = run.layer;
+            CHECK_MSG(layer.SimLevel() != nullptr && layer.AchievementsContent() != nullptr, name + ": " + layer.LoadError());
+            if (layer.SimLevel() == nullptr || layer.AchievementsContent() == nullptr) continue;
+            CHECK_MSG(openThePopup(run), name + ": the popup is up");
+            if (!layer.AchievementsPopupOpen()) continue;
+            const bool generated = lang != Lang::En && layer.StringTable().Languages().FontSetOf(lang) == Strings::FontSet::Generated;
+            const std::string& text = layer.AchievementsPopupText();
+            const std::string& mine = unlocked ? kCheckIcon : kPadlockIcon;
+            const std::string& theOther = unlocked ? kPadlockIcon : kCheckIcon;
+            const BitmapFont* font = layer.UiFontOf("Verdana40_shadow.fnt");
+            CHECK_MSG(font != nullptr && font->IsLoaded(), name + ": the popup's font is read");
+            CHECK_MSG(layer.Current() != nullptr, name + ": a level");
+            if (layer.Current() == nullptr || font == nullptr) continue;
+            // The unlocked entry has the unlock mark and the locked one the other, in the saved set the layer holds.
+            CHECK_MSG(layer.AchievementStore().Has(13) == unlocked, name + ": the entry is " + (unlocked ? "unlocked" : "locked"));
+            if (generated) {
+                // The icons, once, and neither of the original's glyph codes; the other icon is not there.
+                CHECK_MSG(countOf(text, mine) == 1 && countOf(text, theOther) == 0, name + ": the popup shows this entry's icon once and not the other's");
+                CHECK_MSG(text.find('@') == std::string::npos && text.find('#') == std::string::npos, name + ": no literal '@' or '#' before the title");
+                const Supersonic::FontGlyph* glyph = font->Find(unlocked ? 0xE000u : 0xE001u);
+                CHECK_MSG(glyph != nullptr && glyph->width > 0 && glyph->height > 0, name + ": the atlas the layer loaded holds the icon, with ink");
+                CHECK_MSG(font->Find(unlocked ? 0xE001u : 0xE000u) != nullptr, name + ": and the other icon too (both are in the atlas)");
+                // Left to right the icon opens the first line (Arabic is in visual order: the icon is the last thing of it).
+                if (lang != Lang::Ar) CHECK_MSG(text.compare(0, mine.size(), mine) == 0 && text.compare(mine.size(), 1, " ") == 0, name + ": the icon, a space, then the title");
+                // Nothing of the icon is in a language file or a table: it is written only by the layer.
+            } else {
+                // The original's own glyph codes, byte for byte what the popup was before step 249.
+                const std::string original(1, unlocked ? '@' : '#');
+                const MagicPortals::Chapters::Level* level = layer.Current();
+                const std::string logical = Achievements::PopupText(layer.AchievementRules(), *layer.AchievementsContent(),
+                                                                    Achievements::FromLevel(*layer.AchievementsContent(), level->world, level->index),
+                                                                    layer.AchievementStore().Sorted());
+                CHECK_MSG(text == logical && text.compare(0, 2, original + " ") == 0, name + ": the popup is the original's text, '" + original + "' first");
+                CHECK_MSG(text.find("\xEE") == std::string::npos, name + ": and holds no private-use character");
+                CHECK_MSG(font->Find(0xE000u) == nullptr && font->Find(0xE001u) == nullptr, name + ": the original's own font has no glyph there");
+            }
+        }
+    }
+}
+
+// en -> ru -> en -> de -> ja, with the popup open: the marks follow the language on the screen, and the font is read again each time.
+void thePopupsMarksFollowTheLanguage() {
+    if (!dataIsThere("thePopupsMarksFollowTheLanguage")) return;
+    Run run(langPaths("marks-switch", "en"), "level30");
+    MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.AchievementsContent() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr || layer.AchievementsContent() == nullptr) return;
+    CHECK_MSG(openThePopup(run), "the popup is up");
+    if (!layer.AchievementsPopupOpen()) return;
+    CHECK_MSG(layer.AchievementsPopupText().compare(0, 2, "# ") == 0 && layer.AchievementsPopupText().find("\xEE") == std::string::npos, "English: '#' first, as the original's font draws it");
+    CHECK(layer.SetLanguage(Lang::Ru));
+    CHECK_MSG(countOf(layer.AchievementsPopupText(), kPadlockIcon) == 1 && layer.AchievementsPopupText().find('#') == std::string::npos, "Russian: the padlock icon, no '#'");
+    CHECK(layer.UiFontOf("Verdana40_shadow.fnt") != nullptr && layer.UiFontOf("Verdana40_shadow.fnt")->Find(0xE001u) != nullptr);
+    CHECK(layer.SetLanguage(Lang::En));
+    CHECK_MSG(layer.AchievementsPopupText().compare(0, 2, "# ") == 0 && layer.AchievementsPopupText().find("\xEE") == std::string::npos, "English again: '#' first and no private-use character");
+    CHECK(layer.UiFontOf("Verdana40_shadow.fnt") != nullptr && layer.UiFontOf("Verdana40_shadow.fnt")->Find(0xE001u) == nullptr);
+    CHECK(layer.SetLanguage(Lang::De));
+    CHECK_MSG(layer.AchievementsPopupText().compare(0, 2, "# ") == 0 && layer.AchievementsPopupText().find("\xEE") == std::string::npos, "German (the original's font): '#' first, no icon");
+    CHECK(layer.SetLanguage(Lang::Ja));
+    CHECK_MSG(countOf(layer.AchievementsPopupText(), kPadlockIcon) == 1 && layer.AchievementsPopupText().find('#') == std::string::npos, "Japanese: the padlock icon");
+    CHECK(layer.SetLanguage(Lang::Ar));
+    CHECK_MSG(countOf(layer.AchievementsPopupText(), kPadlockIcon) == 1 && layer.AchievementsPopupText().find('#') == std::string::npos, "Arabic: the padlock icon, once, in the shaped text");
+    CHECK(layer.SetLanguage(Lang::En));
+    CHECK_MSG(layer.AchievementsPopupText().compare(0, 2, "# ") == 0, "and English at the end");
+}
+
+// Whether the scratch folder of baked pictures holds a file whose name begins with `prefix` (<id>_<code>_<hash>.png).
+bool hasBaked(const MagicPortalsLayer::Paths& paths, const std::string& prefix) {
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(paths.prisms / PictureBake::kScratchFolder, ec), end; !ec && it != end; it.increment(ec)) {
+        if (it->path().filename().string().rfind(prefix, 0) == 0) return true;
+    }
+    return false;
+}
+
+// The credits strip is baked when the credits screen opens, and the game-finished card when it is raised: not on the main menu's first frame, and not at every level load
+// (planning step 249). English never bakes either.
+void theCreditsStripAndTheCardAreBakedWhenTheyAreShown() {
+    if (!dataIsThere("theCreditsStripAndTheCardAreBakedWhenTheyAreShown")) return;
+    using Screen = MagicPortalsLayer::Screen;
+    for (const Lang lang : {Lang::De, Lang::Ru}) {
+        const std::string code = codeOf(lang);
+        {
+            // The main menu: its own pictures are baked, the strip is not.
+            const MagicPortalsLayer::Paths paths = langPaths("lazy-menu-" + code, code);
+            Run run(paths, "");
+            CHECK(tickToTheMainMenu(run.layer, run.registry));
+            rest(run.layer, run.registry, 30);
+            (void)menuFrame(run.registry, run.layer);
+            CHECK_MSG(hasBaked(paths, "tap_start_" + code + "_") && hasBaked(paths, "achievements_" + code + "_"), code + ": the main menu's pictures are baked");
+            CHECK_MSG(!hasBaked(paths, "credits_strip_"), code + ": the credits strip is not baked on the main menu");
+            CHECK(run.layer.PressMainMenu(run.registry, MagicPortals::MainMenu::Button::Credits) && run.layer.MenuScreen() == Screen::Credits);
+            CHECK_MSG(hasBaked(paths, "credits_strip_" + code + "_"), code + ": the credits screen's opening bakes it");
+            rest(run.layer, run.registry, 90);
+            const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+            CHECK_MSG(quadsStartingWith(frame, "credits_strip_" + code + "_").size() == 1, code + ": and the screen draws it");
+            // Switched away and back: the other language's strip is made when the screen next draws it (the switch itself bakes nothing).
+            const Lang other = lang == Lang::De ? Lang::Ru : Lang::De;
+            CHECK(run.layer.SetLanguage(other));
+            CHECK_MSG(!hasBaked(paths, "credits_strip_" + codeOf(other) + "_"), code + ": a switch with the credits up bakes nothing by itself");
+            rest(run.layer, run.registry, 1);
+            (void)menuFrame(run.registry, run.layer);
+            CHECK_MSG(hasBaked(paths, "credits_strip_" + codeOf(other) + "_"), code + ": the next frame makes the new language's strip");
+        }
+        {
+            // A first level load: no strip and no card; the plaques, the pause's and the end screens' pictures are made as before.
+            const MagicPortalsLayer::Paths paths = langPaths("lazy-level-" + code, code);
+            Run run(paths, "level30");
+            MagicPortalsLayer& layer = run.layer;
+            CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+            if (layer.SimLevel() == nullptr) continue;
+            rest(layer, run.registry, 30);
+            CHECK_MSG(hasBaked(paths, "level_finished_" + code + "_") && hasBaked(paths, "game_over_" + code + "_"), code + ": the level load made the end screens' pictures");
+            CHECK_MSG(!hasBaked(paths, "credits_strip_"), code + ": and not the credits strip");
+            CHECK_MSG(!hasBaked(paths, "game_finished_"), code + ": and not the game-finished card");
+            // Asking for the card is what makes it (the accessor resolves a picture left to its moment, as the popup's raising does).
+            checkBaked(layer.PopupPictureFile("sprites/game_finished.png"), {"game_finished.png", "game_finished"}, code, "asked for");
+            CHECK_MSG(hasBaked(paths, "game_finished_" + code + "_"), code + ": the card is baked once it is asked for");
+            // A switch while the card is made: the old one stays, the new language's is made when it is asked for, not by the switch.
+            const Lang other = lang == Lang::De ? Lang::Ru : Lang::De;
+            CHECK(layer.SetLanguage(other));
+            CHECK_MSG(!hasBaked(paths, "game_finished_" + codeOf(other) + "_"), code + ": the switch bakes the new card by itself no more");
+            checkBaked(layer.PopupPictureFile("sprites/game_finished.png"), {"game_finished.png", "game_finished"}, codeOf(other), "after the switch");
+            CHECK(layer.SetLanguage(Lang::En));
+            CHECK_MSG(layer.PopupPictureFile("sprites/game_finished.png") == shippedPicture("game_finished.png"), "English: the shipped card");
+        }
+    }
+    {
+        // The card is raised where the game raises it: chapter select after 4-32. Its picture is made then, and not at the level's load.
+        const MagicPortalsLayer::Paths paths = langPaths("lazy-raise", "de");
+        Run run(paths, "level31c");
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        rest(layer, run.registry, 30);
+        CHECK_MSG(!hasBaked(paths, "game_finished_"), "4-32 loaded: the card is not baked");
+        MagicPortalsLayer::MenuButton next;
+        next.kind = MagicPortalsLayer::MenuButton::Kind::Next;
+        CHECK(layer.PressMenu(run.registry, next));
+        CHECK_MSG(layer.MenuPopupClass() != nullptr && layer.MenuPopupClass()->name == "GameFinishedPopup", "the card is raised over chapter select");
+        CHECK_MSG(hasBaked(paths, "game_finished_de_"), "and the German card is baked by then");
+        rest(layer, run.registry, 100);
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "game_finished_de_").size() == 1, "the popup draws it");
+    }
+    {
+        // English: neither is ever baked, and the folder is never made.
+        const MagicPortalsLayer::Paths paths = langPaths("lazy-english", "en");
+        Run run(paths, "level30");
+        rest(run.layer, run.registry, 30);
+        CHECK_MSG(run.layer.PopupPictureFile("sprites/game_finished.png") == shippedPicture("game_finished.png") && run.layer.MenuPictureFile("credit_name.png") == shippedPicture("credit_name.png"),
+                  "English asks for the card and the strip: the shipped files");
+        std::error_code ec;
+        CHECK_MSG(!std::filesystem::exists(paths.prisms / PictureBake::kScratchFolder, ec), "and English made no folder of baked pictures");
+    }
+}
+
 void runTests() {
     theNumericGoldenComparesWithATolerance();
     theCommittedGoldenHidesAsanteesWords();
@@ -3298,6 +3508,8 @@ void runTests() {
     aBareLayerIsEnglishAndWritesNothing();
     everyLanguageStartsFromTheFlag();
     theCaptionAndThePauseSpeakEachLanguage();
+    thePopupsMarksAreTheFontsOwn();
+    thePopupsMarksFollowTheLanguage();
     theDashboardShowsTheTranslatedRows();
     theCardsSpeakTheLanguage();
     settingTheLanguageTwiceReturnsToTheSameEnglish();
@@ -3308,6 +3520,7 @@ void runTests() {
     theLevelsPicturesAreTheLanguagesToo();
     aPopupsPictureIsTheLanguagesToo();
     theCreditsStripAndTheScorePlaquesAreTheLanguagesToo();
+    theCreditsStripAndTheCardAreBakedWhenTheyAreShown();
     aPictureThatFailsItsCheckStaysEnglishWithOneLogLine();
     theHintIsMirroredInArabic();
     theFlagAndTheSavedChoiceAndEnglish();

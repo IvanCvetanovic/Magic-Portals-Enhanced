@@ -268,6 +268,10 @@ public:
     std::string Show(std::string_view key, std::initializer_list<std::pair<std::string_view, std::string>> values = {}) const;
     // Display for the table's own language, for a text that was composed elsewhere (an achievement's title and description, a popup's lines).
     std::string Shape(std::string_view text) const;
+    // The glyph code to write where the original's bitmap fonts draw an icon from `code` (the achievements popup's '@' and '#', planning step 249): `code` itself for a
+    // language set in the original's fonts, the code point of the icon FontBake draws for it (languages.json `fonts.icons`, `stands_for`) for one drawn from a generated
+    // atlas, which has no such glyph. A code no icon takes the place of is returned as it is. Call it for the glyph code, then Shape the whole text once.
+    std::string OriginalGlyph(std::string_view code) const;
     // Whether the table's language is written right to left (languages.json `rtl`).
     bool Rtl() const { return m_languages.Rtl(m_lang); }
 

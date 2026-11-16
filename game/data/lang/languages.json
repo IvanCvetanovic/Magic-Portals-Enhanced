@@ -84,7 +84,35 @@
         "_source": "Verdana40_shadow.fnt: info padding=2,6,6,2 spacing=2,2; common lineHeight=40 base=33 scaleW=512; char id=72 (H) yoffset=7, top padding 2 -> cap 33-9=24. shadow: fitted."
       }
     ],
-    "picker_slot": "matura"
+    "picker_slot": "matura",
+    "icons": [
+      {
+        "_about": [
+          "Planning step 249. The original's Verdana40_shadow bitmap font gives the glyph codes '@' and '#' an icon each (a check mark and a padlock: the achievements popup writes one before each achievement, achievements.json popup.unlocked_mark and locked_mark). A generated atlas has no such glyph, so a language drawn from one showed a literal '@' and '#'. The two icons here are OUR OWN, drawn by code (sim/FontBake: vector shapes, 8 x 8 supersampling, white over the slot's baked shadow like a letter): nothing is read, copied or derived from the original's fonts or pictures.",
+          "stands_for is the original's glyph code the icon takes the place of, in a language drawn from a generated atlas (Strings::Table::OriginalGlyph); English and the five languages set in the original's fonts keep '@' and '#' as they were. code_point is in the private-use area, where no text and no face has a glyph, and is written U+XXXX here and nowhere else.",
+          "slots: only the Verdana slot carries it (the popup's font); a slot that carries no icon bakes exactly what it did. Every shape number is in CAP HEIGHTS of the slot (24 px in Verdana's slot): x from the ink's left edge, y up from the baseline, the capital's top 1. advance is the pen's step, bearing the ink's distance from the pen.",
+          "AUTHORED, not measured: chosen by eye against a capture of the English popup in the real game (a thin slanted check about a capital tall; a small padlock with a keyhole), then tuned on the Russian, Turkish, Ukrainian, Japanese and Arabic popups beside it. The shape numbers' names, in order: check = width, stroke, knee_x, knee_y, left_y (two round-capped strokes: left end at (stroke / 2, left_y), knee, right end at (width - stroke / 2, 1 - stroke / 2)); padlock = width, body_height, corner (the body's corner radius), stroke (the shackle's), inset (the arch's outer radius is width / 2 - inset, and its top is the capital's height), hole (the keyhole's disc), hole_y, slot (half its width), slot_bottom."
+        ],
+        "id": "check",
+        "kind": "check",
+        "code_point": "U+E000",
+        "stands_for": "@",
+        "slots": ["verdana"],
+        "advance": 1.2,
+        "bearing": 0.0,
+        "shape": {"width": 0.95, "stroke": 0.2, "knee_x": 0.36, "knee_y": 0.1, "left_y": 0.4}
+      },
+      {
+        "id": "padlock",
+        "kind": "padlock",
+        "code_point": "U+E001",
+        "stands_for": "#",
+        "slots": ["verdana"],
+        "advance": 1.2,
+        "bearing": 0.08,
+        "shape": {"width": 0.8, "body_height": 0.58, "corner": 0.08, "stroke": 0.15, "inset": 0.12, "hole": 0.06, "hole_y": 0.36, "slot": 0.026, "slot_bottom": 0.14}
+      }
+    ]
   },
   "languages": [
     {

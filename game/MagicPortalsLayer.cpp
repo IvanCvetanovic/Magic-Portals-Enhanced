@@ -494,6 +494,12 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
             &board.rows.barSprite,    &board.rows.lockSprite,   &board.plaque.sprite,  &board.bar.sprite,
             &board.start.sprite};
         for (const std::string* file : more) {
+            // The credits strip's words are baked for a language that is not English (planning step 248), and a player sees the strip only on the credits screen: it is left
+            // to the moment that screen opens (openMenu), where menuPicture resolves it, and not baked on the main menu's first frame (about 50 ms on a desktop CPU).
+            if (*file == credits.strip.sprite && hasWordedRecipe(*file)) {
+                m_pictureLazy.insert(*file);
+                continue;
+            }
             resolve(*file, false);
         }
         // Chapter select and the grid: the background an entity, the rest sprites.
@@ -4274,6 +4280,8 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         // CreditsScreenLayer's constructor: the strip's top on the bottom edge.
         m_credits = Credits::Start(MenuBoxPx());
         m_creditsTouch = CreditsTouch{};
+        // The strip, whose words are baked for the language on the screen: made now, when the screen opens, and not before (planning step 249). English: the shipped file.
+        (void)menuPicture(m_creditsRules.strip.sprite);
         // The closing card's words are the original's fonts, loaded once for the run (a font already loaded is kept).
         for (const Credits::Rules::Tail::Line& line : m_creditsRules.tail.lines) loadUiFont(line.font);
     }
@@ -4519,6 +4527,10 @@ void MagicPortalsLayer::openMenuPopup(const Popup::Class& cls) {
     // Its pictures, resolved as buildControls resolves a level's popups' - which
     // went with the level (unloadControls): there is none under a menu state.
     for (const std::string* file : {&cls.card.sprite, &cls.closeButton.sprite}) {
+        if (m_popupLazy.count(*file) != 0) {
+            (void)popupPicture(*file); // the card whose words are baked: made now, as it is raised
+            continue;
+        }
         if (m_popupImages.find(*file) != m_popupImages.end()) continue;
         const std::string path = originalAsset(*file);
         m_popupImages[*file] = imageSizePx(path).y > 0.0 ? path : std::string();
@@ -5173,8 +5185,7 @@ std::string MagicPortalsLayer::EndPictureFile(const std::string& file) const {
 }
 
 std::string MagicPortalsLayer::PopupPictureFile(const std::string& file) const {
-    const auto found = m_popupImages.find(file);
-    return found != m_popupImages.end() ? found->second : std::string();
+    return popupPicture(file); // a picture left to the moment it is raised is made by this ask, as by the popup's
 }
 
 // ---- the pictures that carry words (planning step 247, LANG-2) ------------------------------------------------------------------------
@@ -5247,9 +5258,29 @@ std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std:
     const PictureBake::Written written = PictureBake::Ensure(wanted);
     if (!written.ok) return english(written.reason);
     SUPERSONIC_LOG_INFO("Magic Portals") << "picture " << file << " in " << code << ": " << written.path
-                                         << (written.cached ? " (already there)" : (" (baked in " + std::to_string(written.milliseconds) + " ms, scale " + std::to_string(written.scale) + ")")) << std::endl;
+                                         << (written.cached ? (" (already there; found in " + std::to_string(written.milliseconds) + " ms)")
+                                                            : (" (baked in " + std::to_string(written.milliseconds) + " ms, scale " + std::to_string(written.scale) + ")")) << std::endl;
     state.baked.emplace(key, written.path);
     return written.path;
+}
+
+bool MagicPortalsLayer::hasWordedRecipe(const std::string& file) const {
+    if (m_language == Strings::kDefaultLang || !m_stringsReady) return false;
+    if (!m_pictures) m_pictures = std::make_shared<PictureState>();
+    PictureState& state = *m_pictures;
+    ensurePictureRecipes(state.recipes, state.tried, m_paths.portData);
+    return state.recipes.loaded && state.recipes.Find(file) != nullptr;
+}
+
+const std::string& MagicPortalsLayer::popupPicture(const std::string& file) const {
+    static const std::string none;
+    // A picture left to the moment it is raised (buildControls, refreshWordedPictures): resolved now, once - which is where its bake is paid for, if it has one.
+    if (m_popupLazy.erase(file) != 0) {
+        const std::string path = originalAsset(file);
+        m_popupImages[file] = imageSizePx(path) == glm::dvec2(0.0) ? std::string() : path;
+    }
+    const auto found = m_popupImages.find(file);
+    return found != m_popupImages.end() ? found->second : none;
 }
 
 void MagicPortalsLayer::refreshWordedPictures() {
@@ -5283,8 +5314,18 @@ void MagicPortalsLayer::refreshWordedPictures() {
             if (concerned(file, path)) path = readable(menuImage(file));
         }
     }
-    for (auto& [file, path] : m_popupImages) {
-        if (concerned(file, path)) path = readable(originalAsset(file));
+    // The popups': English gets the shipped file back at once (nothing is baked); a language's picture is left to the moment its popup is raised (popupPicture), where it was
+    // resolved at the level's load before step 249.
+    for (auto it = m_popupImages.begin(); it != m_popupImages.end();) {
+        if (!concerned(it->first, it->second)) {
+            ++it;
+        } else if (m_language == Strings::kDefaultLang) {
+            it->second = readable(originalAsset(it->first));
+            ++it;
+        } else {
+            m_popupLazy.insert(it->first);
+            it = m_popupImages.erase(it);
+        }
     }
     // The level HUD's plaque (current_score_plaque.png, planning step 248): one string, set when a level with a medal is laid out, and the language's like the rest.
     if (!m_plaqueImage.empty() && concerned(m_hudRules.plaque.sprite, m_plaqueImage)) m_plaqueImage = readable(menuImage(m_hudRules.plaque.sprite));
@@ -5566,8 +5607,16 @@ Dashboard::Board MagicPortalsLayer::buildDashboardBoard() const {
 }
 
 std::string MagicPortalsLayer::achievementsPopupText(const std::vector<const Achievements::Entry*>& entries) const {
-    std::string text = Achievements::PopupText(m_achievementRules, m_achievementsShown, entries, m_achievementStore.Sorted());
-    if (const Strings::Table* table = strings()) text = table->Shape(text);
+    // The marks before each entry are the original's glyph codes ('@' a check mark, '#' a padlock) where the font is the original's bitmap, and the icons FontBake draws in a
+    // generated atlas (which has no such glyph, and drew the characters themselves) where it is one (planning step 249). The text is then shaped once, as it always was.
+    const Strings::Table* table = strings();
+    Achievements::PopupMarks marks{m_achievementRules.popup.unlockedMark, m_achievementRules.popup.lockedMark};
+    if (table != nullptr) {
+        marks.unlocked = table->OriginalGlyph(marks.unlocked);
+        marks.locked = table->OriginalGlyph(marks.locked);
+    }
+    std::string text = Achievements::PopupText(m_achievementRules, m_achievementsShown, entries, m_achievementStore.Sorted(), marks);
+    if (table != nullptr) text = table->Shape(text);
     return text;
 }
 
@@ -6608,7 +6657,7 @@ void MagicPortalsLayer::syncEdgeCovers(entt::registry& registry) {
     m_edgeSeen = std::move(now);
 }
 
-glm::dvec2 MagicPortalsLayer::imageSizePx(const std::string& path) {
+glm::dvec2 MagicPortalsLayer::imageSizePx(const std::string& path) const {
     if (const auto known = m_imageSizes.find(path); known != m_imageSizes.end()) return known->second;
     int width = 0;
     int height = 0;
@@ -10160,7 +10209,15 @@ void MagicPortalsLayer::buildControls() {
     // original's assets rather than by file alone - the hand and the stone are
     // entities, the smoke a particle - each the hd twin where one exists.
     const auto popupImage = [&](const std::string& file) {
-        if (m_popupImages.find(file) == m_popupImages.end()) m_popupImages[file] = readable(originalAsset(file));
+        if (m_popupImages.find(file) != m_popupImages.end() || m_popupLazy.count(file) != 0) return;
+        // A card whose words are baked for the language (the game-finished card: a player meets it once per playthrough) is left to the moment it is raised, not made at
+        // every level load (planning step 249); English, and every picture no recipe names, is resolved here as before.
+        const std::string sprites = "sprites/";
+        if (file.compare(0, sprites.size(), sprites) == 0 && hasWordedRecipe(file.substr(sprites.size()))) {
+            m_popupLazy.insert(file);
+            return;
+        }
+        m_popupImages[file] = readable(originalAsset(file));
     };
     popupImage(m_popupRules.card.sprite);
     popupImage(m_popupRules.closeButton.sprite);
@@ -10201,6 +10258,7 @@ void MagicPortalsLayer::unloadControls() {
     m_endImages.clear();
     m_endTexels.clear();
     m_popupImages.clear();
+    m_popupLazy.clear();
 }
 
 const Supersonic::BitmapFont* MagicPortalsLayer::uiFont(const std::string& name) const {
@@ -10502,9 +10560,9 @@ void MagicPortalsLayer::emitPopup(Supersonic::ScreenOverlay& overlay, const glm:
             overlay.Add(std::move(quad));
             continue;
         }
-        const auto image = m_popupImages.find(piece.sprite);
-        if (image == m_popupImages.end() || image->second.empty()) continue;
-        quad.texture = image->second;
+        const std::string& image = popupPicture(piece.sprite);
+        if (image.empty()) continue;
+        quad.texture = image;
         if (piece.angleDeg != 0.0) {
             quad.basis = ScreenOverlay::Rotation(glm::radians(static_cast<float>(piece.angleDeg)), aspect);
         }
@@ -15250,10 +15308,7 @@ void MagicPortalsLayer::openPopup(entt::registry& registry, const Popup::Class& 
     // A popup nobody can see must not stop the level: without its card and its
     // close button - the original's assets absent - it is said once and not
     // raised, as a HUD control whose picture is missing is not built.
-    const auto drawable = [this](const std::string& file) {
-        const auto found = m_popupImages.find(file);
-        return found != m_popupImages.end() && !found->second.empty();
-    };
+    const auto drawable = [this](const std::string& file) { return !popupPicture(file).empty(); };
     if (!drawable(cls.card.sprite) || !drawable(m_popupRules.closeButton.sprite)) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "popup " << cls.name << " not raised: its card or close button "
                                              << "could not be read" << std::endl;

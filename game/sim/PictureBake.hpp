@@ -259,6 +259,15 @@ struct Band {
     Span inkRows;                 // [a, b): where the band's ink may lie (the rows the original's band has, and the transparent rows between it and its neighbours)
     BreakAt breakAt = BreakAt::Space;
     std::vector<FaceTuning> faces; // tunings that replace Text::faces' of the same face id for this band (the heading's own embolden)
+    // BALANCE (planning step 249). A band that wraps to `balanceMinLines` lines or more is MOVED, after its size and its lines are fitted by its baseline as they always were
+    // (the same lines at the same size, only higher or lower), so that the free rows between the ink of band `balanceAbove` (an earlier band, as it was drawn in this language)
+    // and this band's first line equal the free rows between its last line and row `balanceBelow` (the first row of the ink that follows it): a two-line heading grows upward from
+    // its anchor and would read as belonging to the wrong block. A band of fewer lines is laid out as it always was, so a one-line heading is the picture it was; a move that
+    // would leave the band's ink rows is not made.
+    bool balanced = false;
+    int balanceAbove = -1;
+    double balanceBelow = 0.0;
+    int balanceMinLines = 2;
 };
 
 struct Text {
@@ -359,6 +368,7 @@ struct BandResult {
     int lines = 0;
     std::vector<std::string> lineTexts;
     Rect ink;                     // the ink's box, in the picture's pixels
+    double lineGap = kNoLineGap;  // Outcome::lineGap for this band's lines (kNoLineGap for a band of one line)
 };
 
 struct Outcome {

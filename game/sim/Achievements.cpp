@@ -645,11 +645,18 @@ std::string ListOf(const std::vector<int>& ids) {
 
 std::string PopupText(const Rules& rules, const Content& content, const std::vector<const Entry*>& entries,
                       const std::vector<int>& unlocked) {
+    // The original's own glyph codes: byte for byte what the popup was before the marks could differ.
+    return PopupText(rules, content, entries, unlocked, PopupMarks{rules.popup.unlockedMark, rules.popup.lockedMark});
+}
+
+std::string PopupText(const Rules& rules, const Content& content, const std::vector<const Entry*>& entries,
+                      const std::vector<int>& unlocked, const PopupMarks& marks) {
+    (void)rules;
     std::string text;
     for (std::size_t t = 0; t < entries.size(); ++t) {
         const Entry& entry = *entries[t];
         const bool open = IsUnlocked(unlocked, entry.id);
-        text += (open ? rules.popup.unlockedMark : rules.popup.lockedMark) + " " + TitleOf(content, entry, open) +
+        text += (open ? marks.unlocked : marks.locked) + " " + TitleOf(content, entry, open) +
                 ":\n" + DescriptionOf(content, entry, open);
         if (t + 1 < entries.size()) text += "\n\n";
     }

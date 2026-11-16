@@ -1197,10 +1197,148 @@ void TheFilesAreCleanAndSayWhereTheyCameFrom() {
     CHECK_EQ(files, 12);
 }
 
+// ---- the icons of the `fonts` block (planning step 249) -----------------------------------------------------------------------------------
+
+// The two icons as languages.json writes them, spliced into the test's own block: a check mark and a padlock, in Verdana's slot.
+const std::string kTestIcons = R"("icons": [
+      {"id": "tick", "kind": "check", "code_point": "U+E000", "stands_for": "@", "slots": ["verdana"], "advance": 1.2, "bearing": 0.0,
+       "shape": {"width": 0.95, "stroke": 0.2, "knee_x": 0.36, "knee_y": 0.1, "left_y": 0.4}},
+      {"id": "lock", "kind": "padlock", "code_point": "U+E001", "stands_for": "#", "slots": ["verdana"], "advance": 1.2, "bearing": 0.08,
+       "shape": {"width": 0.8, "body_height": 0.58, "corner": 0.08, "stroke": 0.15, "inset": 0.12, "hole": 0.06, "hole_y": 0.36, "slot": 0.026, "slot_bottom": 0.14}}
+    ])";
+
+void TheLoaderReadsAndRefusesIcons() {
+    std::string why;
+    const auto withIcons = [](const std::string& icons) {
+        std::string block = kTestFonts;
+        const std::string from = "\"picker_slot\": \"matura\"";
+        const std::size_t at = block.find(from);
+        CHECK_MSG(at != std::string::npos, "the test's block has its picker slot");
+        if (at != std::string::npos) block.replace(at, from.size(), from + ",\n    " + icons);
+        return block;
+    };
+    // Optional: the test's own block, which has none, loads as it always did, with no icon.
+    {
+        const fs::path file = ScratchRoot() / "languages" / "icons_none.json";
+        WriteFile(file, LanguagesJson(RightEntries()));
+        Strings::LanguageTable table;
+        CHECK_MSG(Strings::LoadLanguages(file.string(), table, why) && table.Fonts().icons.empty(), "a fonts block with no icons loads, and has none: " + why);
+        CHECK_MSG(table.Fonts().IconStandingFor("@") == nullptr, "and no glyph code is taken");
+    }
+    // The control, and what it loads as.
+    {
+        const fs::path file = ScratchRoot() / "languages" / "icons_right.json";
+        WriteFile(file, LanguagesJson(RightEntries(), withIcons(kTestIcons)));
+        Strings::LanguageTable table;
+        CHECK_MSG(Strings::LoadLanguages(file.string(), table, why), "a block with two icons loads: " + why);
+        const FontBake::Plan& plan = table.Fonts();
+        CHECK(plan.icons.size() == 2 && plan.icons[0].id == "tick" && plan.icons[0].kind == FontBake::IconKind::Check && plan.icons[0].codePoint == 0xE000 &&
+              plan.icons[0].standsFor == "@" && plan.icons[1].kind == FontBake::IconKind::Padlock && plan.icons[1].codePoint == 0xE001 && plan.icons[1].standsFor == "#");
+        CHECK_MSG(plan.icons[0].shape.size() == 5 && plan.icons[1].shape.size() == 9 && plan.icons[0].Value("knee_x") > 0.35 && plan.icons[0].Value("knee_x") < 0.37 &&
+                      plan.icons[1].Value("slot_bottom") > 0.13 && plan.icons[1].Value("slot_bottom") < 0.15,
+                  "the shape numbers are read by name, in the kind's order");
+        CHECK_MSG(plan.IconStandingFor("@") == &plan.icons[0] && plan.IconStandingFor("#") == &plan.icons[1] && plan.IconAt(0xE001) == &plan.icons[1] && plan.IconsOf(*plan.Slot("verdana")).size() == 2 &&
+                      plan.IconsOf(*plan.Slot("matura")).empty(),
+                  "the plan finds an icon by its code point and by the glyph code it stands for, and by slot");
+        // A failed load leaves the plan as it was.
+        CHECK(!Strings::LoadLanguages((ScratchRoot() / "languages" / "nothing.json").string(), table, why));
+        CHECK_MSG(table.Fonts().icons.size() == 2, "and a refusal leaves a loaded plan's icons alone");
+    }
+    struct Case {
+        const char* what;
+        std::string from;
+        std::string to;
+        std::string needle;
+    };
+    const std::string pua = "\xEE\x80\x80"; // the character itself, which the table never writes
+    const std::vector<Case> cases = {
+        {"an unknown member of an icon", "\"advance\": 1.2, \"bearing\": 0.0", "\"advance\": 1.2, \"bearing\": 0.0, \"glow\": 1", "glow"},
+        {"an id with a capital", "\"id\": \"tick\"", "\"id\": \"Tick\"", "id"},
+        {"a kind that is not one", "\"kind\": \"check\"", "\"kind\": \"tick\"", "kind"},
+        {"a kind in capitals", "\"kind\": \"padlock\"", "\"kind\": \"Padlock\"", "kind"},
+        {"a code point not written U+XXXX", "\"code_point\": \"U+E000\"", "\"code_point\": \"E000\"", "code_point"},
+        {"a code point that is the character itself", "\"code_point\": \"U+E000\"", "\"code_point\": \"" + pua + "\"", "code_point"},
+        {"a code point in lower case", "\"code_point\": \"U+E000\"", "\"code_point\": \"U+e000\"", "code_point"},
+        {"a code point of a letter", "\"code_point\": \"U+E000\"", "\"code_point\": \"U+0041\"", "private-use"},
+        {"a code point past the private-use area", "\"code_point\": \"U+E001\"", "\"code_point\": \"U+F900\"", "private-use"},
+        {"a glyph code that is a letter", "\"stands_for\": \"@\"", "\"stands_for\": \"A\"", "stands_for"},
+        {"a glyph code of two characters", "\"stands_for\": \"#\"", "\"stands_for\": \"##\"", "stands_for"},
+        {"a glyph code that is no string", "\"stands_for\": \"#\"", "\"stands_for\": 35", "stands_for"},
+        {"a slot nobody defined", "\"slots\": [\"verdana\"], \"advance\": 1.2, \"bearing\": 0.0", "\"slots\": [\"nobody\"], \"advance\": 1.2, \"bearing\": 0.0", "nobody"},
+        {"no slot", "\"slots\": [\"verdana\"], \"advance\": 1.2, \"bearing\": 0.0", "\"slots\": [], \"advance\": 1.2, \"bearing\": 0.0", "slots"},
+        {"a slot that is no string", "\"slots\": [\"verdana\"], \"advance\": 1.2, \"bearing\": 0.0", "\"slots\": [3], \"advance\": 1.2, \"bearing\": 0.0", "slots"},
+        {"an advance that is no number", "\"advance\": 1.2, \"bearing\": 0.0", "\"advance\": \"wide\", \"bearing\": 0.0", "advance"},
+        {"an advance short of the ink", "\"advance\": 1.2, \"bearing\": 0.0", "\"advance\": 0.5, \"bearing\": 0.0", "advance"},
+        {"a bearing below zero", "\"advance\": 1.2, \"bearing\": 0.0", "\"advance\": 1.2, \"bearing\": -0.1", "bearing"},
+        {"a shape that lacks a number", "\"stroke\": 0.2, ", "", "shape"},
+        {"a shape with a number the kind has not", "\"left_y\": 0.4}", "\"left_y\": 0.4, \"extra\": 1}", "shape"},
+        {"a shape number that is a string", "\"knee_x\": 0.36", "\"knee_x\": \"x\"", "knee_x"},
+        {"a shape number below zero", "\"width\": 0.95", "\"width\": -1", "width"},
+        {"a shape number past the bound", "\"width\": 0.8", "\"width\": 9", "width"},
+        {"a check mark whose knee is outside its box", "\"knee_x\": 0.36", "\"knee_x\": 0.02", "knee"},
+        {"a padlock whose keyhole is out of the body", "\"hole_y\": 0.36", "\"hole_y\": 0.6", "keyhole"},
+        {"a padlock whose arch has no hole", "\"stroke\": 0.15", "\"stroke\": 0.5", "arch"},
+        {"two icons at one code point", "\"code_point\": \"U+E001\"", "\"code_point\": \"U+E000\"", "one icon"},
+        {"two icons for one glyph code", "\"stands_for\": \"#\"", "\"stands_for\": \"@\"", "one icon"},
+        {"two icons of one id", "\"id\": \"lock\"", "\"id\": \"tick\"", "one icon"},
+    };
+    for (const Case& c : cases) {
+        std::string block = withIcons(kTestIcons);
+        const std::size_t at = block.find(c.from);
+        CHECK_MSG(at != std::string::npos, std::string("the text to change is in the icons: ") + c.what);
+        if (at == std::string::npos) continue;
+        block.replace(at, c.from.size(), c.to);
+        CHECK_MSG(Refused(LanguagesJson(RightEntries(), block), why) && Contains(why, "fonts") && Contains(why, "icons") && Contains(why, c.needle), std::string(c.what) + ": " + why);
+    }
+    CHECK_MSG(Refused(LanguagesJson(RightEntries(), withIcons("\"icons\": []")), why) && Contains(why, "icons"), "an empty list of icons (leave it out instead): " + why);
+    CHECK_MSG(Refused(LanguagesJson(RightEntries(), withIcons("\"icons\": 3")), why) && Contains(why, "icons"), "icons that are no list: " + why);
+    CHECK_MSG(Refused(LanguagesJson(RightEntries(), withIcons("\"icons\": {}")), why) && Contains(why, "icons"), "icons that are an object: " + why);
+    {
+        // The code point in a script's ranges: the one script of the test's block is moved onto it.
+        std::string block = withIcons(kTestIcons);
+        const std::string from = "\"4E00-9FFF\"";
+        const std::size_t at = block.find(from);
+        CHECK(at != std::string::npos);
+        if (at != std::string::npos) block.replace(at, from.size(), "\"E000-E0FF\"");
+        CHECK_MSG(Refused(LanguagesJson(RightEntries(), block), why) && Contains(why, "script"), "an icon at a code point a script routes to a face: " + why);
+    }
+}
+
+// What the table writes for the original's glyph codes: the icon's code point for a language drawn from a generated atlas, the code itself for every other, and no language
+// file or table holds a private-use code point (the icons are written by the layer only).
+void TheOriginalsGlyphCodesBecomeIconsOnlyWhereTheFontIsGenerated() {
+    const std::string checkMark = "\xEE\x80\x80";
+    const std::string padlock = "\xEE\x80\x81";
+    for (const Lang lang : AllLangs()) {
+        Strings::Table table;
+        std::string error;
+        CHECK_MSG(table.Load(kData, lang, error), "the table loads: " + error);
+        const bool generated = lang != Lang::En && table.Languages().FontSetOf(lang) == Strings::FontSet::Generated;
+        const std::string code = table.Languages().CodeOf(lang);
+        CHECK_MSG(table.OriginalGlyph("@") == (generated ? checkMark : "@") && table.OriginalGlyph("#") == (generated ? padlock : "#"),
+                  code + ": '@' and '#' become the check mark and the padlock where the font is generated, and stay where it is the original's");
+        CHECK_MSG(table.OriginalGlyph("!") == "!" && table.OriginalGlyph("%") == "%" && table.OriginalGlyph("") == "" && table.OriginalGlyph("@@") == "@@",
+                  code + ": a code no icon takes the place of is returned as it is");
+        // The five languages that are generated, exactly.
+        const bool expected = lang == Lang::Ru || lang == Lang::Tr || lang == Lang::Uk || lang == Lang::Ja || lang == Lang::Ar;
+        CHECK_MSG(generated == expected, code + ": the generated languages are ru tr uk ja ar");
+        // Never in a string of the language's file, or English's.
+        for (const auto& [key, value] : ReadStrings(code)) {
+            for (const std::uint32_t point : Utf8::Decode(value)) {
+                if (point >= 0xE000 && point <= 0xF8FF) CHECK_MSG(false, code + ": '" + key + "' holds a private-use code point, which only the plan's icons are");
+            }
+        }
+    }
+    // A table that was never loaded has no plan, so no icon, and says the original's code.
+    CHECK_MSG(Strings::Table{}.OriginalGlyph("@") == "@", "a table that was not loaded writes the original's own code");
+}
+
 void runTests() {
     TheLanguageTableIsTheEnumsOrder();
     TheLoaderRefusesATableThatIsNotTheEnums();
     TheLoaderRefusesABadFontsBlock();
+    TheLoaderReadsAndRefusesIcons();
+    TheOriginalsGlyphCodesBecomeIconsOnlyWhereTheFontIsGenerated();
     EnglishIsReadStrictly();
     EveryLanguageHasExactlyEnglishsKeysAndPlaceholders();
     ThePictureKeysAreTheWordsOfThePictures();

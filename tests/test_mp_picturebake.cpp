@@ -226,6 +226,13 @@ void TheShippedTableLoadsAsTheElevenPictures() {
             bool others = true;
             for (std::size_t i = 0; i + 1 < recipe.text.bands.size(); ++i) others = others && !recipe.text.bands[i].anchorLast && recipe.text.bands[i].faces.empty();
             CHECK_MSG(heading.anchorLast && lighter && others, recipe.id + ": only the heading is anchored by its last line and has an embolden of its own");
+            // And only the heading is balanced (planning step 249), against the band above it (the modelling role, band 3) and the row of the first name (600), from two lines on: the
+            // real-sprite checks look at the heading only where the table says it is balanced, so the table's saying so is held here. The rule's shipped line gap is the original's 0.15.
+            bool unbalanced = true;
+            for (std::size_t i = 0; i + 1 < recipe.text.bands.size(); ++i) unbalanced = unbalanced && !recipe.text.bands[i].balanced;
+            CHECK_MSG(heading.balanced && heading.balanceAbove == 3 && heading.balanceBelow == 600.0 && heading.balanceMinLines == 2 && unbalanced,
+                      recipe.id + ": only the heading is balanced, against band 3 and row 600, from two lines on");
+            CHECK_MSG(std::fabs(recipe.text.gap - 0.15) < 1e-9, recipe.id + ": the lines of a band keep 0.15 of its size apart (the original's own design band does): " + std::to_string(recipe.text.gap));
         }
     }
 }
@@ -2128,6 +2135,170 @@ void TheStripsAlphaTuningsPitchAnchorAndRightEdgeAreHeld() {
     }
 }
 
+// A strip of a role line, a heading to be wrapped and the first name under it: the heading's ink window runs from under the role to above the name, the heading's cleared rows
+// are the middle of it, and a name's bar (not cleared, so never drawn over) begins at row 170.
+StripFixture MakeHeadingStrip() {
+    StripFixture f = MakeStrip();
+    f.picture = PB::Blank(160, 200);
+    const auto bar = [&](int x0, int y0, int x1, int y1, double r, double g, double b) {
+        for (int y = y0; y < y1; ++y) {
+            for (int x = x0; x < x1; ++x) Put(f.picture, x, y, r, g, b, 255);
+        }
+    };
+    bar(12, 20, 120, 30, 0, 0, 0);       // the role line
+    bar(12, 100, 150, 140, 0, 0, 0);     // the heading
+    bar(10, 170, 100, 182, 40, 40, 160); // the first name
+    PB::Recipe& r = f.recipe;
+    r.id = "syn_heading";
+    r.sprite = "syn_heading.png";
+    r.width = 160;
+    r.height = 200;
+    r.digest = PB::Digest(f.picture);
+    r.erase.clearRows = {PB::Span{19, 31}, PB::Span{99, 141}};
+    r.erase.rect = PB::Rect{0, 12, 160, 150};
+    PB::Band role = r.text.bands[0];
+    role.key = std::string(Strings::Key::kCreditsRoleModelling);
+    role.maxLines = 1;
+    role.px = 6.0;
+    role.firstBaseline = 28.0;
+    role.inkRows = PB::Span{12, 60};
+    PB::Band heading = role;
+    heading.key = std::string(Strings::Key::kCreditsThanks);
+    heading.px = 9.0;
+    heading.anchorLast = true;
+    heading.firstBaseline = 136.0;
+    heading.pitch = 14.0;
+    heading.maxLines = 2;
+    heading.inkRows = PB::Span{61, 168};
+    heading.breakAt = PB::BreakAt::Space;
+    heading.balanced = true;
+    heading.balanceAbove = 0;
+    heading.balanceBelow = 170.0;
+    heading.balanceMinLines = 2;
+    r.text.bands = {role, heading};
+    return f;
+}
+
+// BALANCE (planning step 249): a heading that wraps is placed so that the free rows above it, to the ink of the band above, equal the free rows below it, to the row where the next ink
+// begins - and a heading that does not wrap is the picture it was.
+void AWrappedHeadingIsBalancedBetweenTheInkAboveAndTheRowBelow() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const StripFixture f = MakeHeadingStrip();
+    PB::Recipe plain = f.recipe;
+    plain.text.bands[1].balanced = false;
+    const std::string role = "aaaa bbbb - cc dd - eeee ffff";
+    const std::vector<std::string> twoLines{"ab - cd", "Special thanks here again"};
+    const std::vector<std::string> oneLine{"ab - cd", "Thanks"};
+    const auto gaps = [](const PB::Outcome& o, double below, double& above, double& under) {
+        above = o.bands[1].ink.y0 - o.bands[0].ink.y1;
+        under = below - o.bands[1].ink.y1;
+    };
+    // Two lines: the gaps are equal to within two rows, and both are real; without the rule they are not.
+    const PB::Outcome balanced = PB::Render(RequestForBands(f.recipe, Lang::En, twoLines), f.picture, nullptr);
+    const PB::Outcome anchored = PB::Render(RequestForBands(plain, Lang::En, twoLines), f.picture, nullptr);
+    CHECK_MSG(balanced.ok && anchored.ok && balanced.bands.size() == 2 && balanced.bands[1].lines == 2 && anchored.bands[1].lines == 2, "the heading wraps to two lines both ways: " + balanced.reason + anchored.reason);
+    if (!balanced.ok || !anchored.ok || balanced.bands[1].lines != 2) return;
+    double above = 0.0;
+    double under = 0.0;
+    gaps(balanced, 170.0, above, under);
+    CHECK_MSG(std::fabs(above - under) <= 2.0 && above >= 10.0, "balanced: the free rows above the heading (" + std::to_string(above) + ") are the free rows below it (" + std::to_string(under) + ") to within two");
+    double aboveBefore = 0.0;
+    double underBefore = 0.0;
+    gaps(anchored, 170.0, aboveBefore, underBefore);
+    CHECK_MSG(std::fabs(aboveBefore - underBefore) > 6.0, "anchored by its last baseline the gaps are not equal (" + std::to_string(aboveBefore) + " above, " + std::to_string(underBefore) + " below): the rule moves the heading");
+    CHECK_MSG(balanced.bands[1].ink.y0 != anchored.bands[1].ink.y0 && balanced.bands[1].scale == anchored.bands[1].scale, "and it moves it, at the same size");
+    // The heading's ink stays inside its window, and the role line above it is the picture it was either way.
+    CHECK_MSG(balanced.bands[1].ink.y0 >= f.recipe.text.bands[1].inkRows.a && balanced.bands[1].ink.y1 <= f.recipe.text.bands[1].inkRows.b, "inside its ink rows");
+    bool roleSame = true;
+    for (int y = 12; y < 60; ++y) roleSame = roleSame && std::equal(balanced.image.At(0, y), balanced.image.At(0, y) + balanced.image.width * 4, anchored.image.At(0, y));
+    CHECK_MSG(roleSame, "the band above is the same pixels with and without the rule");
+
+    // One line: byte for byte the unbalanced picture (the one-line headings of English-like languages keep their baseline).
+    const PB::Outcome single = PB::Render(RequestForBands(f.recipe, Lang::En, oneLine), f.picture, nullptr);
+    const PB::Outcome singlePlain = PB::Render(RequestForBands(plain, Lang::En, oneLine), f.picture, nullptr);
+    CHECK_MSG(single.ok && singlePlain.ok && single.bands[1].lines == 1, "a short heading is one line: " + single.reason);
+    if (single.ok && singlePlain.ok) {
+        CHECK_MSG(single.image.rgba == singlePlain.image.rgba && single.bands[1].ink.y0 == singlePlain.bands[1].ink.y0, "a heading of one line is the same picture with and without the rule");
+        CHECK_MSG(std::fabs(single.placed.back().baseline - 136.0) < 0.3, "and its last baseline is the anchor's: " + std::to_string(single.placed.back().baseline));
+    }
+    // min_lines is the line count that turns it on: with three required, a heading of two keeps its baseline.
+    PB::Recipe three = f.recipe;
+    three.text.bands[1].maxLines = 3;
+    three.text.bands[1].balanceMinLines = 3;
+    const PB::Outcome notYet = PB::Render(RequestForBands(three, Lang::En, twoLines), f.picture, nullptr);
+    CHECK_MSG(notYet.ok && notYet.bands[1].lines == 2 && notYet.image.rgba == anchored.image.rgba, "a heading of fewer lines than min_lines is anchored as it was");
+    // below_row is the row the gap below is measured to: moving it moves the heading by half the move.
+    PB::Recipe lower = f.recipe;
+    lower.text.bands[1].balanceBelow = 180.0;
+    const PB::Outcome moved = PB::Render(RequestForBands(lower, Lang::En, twoLines), f.picture, nullptr);
+    if (moved.ok) {
+        double a2 = 0.0;
+        double u2 = 0.0;
+        gaps(moved, 180.0, a2, u2);
+        CHECK_MSG(std::fabs(a2 - u2) <= 2.0 && moved.bands[1].ink.y0 >= balanced.bands[1].ink.y0 + 3 && moved.bands[1].ink.y0 <= balanced.bands[1].ink.y0 + 7,
+                  "below_row 180 puts the heading half of ten rows lower, balanced to that row: " + std::to_string(moved.bands[1].ink.y0 - balanced.bands[1].ink.y0));
+    } else {
+        CHECK_MSG(false, "the lower row bakes: " + moved.reason);
+    }
+    // above_band is the band whose ink bottom the gap above is measured from: a role line of two lines ends lower, and the heading follows its ink, not a number.
+    PB::Recipe taller = f.recipe;
+    taller.text.bands[0].maxLines = 2;
+    taller.text.maxRight = 142.0;
+    const std::vector<std::string> longRole{role, "Special thanks here again"};
+    const PB::Outcome follows = PB::Render(RequestForBands(taller, Lang::En, longRole), f.picture, nullptr);
+    CHECK_MSG(follows.ok && follows.bands[0].lines == 2 && follows.bands[1].lines == 2, "a role of two lines over a heading of two: " + follows.reason);
+    if (follows.ok && follows.bands[0].lines == 2 && follows.bands[1].lines == 2) {
+        double a3 = 0.0;
+        double u3 = 0.0;
+        gaps(follows, 170.0, a3, u3);
+        CHECK_MSG(follows.bands[0].ink.y1 > balanced.bands[0].ink.y1 + 6 && std::fabs(a3 - u3) <= 2.0 && follows.bands[1].ink.y0 > balanced.bands[1].ink.y0,
+                  "the heading is balanced to where the role ended in THIS language (" + std::to_string(follows.bands[0].ink.y1) + "), not to a number: " + std::to_string(a3) + " above, " + std::to_string(u3) + " below");
+    }
+    // A heading with nowhere to go - its window cannot hold it balanced - shrinks a step (the fit's own rule), and is refused below the floor.
+    PB::Recipe tight = f.recipe;
+    tight.text.bands[1].inkRows = PB::Span{61, 100};
+    const PB::Outcome squeezed = PB::FitPhrase(RequestForBands(tight, Lang::En, twoLines));
+    CHECK_MSG(!squeezed.ok || squeezed.bands[1].ink.y1 <= 100, "a window too small for the balanced block is never overrun: " + squeezed.reason);
+}
+
+// THE LINE GAP (planning step 249): the least clear distance between two lines of a band is the recipe's `gap` of the band's px, scaled; the lines are pushed apart where the ink
+// needs it and nowhere else, and a gap that is already kept changes nothing.
+void ALineGapIsHeldBetweenTheLinesOfABand() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const StripFixture f = MakeStrip();
+    // Descenders over ascenders: the tight pair.
+    const std::vector<std::string> phrase{"gggg gggg - hhhh hhhh", "x"};
+    double least = 1e9;
+    double largest = 0.0;
+    for (const double gap : {0.0, 0.05, 0.15, 0.30, 0.45}) {
+        PB::Recipe recipe = f.recipe;
+        recipe.text.gap = gap;
+        recipe.text.maxRight = 90.0;
+        const PB::Outcome o = PB::FitPhrase(RequestForBands(recipe, Lang::En, phrase));
+        CHECK_MSG(o.ok && o.bands[0].lines == 2, "two lines at gap " + std::to_string(gap) + ": " + o.reason);
+        if (!o.ok || o.bands[0].lines != 2) continue;
+        const double wanted = gap * recipe.text.bands[0].px * o.bands[0].scale;
+        CHECK_MSG(o.bands[0].lineGap < PB::kNoLineGap && o.bands[0].lineGap >= wanted - 0.5, "gap " + std::to_string(gap) + ": the lines' ink is at least " + std::to_string(wanted) + " px apart: " + std::to_string(o.bands[0].lineGap));
+        CHECK_MSG(o.bands[1].lines == 1 && o.bands[1].lineGap == PB::kNoLineGap, "a band of one line has no gap to speak of");
+        if (gap == 0.0) least = o.bands[0].lineGap;
+        largest = o.bands[0].lineGap;
+    }
+    CHECK_MSG(largest > least + 1.0, "a bigger gap really pushes the lines apart: " + std::to_string(least) + " px at 0, " + std::to_string(largest) + " at 0.45");
+    // A gap the pitch already keeps changes nothing: the same pixels at gap 0 and at a gap that is below what the pitch leaves.
+    PB::Recipe loose = f.recipe;
+    loose.text.bands[0].pitch = 30.0;
+    loose.text.maxRight = 90.0;
+    PB::Recipe loose0 = loose;
+    loose0.text.gap = 0.0;
+    PB::Recipe loose15 = loose;
+    loose15.text.gap = 0.15;
+    const PB::Outcome a = PB::Render(RequestForBands(loose0, Lang::En, phrase), f.picture, nullptr);
+    const PB::Outcome b = PB::Render(RequestForBands(loose15, Lang::En, phrase), f.picture, nullptr);
+    CHECK_MSG(a.ok && b.ok && a.image.rgba == b.image.rgba, "lines already far apart are not moved by the gap: " + a.reason + b.reason);
+}
+
 // The halo of a word is written beyond the erased rectangle only where the recipe's `paint` rectangle says so (the golden plaque's, to row 216): with it the halo darkens plate pixels
 // below the rectangle and none beyond the paint rectangle, without it none outside the erased one is touched.
 void ThePaintRectangleLetsTheHaloReachPastTheErasedRectangle() {
@@ -2430,6 +2601,32 @@ void TheLoaderRefusesWhatTheNewRulesDoNotAllow() {
     twoClears.replace(twoClears.find("[[20, 40]]"), 10, "[[20, 40], [60, 70]]");
     const std::string count = LoadText("mini-count", MiniTable(twoClears, bandsText, ""));
     CHECK_MSG(Contains(count, "cleared bands"), "a different number of cleared bands and bands is refused: " + count);
+    // A band's balance (planning step 249): its three members, an earlier band to measure from, two lines at least and no more than the band wraps to, a row at or under its window.
+    {
+        const std::string firstBand = "{\"key\": \"credits.role.design\", \"px\": 8.0, \"first_baseline\": 36.0, \"anchor\": \"first\", \"pitch\": 16.0, \"max_lines\": 1, \"ink_rows\": [18, 44], \"break\": \"space\"}";
+        const std::string secondBand = "{\"key\": \"credits.thanks\", \"px\": 8.0, \"first_baseline\": 76.0, \"anchor\": \"last\", \"pitch\": 16.0, \"max_lines\": 2, \"ink_rows\": [58, 100], \"break\": \"space\", \"balance\": ";
+        const std::string head = bandsText.substr(0, bandsText.find("\"bands\": [") + 10);
+        const auto twoBands = [&](const std::string& balance) { return head + firstBand + ", " + secondBand + balance + "}]}"; };
+        const std::string rows = "{\"rule\": \"clear_rows\", \"clear\": [[20, 40], [60, 80]]}";
+        const std::string good = "{\"above_band\": 0, \"below_row\": 110, \"min_lines\": 2}";
+        CHECK_MSG(LoadText("mini-balance-ok", MiniTable(rows, twoBands(good), "")).empty(), "a band with a balance loads (the control)");
+        const std::vector<std::pair<std::string, std::string>> bad = {
+            {"{\"above_band\": 1, \"below_row\": 110, \"min_lines\": 2}", "above_band"},   // itself
+            {"{\"above_band\": 5, \"below_row\": 110, \"min_lines\": 2}", "above_band"},   // none
+            {"{\"above_band\": -1, \"below_row\": 110, \"min_lines\": 2}", "above_band"},
+            {"{\"above_band\": 0, \"below_row\": 110, \"min_lines\": 1}", "min_lines"},   // nothing to balance
+            {"{\"above_band\": 0, \"below_row\": 110, \"min_lines\": 3}", "min_lines"},   // more than the band wraps to
+            {"{\"above_band\": 0, \"below_row\": 99, \"min_lines\": 2}", "below_row"},    // inside its window
+            {"{\"above_band\": 0, \"below_row\": 500, \"min_lines\": 2}", "below_row"},   // off the picture
+            {"{\"above_band\": 0, \"min_lines\": 2}", "below_row"},
+            {"{\"above_band\": 0, \"below_row\": 110, \"min_lines\": 2, \"extra\": 1}", "extra"},
+            {"[0, 110, 2]", "balance"},
+        };
+        for (const auto& [balance, needle] : bad) {
+            const std::string error = LoadText("mini-balance-bad", MiniTable(rows, twoBands(balance), ""));
+            CHECK_MSG(!error.empty() && Contains(error, needle), "a balance " + balance + " is refused, naming " + needle + ": " + error);
+        }
+    }
 }
 
 // A picture of several phrases: every phrase is in the file's name, and so are the bytes of the face the digits are drawn from, though no script routes to it.
@@ -2505,6 +2702,8 @@ void runFreeCases() {
     APanelIsErasedFromItsLeftMarginAlone();
     AStripClearsItsBandsAndDrawsThemAgainLeftAligned();
     TheStripsAlphaTuningsPitchAnchorAndRightEdgeAreHeld();
+    AWrappedHeadingIsBalancedBetweenTheInkAboveAndTheRowBelow();
+    ALineGapIsHeldBetweenTheLinesOfABand();
     ThePaintRectangleLetsTheHaloReachPastTheErasedRectangle();
     TheSlopeIsReadOverTheLastTwelveCleanRows();
     AParagraphIsCentredInsideItsBoxWithTheFewestLines();
@@ -2702,6 +2901,44 @@ PB::Request RequestFromTable(const PB::Recipe& recipe, Lang lang, const Strings:
     return request;
 }
 
+// What a real strip's bands must be in every language (planning step 249). The LEADING: two lines of a band keep the recipe's gap of the band's px apart, and in any case at least
+// kLeastLineGap free hd rows (the original's own English design band keeps 3 free rows between its lines, 2.0 by distance, at the same x-height). The HEADING: a heading of two lines
+// has as many free rows above it, under the ink of the role line above, as below it, above the row of the first name, to within kBalanceTolerance (the rows an ink box at the recipe's
+// threshold and a rounded baseline can differ by), and both are ten rows at least; a heading of one line keeps its last baseline, the recipe's 565.
+constexpr double kLeastLineGap = 1.5;
+constexpr double kBalanceTolerance = 3.0;
+constexpr double kLeastHeadingGap = 10.0;
+
+void CheckTheStripsBands(const PB::Recipe& recipe, const PB::Outcome& a, const std::string& name) {
+    CHECK_MSG(a.bands.size() == recipe.text.bands.size(), name + ": a result a band");
+    if (a.bands.size() != recipe.text.bands.size()) return;
+    for (std::size_t i = 0; i < a.bands.size(); ++i) {
+        const PB::Band& band = recipe.text.bands[i];
+        const PB::BandResult& result = a.bands[i];
+        if (result.lines >= 2) {
+            const double wanted = recipe.text.gap * band.px * result.scale;
+            CHECK_MSG(result.lineGap < PB::kNoLineGap && result.lineGap >= wanted - 0.5 && result.lineGap >= kLeastLineGap,
+                      name + ": band " + std::to_string(i) + " keeps its lines apart: " + std::to_string(result.lineGap) + " hd rows, the gap " + std::to_string(wanted) + ", at least " + std::to_string(kLeastLineGap));
+        } else {
+            CHECK_MSG(result.lineGap == PB::kNoLineGap, name + ": band " + std::to_string(i) + " of one line has no gap");
+        }
+        if (!band.balanced) continue;
+        const PB::BandResult& above = a.bands[static_cast<std::size_t>(band.balanceAbove)];
+        const double freeAbove = result.ink.y0 - above.ink.y1;
+        const double freeBelow = band.balanceBelow - result.ink.y1;
+        if (result.lines >= band.balanceMinLines) {
+            CHECK_MSG(std::fabs(freeAbove - freeBelow) <= kBalanceTolerance && std::min(freeAbove, freeBelow) >= kLeastHeadingGap,
+                      name + ": the wrapped heading is between its neighbours: " + std::to_string(freeAbove) + " free rows above, " + std::to_string(freeBelow) + " below");
+            std::printf("  %s: the wrapped heading has %.0f free rows above it and %.0f below\n", name.c_str(), freeAbove, freeBelow);
+        } else {
+            // The heading's last glyph stands on the recipe's baseline.
+            double last = -1.0;
+            for (const PB::Placed& placed : a.placed) last = placed.baseline;
+            CHECK_MSG(std::fabs(last - band.firstBaseline) < 0.3, name + ": a heading of one line keeps its baseline " + std::to_string(band.firstBaseline) + ": " + std::to_string(last));
+        }
+    }
+}
+
 void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
     const World& world = TheWorld();
     if (!world.ok) return;
@@ -2791,6 +3028,7 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
                 CHECK_MSG(a.lineGap > 0.0 && a.lineGap < PB::kNoLineGap && a.lineGap >= wanted - 0.5, name + ": the two lines' ink is at least the gap apart: " + std::to_string(a.lineGap) + " px, the gap " + std::to_string(wanted));
                 closest = std::min(closest, a.lineGap - wanted);
             }
+            if (recipe.text.layout == PB::Layout::Bands) CheckTheStripsBands(recipe, a, name);
             // Twice is the same bytes.
             const PB::Outcome b = PB::Render(request, source, twinPtr);
             std::string again;
@@ -2844,6 +3082,31 @@ void TheBakeIsCheap() {
         }
         std::printf("  %-16s bake and encode: %.1f ms (least of three, Russian)\n", recipe.id.c_str(), best);
         CHECK_MSG(best < 2000.0, recipe.id + " bakes in well under two seconds: " + std::to_string(best));
+        // WHAT A CACHE HIT COSTS (planning step 249): Ensure decodes the sprite and checks its size and digest, reads every face, and hashes the bytes of the faces the slot uses
+        // before it looks for the file - the safety of step 247, which this step leaves as it is. The least of three finds of the file the first Ensure wrote.
+        PB::Wanted wanted;
+        wanted.recipe = &recipe;
+        wanted.recipes = &world.recipes;
+        wanted.plan = &world.languages.Fonts();
+        wanted.fontsDir = kData + "/" + wanted.plan->folder;
+        wanted.lang = Lang::Ru;
+        wanted.languageCode = "ru";
+        if (!recipe.key.empty()) wanted.phrase = russian.Get(recipe.key);
+        for (const PB::Band& band : recipe.text.bands) wanted.phrases.push_back(russian.Get(band.key));
+        wanted.sourcePath = kOriginal + "/sprites/hd/" + recipe.sprite;
+        wanted.twinPath = kOriginal + "/sprites/hd/" + recipe.erase.twinSprite;
+        wanted.directory = ScratchDir("cache-hit-cost").string();
+        const PB::Written made = PB::Ensure(wanted);
+        CHECK_MSG(made.ok && !made.cached, recipe.id + ": the first Ensure bakes: " + made.reason);
+        double found = 1e9;
+        for (int run = 0; run < 3; ++run) {
+            const auto began = std::chrono::steady_clock::now();
+            const PB::Written again = PB::Ensure(wanted);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+            CHECK_MSG(again.ok && again.cached && again.path == made.path, recipe.id + ": the second Ensure finds the file: " + again.reason);
+            found = std::min(found, ms);
+        }
+        std::printf("  %-16s a cache hit (the file is found again): %.1f ms (least of three, Russian)\n", recipe.id.c_str(), found);
     }
 }
 
@@ -3029,8 +3292,18 @@ void TheStripKeepsItsNamesAndLogosAndTheMedalStaysOnTheBakedPlaque() {
         CHECK_MSG(notBlack == 0, name + ": the new ink is black: " + std::to_string(notBlack) + " pixels are not");
         // The alpha is the coverage and is NOT multiplied by the strip's own 230 (the layer draws the picture at 230): where a stem covers a pixel whole, its alpha is 255.
         CHECK_MSG(maxAlpha == 255, name + ": the ink's alpha is its coverage, 255 at most and at least: " + std::to_string(maxAlpha));
-        // The heading ('Special thanks') grows UPWARD from its last baseline: in one line or two, its last line stands on the original's baseline, row 565.
-        CHECK_MSG(!o.placed.empty() && std::fabs(o.placed.back().baseline - 565.0) < 0.5, name + ": the heading's last line stands on baseline 565: " + std::to_string(o.placed.empty() ? 0.0 : o.placed.back().baseline));
+        // The heading ('Special thanks') of ONE line stands on the original's baseline, row 565 (de, tr, ja, ar: planning step 249 moves no heading of one line). A heading of two lines
+        // grew upward from that baseline until step 249 and is now placed between its neighbours (CheckTheStripsBands, which holds it to equal gaps above and below).
+        CHECK_MSG(!o.bands.empty() && !o.placed.empty() && (o.bands.back().lines >= 2 || std::fabs(o.placed.back().baseline - 565.0) < 0.5),
+                  name + ": a heading of one line stands on baseline 565: " + std::to_string(o.placed.empty() ? 0.0 : o.placed.back().baseline));
+        std::printf("  the strip in %s: scale and lines of the five bands:", Code(lang).c_str());
+        for (const PB::BandResult& band : o.bands) std::printf(" %.3f/%d", band.scale, band.lines);
+        std::printf("; free rows between the lines:");
+        for (const PB::BandResult& band : o.bands) {
+            if (band.lineGap < PB::kNoLineGap) std::printf(" %.2f", band.lineGap);
+            else std::printf(" -");
+        }
+        std::printf("; the heading's ink rows %d..%d\n", o.bands.back().ink.y0, o.bands.back().ink.y1);
     }
 }
 

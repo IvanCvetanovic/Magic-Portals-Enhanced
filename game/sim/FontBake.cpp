@@ -56,6 +56,8 @@ using namespace Stbtt;
 
 // Bumped whenever the bake's output for the same inputs changes, so a cache from the older algorithm is not mistaken for current.
 constexpr const char* kAlgorithm = "mp-fontbake-1";
+// The same for the icons' rasteriser (planning step 249): part of the hash of a slot that carries icons, and of no other, so Matura's atlases keep their names.
+constexpr const char* kIconAlgorithm = "mp-fontbake-icons-1";
 
 constexpr std::uint32_t kSpace = 0x20;
 constexpr std::uint32_t kNoBreakSpace = 0xA0;
@@ -259,6 +261,143 @@ void Compose(const std::vector<float>& coverage, const std::vector<float>& shado
     }
 }
 
+std::string HexOf(std::uint32_t v); // below
+
+// The cell a bw x bh bitmap needs (the bitmap, its thickening margin on every side, the slot's padding), and whether a page can hold it: the check that comes before the
+// bitmap is made, so a glyph of a wrong size is an error and not an allocation.
+bool CellFits(const SlotSpec& slot, int bw, int bh, int margin, const std::string& what, std::uint32_t codePoint, int& cellW, int& cellH, std::string& error) {
+    cellW = bw + 2 * margin + slot.padLeft + slot.padRight;
+    cellH = bh + 2 * margin + slot.padUp + slot.padDown;
+    if (cellW > slot.pageSize || cellH > slot.pageSize || cellW > kMaxCellSide || cellH > kMaxCellSide) {
+        error = "the glyph U+" + HexOf(codePoint) + " of '" + what + "' is " + std::to_string(cellW) + " x " + std::to_string(cellH) + ", which does not fit a " +
+                std::to_string(slot.pageSize) + " px page";
+        return false;
+    }
+    return true;
+}
+
+// The cell of a glyph whose coverage is `bitmap` (bw x bh, row 0 at the top, values 0..1), the bitmap's top-left corner standing (ix0, iy0) from the pen on the baseline
+// (iy0 is negative above it): the slot's padding round it, the thickening, the soft shadow and the composition, which a letter and an icon share. `what` names the face or the
+// icon for the error. `glyph.codePoint` is set; false, with `error`, when the cell does not fit a page.
+bool MakeCell(const SlotSpec& slot, const std::vector<float>& bitmap, int bw, int bh, int ix0, int iy0, int margin, const Kernel& kernelX, const Kernel& kernelY,
+              const std::string& what, Glyph& glyph, std::string& error) {
+    if (!CellFits(slot, bw, bh, margin, what, glyph.codePoint, glyph.cellW, glyph.cellH, error)) return false;
+    // The coverage on the cell's canvas, the glyph where the padding leaves it.
+    std::vector<float> coverage(static_cast<std::size_t>(glyph.cellW) * glyph.cellH, 0.0f);
+    for (int y = 0; y < bh; ++y) {
+        for (int x = 0; x < bw; ++x) {
+            coverage[static_cast<std::size_t>(y + margin + slot.padUp) * glyph.cellW + (x + margin + slot.padLeft)] = bitmap[static_cast<std::size_t>(y) * bw + x];
+        }
+    }
+    Embolden(coverage, glyph.cellW, glyph.cellH, slot.embolden);
+    std::vector<float> across;
+    std::vector<float> shadow;
+    ConvolveX(coverage, across, glyph.cellW, glyph.cellH, kernelX);
+    ConvolveY(across, shadow, glyph.cellW, glyph.cellH, kernelY);
+    Compose(coverage, shadow, slot.shadow.alpha, glyph.rgba);
+    glyph.xoffset = ix0 - margin - slot.padLeft;
+    glyph.yoffset = slot.base + iy0 - margin - slot.padUp;
+    return true;
+}
+
+// ---- icons: vector shapes, rasterised by supersampling --------------------------------------------------------------------------------------------
+
+constexpr int kIconSamples = 8; // sub-samples a side in each pixel: an edge's coverage is known to 1/64
+constexpr std::uint32_t kPrivateUseFirst = 0xE000;
+constexpr std::uint32_t kPrivateUseLast = 0xF8FF;
+constexpr double kMaxIconNumber = 4.0; // a sanity bound on a shape number, in cap heights: a typo, not a design
+
+double SquaredDistanceToSegment(double px, double py, double ax, double ay, double bx, double by) {
+    const double dx = bx - ax;
+    const double dy = by - ay;
+    const double length2 = dx * dx + dy * dy;
+    double t = length2 > 0.0 ? ((px - ax) * dx + (py - ay) * dy) / length2 : 0.0;
+    t = std::clamp(t, 0.0, 1.0);
+    const double cx = ax + t * dx - px;
+    const double cy = ay + t * dy - py;
+    return cx * cx + cy * cy;
+}
+
+// The shapes, in cap heights: x from the ink's left edge, y up from the baseline (the capital's top is 1).
+struct CheckShape {
+    double width, stroke, kneeX, kneeY, leftY;
+};
+
+struct PadlockShape {
+    double width, bodyHeight, corner, stroke, inset, hole, holeY, slot, slotBottom;
+};
+
+bool InsideCheck(const CheckShape& s, double x, double y) {
+    const double r = s.stroke * 0.5;
+    const double r2 = r * r;
+    return SquaredDistanceToSegment(x, y, r, s.leftY, s.kneeX, s.kneeY) <= r2 || SquaredDistanceToSegment(x, y, s.kneeX, s.kneeY, s.width - r, 1.0 - r) <= r2;
+}
+
+bool InsidePadlock(const PadlockShape& s, double x, double y) {
+    const double halfWidth = s.width * 0.5;
+    const double dx = x - halfWidth;
+    // The body: a rounded rectangle (the usual distance to one), with the keyhole cut out of it - a disc and a slot under it.
+    const double qx = std::fabs(dx) - (halfWidth - s.corner);
+    const double qy = std::fabs(y - s.bodyHeight * 0.5) - (s.bodyHeight * 0.5 - s.corner);
+    const double ox = std::max(qx, 0.0);
+    const double oy = std::max(qy, 0.0);
+    if (std::sqrt(ox * ox + oy * oy) + std::min(std::max(qx, qy), 0.0) - s.corner <= 0.0) {
+        const double hy = y - s.holeY;
+        if (dx * dx + hy * hy <= s.hole * s.hole) return false;
+        if (std::fabs(dx) <= s.slot && y >= s.slotBottom && y <= s.holeY) return false;
+        return true;
+    }
+    // The shackle: an arch whose outer top is the capital's height, its two legs standing on the body.
+    const double outer = halfWidth - s.inset;
+    const double inner = outer - s.stroke;
+    const double centreY = 1.0 - outer;
+    if (y >= centreY) {
+        const double r2 = dx * dx + (y - centreY) * (y - centreY);
+        return r2 <= outer * outer && r2 >= inner * inner;
+    }
+    return y >= s.bodyHeight && std::fabs(dx) >= inner && std::fabs(dx) <= outer;
+}
+
+// The ink's size in pixels for a slot whose capital is `cap` px: the shape's width and the capital's height, each rounded up to a whole pixel.
+int IconBitmapWidth(const IconSpec& icon, double cap) {
+    return std::max(1, static_cast<int>(std::ceil(icon.Value("width") * cap - 1e-9)));
+}
+
+int IconBitmapHeight(double cap) {
+    return std::max(1, static_cast<int>(std::ceil(cap - 1e-9)));
+}
+
+// The icon's coverage, bw x bh, row 0 at the top: for each pixel the share of kIconSamples^2 sub-samples that lie inside the shape.
+void RasteriseIcon(const IconSpec& icon, double cap, int bw, int bh, std::vector<float>& coverage) {
+    coverage.assign(static_cast<std::size_t>(bw) * bh, 0.0f);
+    CheckShape check{};
+    PadlockShape lock{};
+    if (icon.kind == IconKind::Check) {
+        check = {icon.Value("width"), icon.Value("stroke"), icon.Value("knee_x"), icon.Value("knee_y"), icon.Value("left_y")};
+    } else {
+        lock = {icon.Value("width"), icon.Value("body_height"), icon.Value("corner"), icon.Value("stroke"), icon.Value("inset"),
+                icon.Value("hole"),  icon.Value("hole_y"),      icon.Value("slot"),   icon.Value("slot_bottom")};
+    }
+    for (int iy = 0; iy < bh; ++iy) {
+        for (int ix = 0; ix < bw; ++ix) {
+            int inside = 0;
+            for (int sy = 0; sy < kIconSamples; ++sy) {
+                for (int sx = 0; sx < kIconSamples; ++sx) {
+                    const double x = (ix + (sx + 0.5) / kIconSamples) / cap;
+                    const double y = (bh - (iy + (sy + 0.5) / kIconSamples)) / cap;
+                    inside += (icon.kind == IconKind::Check ? InsideCheck(check, x, y) : InsidePadlock(lock, x, y)) ? 1 : 0;
+                }
+            }
+            coverage[static_cast<std::size_t>(iy) * bw + ix] = static_cast<float>(inside) / static_cast<float>(kIconSamples * kIconSamples);
+        }
+    }
+}
+
+// Whether `slot` carries `icon`.
+bool SlotCarries(const IconSpec& icon, const SlotSpec& slot) {
+    return std::find(icon.slots.begin(), icon.slots.end(), slot.id) != icon.slots.end();
+}
+
 void AppendPng(void* context, void* data, int size) {
     static_cast<std::string*>(context)->append(static_cast<const char*>(data), static_cast<std::size_t>(size));
 }
@@ -362,6 +501,143 @@ const SlotSpec* Plan::Slot(std::string_view id) const {
     return nullptr;
 }
 
+const IconSpec* Plan::IconAt(std::uint32_t codePoint) const {
+    for (const IconSpec& icon : icons) {
+        if (icon.codePoint == codePoint) return &icon;
+    }
+    return nullptr;
+}
+
+const IconSpec* Plan::IconStandingFor(std::string_view original) const {
+    for (const IconSpec& icon : icons) {
+        if (icon.standsFor == original) return &icon;
+    }
+    return nullptr;
+}
+
+std::vector<const IconSpec*> Plan::IconsOf(const SlotSpec& slot) const {
+    std::vector<const IconSpec*> carried;
+    for (const IconSpec& icon : icons) {
+        if (SlotCarries(icon, slot)) carried.push_back(&icon);
+    }
+    return carried;
+}
+
+const std::vector<std::string_view>& IconShapeNames(IconKind kind) {
+    static const std::vector<std::string_view> check = {"width", "stroke", "knee_x", "knee_y", "left_y"};
+    static const std::vector<std::string_view> padlock = {"width", "body_height", "corner", "stroke", "inset", "hole", "hole_y", "slot", "slot_bottom"};
+    return kind == IconKind::Check ? check : padlock;
+}
+
+std::string_view IconKindName(IconKind kind) {
+    return kind == IconKind::Check ? "check" : "padlock";
+}
+
+bool ParseIconKind(std::string_view name, IconKind& out) {
+    if (name == "check") {
+        out = IconKind::Check;
+        return true;
+    }
+    if (name == "padlock") {
+        out = IconKind::Padlock;
+        return true;
+    }
+    return false;
+}
+
+double IconSpec::Value(std::string_view name) const {
+    const std::vector<std::string_view>& names = IconShapeNames(kind);
+    for (std::size_t i = 0; i < names.size() && i < shape.size(); ++i) {
+        if (names[i] == name) return shape[i];
+    }
+    return 0.0;
+}
+
+bool CheckIcon(const Plan& plan, const IconSpec& icon, std::string& why) {
+    const std::string at = "the icon '" + icon.id + "'";
+    const std::vector<std::string_view>& names = IconShapeNames(icon.kind);
+    if (icon.shape.size() != names.size()) {
+        why = at + ": a " + std::string(IconKindName(icon.kind)) + " has " + std::to_string(names.size()) + " shape numbers";
+        return false;
+    }
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (!std::isfinite(icon.shape[i]) || icon.shape[i] < 0.0 || icon.shape[i] > kMaxIconNumber) {
+            why = at + ": the shape number '" + std::string(names[i]) + "' is not from 0 to " + std::to_string(static_cast<int>(kMaxIconNumber)) + " cap heights";
+            return false;
+        }
+    }
+    const auto v = [&icon](std::string_view name) { return icon.Value(name); };
+    if (icon.kind == IconKind::Check) {
+        const double width = v("width");
+        const double stroke = v("stroke");
+        const double half = stroke * 0.5;
+        if (!(stroke > 0.0) || !(width > stroke)) {
+            why = at + ": a check mark's stroke is above zero and below its width";
+            return false;
+        }
+        if (v("knee_x") < half || v("knee_x") > width - half || v("knee_y") < half || v("knee_y") > 1.0 - half || v("left_y") < half || v("left_y") > 1.0 - half) {
+            why = at + ": a check mark's left end, knee and right end lie inside its box (knee_x, knee_y and left_y are at least half a stroke from the edges)";
+            return false;
+        }
+    } else {
+        const double width = v("width");
+        const double body = v("body_height");
+        const double corner = v("corner");
+        const double outer = width * 0.5 - v("inset");
+        const double inner = outer - v("stroke");
+        if (!(width > 0.0) || !(body > 0.0) || body >= 1.0 || corner > std::min(width, body) * 0.5) {
+            why = at + ": a padlock's body is below the capital's height and its corner at most half of its smaller side";
+            return false;
+        }
+        if (!(v("stroke") > 0.0) || !(inner > 0.0) || 1.0 - outer < body) {
+            why = at + ": a padlock's arch has a hole and stands on its body (inset and stroke leave an inner radius above zero, and the arch's centre is not below the body's top)";
+            return false;
+        }
+        if (!(v("hole") > 0.0) || v("hole_y") - v("hole") < 0.0 || v("hole_y") + v("hole") > body || v("slot") > v("hole") || v("slot_bottom") > v("hole_y")) {
+            why = at + ": a padlock's keyhole (a disc and the slot under it) lies inside its body";
+            return false;
+        }
+    }
+    if (!(icon.advance > 0.0) || icon.bearing < 0.0 || icon.advance < icon.bearing + v("width") || icon.advance > kMaxIconNumber) {
+        why = at + ": the advance holds the bearing and the ink's width, in cap heights";
+        return false;
+    }
+    if (icon.codePoint < kPrivateUseFirst || icon.codePoint > kPrivateUseLast) {
+        why = at + ": the code point is in the private-use area U+E000-F8FF, where no text and no face has a glyph";
+        return false;
+    }
+    for (const ScriptSpec& script : plan.scripts) {
+        for (const CodeRange& range : script.ranges) {
+            if (icon.codePoint >= range.first && icon.codePoint <= range.last) {
+                why = at + ": the code point is in the script '" + script.id + "', which routes it to a face";
+                return false;
+            }
+        }
+    }
+    if (icon.standsFor.size() != 1 || icon.standsFor[0] <= ' ' || icon.standsFor[0] >= 0x7F || IsAsciiLetter(static_cast<unsigned char>(icon.standsFor[0])) ||
+        (icon.standsFor[0] >= '0' && icon.standsFor[0] <= '9')) {
+        why = at + ": 'stands_for' is one printable ASCII character that is no letter or digit (the original's glyph code)";
+        return false;
+    }
+    if (icon.slots.empty()) {
+        why = at + ": 'slots' names at least one slot";
+        return false;
+    }
+    for (const std::string& slot : icon.slots) {
+        if (plan.Slot(slot) == nullptr) {
+            why = at + ": 'slots' names '" + slot + "', which is no slot of the plan";
+            return false;
+        }
+    }
+    for (const IconSpec& other : plan.icons) {
+        if (&other != &icon && (other.id == icon.id || other.codePoint == icon.codePoint || other.standsFor == icon.standsFor)) {
+            why = at + ": its id, code point and 'stands_for' are each used by one icon";
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ParseCodePoint(std::string_view text, std::uint32_t& out) {
     if (text.size() < 6 || text.size() > 8 || text[0] != 'U' || text[1] != '+') return false;
     std::uint32_t value = 0;
@@ -410,6 +686,14 @@ std::set<std::uint32_t> BaseSet() {
         if (IsAsciiPunctuationOrDigit(c) || IsAsciiLetter(c)) base.insert(c);
     }
     return base;
+}
+
+std::set<std::uint32_t> WantedPoints(const Plan& plan, const SlotSpec& slot, const std::set<std::uint32_t>& codePoints) {
+    std::set<std::uint32_t> all = codePoints;
+    const std::set<std::uint32_t> base = BaseSet();
+    all.insert(base.begin(), base.end());
+    for (const IconSpec* icon : plan.IconsOf(slot)) all.insert(icon->codePoint);
+    return all;
 }
 
 bool LoadFaces(const Plan& plan, const std::string& dir, std::vector<FaceBytes>& out, std::string& error) {
@@ -467,9 +751,22 @@ std::string InputHash(const Plan& plan, const SlotSpec& slot, const std::vector<
             }
         }
     }
-    std::set<std::uint32_t> all = codePoints;
-    const std::set<std::uint32_t> base = BaseSet();
-    all.insert(base.begin(), base.end());
+    // The icons the slot carries and the way they are drawn: only in a slot that has any, so another slot's hash is what it was before the icons.
+    const std::vector<const IconSpec*> icons = plan.IconsOf(slot);
+    if (!icons.empty()) {
+        h.Text(kIconAlgorithm);
+        h.Number(icons.size());
+        for (const IconSpec* icon : icons) {
+            h.Text(icon->id);
+            h.Text(IconKindName(icon->kind));
+            h.Number(icon->codePoint);
+            h.Real(icon->advance);
+            h.Real(icon->bearing);
+            h.Number(icon->shape.size());
+            for (const double value : icon->shape) h.Real(value);
+        }
+    }
+    const std::set<std::uint32_t> all = WantedPoints(plan, slot, codePoints);
     h.Number(all.size());
     for (const std::uint32_t c : all) h.Number(c);
     return h.Hex();
@@ -526,9 +823,7 @@ bool Bake(const Plan& plan, const SlotSpec& slot, const std::vector<FaceBytes>& 
         return nullptr;
     };
 
-    std::set<std::uint32_t> wanted = codePoints;
-    const std::set<std::uint32_t> base = BaseSet();
-    wanted.insert(base.begin(), base.end());
+    const std::set<std::uint32_t> wanted = WantedPoints(plan, slot, codePoints);
 
     const int margin = slot.embolden > 0.0 ? 1 : 0;
     const Kernel kernelX = MakeKernel(slot.shadow.dx, slot.shadow.sigma);
@@ -537,6 +832,21 @@ bool Bake(const Plan& plan, const SlotSpec& slot, const std::vector<FaceBytes>& 
     std::vector<Glyph> glyphs;
     std::vector<std::uint32_t> missing;
     for (const std::uint32_t codePoint : wanted) {
+        // An icon the slot carries is drawn from its shape, and never looked up in a face (it is no letter, and would be reported missing).
+        if (const IconSpec* icon = plan.IconAt(codePoint); icon != nullptr && SlotCarries(*icon, slot)) {
+            const double cap = slot.capHeight;
+            const int bw = IconBitmapWidth(*icon, cap);
+            const int bh = IconBitmapHeight(cap);
+            std::vector<float> bitmap;
+            RasteriseIcon(*icon, cap, bw, bh, bitmap);
+            Glyph made;
+            made.codePoint = codePoint;
+            made.xadvance = static_cast<int>(std::floor(icon->advance * cap));
+            // The ink stands on the baseline: its top is bh above it, its left edge the bearing right of the pen.
+            if (!MakeCell(slot, bitmap, bw, bh, static_cast<int>(std::lround(icon->bearing * cap)), -bh, margin, kernelX, kernelY, icon->id, made, error)) return false;
+            glyphs.push_back(std::move(made));
+            continue;
+        }
         LoadedFace* face = faceNamed(FaceIdOf(plan, slot, codePoint));
         const int glyphIndex = face == nullptr ? 0 : stbtt_FindGlyphIndex(&face->info, static_cast<int>(codePoint));
         if (glyphIndex == 0) {
@@ -558,33 +868,14 @@ bool Bake(const Plan& plan, const SlotSpec& slot, const std::vector<FaceBytes>& 
         const int bw = ix1 - ix0;
         const int bh = iy1 - iy0;
         if (bw > 0 && bh > 0) {
-            const int inner = bw + 2 * margin;
-            const int innerH = bh + 2 * margin;
-            glyph.cellW = inner + slot.padLeft + slot.padRight;
-            glyph.cellH = innerH + slot.padUp + slot.padDown;
-            if (glyph.cellW > slot.pageSize || glyph.cellH > slot.pageSize || glyph.cellW > kMaxCellSide || glyph.cellH > kMaxCellSide) {
-                error = "the glyph U+" + HexOf(codePoint) + " of '" + face->id + "' is " + std::to_string(glyph.cellW) + " x " + std::to_string(glyph.cellH) +
-                        ", which does not fit a " + std::to_string(slot.pageSize) + " px page";
-                return false;
-            }
+            int cellW = 0;
+            int cellH = 0;
+            if (!CellFits(slot, bw, bh, margin, face->id, codePoint, cellW, cellH, error)) return false;
             std::vector<unsigned char> raster(static_cast<std::size_t>(bw) * bh, 0);
             stbtt_MakeGlyphBitmap(&face->info, raster.data(), bw, bh, bw, face->scale, face->scale, glyphIndex);
-            // The coverage on the cell's canvas, the glyph where the padding leaves it.
-            std::vector<float> coverage(static_cast<std::size_t>(glyph.cellW) * glyph.cellH, 0.0f);
-            for (int y = 0; y < bh; ++y) {
-                for (int x = 0; x < bw; ++x) {
-                    coverage[static_cast<std::size_t>(y + margin + slot.padUp) * glyph.cellW + (x + margin + slot.padLeft)] =
-                        static_cast<float>(raster[static_cast<std::size_t>(y) * bw + x]) / 255.0f;
-                }
-            }
-            Embolden(coverage, glyph.cellW, glyph.cellH, slot.embolden);
-            std::vector<float> across;
-            std::vector<float> shadow;
-            ConvolveX(coverage, across, glyph.cellW, glyph.cellH, kernelX);
-            ConvolveY(across, shadow, glyph.cellW, glyph.cellH, kernelY);
-            Compose(coverage, shadow, slot.shadow.alpha, glyph.rgba);
-            glyph.xoffset = ix0 - margin - slot.padLeft;
-            glyph.yoffset = slot.base + iy0 - margin - slot.padUp;
+            std::vector<float> bitmap(raster.size());
+            for (std::size_t i = 0; i < raster.size(); ++i) bitmap[i] = static_cast<float>(raster[i]) / 255.0f;
+            if (!MakeCell(slot, bitmap, bw, bh, ix0, iy0, margin, kernelX, kernelY, face->id, glyph, error)) return false;
         }
         glyphs.push_back(std::move(glyph));
     }

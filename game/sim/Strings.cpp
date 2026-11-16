@@ -32,6 +32,13 @@ inline constexpr const char* kFaces = "faces";
 inline constexpr const char* kScripts = "scripts";
 inline constexpr const char* kSlots = "slots";
 inline constexpr const char* kPickerSlot = "picker_slot";
+inline constexpr const char* kIcons = "icons";
+inline constexpr const char* kKind = "kind";
+inline constexpr const char* kCodePoint = "code_point";
+inline constexpr const char* kStandsFor = "stands_for";
+inline constexpr const char* kAdvance = "advance";
+inline constexpr const char* kBearing = "bearing";
+inline constexpr const char* kShape = "shape";
 inline constexpr const char* kId = "id";
 inline constexpr const char* kFile = "file";
 inline constexpr const char* kReference = "reference";
@@ -384,13 +391,90 @@ bool ReadSlots(const Json::Value& list, const std::string& where, FontBake::Plan
     return true;
 }
 
+// The icons (planning step 249): optional, and read as strictly as the rest. A member that is not one, a number that is not one, a shape that lacks a name of its kind or has
+// another, a code point outside the private-use area or in a script's ranges: each is refused with the member's place. FontBake::CheckIcon holds the rules of the geometry.
+bool ReadIcons(const Json::Value& list, const std::string& where, FontBake::Plan& plan, std::string& error) {
+    if (!list.IsArray() || list.AsArray().empty()) {
+        error = where + ": 'icons' must be a non-empty array (or left out)";
+        return false;
+    }
+    for (std::size_t i = 0; i < list.AsArray().size(); ++i) {
+        const std::string at = where + ".icons[" + std::to_string(i) + "]";
+        const Json::Value& item = list.AsArray()[i];
+        if (!item.IsObject()) {
+            error = at + " is not an object";
+            return false;
+        }
+        if (!OnlyMembers(item, {FontsKey::kId, FontsKey::kKind, FontsKey::kCodePoint, FontsKey::kStandsFor, FontsKey::kSlots, FontsKey::kAdvance, FontsKey::kBearing, FontsKey::kShape},
+                         at, error)) {
+            return false;
+        }
+        FontBake::IconSpec icon;
+        icon.id = item[FontsKey::kId].AsString();
+        if (!item[FontsKey::kId].IsString() || !IsIdentifier(icon.id)) {
+            error = at + ": 'id' must be a name of lower-case letters, digits and underscores";
+            return false;
+        }
+        if (!item[FontsKey::kKind].IsString() || !FontBake::ParseIconKind(item[FontsKey::kKind].AsString(), icon.kind)) {
+            error = at + ": 'kind' must be \"check\" or \"padlock\"";
+            return false;
+        }
+        if (!item[FontsKey::kCodePoint].IsString() || !FontBake::ParseCodePoint(item[FontsKey::kCodePoint].AsString(), icon.codePoint)) {
+            error = at + ": 'code_point' must be a code point written U+XXXX (never the character itself)";
+            return false;
+        }
+        icon.standsFor = item[FontsKey::kStandsFor].AsString();
+        if (!item[FontsKey::kStandsFor].IsString()) {
+            error = at + ": 'stands_for' must be a string (the original's glyph code)";
+            return false;
+        }
+        const Json::Value& slots = item[FontsKey::kSlots];
+        if (!slots.IsArray() || slots.AsArray().empty()) {
+            error = at + ": 'slots' must be a non-empty array of slot ids";
+            return false;
+        }
+        for (const Json::Value& slot : slots.AsArray()) {
+            if (!slot.IsString()) {
+                error = at + ": 'slots' holds a value that is no slot id";
+                return false;
+            }
+            icon.slots.push_back(slot.AsString());
+        }
+        if (!IsNumberIn(item[FontsKey::kAdvance], 0.0, 4.0, icon.advance) || !IsNumberIn(item[FontsKey::kBearing], 0.0, 4.0, icon.bearing)) {
+            error = at + ": 'advance' and 'bearing' must be numbers from 0 to 4 (cap heights)";
+            return false;
+        }
+        const Json::Value& shape = item[FontsKey::kShape];
+        const std::vector<std::string_view>& names = FontBake::IconShapeNames(icon.kind);
+        if (!shape.IsObject() || shape.AsObject().size() != names.size()) {
+            error = at + ": 'shape' must be an object with exactly the " + std::to_string(names.size()) + " numbers of a " + std::string(FontBake::IconKindName(icon.kind));
+            return false;
+        }
+        for (const std::string_view name : names) {
+            double value = 0.0;
+            if (!shape.Has(std::string(name)) || !IsNumberIn(shape[std::string(name)], 0.0, 4.0, value)) {
+                error = at + ".shape: '" + std::string(name) + "' must be a number from 0 to 4 (cap heights)";
+                return false;
+            }
+            icon.shape.push_back(value);
+        }
+        std::string why;
+        if (!FontBake::CheckIcon(plan, icon, why)) {
+            error = at + ": " + why;
+            return false;
+        }
+        plan.icons.push_back(std::move(icon));
+    }
+    return true;
+}
+
 bool ReadFonts(const std::string& path, const Json::Value& block, FontBake::Plan& plan, std::string& error) {
     const std::string where = path + ": fonts";
     if (!block.IsObject()) {
         error = where + " must be an object (how a generated language is drawn)";
         return false;
     }
-    if (!OnlyMembers(block, {FontsKey::kFolder, FontsKey::kFaces, FontsKey::kScripts, FontsKey::kSlots, FontsKey::kPickerSlot}, where, error)) return false;
+    if (!OnlyMembers(block, {FontsKey::kFolder, FontsKey::kFaces, FontsKey::kScripts, FontsKey::kSlots, FontsKey::kPickerSlot, FontsKey::kIcons}, where, error)) return false;
     FontBake::Plan read;
     read.folder = block[FontsKey::kFolder].AsString();
     if (!block[FontsKey::kFolder].IsString() || read.folder.empty() || !IsPlainName(read.folder)) {
@@ -406,6 +490,7 @@ bool ReadFonts(const std::string& path, const Json::Value& block, FontBake::Plan
         error = where + ": 'picker_slot' must be the id of a slot";
         return false;
     }
+    if (block.Has(FontsKey::kIcons) && !ReadIcons(block[FontsKey::kIcons], where, read, error)) return false;
     read.loaded = true;
     plan = std::move(read);
     return true;
@@ -676,6 +761,15 @@ std::string Table::Show(std::string_view key, std::initializer_list<std::pair<st
 
 std::string Table::Shape(std::string_view text) const {
     return Display(m_lang, text);
+}
+
+std::string Table::OriginalGlyph(std::string_view code) const {
+    // The original's own code, unless the language is drawn from an atlas FontBake makes: there the original's bitmap glyph does not exist, and the plan's icon that takes
+    // its place is drawn instead (a code point no text uses). English and the languages set in the original's fonts are never asked, so their text is the original's bytes.
+    if (m_languages.Loaded() && m_languages.FontSetOf(m_lang) == FontSet::Generated) {
+        if (const FontBake::IconSpec* icon = m_languages.Fonts().IconStandingFor(code)) return Utf8::Encode(icon->codePoint);
+    }
+    return std::string(code);
 }
 
 // ---- display ---------------------------------------------------------------------------------------------------------------------
