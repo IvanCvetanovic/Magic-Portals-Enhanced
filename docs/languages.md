@@ -5,7 +5,7 @@ Companion app's picker: **English** (the original's, and what a system that spea
 Português, Русский, Türkçe, Українська, 日本語, العربية** (`en de es fr it pt ru tr uk ja ar`). A first run speaks the system's language when it is one of
 the eleven (below); the globe on the main menu changes it. This page is the design, how to add a language, where the translations came from,
 and what is not translated. The record of how it was built, step by step, with its gates, is Steps 236-239, 245 and 247-249 of
-[the remaster plan](planning/2026-09-11-magic-portals-remaster.md); the open questions are `LANG-1` to `LANG-8` in
+[the remaster plan](planning/2026-09-11-magic-portals-remaster.md); the open questions are `LANG-1` to `LANG-10` in
 [parity-backlog.md](parity-backlog.md) section 7.
 
 ## What a player sees
@@ -101,7 +101,7 @@ and what is not translated. The record of how it was built, step by step, with i
 ## The translations
 
 The fourteen interface strings, the fifteen picture words (steps 247 and 248), the 82 achievements' titles and descriptions and the secret achievement's two texts, in each of the ten other languages, were **machine-translated by a language
-model from the English, with the terms aligned with the Magic Rampage Companion app, and reviewed by a second model pass. They have NOT been read by a native speaker.**
+model from the English, with the terms aligned with the Magic Rampage Companion app, and, for the interface strings and the achievements, reviewed by a second model pass (the picture words only for fit and for the characters the faces hold). They have NOT been read by a native speaker.**
 Each file says so. Expect wrong register, awkward phrasing and the occasional mistranslation; a reviewer's corrections go straight into the JSON (`LANG-1`).
 
 **The seven picture words are machine translations too, with no native reader, and the shipped wording is the machine's first or second choice, not a settled one.** They were made
@@ -278,8 +278,8 @@ two credits lines) are this port's own words.
   the run speaks English and says why in the log, as a pick does (`LANG-7`), and the next start tries again.
 * **None of the system reads was run on a phone, a Mac, an iPhone or Windows.** Linux's was run on the built program (`LC_ALL`, `LC_MESSAGES`, `LANG`, a saved file, `--lang`,
   `--fixed-step`, `--frames`, `--saves`, `--screenshot`, `C`, `zh_CN`, an unset environment); the Android, Windows and Apple reads are written and unproved. Android's two files were
-  parsed (not built) against NDK 28.2's headers, whose glue sets the configuration before the game starts; Windows' calls were checked by reading the SDK's headers, not by building;
-  the Apple ones were never compiled (no Mac).
+  read against NDK 28.2's headers, whose glue sets the configuration before the game starts, and are compiled into the release APK of the release that followed step 249 (never run); Windows' calls were checked by reading the SDK's headers and are compiled by MSVC into the program (never run);
+  the Apple ones were compiled by GitHub's macOS runner in that release's build and never run (no Mac).
 * **English is as before, with one character excepted.** The description of achievement 60 holds, in the original, one byte that is not valid UTF-8 (a lone Latin-1 byte;
   `docs/ethanon-formats.md` section 24). The achievements table used to carry U+FFFD for it, which the byte-wise text drew as three Latin-1 glyphs (the three bytes of U+FFFD's
   UTF-8 form); it now carries U+00BA, one glyph. So that one description is not byte for byte what it was before the languages, and nothing else in English moved.

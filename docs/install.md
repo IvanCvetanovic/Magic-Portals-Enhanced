@@ -2,7 +2,7 @@
 
 Free, with no ads and no accounts. There is no installer: you unpack a folder and start the game from it. (On an iPhone or iPad you instead need a sideloading tool on a computer and your own Apple ID: see [below](#iphone-and-ipad).)
 
-Pick your device: [Windows PC](#windows-pc), [Android phone or tablet](#android-phone-or-tablet), [Linux PC](#linux-pc), [Mac](#mac) or [iPhone and iPad](#iphone-and-ipad). The Mac and iPhone files are new, carry no developer's signature, and have never been run on a real Mac or iPhone (see [Platforms](../README.md#platforms)).
+Pick your device: [Windows PC](#windows-pc), [Android phone or tablet](#android-phone-or-tablet), [Linux PC](#linux-pc), [Mac](#mac) or [iPhone and iPad](#iphone-and-ipad). The Mac and iPhone files are recent, carry no developer's signature, and have never been run on a real Mac or iPhone (see [Platforms](../README.md#platforms)).
 
 | | File | Download |
 |---|---|---|
@@ -18,7 +18,7 @@ The download is **not code-signed** (it has no digital signature from a publishe
 
 ## Windows PC
 
-**You need:** a 64-bit Windows PC and a graphics driver that supports Vulkan 1.2 (most PCs from the last eight years or so have one; update the driver through Windows Update, or from NVIDIA, AMD or Intel). The game has been run on Windows 11; whether it starts on Windows 10 was not tried.
+**You need:** a 64-bit Windows PC and a graphics driver that supports Vulkan 1.2 (most PCs from the last eight years or so have one; update the driver through Windows Update, or from NVIDIA, AMD or Intel). The maker's own builds of the game have been run on Windows 11 (the program in the download has not been started on any PC); whether it starts on Windows 10 was not tried.
 
 > **Check this first on Windows 11:** because the download is not code-signed, a PC with **Smart App Control** turned on may refuse to run it, and then there is no *Run anyway* button. To see whether it is on, open **Settings**, **Privacy & security**, **Windows Security**, **App & browser control**, **Smart App Control settings**. If it says *On*, the game will probably not start; turning it off is a choice about your whole PC, so decide for yourself.
 
@@ -61,7 +61,7 @@ Have fun!
 - **“App not installed” or “not compatible”:** your phone is older than Android 8 (or an older version of this app, signed with another key, is installed: uninstall it first). The game cannot run there.
 - **A message about Vulkan when the game starts:** the phone's graphics do not support Vulkan 1.1; the message is the graphics system's own words, and it helps a report.
 - **The installer says “Failed to allocate … because only 0 allocatable”, “Insufficient storage” or “not enough space”, although the settings show free space:** the number the settings call *free* usually includes a reserve that Android keeps for itself and will not install into (as far as is known: the message is the system's own; it comes before any of the game's code runs, and the size in it, 36,709,234 bytes in one report, was the file's own size). A phone or tablet with a few hundred MB *free* can still have nothing it may allocate. Free more room (delete downloads and videos, remove apps you do not use, clear the cache of the big ones, *Settings → Battery and device care → Storage* on a Samsung), restart the device, and open the downloaded file again with the phone's own installer (from *Files* or *My Files*). A tool that installs a file “with options” asks the system for the same room; its *Allocate aggressive* switch lets the system empty caches to make it and may get past this message, which has not been tried on a device. Leave a margin: 150 MB free is a round figure, not a measured need. The figures that are known add up to about 63 MB (the file, about 37 MB, while it installs, and the first start's copy of the game's files, about 26 MB); the installed game keeps its libraries on top of that, and their size is not given here.
-- **The game says it has no space:** it needs about 26 MB free for its copy of the files, besides the app.
+- **The game says it has no space:** it needs about 28 MB free for its copy of the files, besides the app.
 - **Anything else:** [report a problem](#reporting-a-problem) with your phone model and its Android version.
 
 </details>

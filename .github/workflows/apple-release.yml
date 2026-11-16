@@ -10,7 +10,7 @@ name: Apple release archives
 # `codesign --verify --deep --strict` is satisfied by the app unpacked from the finished zip.
 #
 # NO GAME DATA IN THIS REPOSITORY, STILL. The data is taken from the release that is ALREADY PUBLISHED: the content folder of its Windows archive, which is the content package
-# itself (the same 923 files), fetched from the address the dispatch names and checked against the SHA-256 the dispatch names BEFORE anything is unpacked. So it is first run after
+# itself (the same files), fetched from the address the dispatch names and checked against the SHA-256 the dispatch names BEFORE anything is unpacked. So it is first run after
 # the release is published and sends nothing anywhere that the release has not already published. It reads no secret and uses no token: the shells are built in this very run, by
 # apple.yml, called as release.yml calls it, and downloaded as artifacts of this run.
 #
