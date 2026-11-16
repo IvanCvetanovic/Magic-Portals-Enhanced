@@ -3068,39 +3068,93 @@ void theLevelsPicturesAreTheLanguagesToo() {
     }
 }
 
-// A popup that draws a worded picture. No popup of the game does today (the game-finished card is the first that will), so the case gives the popups' framework card the
-// Achievements button's picture in a COPY of the data, and checks that a level's popup cache is remade by a switch like the pause's and the end screens' are: the loop
-// that does it would otherwise have nothing in the game to run on.
+/// A popup that draws a worded picture: the game-finished card (planning step 248) is the first that does. Its picture is resolved when a level loads, with the framework's and
+// every class's, and a switch remakes it like the pause's and the end screens' (step 247 had to give the framework card another picture in a COPY of the data to run this loop
+// at all; the real card needs no copy).
 void aPopupsPictureIsTheLanguagesToo() {
     if (!dataIsThere("aPopupsPictureIsTheLanguagesToo")) return;
-    MagicPortalsLayer::Paths paths = langPaths("words-popup", "de");
-    const std::filesystem::path copy = scratchDir("langlayer-words-popup-data");
-    std::error_code ec;
-    std::filesystem::copy(paths.portData, copy, std::filesystem::copy_options::recursive, ec);
-    CHECK_MSG(!ec, "the data is copied: " + ec.message());
-    paths.portData = copy.string();
-    std::string table;
-    {
-        std::ifstream in(copy / "ui.json", std::ios::binary);
-        table.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    }
-    const std::string card = "\"sprite\": \"sprites/help_popup.png\"";
-    const std::size_t at = table.find(card);
-    CHECK_MSG(at != std::string::npos && table.find(card, at + 1) == std::string::npos, "ui.json names the popups' framework card once");
-    if (at == std::string::npos) return;
-    table.replace(at, card.size(), "\"sprite\": \"sprites/scores.png\"");
-    std::ofstream(copy / "ui.json", std::ios::binary | std::ios::trunc) << table;
-
-    const WordedSprite scores = {"scores.png", "achievements"};
-    Run run(paths, "level30");
+    const WordedSprite finished = {"game_finished.png", "game_finished"};
+    Run run(langPaths("words-popup", "de"), "level30");
     MagicPortalsLayer& layer = run.layer;
     CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
     if (layer.SimLevel() == nullptr) return;
-    checkBaked(layer.PopupPictureFile("sprites/scores.png"), scores, "de", "the popup card");
+    checkBaked(layer.PopupPictureFile("sprites/game_finished.png"), finished, "de", "the game-finished card");
     CHECK(layer.SetLanguage(Lang::Ja));
-    checkBaked(layer.PopupPictureFile("sprites/scores.png"), scores, "ja", "the popup card after the switch");
+    checkBaked(layer.PopupPictureFile("sprites/game_finished.png"), finished, "ja", "the game-finished card after the switch");
     CHECK(layer.SetLanguage(Lang::En));
-    CHECK_MSG(layer.PopupPictureFile("sprites/scores.png") == shippedPicture("scores.png"), "English again: the popup's picture is the shipped file");
+    CHECK_MSG(layer.PopupPictureFile("sprites/game_finished.png") == shippedPicture("game_finished.png"), "English again: the card is the shipped file");
+    // And a run in English never baked it.
+    Run english(langPaths("words-popup-en"), "level30");
+    CHECK_MSG(english.layer.PopupPictureFile("sprites/game_finished.png") == shippedPicture("game_finished.png"), "a run in English loads the shipped card");
+}
+
+// The credits strip (the menu's cache, drawn on the credits screen), the level HUD's plaque (one string, set when a level with a medal loads) and the pause's and the end screen's
+// plaques: each is the language's, remade by a switch, and English gives the shipped files back (planning step 248).
+void theCreditsStripAndTheScorePlaquesAreTheLanguagesToo() {
+    if (!dataIsThere("theCreditsStripAndTheScorePlaquesAreTheLanguagesToo")) return;
+    const WordedSprite strip = {"credit_name.png", "credits_strip"};
+    const WordedSprite current = {"current_score_plaque.png", "current_score"};
+    const WordedSprite golden = {"golden_score_plaque.png", "golden_score"};
+    {
+        Run run(langPaths("words-credits", "de"), "");
+        MagicPortalsLayer& layer = run.layer;
+        CHECK(tickToTheMainMenu(layer, run.registry));
+        rest(layer, run.registry, 30);
+        CHECK(layer.PressMainMenu(run.registry, MagicPortals::MainMenu::Button::Credits));
+        rest(layer, run.registry, 120);
+        std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "credits_strip_de_").size() == 1 && quadsStartingWith(frame, "credit_name.png").empty(), "the credits screen draws the German strip, and not the shipped one");
+        checkBaked(layer.MenuPictureFile("credit_name.png"), strip, "de", "the credits");
+        // A switch with the screen up: the next frame draws the new language's strip.
+        CHECK_MSG(layer.SetLanguage(Lang::Ja) && layer.MenuScreen() == MagicPortalsLayer::Screen::Credits, "Japanese is set with the credits up");
+        rest(layer, run.registry, 1);
+        frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "credits_strip_ja_").size() == 1 && quadsStartingWith(frame, "credits_strip_de_").empty(), "the next frame draws the Japanese strip");
+        checkBaked(layer.MenuPictureFile("credit_name.png"), strip, "ja", "the credits after the switch");
+        CHECK(layer.SetLanguage(Lang::En));
+        rest(layer, run.registry, 1);
+        frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "credit_name.png").size() == 1 && bakedQuads(frame) == 0 && layer.MenuPictureFile("credit_name.png") == shippedPicture("credit_name.png"),
+                  "English again: the shipped strip, and nothing baked on the screen");
+    }
+    {
+        // A level with a medal recorded (the seeded save: chapter 1 all gold) opens with the plaque over the level, and the pause and the end screens hold the two plaques.
+        MagicPortalsLayer::Paths paths = langPaths("words-hud", "de");
+        paths.saveDir = seededSaves("langlayer-words-hud-saves");
+        Run run(paths, "level0");
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        rest(layer, run.registry, 40);
+        std::vector<ScreenOverlay::Quad> frame = hudFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "current_score_de_").size() == 1 && quadsStartingWith(frame, "current_score_plaque.png").empty(), "the level HUD draws the German current-score plaque");
+        checkBaked(layer.PausePictureFile("current_score_plaque.png"), current, "de", "the pause");
+        checkBaked(layer.PausePictureFile("golden_score_plaque.png"), golden, "de", "the pause");
+        checkBaked(layer.EndPictureFile("golden_score_plaque.png"), golden, "de", "the finished screen");
+        // Switched in the middle of the level: the HUD's plaque is remade too (it is one string, not an entry of a cache).
+        CHECK(layer.SetLanguage(Lang::Ja));
+        rest(layer, run.registry, 1);
+        frame = hudFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "current_score_ja_").size() == 1 && quadsStartingWith(frame, "current_score_de_").empty(), "the HUD's plaque is the Japanese one after the switch");
+        checkBaked(layer.PausePictureFile("current_score_plaque.png"), current, "ja", "the pause after the switch");
+        checkBaked(layer.PausePictureFile("golden_score_plaque.png"), golden, "ja", "the pause after the switch");
+        checkBaked(layer.EndPictureFile("golden_score_plaque.png"), golden, "ja", "the finished screen after the switch");
+        CHECK(layer.SetLanguage(Lang::En));
+        rest(layer, run.registry, 1);
+        frame = hudFrame(run.registry, layer);
+        CHECK_MSG(quadsStartingWith(frame, "current_score_plaque.png").size() == 1 && bakedQuads(frame) == 0, "English again: the HUD draws the shipped plaque");
+        CHECK_MSG(layer.PausePictureFile("current_score_plaque.png") == shippedPicture("current_score_plaque.png") && layer.PausePictureFile("golden_score_plaque.png") == shippedPicture("golden_score_plaque.png") &&
+                      layer.EndPictureFile("golden_score_plaque.png") == shippedPicture("golden_score_plaque.png"),
+                  "and the pause's and the end screen's plaques are the shipped files");
+    }
+    {
+        MagicPortalsLayer::Paths paths = langPaths("words-hud-en");
+        paths.saveDir = seededSaves("langlayer-words-hud-en-saves");
+        Run run(paths, "level0");
+        rest(run.layer, run.registry, 40);
+        const std::vector<ScreenOverlay::Quad> frame = hudFrame(run.registry, run.layer);
+        CHECK_MSG(quadsStartingWith(frame, "current_score_plaque.png").size() == 1 && bakedQuads(frame) == 0, "a run in English draws the shipped plaque");
+    }
 }
 
 // How many lines the engine's log holds, from the Magic Portals category, whose text has every part in `parts`.
@@ -3210,6 +3264,26 @@ void aPictureThatFailsItsCheckStaysEnglishWithOneLogLine() {
                   "with no scratch folder French is spoken and its pictures are the shipped ones");
         CHECK_MSG(logLinesWith({"main_play_game_button.png", "in fr stays English", "scratch folder"}) == 1, "and one line says why");
     }
+    {
+        // The credits strip has a phrase a band (planning step 248): a language file that lacks ANY of the five keys keeps the shipped strip, and one line names the key.
+        MagicPortalsLayer::Paths paths = langPaths("words-nobandkey", "de");
+        const std::filesystem::path copy = copyOfTheData("words-nobandkey-data", paths);
+        std::string german = readAll(copy / "lang" / "de.json");
+        const std::string line = "\"credits.thanks\"";
+        const std::size_t at = german.find(line);
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) return;
+        german.replace(at, line.size(), "\"credits.thanks_gone\"");
+        writeAll(copy / "lang" / "de.json", german);
+        Supersonic::Log::Clear();
+        Run run(paths, "");
+        CHECK(tickToTheMainMenu(run.layer, run.registry));
+        rest(run.layer, run.registry, 30);
+        CHECK_MSG(run.layer.MenuPictureFile("credit_name.png") == shippedPicture("credit_name.png"), "a language that lacks one band's key keeps the shipped credits strip");
+        CHECK_MSG(logLinesWith({"credit_name.png", "in de stays English", "credits.thanks"}) == 1, "and one line says which key is missing");
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+        CHECK_MSG(quadsStartingWith(frame, "tap_start_de_").size() == 1, "the pictures beside it are baked");
+    }
 }
 
 void runTests() {
@@ -3233,6 +3307,7 @@ void runTests() {
     aSwitchRemakesEveryPathAndIsLazyAndEnglishGivesTheShippedFilesBack();
     theLevelsPicturesAreTheLanguagesToo();
     aPopupsPictureIsTheLanguagesToo();
+    theCreditsStripAndTheScorePlaquesAreTheLanguagesToo();
     aPictureThatFailsItsCheckStaysEnglishWithOneLogLine();
     theHintIsMirroredInArabic();
     theFlagAndTheSavedChoiceAndEnglish();

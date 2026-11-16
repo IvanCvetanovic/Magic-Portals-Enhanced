@@ -1,8 +1,25 @@
-// The words the original draws as pixels, drawn again in the language on the screen (planning step 247, LANG-2): sim/PictureBake.
+// The words the original draws as pixels, drawn again in the language on the screen (planning steps 247 and 248, LANG-2): sim/PictureBake.
 //
 // TWO SUITES. test_mp_picturebake is PURE: hand-authored synthetic pictures built in code (a procedural plate with a procedural 'ink' word and shadow standing in for an
 // original sprite, a transparent canvas), the committed faces and the committed tables - nothing outside this repository. test_mp_picturebake_original runs the same code
-// over the ORIGINAL's seven sprites (the extracted assets, gitignored) and exits 77 without them.
+// over the ORIGINAL's eleven sprites (the extracted assets, gitignored) and exits 77 without them.
+//
+// STEP 248 added (fixtures hand-authored in code: a plate with a straight frame, a medal-like chroma blob, a panel with a corner effect, a strip with transparent gaps):
+//   plaque       the frame-column model erases a plaque to 2 grey levels, the ends of the bevel too, and nothing outside the rectangles changes; a chroma blob and a ring of two pixels
+//                round it are untouched; EACH guard has a negative fixture that trips that guard ALONE and whose reason names it (golden art under the current recipe, current under
+//                the golden, stray ink one row above the rectangle, ink in the margin columns, a tilted plate, a jittering profile, a profile that bends in the hole)
+//   panel        V from the left margin alone (a corner effect on the right margin is not read); ink in the margin, above or below the rectangle, a plate that is not a profile
+//                times a vignette and margins that disagree on too many rows are each refused by their own guard
+//   strip        the cleared rows are drawn again left-aligned in black with no shadow, every row outside the windows is the source's; a phrase wraps after a dash that stands
+//                alone, a descender slides the block up, the digit face draws other digits, a Japanese space is a gap only where the recipe says; a cleared band not bounded by
+//                transparent rows and an ink window with an opaque pixel outside the cleared rows are refused; Ensure's name holds every phrase and the digit face's bytes
+//   paragraph    the fewest lines, centred, inside its box, the pitch the face's, an orphan limit and the lines a recipe saves, and the floor; U+200B and an ASCII space lay out
+//                the same glyphs in the three shipped Japanese phrases, and a no-break space keeps the French '!' on its line
+//   the loader   the new rules, layouts and pairs are refused one fault at a time (a mini table of one recipe tries every pair the loader does not allow)
+// The original-sprite suite adds the golden erase against the current plaque's text-free rows (the OFFLINE ground truth, never a donor), the medal untouched, no edge of the old
+// lettering left, the strip's names and logos identical in ten languages, and the three medals composited over every language's current plaque (they hide no ink).
+// MUTANTS of the step (37, one at a time, by an environment-variable switchboard in a copy of the sources) are listed in the planning record; all are failed by this file or by
+// test_mp_langlayer (the layer's three).
 //
 //   table        game/data/picture_recipes.json loads as the seven pictures it should, each with its string key, and the loader REFUSES, one fault at a time, a missing member,
 //                a size of zero, an upside-down rectangle, an unknown rule or layout or member, a digest that is not hex, a repeated id, a version it does not read, a step
@@ -149,17 +166,17 @@ bool Exists(const fs::path& path) {
 
 // ---- the table ----------------------------------------------------------------------------------------------------------------------------------
 
-void TheShippedTableLoadsAsTheSevenPictures() {
+void TheShippedTableLoadsAsTheElevenPictures() {
     const World& world = TheWorld();
     CHECK(world.ok);
     if (!world.ok) return;
     const PB::Recipes& recipes = world.recipes;
     CHECK(recipes.loaded && !recipes.fileHash.empty());
-    CHECK_EQ(static_cast<int>(recipes.items.size()), 7);
+    CHECK_EQ(static_cast<int>(recipes.items.size()), 11);
     std::set<std::string> keys;
     std::set<std::string> sprites;
     for (const PB::Recipe& recipe : recipes.items) {
-        keys.insert(recipe.key);
+        for (const std::string& key : recipe.Keys()) keys.insert(key);
         sprites.insert(recipe.sprite);
         CHECK_MSG(recipes.Find(recipe.sprite) == &recipe, recipe.id + " is found by its sprite");
         CHECK_MSG(recipe.width > 0 && recipe.height > 0 && recipe.digest.size() == 32, recipe.id + " has its size and its digest");
@@ -168,23 +185,34 @@ void TheShippedTableLoadsAsTheSevenPictures() {
         CHECK_MSG(world.languages.Fonts().Slot(recipe.text.slot) != nullptr, recipe.id + " names a slot of the plan");
     }
     CHECK_MSG(recipes.Find("level_button.png") == nullptr && recipes.Find("") == nullptr, "a sprite no recipe names is not found (the twin is a source, not a recipe)");
-    // The seven keys are exactly the picture keys of the string table.
+    // The fifteen keys (ten phrases, and the five bands of the strip) are exactly the picture keys of the string table.
     std::set<std::string> want;
     for (const std::string_view key : Strings::kPictureKeys) want.insert(std::string(key));
-    CHECK_MSG(keys == want, "the recipes' keys are the string table's picture keys");
+    CHECK_MSG(keys == want && keys.size() == 15, "the recipes' keys are the string table's picture keys");
     const std::set<std::string> expected = {"main_play_game_button.png", "scores.png", "select_chapter.png", "achievement_points.png", "level_finished.png",
-                                            "portals_created_plaque.png", "game_over.png"};
-    CHECK_MSG(sprites == expected, "and the sprites are the seven the original draws words on");
-    // Four plates (one of them a twin) and three generated pictures, as measured.
+                                            "portals_created_plaque.png", "game_over.png", "current_score_plaque.png", "golden_score_plaque.png", "game_finished.png", "credit_name.png"};
+    CHECK_MSG(sprites == expected, "and the sprites are the eleven the original draws words on");
+    // Four plates (one of them a twin), two plaques, a panel, a strip and three generated pictures, as measured.
     int plates = 0;
     int twins = 0;
     int generated = 0;
+    int plaques = 0;
+    int panels = 0;
+    int strips = 0;
     for (const PB::Recipe& recipe : recipes.items) {
         plates += recipe.erase.rule == PB::Rule::RowLerp || recipe.erase.rule == PB::Rule::Separable ? 1 : 0;
         twins += recipe.erase.rule == PB::Rule::Twin ? 1 : 0;
         generated += recipe.erase.rule == PB::Rule::Generated ? 1 : 0;
+        plaques += recipe.erase.rule == PB::Rule::Plaque ? 1 : 0;
+        panels += recipe.erase.rule == PB::Rule::Panel ? 1 : 0;
+        strips += recipe.erase.rule == PB::Rule::ClearRows ? 1 : 0;
     }
-    CHECK_MSG(plates == 3 && twins == 1 && generated == 3, "three modelled plates, one twin and three generated pictures");
+    CHECK_MSG(plates == 3 && twins == 1 && generated == 3 && plaques == 2 && panels == 1 && strips == 1, "three modelled plates, one twin, three generated pictures, two plaques, a panel and a strip");
+    // Each new picture's lettering is a paragraph (the plaques and the card) or bands (the strip), with a floor and the keys its recipe names.
+    for (const PB::Recipe& recipe : recipes.items) {
+        if (recipe.erase.rule == PB::Rule::Plaque || recipe.erase.rule == PB::Rule::Panel) CHECK_MSG(recipe.text.layout == PB::Layout::Paragraph && !recipe.key.empty(), recipe.id + " is a paragraph of one key");
+        if (recipe.erase.rule == PB::Rule::ClearRows) CHECK_MSG(recipe.text.layout == PB::Layout::Bands && recipe.key.empty() && recipe.text.bands.size() == 5 && recipe.erase.clearRows.size() == 5, recipe.id + " is five bands and no key of its own");
+    }
 }
 
 // Loads `text` as the table; the result's error, or empty when it loaded. `out` is checked to be untouched by a refusal.
@@ -218,7 +246,7 @@ void TheLoaderRefusesWhatItShouldNot() {
         {"digest not hex", "\"digest\": \"d17efe5ae96f120c776dd9957227c207\"", "\"digest\": \"D17EFE5AE96F120C776DD9957227C207\"", "digest"},
         {"digest short", "\"digest\": \"d17efe5ae96f120c776dd9957227c207\"", "\"digest\": \"d17efe5a\"", "digest"},
         {"unknown rule", "\"rule\": \"row_lerp\"", "\"rule\": \"blur\"", "rule"},
-        {"unknown layout", "\"layout\": \"word\"", "\"layout\": \"paragraph\"", "layout"},
+        {"unknown layout", "\"layout\": \"word\"", "\"layout\": \"banner\"", "layout"},
         {"upside-down rect", "\"rect\": [\n          160,\n          46,\n          351,\n          84\n        ]", "\"rect\": [\n          351,\n          46,\n          160,\n          84\n        ]",
          "rect"},
         {"rect outside", "\"rect\": [\n          160,\n          46,\n          351,\n          84\n        ]", "\"rect\": [\n          160,\n          46,\n          351,\n          840\n        ]",
@@ -1290,13 +1318,16 @@ void EveryShippedPhraseIsDrawnFromGlyphsItsFacesHold() {
         CHECK_MSG(table.Load(kData, lang, error), error);
         for (const PB::Recipe& recipe : world.recipes.items) {
             ++phrases;
-            CHECK_MSG(std::find(table.FellBack().begin(), table.FellBack().end(), recipe.key) == table.FellBack().end(), Code(lang) + " has " + recipe.key);
-            const PB::Outcome outcome = PB::FitPhrase(RequestFor(recipe, lang, table.Get(recipe.key)));
-            CHECK_MSG(!Contains(outcome.reason, "no glyph") && !Contains(outcome.reason, "no face"), Code(lang) + " " + recipe.key + ": every code point is in its face: " + outcome.reason);
-            CHECK_MSG(outcome.ok, Code(lang) + " " + recipe.key + ": the phrase is drawn: " + outcome.reason);
+            for (const std::string& key : recipe.Keys()) CHECK_MSG(std::find(table.FellBack().begin(), table.FellBack().end(), key) == table.FellBack().end(), Code(lang) + " has " + key);
+            const std::string single = recipe.key.empty() ? std::string() : table.Get(recipe.key);
+            PB::Request request = RequestFor(recipe, lang, single);
+            for (const PB::Band& band : recipe.text.bands) request.phrases.push_back(table.Get(band.key));
+            const PB::Outcome outcome = PB::FitPhrase(request);
+            CHECK_MSG(!Contains(outcome.reason, "no glyph") && !Contains(outcome.reason, "no face"), Code(lang) + " " + recipe.id + ": every code point is in its face: " + outcome.reason);
+            CHECK_MSG(outcome.ok, Code(lang) + " " + recipe.id + ": the phrase is drawn: " + outcome.reason);
         }
     }
-    CHECK_EQ(phrases, 70);
+    CHECK_EQ(phrases, 110);
     // The check would notice: an uncovered character in a real phrase is named.
     Strings::Table german;
     std::string error;
@@ -1328,12 +1359,13 @@ void CollectNames(const Supersonic::Json::Value& value, const std::string& path,
 // THE CACHE AUDIT, as a test. The layer remakes, after a language switch, the caches of the screens that draw the seven pictures (the menus', the pause's, the end
 // screens' and the popups'); a picture another cache holds - the HUD's pads and plaque, the achievement cards - would stay in the old language. None does today, and this
 // is how a later edit that names one of the seven pictures somewhere else is caught: it fails here, and the author adds the cache to the switch.
-void TheWordedSpritesAreNamedOnlyWhereALanguageSwitchRemakesThem() {
+void TheWordedSpritesAreNamedOnlyWhereALanguageSwitchRemakesThem() { // (planning step 247; step 248 added the HUD's plaque, the pause's and the end screen's plaques, the card and the strip)
     const World& world = TheWorld();
     if (!world.ok) return;
     std::set<std::string> names;
     for (const PB::Recipe& recipe : world.recipes.items) names.insert(recipe.sprite);
-    const std::vector<std::string> remade = {"/main_menu/", "/selector/", "/dashboard/", "/pause/", "/level_end/", "/popups/"};
+    // The level HUD's plaque (m_plaqueImage) and the credits' strip (m_menuPictures) joined them at step 248.
+    const std::vector<std::string> remade = {"/main_menu/", "/selector/", "/dashboard/", "/pause/", "/level_end/", "/popups/", "/level_start/", "/credits/"};
     int named = 0;
     int tables = 0;
     for (const std::string& directory : {kData, std::string(MAGICPORTALS_DATA_DIR)}) {
@@ -1358,11 +1390,957 @@ void TheWordedSpritesAreNamedOnlyWhereALanguageSwitchRemakesThem() {
         }
     }
     CHECK_MSG(tables > 20, "the tables were read: " + std::to_string(tables));
-    CHECK_MSG(named == 8, "the seven pictures are named in eight places of the screens' rules (the Achievements picture twice: the main menu's button and the pause's): " + std::to_string(named));
+    CHECK_MSG(named == 14, "the eleven pictures are named in fourteen places of the screens' rules (the Achievements picture twice, the current plaque twice, the golden plaque twice): " + std::to_string(named));
+}
+
+// ============================================================================================================================
+// planning step 248: plaques, the panel, the strip - synthetic fixtures, hand-authored in code (no original pixel, no extracted file)
+// ============================================================================================================================
+
+constexpr int kPlaqueW = 112;
+constexpr int kPlaqueH = 160;
+
+// A plate with a straight frame: frame columns [2, 10) and [98, 106) are constant down the plate, the interior [10, 98) is V(y) H(x) per channel, the rows outside [4, 156)
+// and the columns outside [2, 106) are transparent.
+double PlaqueV(int y) {
+    return 100.0 - 0.4 * y;
+}
+
+double PlaqueH(int x) {
+    const int d = std::min(x - 10, 97 - x);
+    return d >= 10 ? 1.0 : 0.75 + 0.25 * d / 10.0;
+}
+
+double PlaqueF(int x) {
+    const int d = x < 10 ? x - 2 : 105 - x; // 0 outside to 7 inside
+    return 140.0 - 12.0 * d + (x >= 98 ? 6.0 : 0.0);
+}
+
+void PutPlate(PB::Image& image, int x, int y, double value) {
+    Put(image, x, y, value, value * 0.97, value * 0.95, 255); // neutral: the channels differ by less than the chroma threshold (10)
+}
+
+struct PlaqueFixture {
+    PB::Image truth;    // the plate with no lettering and no medal
+    PB::Image picture;  // with two lines of lettering over the frame, and (golden) a medal
+    PB::Recipe recipe;
+};
+
+// A medal: an orange disc far from the centre columns and a small ribbon inside the first rectangle, both of chroma 60.
+void AddMedal(PB::Image& image) {
+    for (int y = 36; y < 53; ++y) {
+        for (int x = 12; x < 29; ++x) {
+            if ((x - 20) * (x - 20) + (y - 44) * (y - 44) <= 64) Put(image, x, y, 220, 160, 100, 255);
+        }
+    }
+    for (int y = 81; y < 84; ++y) {
+        for (int x = 50; x < 54; ++x) Put(image, x, y, 220, 160, 100, 255);
+    }
+}
+
+PlaqueFixture MakePlaque(bool medal) {
+    PlaqueFixture f;
+    f.truth = PB::Blank(kPlaqueW, kPlaqueH);
+    for (int y = 4; y < 156; ++y) {
+        for (int x = 2; x < 106; ++x) {
+            const bool frame = x < 10 || x >= 98;
+            PutPlate(f.truth, x, y, frame ? PlaqueF(x) : PlaqueV(y) * PlaqueH(x));
+        }
+    }
+    PB::Image lettered = WithAWord(f.truth, PB::Rect{8, 86, 100, 97}, 1, 1.0);
+    lettered = WithAWord(lettered, PB::Rect{28, 102, 76, 112}, 1, 1.0);
+    f.picture = lettered;
+    if (medal) AddMedal(f.picture);
+    PB::Recipe& r = f.recipe;
+    r.id = medal ? "syn_golden" : "syn_current";
+    r.key = std::string(Strings::Key::kPictureCurrentScore);
+    r.sprite = r.id + ".png";
+    r.width = kPlaqueW;
+    r.height = kPlaqueH;
+    r.digest = PB::Digest(f.picture);
+    PB::Erase& e = r.erase;
+    e.rule = PB::Rule::Plaque;
+    e.interiorCols = PB::Span{10, 98};
+    e.frameCols = {PB::Span{2, 10}, PB::Span{98, 106}};
+    e.centerCols = PB::Span{34, 74};
+    e.refRows = {PB::Span{20, 76}};
+    e.vTopRows = PB::Span{20, 76};
+    e.vMarginRows = PB::Span{104, 136}; // below the first line's halo (the margin columns are under the first line's ink, as the original's are)
+    e.refCols = {PB::Span{11, 14}, PB::Span{94, 97}};
+    e.agreeTol = 2.0;
+    e.rects = {PB::Rect{2, 80, 106, 125}, PB::Rect{12, 125, 96, 140}};
+    e.rect = PB::Rect{2, 80, 106, 140};
+    e.chroma.enabled = true;
+    e.chroma.threshold = 10;
+    e.chroma.radius = 2;
+    e.chroma.keepMin = medal ? 1 : 0;
+    e.chroma.keepMax = medal ? 100000 : 0;
+    if (medal) {
+        e.hasSkip = true;
+        e.skipCols = PB::Span{10, 33};
+    }
+    e.plaque.sepMean = 0.8;
+    e.plaque.sepMax = 3.0;
+    e.plaque.holdout = 2.5;
+    e.plaque.marginWindow = PB::Span{110, 132};
+    e.plaque.marginRatio = 0.7;
+    e.plaque.ringMax = 4.0;
+    e.plaque.slopeBand = 0.3;
+    PB::Text& t = r.text;
+    t.layout = PB::Layout::Paragraph;
+    t.slot = "matura";
+    t.px = 12.0;
+    t.faces = {PB::FaceTuning{"kurale", 1.0, 0, 0.03, 1.4}, PB::FaceTuning{"noto_sans_jp_bold", 1.0, 0, 0.03, 1.3}, PB::FaceTuning{"noto_sans_arabic_bold", 1.0, 0, 0.03, 1.5}};
+    t.anchorX = 56.0;
+    t.anchorY = 107.0;
+    t.minScale = 0.4;
+    t.step = 0.97;
+    t.inkThreshold = 0.15;
+    t.maxWidth = 84.0;
+    t.gap = 0.05;
+    t.maxLines = 2;
+    t.safe = PB::Rect{14, 88, 98, 126};
+    t.shadow.dy = 0.08;
+    t.shadow.sigmaMin = 1.0;
+    t.shadow.gain = 1.8;
+    t.shadow.cap = 0.9;
+    t.shadow.roundOffsets = true;
+    return f;
+}
+
+bool IsKept(const PB::Image& image, int x, int y, int radius, int threshold) {
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            const int sx = x + dx;
+            const int sy = y + dy;
+            if (sx < 0 || sy < 0 || sx >= image.width || sy >= image.height) continue;
+            const unsigned char* px = image.At(sx, sy);
+            if (px[3] > 0 && std::max({px[0], px[1], px[2]}) - std::min({px[0], px[1], px[2]}) > threshold) return true;
+        }
+    }
+    return false;
+}
+
+bool InAny(const std::vector<PB::Rect>& rects, int x, int y) {
+    for (const PB::Rect& r : rects) {
+        if (r.Contains(x, y)) return true;
+    }
+    return false;
+}
+
+int ChangedOutsideRects(const PB::Image& a, const PB::Image& b, const std::vector<PB::Rect>& rects) {
+    int changed = 0;
+    for (int y = 0; y < a.height; ++y) {
+        for (int x = 0; x < a.width; ++x) {
+            if (!InAny(rects, x, y) && !std::equal(a.At(x, y), a.At(x, y) + 4, b.At(x, y))) ++changed;
+        }
+    }
+    return changed;
+}
+
+void APlaqueIsErasedByItsOwnModel() {
+    for (const bool medal : {false, true}) {
+        const PlaqueFixture f = MakePlaque(medal);
+        const std::string name = medal ? "golden-like" : "current-like";
+        PB::Image out;
+        std::string why;
+        const bool erasedOk = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
+        CHECK_MSG(erasedOk, name + " plaque is erased: " + why);
+        if (out.Empty()) continue;
+        CHECK_MSG(MostDifference(f.picture, f.truth, PB::Rect{2, 84, 106, 116}) > 100, name + ": the synthetic lettering is really on the plate");
+        // Inside the rectangles the plate is back to a stated tolerance (2 grey levels), frame columns included: the lettering covered the frame's bevel at both ends.
+        int worst = 0;
+        int kept = 0;
+        int keptChanged = 0;
+        for (const PB::Rect& r : f.recipe.erase.rects) {
+            for (int y = r.y0; y < r.y1; ++y) {
+                for (int x = r.x0; x < r.x1; ++x) {
+                    if (IsKept(f.picture, x, y, 2, 10)) {
+                        ++kept;
+                        keptChanged += std::equal(out.At(x, y), out.At(x, y) + 4, f.picture.At(x, y)) ? 0 : 1;
+                        continue;
+                    }
+                    for (int c = 0; c < 3; ++c) worst = std::max(worst, std::abs(static_cast<int>(out.At(x, y)[c]) - static_cast<int>(f.truth.At(x, y)[c])));
+                }
+            }
+        }
+        CHECK_MSG(worst <= 2, name + ": the erase is the plate to 2 grey levels, the frame's ends too: " + std::to_string(worst));
+        // The medal: the chroma rule keeps every chromatic pixel and a ring of 2 px round it, bit for bit; the pixels three away are replaced.
+        if (medal) CHECK_MSG(kept > 20 && keptChanged == 0, "the ribbon and its ring of two pixels are untouched: " + std::to_string(kept) + " kept, " + std::to_string(keptChanged) + " changed");
+        else CHECK_EQ(kept, 0);
+        CHECK_MSG(ChangedOutsideRects(out, f.picture, f.recipe.erase.rects) == 0, name + ": nothing outside the rectangles changes (the corners of the lower band too)");
+        int alphaChanged = 0;
+        for (int y = 0; y < out.height; ++y) {
+            for (int x = 0; x < out.width; ++x) alphaChanged += out.At(x, y)[3] != f.picture.At(x, y)[3] ? 1 : 0;
+        }
+        CHECK_EQ(alphaChanged, 0);
+        // The ring is two pixels, not three: the pixel three beyond the ribbon (x 50..53, y 81..83) is the model's, and so is the one at the same place on the lettered plate.
+        if (medal) CHECK_MSG(MostDifference(out, f.truth, PB::Rect{57, 82, 58, 83}) <= 2, "a pixel three beyond the ribbon is the model's");
+    }
+}
+
+// Every negative fixture trips ONE guard and the reason NAMES it: a second guard would hide a mutant of the first.
+void ThePlaqueGuardsFailClosedEachByItself() {
+    PB::Image out;
+    std::string why;
+    // golden art under the current recipe: refused, and by the separability of the clean rows before the chroma count is even looked at (the medal is not a plate) ...
+    {
+        const PlaqueFixture golden = MakePlaque(true);
+        const PlaqueFixture current = MakePlaque(false);
+        {
+        const bool erased = PB::EraseWords(current.recipe, golden.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "separability") && out.Empty(), "golden art under the current recipe: " + why);
+    }
+        // ... and, with the medal's columns left out of the separability check, by the chroma rule alone
+        PlaqueFixture skipping = MakePlaque(false);
+        skipping.recipe.erase.hasSkip = true;
+        skipping.recipe.erase.skipCols = PB::Span{10, 33};
+        {
+        const bool erased = PB::EraseWords(skipping.recipe, golden.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "chroma"), "golden art under a current recipe that skips the medal's columns: " + why);
+    }
+    }
+    // current art under the golden recipe: no medal where the recipe needs one
+    {
+        const PlaqueFixture current = MakePlaque(false);
+        PlaqueFixture golden = MakePlaque(true);
+        {
+        const bool erased = PB::EraseWords(golden.recipe, current.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "chroma"), "current art under the golden recipe: " + why);
+    }
+    }
+    // stray ink one row above the rectangle (row 78: the rectangle begins at 80, the clean rows end at 75)
+    {
+        PlaqueFixture f = MakePlaque(false);
+        for (int x = 30; x < 70; ++x) Put(f.picture, x, 78, 235, 235, 235, 255);
+        {
+        const bool erased = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink above the rectangle: " + why);
+    }
+    }
+    // ink in the margin columns of the rows beside the lettering
+    {
+        PlaqueFixture f = MakePlaque(false);
+        for (int y = 112; y < 132; ++y) {
+            for (int x = 11; x < 14; ++x) Put(f.picture, x, y, 240, 240, 240, 255);
+        }
+        {
+        const bool erased = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "margin rows"), "ink in the margin columns: " + why);
+    }
+    }
+    // a plate that is not a profile times a vignette: a tilt across the clean rows
+    {
+        PlaqueFixture f = MakePlaque(false);
+        for (int y = 20; y < 76; ++y) {
+            for (int x = 10; x < 98; ++x) {
+                for (int c = 0; c < 3; ++c) f.picture.At(x, y)[c] = static_cast<unsigned char>(std::clamp(f.picture.At(x, y)[c] * (1.0 + 0.0003 * (x - 54) * (y - 48)), 0.0, 255.0));
+            }
+        }
+        {
+        const bool erased = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "separability"), "a tilted plate: " + why);
+    }
+    }
+    // every other clean row jitters: each row is still a profile times a vignette, but V is not smooth
+    {
+        PlaqueFixture f = MakePlaque(false);
+        for (int y = 21; y < 76; y += 2) {
+            for (int x = 10; x < 98; ++x) {
+                for (int c = 0; c < 3; ++c) f.picture.At(x, y)[c] = static_cast<unsigned char>(std::clamp(f.picture.At(x, y)[c] * 1.12, 0.0, 255.0));
+            }
+        }
+        {
+        const bool erased = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "hold-out"), "a jittering profile: " + why);
+    }
+    }
+    // the profile bends where nothing was read: the rows below the old lettering are darker than the clean rows' line says
+    {
+        PlaqueFixture f = MakePlaque(false);
+        for (int y = 98; y < 156; ++y) {
+            for (int x = 2; x < 106; ++x) {
+                if (f.picture.At(x, y)[3] == 0) continue;
+                if (std::equal(f.picture.At(x, y), f.picture.At(x, y) + 4, f.truth.At(x, y)) == false) continue; // a lettered pixel is not touched
+                for (int c = 0; c < 3; ++c) f.picture.At(x, y)[c] = static_cast<unsigned char>(std::clamp(f.picture.At(x, y)[c] - 14.0 * (x >= 10 && x < 98 ? 1.0 : 0.0), 0.0, 255.0));
+            }
+        }
+        {
+        const bool erased = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "slope"), "a profile that bends in the hole: " + why);
+    }
+    }
+    // and the same plaque with its slope check off passes (the guard above is what refused it)
+    {
+        PlaqueFixture f = MakePlaque(false);
+        for (int y = 98; y < 156; ++y) {
+            for (int x = 10; x < 98; ++x) {
+                if (f.picture.At(x, y)[3] == 0 || !std::equal(f.picture.At(x, y), f.picture.At(x, y) + 4, f.truth.At(x, y))) continue;
+                for (int c = 0; c < 3; ++c) f.picture.At(x, y)[c] = static_cast<unsigned char>(std::clamp(f.picture.At(x, y)[c] - 14.0, 0.0, 255.0));
+            }
+        }
+        f.recipe.erase.plaque.slopeBand = 0.0;
+        CHECK_MSG(PB::EraseWords(f.recipe, f.picture, nullptr, out, why), "with the slope check off the same plaque is erased: " + why);
+    }
+    // the digest and the size are the source check's, and a recipe asked on another size says so
+    {
+        const PlaqueFixture f = MakePlaque(false);
+        PB::Image small = PB::Blank(60, 60);
+        {
+        const bool erased = PB::EraseWords(f.recipe, small, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "recipe's size"), "another size: " + why);
+    }
+    }
+}
+
+struct PanelFixture {
+    PB::Image truth;
+    PB::Image picture;
+    PB::Recipe recipe;
+};
+
+double PanelV(int y) {
+    return 50.0 + 0.5 * y;
+}
+
+double PanelH(int x) {
+    const int d = std::min(x - 10, 89 - x);
+    return 0.8 + 0.2 * std::min(d, 8) / 8.0;
+}
+
+PanelFixture MakePanel() {
+    PanelFixture f;
+    f.truth = PB::Blank(100, 120);
+    for (int y = 0; y < 120; ++y) {
+        for (int x = 0; x < 100; ++x) {
+            const bool interior = x >= 10 && x < 90;
+            double v = interior ? PanelV(y) * PanelH(x) : 18.0;
+            if (interior && x >= 86 && y >= 40 && y < 60) v *= 1.2; // the corner effect of the right margin, in rows the lettering is beside
+            Put(f.truth, x, y, v * 0.8, v * 0.6, v, 255);
+        }
+    }
+    PB::Image lettered = WithAWord(f.truth, PB::Rect{18, 44, 82, 54}, 2, 1.5);
+    lettered = WithAWord(lettered, PB::Rect{24, 82, 76, 92}, 2, 1.5);
+    f.picture = lettered;
+    PB::Recipe& r = f.recipe;
+    r.id = "syn_panel";
+    r.key = std::string(Strings::Key::kPictureGameFinished);
+    r.sprite = "syn_panel.png";
+    r.width = 100;
+    r.height = 120;
+    r.digest = PB::Digest(f.picture);
+    PB::Erase& e = r.erase;
+    e.rule = PB::Rule::Panel;
+    e.rect = PB::Rect{14, 40, 86, 100};
+    e.interiorCols = PB::Span{10, 90};
+    e.centerCols = PB::Span{30, 70};
+    e.refRows = {PB::Span{64, 80}};
+    e.refCols = {PB::Span{11, 14}, PB::Span{86, 89}};
+    e.agreeTol = 3.0;
+    e.panel.sepMax = 2.0;
+    e.panel.vMargin = 2.5;
+    e.panel.agreeRatio = 0.6;
+    e.panel.ringMax = 4.0;
+    PB::Text& t = r.text;
+    t.layout = PB::Layout::Paragraph;
+    t.slot = "verdana";
+    t.px = 10.0;
+    t.faces = {PB::FaceTuning{"noto_sans_bold", 1.0, 0, 0.025, 1.32}, PB::FaceTuning{"noto_sans_jp_bold", 1.0, 0, 0.025, 1.3}, PB::FaceTuning{"noto_sans_arabic_bold", 1.0, 0, 0.025, 1.5}};
+    t.anchorX = 50.0;
+    t.anchorY = 70.0;
+    t.minScale = 0.5;
+    t.step = 0.97;
+    t.inkThreshold = 0.15;
+    t.maxWidth = 60.0;
+    t.gap = 0.04;
+    t.maxLines = 4;
+    t.orphan = 0.4;
+    t.saveLines = 0.0;
+    t.safe = PB::Rect{20, 46, 80, 94};
+    t.shadow.dy = 0.1;
+    t.shadow.sigmaMin = 1.5;
+    t.shadow.gain = 1.8;
+    t.shadow.cap = 0.9;
+    t.shadow.roundOffsets = true;
+    return f;
+}
+
+void APanelIsErasedFromItsLeftMarginAlone() {
+    const PanelFixture f = MakePanel();
+    PB::Image out;
+    std::string why;
+    CHECK_MSG(PB::EraseWords(f.recipe, f.picture, nullptr, out, why), "the panel is erased: " + why);
+    if (out.Empty()) return;
+    CHECK_MSG(MostDifference(f.picture, f.truth, f.recipe.erase.rect) > 100, "the synthetic lettering is really on the panel");
+    double mean = 0.0;
+    const int worst = MostDifference(out, f.truth, f.recipe.erase.rect, &mean);
+    // The right margin's corner effect (20 percent for 20 rows) would have lifted the model there by 10 levels or more: only the left margin is read, and the result is the plate's.
+    CHECK_MSG(worst <= 2, "the panel is back to 2 grey levels, with a corner effect on the right margin the model does not read: " + std::to_string(worst));
+    CHECK_EQ(PixelsChangedOutside(out, f.picture, f.recipe.erase.rect), 0);
+    // Each guard by itself.
+    {
+        PanelFixture bad = MakePanel();
+        for (int y = 64; y < 80; ++y) {
+            for (int x = 11; x < 14; ++x) Put(bad.picture, x, y, 240, 240, 240, 255);
+        }
+        {
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "left margin's profile"), "ink in the left margin: " + why);
+    }
+    }
+    {
+        PanelFixture bad = MakePanel();
+        for (int x = 30; x < 70; ++x) Put(bad.picture, x, 38, 235, 235, 235, 255);
+        {
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink above the rectangle: " + why);
+    }
+        PanelFixture below = MakePanel();
+        for (int x = 30; x < 70; ++x) Put(below.picture, x, 101, 235, 235, 235, 255);
+        {
+        const bool erased = PB::EraseWords(below.recipe, below.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink below the rectangle: " + why);
+    }
+    }
+    {
+        // not a profile times a vignette, in the columns between the margins and the centre only, so that the margins and the centre still agree with each other
+        PanelFixture bad = MakePanel();
+        for (int y = 64; y < 80; ++y) {
+            for (int x = 16; x < 28; ++x) {
+                for (int c = 0; c < 3; ++c) bad.picture.At(x, y)[c] = static_cast<unsigned char>(std::clamp(bad.picture.At(x, y)[c] * (1.0 + 0.012 * (y - 64)), 0.0, 255.0));
+            }
+        }
+        {
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "separability"), "a panel that is not a profile times a vignette: " + why);
+    }
+    }
+    {
+        PanelFixture bad = MakePanel();
+        bad.recipe.erase.panel.agreeRatio = 0.9; // the corner effect makes 20 of 60 rows disagree
+        {
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "margin rows"), "margins that disagree on too many rows: " + why);
+    }
+    }
+}
+
+// ---- the strip -----------------------------------------------------------------------------------------------------------------------------------
+
+struct StripFixture {
+    PB::Image picture;
+    PB::Recipe recipe;
+};
+
+StripFixture MakeStrip() {
+    StripFixture f;
+    f.picture = PB::Blank(160, 240);
+    const auto bar = [&](int x0, int y0, int x1, int y1, double r, double g, double b) {
+        for (int y = y0; y < y1; ++y) {
+            for (int x = x0; x < x1; ++x) Put(f.picture, x, y, r, g, b, 255);
+        }
+    };
+    bar(12, 20, 120, 30, 0, 0, 0);    // a role
+    bar(12, 90, 110, 100, 0, 0, 0);   // another
+    bar(10, 52, 100, 64, 40, 40, 160); // a name between them
+    bar(10, 130, 100, 150, 40, 40, 160);
+    bar(20, 200, 120, 232, 200, 120, 30); // a logo
+    PB::Recipe& r = f.recipe;
+    r.id = "syn_strip";
+    r.sprite = "syn_strip.png";
+    r.width = 160;
+    r.height = 240;
+    r.digest = PB::Digest(f.picture);
+    r.erase.rule = PB::Rule::ClearRows;
+    r.erase.clearRows = {PB::Span{19, 31}, PB::Span{89, 101}};
+    r.erase.rect = PB::Rect{0, 12, 160, 118};
+    PB::Text& t = r.text;
+    t.layout = PB::Layout::Bands;
+    t.slot = "matura";
+    t.faces = {PB::FaceTuning{"kurale", 1.0, 0x78, 0.065}, PB::FaceTuning{"noto_sans_jp_bold", 1.25, 0, 0.04}, PB::FaceTuning{"noto_sans_arabic_bold", 1.3, 0, 0.03}};
+    t.minScale = 0.7;
+    t.step = 0.97;
+    t.inkThreshold = 0.02;
+    t.gap = 0.05;
+    t.left = 12.0;
+    t.maxRight = 150.0;
+    t.inkLevel = 0;
+    t.japaneseSpaces = true;
+    PB::Band a;
+    a.key = std::string(Strings::Key::kCreditsRoleDesign);
+    a.px = 6.0;
+    a.firstBaseline = 28.0;
+    a.pitch = 13.0;
+    a.maxLines = 2;
+    a.inkRows = PB::Span{12, 48};
+    a.breakAt = PB::BreakAt::AfterDash;
+    PB::Band b = a;
+    b.key = std::string(Strings::Key::kCreditsRoleModelling);
+    b.firstBaseline = 98.0;
+    b.maxLines = 1;
+    b.inkRows = PB::Span{82, 118};
+    t.bands = {a, b};
+    return f;
+}
+
+PB::Request RequestForBands(const PB::Recipe& recipe, Lang lang, const std::vector<std::string>& phrases) {
+    PB::Request request;
+    request.recipe = &recipe;
+    request.plan = &TheWorld().languages.Fonts();
+    request.faces = &TheWorld().faces;
+    request.lang = lang;
+    request.phrases = phrases;
+    return request;
+}
+
+void AStripClearsItsBandsAndDrawsThemAgainLeftAligned() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const StripFixture f = MakeStrip();
+    const PB::Outcome o = PB::Render(RequestForBands(f.recipe, Lang::En, {"ab - cd", "ef"}), f.picture, nullptr);
+    CHECK_MSG(o.ok, "the strip is baked: " + o.reason);
+    if (!o.ok) return;
+    CHECK_MSG(o.bands.size() == 2 && o.bands[0].key == f.recipe.text.bands[0].key && o.bands[1].lines == 1, "each band says what it came to");
+    // Outside the ink windows and the cleared rows every pixel is the source's: the names and the logo are untouched BY CONSTRUCTION.
+    int outside = 0;
+    int oldBarLeft = 0;
+    int notBlack = 0;
+    int inked = 0;
+    for (int y = 0; y < f.picture.height; ++y) {
+        for (int x = 0; x < f.picture.width; ++x) {
+            const bool window = (y >= 12 && y < 48) || (y >= 82 && y < 118);
+            const unsigned char* px = o.image.At(x, y);
+            if (!window) {
+                outside += std::equal(px, px + 4, f.picture.At(x, y)) ? 0 : 1;
+                continue;
+            }
+            if (px[3] > 0) {
+                ++inked;
+                notBlack += (px[0] != 0 || px[1] != 0 || px[2] != 0) ? 1 : 0;
+            }
+            // the old bars' far ends (x 100..119 of the first, 100..109 of the second) are gone: the whole rows were cleared
+            if (((y >= 20 && y < 30 && x >= 100 && x < 120) || (y >= 90 && y < 100 && x >= 100 && x < 110)) && px[3] > 0) ++oldBarLeft;
+        }
+    }
+    CHECK_EQ(outside, 0);
+    CHECK_MSG(inked > 80 && notBlack == 0, "the new ink is black (rgb 0, alpha = coverage): " + std::to_string(inked) + " inked, " + std::to_string(notBlack) + " not black");
+    CHECK_MSG(oldBarLeft == 0, "the cleared rows hold none of the old words: " + std::to_string(oldBarLeft));
+    // Left-aligned on x 12 by the ink's edge, inside its rows and its right edge.
+    for (std::size_t i = 0; i < o.bands.size(); ++i) {
+        const PB::Rect ink = o.bands[i].ink;
+        CHECK_MSG(ink.x0 >= 12 && ink.x0 <= 13, "band " + std::to_string(i) + " begins at the left edge: " + std::to_string(ink.x0));
+        CHECK_MSG(ink.x1 <= 150 && ink.y0 >= f.recipe.text.bands[i].inkRows.a && ink.y1 <= f.recipe.text.bands[i].inkRows.b, "band " + std::to_string(i) + " stays in its window");
+    }
+    // A long phrase wraps AFTER a dash (a dash ends a line and never starts one), at the largest scale that does, the fewest lines.
+    PB::Recipe narrow = f.recipe;
+    narrow.text.maxRight = 142.0;
+    narrow.text.bands[0].maxLines = 2;
+    // Cut at any space the better balance would be 'aaaa bbbb - cc' over 'dd - eeee ffff'; cut only after a dash the first line is 'aaaa bbbb -'.
+    const PB::Outcome wrapped = PB::FitPhrase(RequestForBands(narrow, Lang::En, {"aaaa bbbb - cc dd - eeee ffff", "x"}));
+    CHECK_MSG(wrapped.ok && wrapped.bands[0].lines == 2, "a long phrase wraps in two lines: " + wrapped.reason);
+    if (wrapped.ok && wrapped.bands[0].lines == 2) {
+        const std::vector<std::string>& lines = wrapped.bands[0].lineTexts;
+        CHECK_MSG(lines[0] == "aaaa bbbb -" && lines[1] == "cc dd - eeee ffff", "it breaks after a dash that stands alone: [" + lines[0] + "][" + lines[1] + "]");
+    }
+    // The band's line limit: one line, a phrase too long for it, a floor to stop at.
+    PB::Recipe one = f.recipe;
+    one.text.bands[0].maxLines = 1;
+    const PB::Outcome refused = PB::FitPhrase(RequestForBands(one, Lang::En, {"aaaaaaaaa bbbbbbbbb ccccccccc ddddddddd eeeeeeeee fffffffff ggggggggg hhhhhhhhh iiiiiiiii jjjjjjjjj", "x"}));
+    CHECK_MSG(!refused.ok && Contains(refused.reason, std::string(Strings::Key::kCreditsRoleDesign)) && Contains(refused.reason, "floor"), "a phrase too long for its band's lines fails closed, naming the band: " + refused.reason);
+    // A descender slides the block up rather than past the window's last row; a word without one stays on its baseline.
+    PB::Recipe low = f.recipe;
+    low.text.bands[0].firstBaseline = 46.0;
+    low.text.bands[0].inkRows = PB::Span{12, 47};
+    const PB::Outcome slid = PB::FitPhrase(RequestForBands(low, Lang::En, {"gggg", "x"}));
+    const PB::Outcome stayed = PB::FitPhrase(RequestForBands(low, Lang::En, {"MMMM", "x"}));
+    CHECK_MSG(slid.ok && stayed.ok, "both fit: " + slid.reason + stayed.reason);
+    if (slid.ok && stayed.ok) {
+        CHECK_MSG(slid.bands[0].ink.y1 <= 47 && slid.placed[0].baseline < 46.0 - 0.5, "descenders slide the block up: baseline " + std::to_string(slid.placed[0].baseline));
+        CHECK_MSG(std::fabs(stayed.placed[0].baseline - 46.0) < 0.01, "and a word with none stays: " + std::to_string(stayed.placed[0].baseline));
+    }
+    // Digits from their own face: the same four digits are other ink with the digit face and with none; an unknown face id fails closed.
+    PB::Recipe digits = f.recipe;
+    digits.text.digitFace = "noto_sans_bold";
+    digits.text.faces.push_back(PB::FaceTuning{"noto_sans_bold", 1.0, 0x78, 0.065});
+    const PB::Outcome withFace = PB::Render(RequestForBands(digits, Lang::En, {"3333", "x"}), f.picture, nullptr);
+    const PB::Outcome withoutFace = PB::Render(RequestForBands(f.recipe, Lang::En, {"3333", "x"}), f.picture, nullptr);
+    CHECK_MSG(withFace.ok && withoutFace.ok && withFace.image.rgba != withoutFace.image.rgba, "the digit face draws other digits");
+    digits.text.digitFace = "no_such_face";
+    digits.text.faces.pop_back();
+    const PB::Outcome unknown = PB::FitPhrase(RequestForBands(digits, Lang::En, {"3333", "x"}));
+    CHECK_MSG(!unknown.ok && Contains(unknown.reason, "no_such_face"), "an unknown digit face fails closed: " + unknown.reason);
+    // The spaces of a Japanese phrase: a gap that is drawn here (the strip's dashes have real spaces), never in the plaques.
+    PB::Recipe spaced = f.recipe;
+    PB::Recipe unspaced = f.recipe;
+    unspaced.text.japaneseSpaces = false;
+    const std::string jaPhrase = "AB CD";
+    const PB::Outcome drawn = PB::FitPhrase(RequestForBands(spaced, Lang::Ja, {jaPhrase, "x"}));
+    const PB::Outcome closed = PB::FitPhrase(RequestForBands(unspaced, Lang::Ja, {jaPhrase, "x"}));
+    CHECK_MSG(drawn.ok && closed.ok && drawn.bands[0].ink.Width() > closed.bands[0].ink.Width() + 2, "a Japanese space is a gap with japanese_spaces and none without");
+    // Determinism, and the PNG.
+    const PB::Outcome again = PB::Render(RequestForBands(f.recipe, Lang::En, {"ab - cd", "ef"}), f.picture, nullptr);
+    CHECK_MSG(again.ok && again.image.rgba == o.image.rgba, "two bakes are the same pixels");
+    // The two asserted guards of the erase: a cleared band must be bounded by transparent rows, and an ink window may hold no opaque pixel outside the cleared rows.
+    PB::Image out;
+    std::string why;
+    {
+        StripFixture bad = MakeStrip();
+        Put(bad.picture, 40, 18, 0, 0, 0, 255);
+        bad.recipe.digest = PB::Digest(bad.picture);
+        {
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "bounded") && out.Empty(), "a cleared band whose row above is not transparent: " + why);
+    }
+        StripFixture below = MakeStrip();
+        Put(below.picture, 40, 101, 0, 0, 0, 255);
+        {
+        const bool erased = PB::EraseWords(below.recipe, below.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "bounded"), "and the row below: " + why);
+    }
+    }
+    {
+        StripFixture bad = MakeStrip();
+        Put(bad.picture, 40, 40, 0, 0, 0, 255); // inside the first window, outside the cleared rows
+        {
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "ink window"), "an ink window with an opaque pixel outside the cleared rows: " + why);
+    }
+    }
+    // And a recipe that asks for fewer or more phrases than it has bands is refused.
+    const PB::Outcome few = PB::FitPhrase(RequestForBands(f.recipe, Lang::En, {"only one"}));
+    CHECK_MSG(!few.ok && Contains(few.reason, "phrases"), "a phrase too few: " + few.reason);
+}
+
+// ---- paragraphs -----------------------------------------------------------------------------------------------------------------------------------
+
+void AParagraphIsCentredInsideItsBoxWithTheFewestLines() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const PlaqueFixture f = MakePlaque(false);
+    const PB::Recipe& recipe = f.recipe;
+    const PB::Outcome o = PB::Render(RequestFor(recipe, Lang::En, "current score"), f.picture, nullptr);
+    CHECK_MSG(o.ok, "a paragraph is drawn on the plaque: " + o.reason);
+    if (!o.ok) return;
+    const PB::Rect safe = recipe.text.safe;
+    CHECK_MSG(o.ink.x0 >= safe.x0 && o.ink.x1 <= safe.x1 && o.ink.y0 >= safe.y0 && o.ink.y1 <= safe.y1, "the ink is inside the box");
+    CHECK_MSG(std::fabs((o.ink.x0 + o.ink.x1) / 2.0 - recipe.text.anchorX) <= 2.0 && std::fabs((o.ink.y0 + o.ink.y1) / 2.0 - recipe.text.anchorY) <= 3.0,
+              "the block is centred on its anchor, across and down: " + std::to_string((o.ink.x0 + o.ink.x1) / 2.0) + ", " + std::to_string((o.ink.y0 + o.ink.y1) / 2.0));
+    CHECK_MSG(ChangedOutsideRects(o.image, f.picture, {o.touched}) == 0, "nothing outside what it says it touched changes");
+    CHECK_MSG(o.lines == 2 && o.lineTexts.size() == 2 && o.scale <= 1.0 && o.scale >= recipe.text.minScale, "two lines at a scale between the floor and one");
+    if (o.lineGap < PB::kNoLineGap) CHECK_MSG(o.lineGap >= recipe.text.gap * recipe.text.px * o.scale - 0.5, "the two lines' ink is the gap apart: " + std::to_string(o.lineGap));
+    // The line pitch is the FACE's (1.4 of the scaled px for Kurale here): the baselines are at least that far apart, and in a face tuned to 1.0 they are nearer.
+    {
+        const auto baselines = [](const PB::Outcome& outcome) {
+            double first = -1.0;
+            double second = -1.0;
+            for (const PB::Placed& placed : outcome.placed) {
+                if (placed.line == 0 && first < 0.0) first = placed.baseline;
+                if (placed.line == 1 && second < 0.0) second = placed.baseline;
+            }
+            return second - first;
+        };
+        CHECK_MSG(baselines(o) >= 1.4 * recipe.text.px * o.scale - 0.3, "the baselines are a pitch apart: " + std::to_string(baselines(o)));
+        PB::Recipe loose = recipe;
+        loose.text.faces[0].pitch = 1.0;
+        const PB::Outcome nearer = PB::FitPhrase(RequestFor(loose, Lang::En, "current score"));
+        CHECK_MSG(nearer.ok && baselines(nearer) < baselines(o) - 1.0, "a face tuned to a smaller pitch sets its lines nearer: " + std::to_string(baselines(nearer)) + " against " + std::to_string(baselines(o)));
+    }
+    // The fewest lines: a short phrase is ONE line (a stack would make two), and the lines never get fewer as the phrase gets longer.
+    const PB::Outcome shortPhrase = PB::FitPhrase(RequestFor(recipe, Lang::En, "go on"));
+    CHECK_MSG(shortPhrase.ok && shortPhrase.lines == 1, "a short phrase is one line: " + std::to_string(shortPhrase.lines));
+    int previous = 1;
+    std::string phrase;
+    int lastLines = 0;
+    for (int words = 1; words <= 8; ++words) {
+        phrase += (words > 1 ? " " : "") + std::string("ab");
+        const PB::Outcome grown = PB::FitPhrase(RequestFor(recipe, Lang::En, phrase));
+        if (!grown.ok) break;
+        CHECK_MSG(grown.lines >= previous, "the lines do not get fewer as the phrase grows: " + std::to_string(grown.lines) + " after " + std::to_string(previous));
+        previous = grown.lines;
+        lastLines = grown.lines;
+    }
+    CHECK_MSG(lastLines == 2, "and a long one is two: " + std::to_string(lastLines));
+    // Down to the floor, no further: a floor above what the phrase needs refuses it, naming the scale.
+    PB::Recipe tight = recipe;
+    tight.text.maxWidth = 30.0;
+    tight.text.minScale = 0.95;
+    const PB::Outcome refused = PB::FitPhrase(RequestFor(tight, Lang::En, "current score"));
+    CHECK_MSG(!refused.ok && Contains(refused.reason, "below the recipe's floor"), "a paragraph below its floor fails closed: " + refused.reason);
+}
+
+void AnOrphanLineAndTheLinesSavedAreWeighedByTheRecipe() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const PlaqueFixture f = MakePlaque(false);
+    PB::Recipe recipe = f.recipe;
+    recipe.text.maxWidth = 400.0;
+    recipe.text.safe = PB::Rect{0, 0, 112, 160};
+    const PB::Outcome one = PB::FitPhrase(RequestFor(recipe, Lang::En, "WWWW WW"));
+    CHECK_MSG(one.ok && one.lines == 1, "on a wide box 'WWWW WW' is one line: " + one.reason);
+    if (!one.ok) return;
+    // A box too narrow for one line and wide enough for 'WWWW': two lines, the second half the first; an orphan limit of 0.4 allows it and one of 0.99 does not.
+    recipe.text.maxWidth = one.ink.Width() * 0.78;
+    recipe.text.safe = PB::Rect{0, 0, 112, 160};
+    recipe.text.orphan = 0.0;
+    recipe.text.minScale = 0.9; // a floor above what the one-line layout needs (0.78): two lines at full size, or nothing
+    const PB::Outcome two = PB::FitPhrase(RequestFor(recipe, Lang::En, "WWWW WW"));
+    CHECK_MSG(two.ok && two.lines == 2 && std::fabs(two.scale - 1.0) < 1e-9, "a narrower box makes two lines at full size: " + two.reason + " lines " + std::to_string(two.lines));
+    recipe.text.orphan = 0.4;
+    CHECK_MSG(PB::FitPhrase(RequestFor(recipe, Lang::En, "WWWW WW")).ok, "an orphan limit of 0.4 allows a second line half the first");
+    recipe.text.orphan = 0.99;
+    const PB::Outcome orphaned = PB::FitPhrase(RequestFor(recipe, Lang::En, "WWWW WW"));
+    CHECK_MSG(!orphaned.ok, "and one of 0.99 does not: a line that is a fraction of the other is refused");
+    // saveLines: fewer lines at a slightly smaller scale win when the recipe says a line saved is worth that much. Three words; two fit at about 0.85, three at 1.
+    PB::Recipe saving = f.recipe;
+    saving.text.safe = PB::Rect{0, 0, 112, 160};
+    saving.text.maxLines = 3;
+    saving.text.maxWidth = 1000.0;
+    const PB::Outcome two2 = PB::FitPhrase(RequestFor(saving, Lang::En, "MMMM MMMM"));
+    CHECK_MSG(two2.ok && two2.lines == 1, "two words fit one line on a wide box");
+    if (!two2.ok) return;
+    saving.text.maxWidth = two2.ink.Width() * 0.9;
+    saving.text.saveLines = 0.0;
+    const PB::Outcome exact = PB::FitPhrase(RequestFor(saving, Lang::En, "MMMM MMMM"));
+    CHECK_MSG(exact.ok && exact.lines == 2 && exact.scale > 0.9, "without saveLines two words in a narrow box are two lines at the largest scale: " + std::to_string(exact.scale));
+    saving.text.maxWidth = two2.ink.Width() * 0.95;
+    saving.text.saveLines = 0.0;
+    const PB::Outcome crisp = PB::FitPhrase(RequestFor(saving, Lang::En, "MMMM MMMM MMMM"));
+    saving.text.saveLines = 0.2;
+    const PB::Outcome saved = PB::FitPhrase(RequestFor(saving, Lang::En, "MMMM MMMM MMMM"));
+    CHECK_MSG(crisp.ok && saved.ok && saved.lines < crisp.lines && saved.scale < crisp.scale, "saveLines takes fewer lines at a smaller scale: " + std::to_string(crisp.lines) + " lines at " + std::to_string(crisp.scale) + " against " +
+                                                                                              std::to_string(saved.lines) + " at " + std::to_string(saved.scale));
+}
+
+// A break the data marks with U+200B and one it marks with an ASCII space (which in Japanese only breaks) are the same layout, glyph for glyph - for every shipped phrase
+// of the three paragraph pictures; and a no-break space of the French card never leaves its '!' alone on a line.
+void TheBreakMarksOfTheNewPhrasesAreHandled() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    Strings::Table japanese;
+    Strings::Table french;
+    std::string error;
+    CHECK(japanese.Load(kData, Lang::Ja, error) && french.Load(kData, Lang::Fr, error));
+    int compared = 0;
+    for (const std::string_view key : {Strings::Key::kPictureCurrentScore, Strings::Key::kPictureGoldenScore, Strings::Key::kPictureGameFinished}) {
+        const PB::Recipe* recipe = nullptr;
+        for (const PB::Recipe& candidate : world.recipes.items) recipe = candidate.key == key ? &candidate : recipe;
+        CHECK_MSG(recipe != nullptr, std::string(key) + " has a recipe");
+        if (recipe == nullptr) continue;
+        const std::string phrase = japanese.Get(std::string(key));
+        CHECK_MSG(phrase.find(' ') != std::string::npos, std::string(key) + " in Japanese holds a place to break");
+        std::string zero;
+        for (const char c : phrase) zero += c == ' ' ? Cp({0x200B}) : std::string(1, c);
+        const PB::Outcome spaced = PB::FitPhrase(RequestFor(*recipe, Lang::Ja, phrase));
+        const PB::Outcome marked = PB::FitPhrase(RequestFor(*recipe, Lang::Ja, zero));
+        CHECK_MSG(spaced.ok && marked.ok, std::string(key) + ": both are drawn: " + spaced.reason + marked.reason);
+        if (!spaced.ok || !marked.ok) continue;
+        bool same = spaced.placed.size() == marked.placed.size() && spaced.scale == marked.scale && spaced.lines == marked.lines;
+        for (std::size_t i = 0; same && i < spaced.placed.size(); ++i) {
+            same = spaced.placed[i].codePoint == marked.placed[i].codePoint && spaced.placed[i].penX == marked.placed[i].penX && spaced.placed[i].baseline == marked.placed[i].baseline;
+            if (spaced.placed[i].codePoint == 0x200B || spaced.placed[i].codePoint == 0x20) same = false; // neither is ever drawn
+        }
+        CHECK_MSG(same, std::string(key) + ": an ASCII space and U+200B lay out the same glyphs, and neither is drawn");
+        ++compared;
+    }
+    CHECK_EQ(compared, 3);
+    const PB::Recipe* card = world.recipes.Find("game_finished.png");
+    CHECK(card != nullptr);
+    if (card == nullptr) return;
+    const std::string phrase = french.Get(Strings::Key::kPictureGameFinished);
+    CHECK_MSG(phrase.find(Cp({0x00A0, '!'})) != std::string::npos, "the French card holds a no-break space before its '!'");
+    const PB::Outcome o = PB::FitPhrase(RequestFor(*card, Lang::Fr, phrase));
+    CHECK_MSG(o.ok, "the French card is drawn: " + o.reason);
+    for (const std::string& line : o.lineTexts) CHECK_MSG(line.empty() || line.front() != '!', "no line begins with the '!': [" + line + "]");
+    // Arabic breaks in LOGICAL order, so the first word is on the first line.
+    Strings::Table arabic;
+    CHECK(arabic.Load(kData, Lang::Ar, error));
+    const std::string arabicPhrase = arabic.Get(Strings::Key::kPictureGameFinished);
+    const PB::Outcome ar = PB::FitPhrase(RequestFor(*card, Lang::Ar, arabicPhrase));
+    CHECK_MSG(ar.ok && ar.lineTexts.size() >= 2 && arabicPhrase.rfind(ar.lineTexts[0], 0) == 0, "the Arabic card's first line is its first words");
+}
+
+// The shipped phrases of the credits strip and the card are drawn above the floors by the recipes' own numbers.
+void EveryShippedPhraseOfTheNewPicturesIsAboveItsFloor() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    int fits = 0;
+    for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
+        const Lang lang = static_cast<Lang>(i);
+        Strings::Table table;
+        std::string error;
+        CHECK_MSG(table.Load(kData, lang, error), error);
+        for (const PB::Recipe& recipe : world.recipes.items) {
+            if (recipe.text.layout != PB::Layout::Paragraph && recipe.text.layout != PB::Layout::Bands) continue;
+            const std::string single = recipe.key.empty() ? std::string() : table.Get(recipe.key);
+            PB::Request request = RequestFor(recipe, lang, single);
+            for (const PB::Band& band : recipe.text.bands) request.phrases.push_back(table.Get(band.key));
+            const PB::Outcome o = PB::FitPhrase(request);
+            CHECK_MSG(o.ok && o.scale >= recipe.text.minScale - 1e-9, recipe.id + " in " + Code(lang) + " is at or above its floor: " + o.reason);
+            ++fits;
+        }
+    }
+    CHECK_EQ(fits, 40);
+}
+
+// ---- the loader, for the new rules and layouts ----------------------------------------------------------------------------------------------------
+
+// A table of ONE recipe from the pieces of its erase and text blocks: the pairs of rule and layout the loader refuses are tried here, with everything else valid.
+std::string MiniTable(const std::string& erase, const std::string& text, const std::string& keyLine = "\"key\": \"picture.points\",") {
+    return "{\"version\": 1, \"recipes\": [{\"id\": \"mini\", " + keyLine + " \"sprite\": \"mini.png\", \"size\": [128, 128], \"digest\": \"0123456789abcdef0123456789abcdef\", \"erase\": " + erase +
+           ", \"text\": " + text + "}]}";
+}
+
+void TheLoaderRefusesWhatTheNewRulesDoNotAllow() {
+    const std::string table = TableText();
+    struct Fault {
+        const char* name;
+        std::string from;
+        std::string to;
+        std::string expect;
+    };
+    const std::vector<Fault> faults = {
+        {"margin ratio", "\"margin_ratio\": 0.7,", "\"margin_ratio\": 1.5,", "margin_ratio"},
+        {"slope band", "\"slope_band\": 0.3,", "\"slope_band\": -1.0,", "guard"},
+        {"agree ratio", "\"agree_ratio\": 0.7,", "\"agree_ratio\": 0.0,", "agree_ratio"},
+        {"break", "\"break\": \"after_dash\"", "\"break\": \"anywhere\"", "break"},
+        {"anchor", "\"anchor\": \"first\"", "\"anchor\": \"middle\"", "anchor"},
+        {"max right", "\"max_right\": 470.0", "\"max_right\": 4700.0", "max_right"},
+        {"ink level", "\"ink_level\": 0", "\"ink_level\": 300", "ink_level"},
+        {"orphan", "\"orphan\": 0.0,", "\"orphan\": 1.5,", "orphan"},
+        {"save lines", "\"save_lines\": 0.0\n", "\"save_lines\": 0.9\n", "save_lines"},
+        {"clear rows as a plaque", "\"rule\": \"clear_rows\"", "\"rule\": \"plaque\"", "clear"},
+        {"bands key at the top", "\"id\": \"credits_strip\",", "\"id\": \"credits_strip\",\n      \"key\": \"picture.points\",", "belongs to a recipe of one phrase"},
+        {"a face without its pitch in a paragraph", "\"embolden\": 0.03,\n            \"pitch\": 1.4\n", "\"embolden\": 0.03\n", "pitch"},
+        {"a paragraph made a word", "\"layout\": \"paragraph\"", "\"layout\": \"word\"", "pitch"},
+        {"a chroma radius", "\"radius\": 2,", "\"radius\": 20,", "radius"},
+        {"unknown member of a plaque", "\"agree_tol\": 2.0,", "\"agree_tol\": 2.0,\n        \"agree_tol_typo\": 1.0,", "agree_tol_typo"},
+        {"a cleared band touching the next", "\n            188,\n", "\n            101,\n", "touches"},
+    };
+    for (const Fault& fault : faults) {
+        std::string mutated = table;
+        const std::size_t at = mutated.find(fault.from);
+        if (at == std::string::npos) {
+            CHECK_MSG(false, std::string("the text of fault '") + fault.name + "' is in the committed table (its layout changed: edit this case)");
+            continue;
+        }
+        mutated.replace(at, fault.from.size(), fault.to);
+        const std::string error = LoadText(std::string("n-") + fault.name, mutated);
+        CHECK_MSG(!error.empty() && Contains(error, fault.expect), std::string("'") + fault.name + "' is refused, naming " + fault.expect + ": " + error);
+    }
+    // The pairs of a rule and a layout no recipe has been measured for are refused, whatever else is in order: a stack on a plate, a paragraph on a modelled plate, a word on a
+    // plaque, bands on a plate and a plate under bands.
+    const std::string rowLerp = "{\"rule\": \"row_lerp\", \"rect\": [20, 20, 100, 60], \"ref_cols\": [[4, 16], [104, 116]], \"guard\": {\"agree_max\": 3.0, \"collar_max\": 5.0}}";
+    const std::string generated = "{\"rule\": \"generated\"}";
+    const std::string shadow = "\"shadow\": {\"dx\": 0.0, \"dy\": 0.0, \"sigma\": 0.1, \"sigma_min\": 0.0, \"gain\": 1.0, \"cap\": 1.0, \"round_offsets\": false}, \"inner\": {\"k\": 0.0, \"sigma\": 0.0, \"dx\": 0.0, \"dy\": 0.0}";
+    const std::string common = "\"slot\": \"matura\", \"px\": 12.0, \"anchor\": [64.0, 64.0], \"min_scale\": 0.5, \"step\": 0.97, \"ink_threshold\": 0.04, \"max_width\": 100, ";
+    const std::string word = "{\"layout\": \"word\", " + common + "\"faces\": {}, \"max_height\": 30, " + shadow + "}";
+    const std::string stack = "{\"layout\": \"stack\", " + common + "\"faces\": {}, " + shadow + ", \"first_baseline\": 60.0, \"pitch\": 20.0, \"gap\": 0.05, \"max_lines\": 2, \"safe\": [10, 10, 118, 118]}";
+    const std::string paragraph = "{\"layout\": \"paragraph\", " + common + "\"faces\": {\"kurale\": {\"ratio\": 1.0, \"embolden\": 0.03, \"pitch\": 1.4}}, " + shadow +
+                                  ", \"gap\": 0.05, \"max_lines\": 2, \"safe\": [10, 10, 118, 118], \"orphan\": 0.0, \"save_lines\": 0.0}";
+    CHECK_MSG(LoadText("mini-word-on-row-lerp", MiniTable(rowLerp, word)).empty(), "the mini table's word on a row_lerp plate loads (the control)");
+    CHECK_MSG(LoadText("mini-stack-on-generated", MiniTable(generated, stack)).empty(), "the mini table's stack on a generated picture loads (the control)");
+    const std::string stackOnPlate = LoadText("mini-stack-on-plate", MiniTable(rowLerp, stack));
+    CHECK_MSG(Contains(stackOnPlate, "stack of lines"), "a stack on a plate is refused: " + stackOnPlate);
+    const std::string paragraphOnPlate = LoadText("mini-paragraph-on-plate", MiniTable(rowLerp, paragraph));
+    CHECK_MSG(Contains(paragraphOnPlate, "no recipe has been measured for"), "a paragraph on a row_lerp plate is refused: " + paragraphOnPlate);
+    const std::string paragraphOnGenerated = LoadText("mini-paragraph-on-generated", MiniTable(generated, paragraph));
+    CHECK_MSG(Contains(paragraphOnGenerated, "no recipe has been measured for"), "a paragraph on a generated picture is refused: " + paragraphOnGenerated);
+    const std::string clearWithWord = LoadText("mini-word-on-clear", MiniTable("{\"rule\": \"clear_rows\", \"clear\": [[20, 40]]}", word));
+    CHECK_MSG(!clearWithWord.empty(), "cleared rows under a word are refused: " + clearWithWord);
+    const std::string bandsText = "{\"layout\": \"bands\", \"slot\": \"matura\", \"faces\": {\"kurale\": {\"ratio\": 1.0, \"embolden\": 0.03, \"reference\": \"U+0078\"}}, \"min_scale\": 0.7, \"step\": 0.97, "
+                                  "\"ink_threshold\": 0.02, \"gap\": 0.05, \"left\": 10.0, \"max_right\": 100.0, \"ink_level\": 0, \"bands\": [{\"key\": \"credits.thanks\", \"px\": 8.0, "
+                                  "\"first_baseline\": 36.0, \"anchor\": \"first\", \"pitch\": 16.0, \"max_lines\": 1, \"ink_rows\": [18, 44], \"break\": \"space\"}]}";
+    const std::string clear = "{\"rule\": \"clear_rows\", \"clear\": [[20, 40]]}";
+    CHECK_MSG(LoadText("mini-bands-on-clear", MiniTable(clear, bandsText, "")).empty(), "bands over cleared rows load (the control)");
+    const std::string bandsOnPlate = LoadText("mini-bands-on-plate", MiniTable(rowLerp, bandsText, ""));
+    CHECK_MSG(Contains(bandsOnPlate, "no recipe has been measured for"), "bands on a plate are refused: " + bandsOnPlate);
+    std::string windowShort = bandsText;
+    windowShort.replace(windowShort.find("[18, 44]"), 8, "[22, 44]");
+    const std::string notHeld = LoadText("mini-window", MiniTable(clear, windowShort, ""));
+    CHECK_MSG(Contains(notHeld, "does not hold the cleared rows"), "a band's window that does not hold its cleared rows is refused: " + notHeld);
+    std::string twoClears = clear;
+    twoClears.replace(twoClears.find("[[20, 40]]"), 10, "[[20, 40], [60, 70]]");
+    const std::string count = LoadText("mini-count", MiniTable(twoClears, bandsText, ""));
+    CHECK_MSG(Contains(count, "cleared bands"), "a different number of cleared bands and bands is refused: " + count);
+}
+
+// A picture of several phrases: every phrase is in the file's name, and so are the bytes of the face the digits are drawn from, though no script routes to it.
+void EnsureNamesEveryPhraseAndTheDigitFace() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    StripFixture strip = MakeStrip();
+    strip.recipe.text.digitFace = "noto_sans_bold";
+    strip.recipe.text.faces.push_back(PB::FaceTuning{"noto_sans_bold", 1.0, 0x78, 0.065});
+    const fs::path root = ScratchDir("ensure-bands");
+    const fs::path sources = root / "sources";
+    fs::create_directories(sources);
+    std::string bytes;
+    CHECK(PB::EncodePng(strip.picture, bytes));
+    WriteText(sources / strip.recipe.sprite, bytes);
+    PB::Recipes recipes;
+    recipes.items = {strip.recipe};
+    recipes.fileHash = "synthetic-strip";
+    recipes.loaded = true;
+    const fs::path out = root / "pictures";
+    const auto wanted = [&](const std::vector<std::string>& phrases, const std::string& fonts) {
+        PB::Wanted w;
+        w.recipe = &recipes.items[0];
+        w.recipes = &recipes;
+        w.plan = &TheWorld().languages.Fonts();
+        w.fontsDir = fonts;
+        w.lang = Lang::De;
+        w.languageCode = "de";
+        w.phrases = phrases;
+        w.sourcePath = (sources / strip.recipe.sprite).string();
+        w.directory = out.string();
+        return w;
+    };
+    const std::string fonts = kData + "/" + TheWorld().languages.Fonts().folder;
+    const PB::Written first = PB::Ensure(wanted({"alpha - 33", "delta"}, fonts));
+    CHECK_MSG(first.ok && !first.cached, "a picture of two phrases is baked: " + first.reason);
+    if (!first.ok) return;
+    PB::Image baked;
+    std::string why;
+    CHECK_MSG(PB::ReadImage(first.path, baked, why) && baked.width == 160 && baked.height == 240, "the file is the strip's size");
+    CHECK_MSG(PB::Ensure(wanted({"alpha - 33", "delta"}, fonts)).cached, "asked again, the file is found");
+    CHECK_MSG(PB::Ensure(wanted({"alpha - 34", "delta"}, fonts)).path != first.path, "another first phrase is another file");
+    CHECK_MSG(PB::Ensure(wanted({"alpha - 33", "deltas"}, fonts)).path != first.path, "another second phrase is another file");
+    CHECK_MSG(PB::Ensure(wanted({"alpha - 33"}, fonts)).reason.find("phrases") != std::string::npos, "one phrase for two bands fails closed");
+    // The digit face's bytes: a copy of the fonts folder with one byte appended to NotoSans-Bold, which no script of the matura slot routes to, is another file here, and is the same
+    // file for a recipe that draws no digit from it.
+    const FontBake::Plan& plan = TheWorld().languages.Fonts();
+    const FontBake::FaceSpec* digits = plan.Face("noto_sans_bold");
+    CHECK_MSG(digits != nullptr, "the plan has the digit face");
+    if (digits == nullptr) return;
+    const fs::path changed = root / "fonts-changed";
+    std::error_code copied;
+    fs::copy(kData + "/" + plan.folder, changed, fs::copy_options::recursive, copied);
+    CHECK_MSG(!copied, "the fonts folder is copied: " + copied.message());
+    {
+        std::ofstream append(changed / digits->file, std::ios::binary | std::ios::app);
+        append.put('\0');
+    }
+    const PB::Written other = PB::Ensure(wanted({"alpha - 33", "delta"}, changed.string()));
+    CHECK_MSG(other.ok && other.path != first.path, "a digit face that changed by one byte is another file: " + other.reason);
+    recipes.items[0].text.digitFace.clear();
+    recipes.items[0].text.faces.pop_back();
+    const PB::Written plain = PB::Ensure(wanted({"alpha - 33", "delta"}, fonts));
+    const PB::Written plainChanged = PB::Ensure(wanted({"alpha - 33", "delta"}, changed.string()));
+    CHECK_MSG(plain.ok && plainChanged.ok && plain.path == plainChanged.path && plain.path != first.path, "a recipe with no digit face does not depend on that face's bytes");
 }
 
 void runFreeCases() {
-    TheShippedTableLoadsAsTheSevenPictures();
+    TheShippedTableLoadsAsTheElevenPictures();
+    TheLoaderRefusesWhatTheNewRulesDoNotAllow();
+    APlaqueIsErasedByItsOwnModel();
+    ThePlaqueGuardsFailClosedEachByItself();
+    APanelIsErasedFromItsLeftMarginAlone();
+    AStripClearsItsBandsAndDrawsThemAgainLeftAligned();
+    AParagraphIsCentredInsideItsBoxWithTheFewestLines();
+    AnOrphanLineAndTheLinesSavedAreWeighedByTheRecipe();
+    TheBreakMarksOfTheNewPhrasesAreHandled();
+    EveryShippedPhraseOfTheNewPicturesIsAboveItsFloor();
+    EnsureNamesEveryPhraseAndTheDigitFace();
     TheWordedSpritesAreNamedOnlyWhereALanguageSwitchRemakesThem();
     TheLoaderRefusesWhatItShouldNot();
     ErasingRestoresAKnownPlate();
@@ -1545,6 +2523,14 @@ void TheErasedAchievementsPlateAgreesWithItsSisterPicture() {
     CHECK_MSG(mean <= 2.0 && worst <= 4, "the erase is the sister's plate to a mean of 2 and at worst 4 levels: " + std::to_string(mean) + ", " + std::to_string(worst));
 }
 
+// The request for a recipe in a language, whichever kind of recipe: one phrase, or one phrase a band. `holder` keeps the phrase alive.
+PB::Request RequestFromTable(const PB::Recipe& recipe, Lang lang, const Strings::Table& table, std::string& holder) {
+    holder = recipe.key.empty() ? std::string() : table.Get(recipe.key);
+    PB::Request request = RequestFor(recipe, lang, holder);
+    for (const PB::Band& band : recipe.text.bands) request.phrases.push_back(table.Get(band.key));
+    return request;
+}
+
 void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
     const World& world = TheWorld();
     if (!world.ok) return;
@@ -1572,8 +2558,9 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
             Strings::Table table;
             std::string error;
             CHECK_MSG(table.Load(kData, lang, error), error);
-            const std::string phrase = table.Get(recipe.key);
-            const PB::Outcome a = PB::Render(RequestFor(recipe, lang, phrase), source, twinPtr);
+            std::string holder;
+            const PB::Request request = RequestFromTable(recipe, lang, table, holder);
+            const PB::Outcome a = PB::Render(request, source, twinPtr);
             const std::string name = recipe.id + " in " + Code(lang);
             CHECK_MSG(a.ok, name + " is baked: " + a.reason);
             if (!a.ok) continue;
@@ -1586,8 +2573,8 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
             std::string png;
             CHECK_MSG(PB::EncodePng(a.image, png), name + " encodes");
             if (recipe.erase.rule != PB::Rule::Generated) {
-                // Every pixel outside the rectangle is the source's.
-                CHECK_MSG(PixelsChangedOutside(a.image, source, recipe.erase.rect) == 0, name + ": nothing outside the rectangle changed");
+                // Every pixel outside what the bake says it touched (the erase's rectangle, and where the shadow may reach beyond it) is the source's.
+                CHECK_MSG(PixelsChangedOutside(a.image, source, a.touched) == 0, name + ": nothing outside the rectangle changed");
             } else {
                 // No ink of the original is in a generated picture: the outermost two pixels hold no more than the faintest shadow, and of the soft pixels fewer than two in a
                 // hundred equal the source's (white ink equals white ink wherever it is, so the opaque ones are left out).
@@ -1607,7 +2594,8 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
                 CHECK_MSG(ring <= 4, name + ": the shadow is not cut by the picture's edge: " + std::to_string(ring));
                 CHECK_MSG(soft > 0 && same * 50 < soft, name + ": no pixel of the original is reused: " + std::to_string(same) + " of " + std::to_string(soft));
             }
-            // THE SHADOW is there: pixels outside the ink's box that the bake made (a generated picture) or changed (a plate), by more than the ink's own antialiasing.
+            // THE SHADOW is there: pixels outside the ink's box that the bake made (a generated picture) or changed (a plate), by more than the ink's own antialiasing. (The strip's
+            // ink has none.)
             int shaded = 0;
             int lowest = -1;
             for (int y = 0; y < a.image.height; ++y) {
@@ -1620,20 +2608,20 @@ void AllTenLanguagesBakeEveryPictureAboveItsFloor() {
                     } else if (!erased.Empty()) {
                         int d = 0;
                         for (int c = 0; c < 4; ++c) d = std::max(d, std::abs(static_cast<int>(px[c]) - static_cast<int>(erased.At(x, y)[c])));
-                        shaded += d >= 8 ? 1 : 0;
+                        shaded += d >= (recipe.text.layout == PB::Layout::Paragraph ? 3 : 8) ? 1 : 0; // a halo darkens a dark plate by a few levels
                     }
                 }
             }
-            CHECK_MSG(shaded >= 40, name + ": a drop shadow is drawn round the ink: " + std::to_string(shaded) + " pixels");
+            if (recipe.text.layout != PB::Layout::Bands) CHECK_MSG(shaded >= 40, name + ": a drop shadow is drawn round the ink: " + std::to_string(shaded) + " pixels");
             lowestRow = std::max(lowestRow, static_cast<double>(lowest));
             // TWO LINES NEVER TOUCH: the ink of the second is at least the recipe's gap (less the half pixel a whole step of the pitch and a rounded column can take) below the first's.
-            if (a.lines == 2) {
+            if (a.lines == 2 && recipe.text.layout != PB::Layout::Bands) {
                 const double wanted = recipe.text.gap * recipe.text.px * a.scale;
                 CHECK_MSG(a.lineGap > 0.0 && a.lineGap < PB::kNoLineGap && a.lineGap >= wanted - 0.5, name + ": the two lines' ink is at least the gap apart: " + std::to_string(a.lineGap) + " px, the gap " + std::to_string(wanted));
                 closest = std::min(closest, a.lineGap - wanted);
             }
             // Twice is the same bytes.
-            const PB::Outcome b = PB::Render(RequestFor(recipe, lang, phrase), source, twinPtr);
+            const PB::Outcome b = PB::Render(request, source, twinPtr);
             std::string again;
             CHECK_MSG(b.ok && PB::EncodePng(b.image, again) && again == png, name + ": two bakes are the same bytes");
             if (!dump.empty()) {
@@ -1660,10 +2648,8 @@ void TheBakeIsCheap() {
     const World& world = TheWorld();
     if (!world.ok) return;
     // Milliseconds per picture, the least of three runs (other processes share the machine), printed and bounded generously: this is a pin against a hundredfold, not a benchmark.
-    Strings::Table german;
-    std::string error;
-    CHECK(german.Load(kData, Lang::De, error));
     Strings::Table russian;
+    std::string error;
     CHECK(russian.Load(kData, Lang::Ru, error));
     for (const PB::Recipe& recipe : world.recipes.items) {
         const PB::Image source = ReadOriginal(recipe.sprite);
@@ -1673,14 +2659,16 @@ void TheBakeIsCheap() {
             twin = ReadOriginal(recipe.erase.twinSprite);
             twinPtr = &twin;
         }
+        std::string holder;
+        const PB::Request request = RequestFromTable(recipe, Lang::Ru, russian, holder);
         double best = 1e9;
         for (int run = 0; run < 3; ++run) {
             const auto began = std::chrono::steady_clock::now();
-            const PB::Outcome outcome = PB::Render(RequestFor(recipe, Lang::Ru, russian.Get(recipe.key)), source, twinPtr);
+            const PB::Outcome outcome = PB::Render(request, source, twinPtr);
             std::string png;
             const bool encoded = outcome.ok && PB::EncodePng(outcome.image, png);
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
-            CHECK_MSG(encoded, recipe.id + " bakes in Russian");
+            CHECK_MSG(encoded, recipe.id + " bakes in Russian: " + outcome.reason);
             best = std::min(best, ms);
         }
         std::printf("  %-16s bake and encode: %.1f ms (least of three, Russian)\n", recipe.id.c_str(), best);
@@ -1688,10 +2676,286 @@ void TheBakeIsCheap() {
     }
 }
 
+// ---- the four pictures of step 248, on the real sprites -----------------------------------------------------------------------------------------------
+
+int OpaquePixels(const PB::Image& image, const PB::Rect& where) {
+    int count = 0;
+    for (int y = where.y0; y < where.y1; ++y) {
+        for (int x = where.x0; x < where.x1; ++x) count += image.At(x, y)[3] != 0 ? 1 : 0;
+    }
+    return count;
+}
+
+bool SameRows(const PB::Image& a, const PB::Image& b, int y0, int y1) {
+    for (int y = y0; y < y1; ++y) {
+        if (!std::equal(a.At(0, y), a.At(0, y) + a.width * 4, b.At(0, y))) return false;
+    }
+    return true;
+}
+
+void ThePlaquesAndTheCardAreErasedClean() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    // The golden plaque is the current plaque 55 rows lower, with a medal: the current plaque's text-free rows are the golden erase's OFFLINE ground truth (never a donor).
+    const PB::Recipe* golden = world.recipes.Find("golden_score_plaque.png");
+    const PB::Recipe* current = world.recipes.Find("current_score_plaque.png");
+    const PB::Recipe* card = world.recipes.Find("game_finished.png");
+    CHECK(golden != nullptr && current != nullptr && card != nullptr);
+    if (golden == nullptr || current == nullptr || card == nullptr) return;
+    const PB::Image goldenSource = ReadOriginal(golden->sprite);
+    const PB::Image currentSource = ReadOriginal(current->sprite);
+    PB::Image goldenErased;
+    PB::Image currentErased;
+    std::string why;
+    CHECK_MSG(PB::EraseWords(*golden, goldenSource, nullptr, goldenErased, why), "the golden plaque is erased: " + why);
+    CHECK_MSG(PB::EraseWords(*current, currentSource, nullptr, currentErased, why), "the current plaque is erased: " + why);
+    if (goldenErased.Empty() || currentErased.Empty()) return;
+    int interiorWorst = 0;
+    double interiorSum = 0.0;
+    int interiorCount = 0;
+    int frameWorst = 0;
+    for (int y = 100; y < 156; ++y) {
+        for (int x = 2; x < 126; ++x) {
+            if (IsKept(goldenSource, x, y, 2, 10)) continue;
+            int d = 0;
+            for (int c = 0; c < 3; ++c) d = std::max(d, std::abs(static_cast<int>(goldenErased.At(x, y)[c]) - static_cast<int>(currentSource.At(x, y - 55)[c])));
+            if (x >= 13 && x < 115) {
+                interiorWorst = std::max(interiorWorst, d);
+                interiorSum += d;
+                ++interiorCount;
+            } else {
+                frameWorst = std::max(frameWorst, d);
+            }
+        }
+    }
+    std::printf("  the golden erase against the current plaque's text-free rows: interior mean %.2f, worst %d; frame columns worst %d\n", interiorSum / std::max(1, interiorCount), interiorWorst, frameWorst);
+    CHECK_MSG(interiorWorst <= 2 && interiorSum / std::max(1, interiorCount) < 0.7, "the golden erase is the plate's own text-free rows to 2 grey levels inside (the prototype's 0.45 mean)");
+    CHECK_MSG(frameWorst == 0, "and exactly on the frame columns: " + std::to_string(frameWorst));
+    // The medal: no chromatic pixel of the golden plaque changed.
+    int chromatic = 0;
+    int changed = 0;
+    for (int y = 0; y < goldenSource.height; ++y) {
+        for (int x = 0; x < goldenSource.width; ++x) {
+            const unsigned char* px = goldenSource.At(x, y);
+            if (px[3] == 0 || std::max({px[0], px[1], px[2]}) - std::min({px[0], px[1], px[2]}) <= 10) continue;
+            ++chromatic;
+            changed += std::equal(px, px + 4, goldenErased.At(x, y)) ? 0 : 1;
+        }
+    }
+    CHECK_MSG(chromatic > 1400 && changed == 0, "the medal is untouched by the erase: " + std::to_string(chromatic) + " chromatic pixels, " + std::to_string(changed) + " changed");
+    // No edge of the old lettering is left: along a row of the erased interior (below the clean rows) the largest second difference is a few levels; the source's was far more. Down a
+    // frame column of the rectangle the colour does not change at all.
+    for (const PB::Recipe* recipe : {current, golden}) {
+        const PB::Image& source = recipe == current ? currentSource : goldenSource;
+        const PB::Image& erased = recipe == current ? currentErased : goldenErased;
+        int worstErased = 0;
+        int worstSource = 0;
+        const int y0 = recipe == current ? 100 : 112; // the golden's rows under the ribbon
+        const int y1 = recipe == current ? 140 : 190;
+        for (int y = y0; y < y1; ++y) {
+            for (int x = 40; x < 105; ++x) {
+                if (IsKept(source, x, y, 2, 10) || IsKept(source, x - 1, y, 2, 10) || IsKept(source, x + 1, y, 2, 10)) continue;
+                for (int c = 0; c < 3; ++c) {
+                    worstErased = std::max(worstErased, std::abs(erased.At(x - 1, y)[c] - 2 * erased.At(x, y)[c] + erased.At(x + 1, y)[c]));
+                    worstSource = std::max(worstSource, std::abs(source.At(x - 1, y)[c] - 2 * source.At(x, y)[c] + source.At(x + 1, y)[c]));
+                }
+            }
+        }
+        std::printf("  %-14s residual of the old lettering: the erased rows' sharpest edge is %d grey levels, the source's was %d\n", recipe->id.c_str(), worstErased, worstSource);
+        CHECK_MSG(worstErased <= 3 && worstSource >= 30, recipe->id + ": no edge of the old lettering is left: " + std::to_string(worstErased) + " (the source's " + std::to_string(worstSource) + ")");
+        int frameSteps = 0;
+        for (int x = 2; x < 13; ++x) {
+            for (int y = y0; y + 1 < y1; ++y) {
+                for (int c = 0; c < 3; ++c) frameSteps += erased.At(x, y)[c] != erased.At(x, y + 1)[c] ? 1 : 0;
+            }
+        }
+        CHECK_MSG(frameSteps == 0, recipe->id + ": a frame column is constant down the erased rows: " + std::to_string(frameSteps) + " steps");
+    }
+    // Each plaque refuses the other's picture (the real sprites, so the real guards).
+    PB::Image out;
+    CHECK_MSG(!PB::EraseWords(*current, goldenSource, nullptr, out, why), "the golden plaque under the current recipe is refused: " + why);
+    CHECK_MSG(!PB::EraseWords(*golden, currentSource, nullptr, out, why), "the current plaque under the golden recipe is refused: " + why);
+    std::printf("  (both refusals: %s)\n", why.c_str());
+    // The card: no edge of the two paragraphs is left in its rectangle, and the rows outside it are the picture's.
+    const PB::Image cardSource = ReadOriginal(card->sprite);
+    PB::Image cardErased;
+    CHECK_MSG(PB::EraseWords(*card, cardSource, nullptr, cardErased, why), "the card is erased: " + why);
+    if (!cardErased.Empty()) {
+        int worstErased = 0;
+        int worstSource = 0;
+        for (int y = 170; y < 345; ++y) {
+            for (int x = 130; x < 300; ++x) {
+                for (int c = 0; c < 3; ++c) {
+                    worstErased = std::max(worstErased, std::abs(cardErased.At(x - 1, y)[c] - 2 * cardErased.At(x, y)[c] + cardErased.At(x + 1, y)[c]));
+                    worstSource = std::max(worstSource, std::abs(cardSource.At(x - 1, y)[c] - 2 * cardSource.At(x, y)[c] + cardSource.At(x + 1, y)[c]));
+                }
+            }
+        }
+        std::printf("  game_finished  residual of the old paragraphs: %d grey levels, the source's was %d\n", worstErased, worstSource);
+        CHECK_MSG(worstErased <= 3 && worstSource >= 30, "no edge of the card's old paragraphs is left: " + std::to_string(worstErased) + " (the source's " + std::to_string(worstSource) + ")");
+        CHECK_EQ(PixelsChangedOutside(cardErased, cardSource, card->erase.rect), 0);
+    }
+}
+
+void TheStripKeepsItsNamesAndLogosAndTheMedalStaysOnTheBakedPlaque() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const PB::Recipe* strip = world.recipes.Find("credit_name.png");
+    CHECK(strip != nullptr);
+    if (strip == nullptr) return;
+    const PB::Image source = ReadOriginal(strip->sprite);
+    PB::Image cleared;
+    std::string why;
+    CHECK_MSG(PB::EraseWords(*strip, source, nullptr, cleared, why), "the strip's bands are cleared: " + why);
+    if (cleared.Empty()) return;
+    int total = 0;
+    int inBands = 0;
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            if (source.At(x, y)[3] == 0) continue;
+            ++total;
+            for (const PB::Span& span : strip->erase.clearRows) inBands += (y >= span.a && y < span.b) ? 1 : 0;
+        }
+    }
+    CHECK_MSG(total == 88150 && inBands == 26364, "the cleared rows hold 26,364 of the strip's 88,150 non-transparent pixels (the prototype's count): " + std::to_string(inBands) + " of " + std::to_string(total));
+    // The company line (rows 328..358) and the Ethanon and Asantee logos (rows 798..892 and 953..1022) are bit-identical in every language's strip; so is every pixel outside the windows.
+    CHECK_MSG(OpaquePixels(source, PB::Rect{0, 328, source.width, 359}) > 500 && OpaquePixels(source, PB::Rect{0, 798, source.width, 893}) > 2000 && OpaquePixels(source, PB::Rect{0, 953, source.width, 1023}) > 2000,
+              "the rows kept (the company line and the two logos) hold opaque pixels in the original");
+    for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
+        const Lang lang = static_cast<Lang>(i);
+        Strings::Table table;
+        std::string error;
+        CHECK_MSG(table.Load(kData, lang, error), error);
+        std::string holder;
+        const PB::Outcome o = PB::Render(RequestFromTable(*strip, lang, table, holder), source, nullptr);
+        CHECK_MSG(o.ok, Code(lang) + ": the strip is baked: " + o.reason);
+        if (!o.ok) continue;
+        const std::string name = "the strip in " + Code(lang);
+        CHECK_MSG(SameRows(o.image, source, 328, 359) && SameRows(o.image, source, 798, 893) && SameRows(o.image, source, 953, 1023), name + ": the company line and both logos are the original's, pixel for pixel");
+        // The four names and 'Daniel and Carol Santee' (with its 'and') sit between the bands: every row outside every window is the source's.
+        int rowsDiffer = 0;
+        for (int y = 0; y < source.height; ++y) {
+            bool window = false;
+            for (const PB::Band& band : strip->text.bands) window = window || (y >= band.inkRows.a && y < band.inkRows.b);
+            if (!window && !SameRows(o.image, source, y, y + 1)) ++rowsDiffer;
+        }
+        CHECK_MSG(rowsDiffer == 0, name + ": every row outside the bands' windows is the original's: " + std::to_string(rowsDiffer) + " differ");
+        // The new ink is black with alpha = coverage, and each band got ink.
+        int notBlack = 0;
+        for (const PB::BandResult& band : o.bands) {
+            CHECK_MSG(band.ink.Valid() && band.ink.x0 >= 63 && band.ink.x0 <= 66 && band.ink.x1 <= 470, name + ": " + band.key + " starts at the original's left edge and ends inside the right one: " + std::to_string(band.ink.x0) + ".." + std::to_string(band.ink.x1));
+        }
+        for (const PB::Span& span : strip->erase.clearRows) {
+            for (int y = span.a; y < span.b; ++y) {
+                for (int x = 0; x < o.image.width; ++x) {
+                    const unsigned char* px = o.image.At(x, y);
+                    notBlack += (px[3] != 0 && (px[0] != 0 || px[1] != 0 || px[2] != 0)) ? 1 : 0;
+                }
+            }
+        }
+        CHECK_MSG(notBlack == 0, name + ": the new ink is black: " + std::to_string(notBlack) + " pixels are not");
+    }
+}
+
+// The medal is drawn OVER the current plaque, 8 hd rows below its top (the medal's centre is 28 units above the plaque's, and the sprites are 64 units a side at density 2): its
+// opaque pixels (alpha 128 and over: the medal's body and its ribbon, which end at medal row 105, plaque row 113) must hide none of the translated ink, in every language and for all
+// three medals. The medal's soft shadow (alpha 8 to 127, to medal row 118) does fall on the first rows of the ink and dims it a little, as it dims the original's lettering: counted
+// and printed, not refused.
+void TheMedalIsDrawnOverTheTranslatedPlaqueAndHidesNoInk() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const PB::Recipe* current = world.recipes.Find("current_score_plaque.png");
+    CHECK(current != nullptr);
+    if (current == nullptr) return;
+    const PB::Image source = ReadOriginal(current->sprite);
+    PB::Image erased;
+    std::string why;
+    CHECK_MSG(PB::EraseWords(*current, source, nullptr, erased, why), why);
+    int checkedInk = 0;
+    int softest = 0;
+    for (const char* medalName : {"medal_bronze_l.png", "medal_silver_l.png", "medal_gold_l.png"}) {
+        const PB::Image medal = ReadOriginal(medalName);
+        CHECK_MSG(medal.width == 128 && medal.height == 128, std::string(medalName) + " is 64 x 64 units at density 2");
+        for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
+            const Lang lang = static_cast<Lang>(i);
+            Strings::Table table;
+            std::string error;
+            CHECK_MSG(table.Load(kData, lang, error), error);
+            std::string holder;
+            const PB::Outcome o = PB::Render(RequestFromTable(*current, lang, table, holder), source, nullptr);
+            CHECK_MSG(o.ok, Code(lang) + ": the current plaque is baked: " + o.reason);
+            if (!o.ok) continue;
+            int hidden = 0;
+            int dimmed = 0;
+            int ink = 0;
+            for (int y = 0; y < medal.height; ++y) {
+                for (int x = 0; x < medal.width; ++x) {
+                    const int py = y + 8;
+                    if (py >= o.image.height || medal.At(x, y)[3] < 8) continue;
+                    const bool opaque = medal.At(x, y)[3] >= 128;
+                    // A pixel of white ink: much brighter than the erased plate under it.
+                    const unsigned char* baked = o.image.At(x, py);
+                    const unsigned char* plate = erased.At(x, py);
+                    if (std::max({baked[0], baked[1], baked[2]}) - std::max({plate[0], plate[1], plate[2]}) >= 40) (opaque ? hidden : dimmed) += 1;
+                }
+            }
+            for (int y = o.ink.y0; y < o.ink.y1; ++y) {
+                for (int x = o.ink.x0; x < o.ink.x1; ++x) ink += o.image.At(x, y)[0] > 230 ? 1 : 0;
+            }
+            checkedInk += ink;
+            softest = std::max(softest, dimmed);
+            CHECK_MSG(hidden == 0 && ink > 100, std::string(medalName) + " over the plaque in " + Code(lang) + " hides none of the translated ink: " + std::to_string(hidden) + " ink pixels under it of " + std::to_string(ink));
+        }
+    }
+    std::printf("  the medals' soft shadows fall on at most %d ink pixels of the translated plaque (they dim them, hide none)\n", softest);
+    CHECK_MSG(checkedInk > 3000, "the test looked at ink");
+}
+
+// The golden plaque's medal is part of its sprite and the translated ink and halo are drawn over the plaque: the medal's own (chromatic) pixels must come out bit for bit the sprite's
+// in every language (the halo reaches about five rows above the ink, and the ribbon's tips end four rows above the ink box).
+void TheGoldenMedalSurvivesTheTranslatedWords() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const PB::Recipe* golden = world.recipes.Find("golden_score_plaque.png");
+    CHECK(golden != nullptr);
+    if (golden == nullptr) return;
+    const PB::Image source = ReadOriginal(golden->sprite);
+    int overall = 0;
+    for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
+        const Lang lang = static_cast<Lang>(i);
+        Strings::Table table;
+        std::string error;
+        CHECK_MSG(table.Load(kData, lang, error), error);
+        std::string holder;
+        const PB::Outcome o = PB::Render(RequestFromTable(*golden, lang, table, holder), source, nullptr);
+        CHECK_MSG(o.ok, Code(lang) + ": the golden plaque is baked: " + o.reason);
+        if (!o.ok) continue;
+        int worst = 0;
+        int changed = 0;
+        for (int y = 0; y < source.height; ++y) {
+            for (int x = 0; x < source.width; ++x) {
+                const unsigned char* px = source.At(x, y);
+                if (px[3] == 0 || std::max({px[0], px[1], px[2]}) - std::min({px[0], px[1], px[2]}) <= 10) continue;
+                int d = 0;
+                for (int c = 0; c < 3; ++c) d = std::max(d, std::abs(static_cast<int>(o.image.At(x, y)[c]) - static_cast<int>(px[c])));
+                worst = std::max(worst, d);
+                changed += d > 0 ? 1 : 0;
+            }
+        }
+        overall = std::max(overall, worst);
+        CHECK_MSG(worst == 0, Code(lang) + ": the golden medal's own pixels are the sprite's, bit for bit, under the halo of the words (the ink box starts four rows under the ribbon's tips): " + std::to_string(worst) + " (" + std::to_string(changed) + " pixels differ)");
+    }
+    std::printf("  the golden medal's pixels are the sprite's in all ten languages (the largest change is %d grey levels)\n", overall);
+}
+
 void runOriginalCases() {
     EveryRecipesGuardsHoldOnTheRealSprite();
     TheErasedAchievementsPlateAgreesWithItsSisterPicture();
     AllTenLanguagesBakeEveryPictureAboveItsFloor();
+    ThePlaquesAndTheCardAreErasedClean();
+    TheStripKeepsItsNamesAndLogosAndTheMedalStaysOnTheBakedPlaque();
+    TheMedalIsDrawnOverTheTranslatedPlaqueAndHidesNoInk();
+    TheGoldenMedalSurvivesTheTranslatedWords();
     TheBakeIsCheap();
 }
 

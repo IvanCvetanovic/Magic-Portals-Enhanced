@@ -278,6 +278,11 @@ struct Reader {
         out = object[key].AsBool();
         return true;
     }
+    // A flag that may be left out (then `out` is as it was); present, it must be true or false.
+    bool FlagOpt(const Json::Value& object, const std::string& where, const char* key, bool& out) {
+        if (!object.Has(key)) return true;
+        return Flag(object, where, key, out);
+    }
     // [a, b] as two numbers.
     bool Pair(const Json::Value& object, const std::string& where, const char* key, double& a, double& b) {
         const std::string name = where + "." + key;
@@ -337,6 +342,9 @@ bool ParseRule(const std::string& name, Rule& out) {
     else if (name == "separable") out = Rule::Separable;
     else if (name == "twin") out = Rule::Twin;
     else if (name == "generated") out = Rule::Generated;
+    else if (name == "plaque") out = Rule::Plaque;
+    else if (name == "panel") out = Rule::Panel;
+    else if (name == "clear_rows") out = Rule::ClearRows;
     else return false;
     return true;
 }
@@ -344,6 +352,15 @@ bool ParseRule(const std::string& name, Rule& out) {
 bool ParseLayout(const std::string& name, Layout& out) {
     if (name == "word") out = Layout::Word;
     else if (name == "stack") out = Layout::Stack;
+    else if (name == "paragraph") out = Layout::Paragraph;
+    else if (name == "bands") out = Layout::Bands;
+    else return false;
+    return true;
+}
+
+bool ParseBreak(const std::string& name, BreakAt& out) {
+    if (name == "space") out = BreakAt::Space;
+    else if (name == "after_dash") out = BreakAt::AfterDash;
     else return false;
     return true;
 }
@@ -352,12 +369,194 @@ bool InsidePicture(const Rect& r, int width, int height) {
     return r.x0 >= 0 && r.y0 >= 0 && r.x1 <= width && r.y1 <= height;
 }
 
+// [a, b) as a pair of whole numbers with 0 <= a < b <= limit.
+bool Range(Reader& in, const Json::Value& block, const std::string& where, const char* key, int limit, Span& out) {
+    Span span;
+    if (!in.WholePair(block, where, key, span.a, span.b)) return false;
+    if (span.a < 0 || span.b <= span.a || span.b > limit) {
+        return in.Fail(where + "." + key, "is empty, upside down or outside the picture: 0 <= a < b <= " + std::to_string(limit) + " is needed");
+    }
+    out = span;
+    return true;
+}
+
+bool SpanInside(const Span& inner, const Span& outer) {
+    return inner.a >= outer.a && inner.b <= outer.b;
+}
+
+// A list of [x0, y0, x1, y1] rectangles, whole, the right way round and inside the picture.
+bool RectList(Reader& in, const Json::Value& block, const std::string& where, const char* key, int width, int height, std::vector<Rect>& out) {
+    const std::string name = where + "." + key;
+    if (!block.Has(key) || !block[key].IsArray() || block[key].AsArray().empty()) return in.Fail(name, "is not a list of [x0, y0, x1, y1] rectangles");
+    std::vector<Rect> read;
+    for (std::size_t i = 0; i < block[key].AsArray().size(); ++i) {
+        const Json::Value& item = block[key].AsArray()[i];
+        const std::string at = name + "[" + std::to_string(i) + "]";
+        if (!item.IsArray() || item.AsArray().size() != 4) return in.Fail(at, "is not four whole numbers [x0, y0, x1, y1]");
+        Rect r;
+        if (!in.Whole(item.AsArray()[0], at + "[0]", r.x0) || !in.Whole(item.AsArray()[1], at + "[1]", r.y0) || !in.Whole(item.AsArray()[2], at + "[2]", r.x1) ||
+            !in.Whole(item.AsArray()[3], at + "[3]", r.y1)) {
+            return false;
+        }
+        if (!r.Valid()) return in.Fail(at, "is empty or upside down: x0 < x1 and y0 < y1 are needed");
+        if (!InsidePicture(r, width, height)) return in.Fail(at, "is not inside the picture");
+        read.push_back(r);
+    }
+    out = std::move(read);
+    return true;
+}
+
+bool ReadPlaque(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
+    Erase& e = recipe.erase;
+    if (!in.Only(block, where, {"rule", "interior_cols", "frame_cols", "center_cols", "h_rows", "v_top_rows", "v_margin_rows", "margin_cols", "agree_tol", "rects", "mirror", "flat_cols",
+                                "skip_cols", "chroma", "guard"})) {
+        return false;
+    }
+    const int w = recipe.width;
+    const int h = recipe.height;
+    if (!Range(in, block, where, "interior_cols", w, e.interiorCols) || !in.Spans(block, where, "frame_cols", e.frameCols) || !Range(in, block, where, "center_cols", w, e.centerCols) ||
+        !in.Spans(block, where, "h_rows", e.refRows) || !Range(in, block, where, "v_top_rows", h, e.vTopRows) || !Range(in, block, where, "v_margin_rows", h, e.vMarginRows) ||
+        !in.Spans(block, where, "margin_cols", e.refCols) || !in.Number(block, where, "agree_tol", e.agreeTol) || !RectList(in, block, where, "rects", w, h, e.rects)) {
+        return false;
+    }
+    if (e.agreeTol <= 0.0) return in.Fail(where + ".agree_tol", "is above zero");
+    for (const Span& span : e.frameCols) {
+        if (span.b > w) return in.Fail(where + ".frame_cols", "is not inside the picture");
+        if (!(span.b <= e.interiorCols.a || span.a >= e.interiorCols.b)) return in.Fail(where + ".frame_cols", "overlaps the interior columns");
+    }
+    if (!SpanInside(e.centerCols, e.interiorCols)) return in.Fail(where + ".center_cols", "is not inside the interior columns");
+    for (const Span& span : e.refRows) {
+        if (span.b > h) return in.Fail(where + ".h_rows", "is not inside the picture");
+    }
+    if (e.vTopRows.b - e.vTopRows.a < 4) return in.Fail(where + ".v_top_rows", "holds at least four rows (the hold-out check needs them)");
+    if (e.vMarginRows.a < e.vTopRows.b) return in.Fail(where + ".v_margin_rows", "starts below v_top_rows: the knots of V must ascend");
+    if (e.refCols.size() != 2) return in.Fail(where + ".margin_cols", "is the left margin and the right margin: two pairs");
+    for (const Span& span : e.refCols) {
+        if (!SpanInside(span, e.interiorCols)) return in.Fail(where + ".margin_cols", "is not inside the interior columns");
+    }
+    if (e.refCols[0].b > e.refCols[1].a) return in.Fail(where + ".margin_cols", "the left margin is not left of the right one");
+    // Every column of every rectangle is a frame column or an interior one: the model has a value for it.
+    Rect bounds = e.rects[0];
+    for (const Rect& r : e.rects) {
+        bounds.x0 = std::min(bounds.x0, r.x0);
+        bounds.y0 = std::min(bounds.y0, r.y0);
+        bounds.x1 = std::max(bounds.x1, r.x1);
+        bounds.y1 = std::max(bounds.y1, r.y1);
+        for (int x = r.x0; x < r.x1; ++x) {
+            bool known = x >= e.interiorCols.a && x < e.interiorCols.b;
+            for (const Span& span : e.frameCols) known = known || (x >= span.a && x < span.b);
+            if (!known) return in.Fail(where + ".rects", "holds column " + std::to_string(x) + ", which is neither a frame column nor an interior one");
+        }
+    }
+    e.rect = bounds;
+    if (block.Has("mirror")) {
+        const Json::Value& mirror = block["mirror"];
+        const std::string at = where + ".mirror";
+        if (!in.Only(mirror, at, {"cols", "axis"}) || !Range(in, mirror, at, "cols", w, e.mirrorCols) || !in.WholeMember(mirror, at, "axis", e.mirrorAxis)) return false;
+        if (!SpanInside(e.mirrorCols, e.interiorCols)) return in.Fail(at + ".cols", "is not inside the interior columns");
+        for (int x = e.mirrorCols.a; x < e.mirrorCols.b; ++x) {
+            const int from = e.mirrorAxis - x;
+            if (from < e.interiorCols.a || from >= e.interiorCols.b || (from >= e.mirrorCols.a && from < e.mirrorCols.b)) {
+                return in.Fail(at, "column " + std::to_string(x) + " has no clean mirror column inside the interior");
+            }
+        }
+        e.hasMirror = true;
+    }
+    if (block.Has("flat_cols")) {
+        if (!Range(in, block, where, "flat_cols", w, e.flatCols)) return false;
+        if (!SpanInside(e.flatCols, e.interiorCols)) return in.Fail(where + ".flat_cols", "is not inside the interior columns");
+        e.hasFlat = true;
+    }
+    if (block.Has("skip_cols")) {
+        if (!Range(in, block, where, "skip_cols", w, e.skipCols)) return false;
+        e.hasSkip = true;
+    }
+    if (block.Has("chroma")) {
+        const Json::Value& chroma = block["chroma"];
+        const std::string at = where + ".chroma";
+        if (!in.Only(chroma, at, {"threshold", "radius", "min", "max"}) || !in.WholeMember(chroma, at, "threshold", e.chroma.threshold) ||
+            !in.WholeMember(chroma, at, "radius", e.chroma.radius) || !in.WholeMember(chroma, at, "min", e.chroma.keepMin) || !in.WholeMember(chroma, at, "max", e.chroma.keepMax)) {
+            return false;
+        }
+        if (e.chroma.threshold < 1 || e.chroma.threshold > 254) return in.Fail(at + ".threshold", "is from 1 to 254");
+        if (e.chroma.radius < 0 || e.chroma.radius > 8) return in.Fail(at + ".radius", "is from 0 to 8");
+        if (e.chroma.keepMin < 0 || e.chroma.keepMax < e.chroma.keepMin) return in.Fail(at, "has 0 <= min <= max");
+        e.chroma.enabled = true;
+    }
+    if (!block.Has("guard") || !block["guard"].IsObject()) return in.Fail(where + ".guard", "is missing");
+    const Json::Value& guard = block["guard"];
+    const std::string gwhere = where + ".guard";
+    PlaqueGuard& g = e.plaque;
+    if (!in.Only(guard, gwhere, {"sep_mean", "sep_max", "holdout", "margin_window", "margin_ratio", "ring_max", "slope_band"}) || !in.Number(guard, gwhere, "sep_mean", g.sepMean) ||
+        !in.Number(guard, gwhere, "sep_max", g.sepMax) || !in.Number(guard, gwhere, "holdout", g.holdout) || !Range(in, guard, gwhere, "margin_window", h, g.marginWindow) ||
+        !in.Number(guard, gwhere, "margin_ratio", g.marginRatio) || !in.Number(guard, gwhere, "ring_max", g.ringMax)) {
+        return false;
+    }
+    if (guard.Has("slope_band") && !in.Number(guard, gwhere, "slope_band", g.slopeBand)) return false;
+    if (g.sepMean <= 0.0 || g.sepMax <= 0.0 || g.holdout <= 0.0 || g.ringMax <= 0.0 || g.slopeBand < 0.0) return in.Fail(gwhere, "has limits above zero");
+    if (g.marginRatio <= 0.0 || g.marginRatio > 1.0) return in.Fail(gwhere + ".margin_ratio", "is above zero and at most one");
+    if (!SpanInside(g.marginWindow, e.vMarginRows)) return in.Fail(gwhere + ".margin_window", "is not inside v_margin_rows");
+    return true;
+}
+
+bool ReadPanel(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
+    Erase& e = recipe.erase;
+    if (!in.Only(block, where, {"rule", "rect", "interior_cols", "center_cols", "h_rows", "margin_cols", "agree_tol", "guard"})) return false;
+    const int w = recipe.width;
+    const int h = recipe.height;
+    if (!in.RectOf(block, where, "rect", e.rect) || !Range(in, block, where, "interior_cols", w, e.interiorCols) || !Range(in, block, where, "center_cols", w, e.centerCols) ||
+        !in.Spans(block, where, "h_rows", e.refRows) || !in.Spans(block, where, "margin_cols", e.refCols) || !in.Number(block, where, "agree_tol", e.agreeTol)) {
+        return false;
+    }
+    if (!InsidePicture(e.rect, w, h)) return in.Fail(where + ".rect", "is not inside the picture");
+    if (e.rect.x0 < e.interiorCols.a || e.rect.x1 > e.interiorCols.b) return in.Fail(where + ".rect", "is not inside the interior columns");
+    if (e.rect.y0 < 4 || e.rect.y1 + 3 > h) return in.Fail(where + ".rect", "needs three rows of the picture above and below it for the ring check");
+    if (e.agreeTol <= 0.0) return in.Fail(where + ".agree_tol", "is above zero");
+    if (!SpanInside(e.centerCols, e.interiorCols)) return in.Fail(where + ".center_cols", "is not inside the interior columns");
+    for (const Span& span : e.refRows) {
+        if (span.b > h) return in.Fail(where + ".h_rows", "is not inside the picture");
+    }
+    if (e.refCols.size() != 2) return in.Fail(where + ".margin_cols", "is the left margin and the right margin: two pairs");
+    for (const Span& span : e.refCols) {
+        if (!SpanInside(span, e.interiorCols)) return in.Fail(where + ".margin_cols", "is not inside the interior columns");
+    }
+    if (e.refCols[0].b > e.refCols[1].a) return in.Fail(where + ".margin_cols", "the left margin is not left of the right one");
+    if (!block.Has("guard") || !block["guard"].IsObject()) return in.Fail(where + ".guard", "is missing");
+    const Json::Value& guard = block["guard"];
+    const std::string gwhere = where + ".guard";
+    PanelGuard& g = e.panel;
+    if (!in.Only(guard, gwhere, {"sep_max", "v_margin", "agree_ratio", "ring_max"}) || !in.Number(guard, gwhere, "sep_max", g.sepMax) || !in.Number(guard, gwhere, "v_margin", g.vMargin) ||
+        !in.Number(guard, gwhere, "agree_ratio", g.agreeRatio) || !in.Number(guard, gwhere, "ring_max", g.ringMax)) {
+        return false;
+    }
+    if (g.sepMax <= 0.0 || g.vMargin <= 0.0 || g.ringMax <= 0.0) return in.Fail(gwhere, "has limits above zero");
+    if (g.agreeRatio <= 0.0 || g.agreeRatio > 1.0) return in.Fail(gwhere + ".agree_ratio", "is above zero and at most one");
+    return true;
+}
+
+bool ReadClear(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
+    Erase& e = recipe.erase;
+    if (!in.Only(block, where, {"rule", "clear"}) || !in.Spans(block, where, "clear", e.clearRows)) return false;
+    for (std::size_t i = 0; i < e.clearRows.size(); ++i) {
+        const Span& span = e.clearRows[i];
+        // A band is bounded by a picture row above and below, which the erase asserts are fully transparent.
+        if (span.a < 1 || span.b + 1 > recipe.height) return in.Fail(where + ".clear[" + std::to_string(i) + "]", "has no picture row above and below it to be bounded by");
+        if (i > 0 && span.a <= e.clearRows[i - 1].b) return in.Fail(where + ".clear[" + std::to_string(i) + "]", "touches or overlaps the band before it: a transparent row must lie between two bands");
+    }
+    e.rect = Rect{0, e.clearRows.front().a, recipe.width, e.clearRows.back().b}; // widened by the text's windows when the recipe is complete
+    return true;
+}
+
 bool ReadErase(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
     Erase& erase = recipe.erase;
-    if (!in.Only(block, where, {"rule", "rect", "ref_cols", "ref_rows", "flat_cols", "guard", "twin_sprite", "twin_digest", "shift", "check_rect", "min_inside"})) return false;
     std::string rule;
+    if (!block.IsObject()) return in.Fail(where, "is not an object");
     if (!in.Text(block, where, "rule", rule)) return false;
-    if (!ParseRule(rule, erase.rule)) return in.Fail(where + ".rule", "'" + rule + "' is none of row_lerp, separable, twin and generated");
+    if (!ParseRule(rule, erase.rule)) return in.Fail(where + ".rule", "'" + rule + "' is none of row_lerp, separable, twin, generated, plaque, panel and clear_rows");
+    if (erase.rule == Rule::Plaque) return ReadPlaque(in, block, where, recipe);
+    if (erase.rule == Rule::Panel) return ReadPanel(in, block, where, recipe);
+    if (erase.rule == Rule::ClearRows) return ReadClear(in, block, where, recipe);
+    if (!in.Only(block, where, {"rule", "rect", "ref_cols", "ref_rows", "flat_cols", "guard", "twin_sprite", "twin_digest", "shift", "check_rect", "min_inside"})) return false;
     const Rect picture{0, 0, recipe.width, recipe.height};
     if (erase.rule == Rule::Generated) {
         erase.rect = picture; // nothing of the picture is read, and all of it is written
@@ -440,15 +639,98 @@ bool ReadInner(Reader& in, const Json::Value& block, const std::string& where, I
     return true;
 }
 
-bool ReadText(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
+// The faces: a member per face id, each with its ratio and its embolden, optionally the glyph it is measured by and (a paragraph's) its line pitch.
+bool ReadFaces(Reader& in, const Json::Value& block, const std::string& where, std::vector<FaceTuning>& out) {
+    if (!block.Has("faces") || !block["faces"].IsObject()) return in.Fail(where + ".faces", "is missing");
+    std::vector<FaceTuning> read;
+    for (const auto& [id, value] : block["faces"].AsObject()) {
+        if (!id.empty() && id[0] == '_') continue;
+        const std::string at = where + ".faces." + id;
+        if (!in.Only(value, at, {"ratio", "embolden", "reference", "pitch"})) return false;
+        FaceTuning tuning;
+        tuning.face = id;
+        if (!in.Number(value, at, "ratio", tuning.ratio) || !in.Number(value, at, "embolden", tuning.embolden)) return false;
+        if (tuning.ratio <= 0.0) return in.Fail(at + ".ratio", "is above zero");
+        if (tuning.embolden < 0.0 || tuning.embolden > 1.0) return in.Fail(at + ".embolden", "is from 0 to 1");
+        if (value.Has("reference")) {
+            std::uint32_t point = 0;
+            if (!value["reference"].IsString() || !FontBake::ParseCodePoint(value["reference"].AsString(), point)) return in.Fail(at + ".reference", "is not a code point like U+0078");
+            tuning.reference = point;
+        }
+        if (value.Has("pitch")) {
+            if (!in.Number(value, at, "pitch", tuning.pitch)) return false;
+            if (tuning.pitch <= 0.0) return in.Fail(at + ".pitch", "is above zero");
+        }
+        read.push_back(tuning);
+    }
+    out = std::move(read);
+    return true;
+}
+
+// The ink's grey level and whether a Japanese space is a gap: optional members of every layout.
+bool ReadInkLook(Reader& in, const Json::Value& block, const std::string& where, Text& text) {
+    if (block.Has("ink_level")) {
+        if (!in.WholeMember(block, where, "ink_level", text.inkLevel)) return false;
+        if (text.inkLevel < 0 || text.inkLevel > 255) return in.Fail(where + ".ink_level", "is from 0 to 255");
+    }
+    return in.FlagOpt(block, where, "japanese_spaces", text.japaneseSpaces);
+}
+
+bool ReadBands(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
     Text& text = recipe.text;
-    if (!in.Only(block, where, {"layout", "slot", "px", "faces", "anchor", "min_scale", "step", "ink_threshold", "max_width", "max_height", "shadow", "inner", "first_baseline",
-                                "pitch", "gap", "max_lines", "safe"})) {
+    if (!in.Only(block, where, {"layout", "slot", "faces", "min_scale", "step", "ink_threshold", "gap", "left", "max_right", "digit_face", "ink_level", "japanese_spaces", "bands"})) return false;
+    double left = 0.0;
+    double right = 0.0;
+    if (!in.Text(block, where, "slot", text.slot) || !in.Number(block, where, "min_scale", text.minScale) || !in.Number(block, where, "step", text.step) ||
+        !in.Number(block, where, "ink_threshold", text.inkThreshold) || !in.Number(block, where, "gap", text.gap) || !in.Number(block, where, "left", left) ||
+        !in.Number(block, where, "max_right", right) || !ReadFaces(in, block, where, text.faces) || !in.WholeMember(block, where, "ink_level", text.inkLevel) || !ReadInkLook(in, block, where, text)) {
         return false;
     }
+    if (text.minScale <= 0.0 || text.minScale > 1.0) return in.Fail(where + ".min_scale", "is above zero and at most one");
+    if (text.step <= 0.0 || text.step >= 1.0) return in.Fail(where + ".step", "is above zero and below one");
+    if (text.inkThreshold <= 0.0 || text.inkThreshold >= 1.0) return in.Fail(where + ".ink_threshold", "is above zero and below one");
+    if (text.gap < 0.0) return in.Fail(where + ".gap", "is not below zero");
+    if (left < 0.0 || right <= left || right > recipe.width) return in.Fail(where + ".max_right", "is right of left and inside the picture");
+    text.left = left;
+    text.maxRight = right;
+    if (block.Has("digit_face") && !in.Text(block, where, "digit_face", text.digitFace)) return false;
+    if (!block.Has("bands") || !block["bands"].IsArray() || block["bands"].AsArray().empty()) return in.Fail(where + ".bands", "is not a list of bands");
+    for (std::size_t i = 0; i < block["bands"].AsArray().size(); ++i) {
+        const Json::Value& item = block["bands"].AsArray()[i];
+        const std::string at = where + ".bands[" + std::to_string(i) + "]";
+        if (!in.Only(item, at, {"key", "px", "first_baseline", "anchor", "pitch", "max_lines", "ink_rows", "break", "faces"})) return false;
+        Band band;
+        std::string anchor;
+        std::string breakAt;
+        if (!in.Text(item, at, "key", band.key) || !in.Number(item, at, "px", band.px) || !in.Number(item, at, "first_baseline", band.firstBaseline) || !in.Text(item, at, "anchor", anchor) ||
+            !in.Number(item, at, "pitch", band.pitch) || !in.WholeMember(item, at, "max_lines", band.maxLines) || !Range(in, item, at, "ink_rows", recipe.height, band.inkRows) ||
+            !in.Text(item, at, "break", breakAt)) {
+            return false;
+        }
+        if (anchor != "first" && anchor != "last") return in.Fail(at + ".anchor", "'" + anchor + "' is neither first nor last");
+        band.anchorLast = anchor == "last";
+        if (!ParseBreak(breakAt, band.breakAt)) return in.Fail(at + ".break", "'" + breakAt + "' is neither space nor after_dash");
+        if (band.px <= 0.0 || band.pitch <= 0.0) return in.Fail(at + ".px", "and the pitch are above zero");
+        if (band.maxLines < 1 || band.maxLines > 4) return in.Fail(at + ".max_lines", "is from 1 to 4");
+        if (band.firstBaseline < 0.0 || band.firstBaseline > recipe.height) return in.Fail(at + ".first_baseline", "is not inside the picture");
+        if (!text.bands.empty() && band.inkRows.a < text.bands.back().inkRows.b) return in.Fail(at + ".ink_rows", "overlaps the band before it: the bands' windows ascend and do not meet");
+        if (item.Has("faces") && !ReadFaces(in, item, at, band.faces)) return false;
+        text.bands.push_back(std::move(band));
+    }
+    return true;
+}
+
+bool ReadText(Reader& in, const Json::Value& block, const std::string& where, Recipe& recipe) {
+    Text& text = recipe.text;
     std::string layout;
+    if (!block.IsObject()) return in.Fail(where, "is not an object");
     if (!in.Text(block, where, "layout", layout)) return false;
-    if (!ParseLayout(layout, text.layout)) return in.Fail(where + ".layout", "'" + layout + "' is neither word nor stack");
+    if (!ParseLayout(layout, text.layout)) return in.Fail(where + ".layout", "'" + layout + "' is none of word, stack, paragraph and bands");
+    if (text.layout == Layout::Bands) return ReadBands(in, block, where, recipe);
+    if (!in.Only(block, where, {"layout", "slot", "px", "faces", "anchor", "min_scale", "step", "ink_threshold", "max_width", "max_height", "shadow", "inner", "first_baseline",
+                                "pitch", "gap", "max_lines", "safe", "orphan", "save_lines", "paint", "ink_level", "japanese_spaces"})) {
+        return false;
+    }
     if (!in.Text(block, where, "slot", text.slot) || !in.Number(block, where, "px", text.px) || !in.Pair(block, where, "anchor", text.anchorX, text.anchorY) ||
         !in.Number(block, where, "min_scale", text.minScale) || !in.Number(block, where, "step", text.step) ||
         !in.Number(block, where, "ink_threshold", text.inkThreshold) || !in.Number(block, where, "max_width", text.maxWidth)) {
@@ -461,25 +743,20 @@ bool ReadText(Reader& in, const Json::Value& block, const std::string& where, Re
     if (text.maxWidth <= 0.0) return in.Fail(where + ".max_width", "is above zero");
     if (text.anchorX < 0.0 || text.anchorX > recipe.width || text.anchorY < 0.0 || text.anchorY > recipe.height) return in.Fail(where + ".anchor", "is not inside the picture");
 
-    // The faces: a member per face id, each with its ratio and its embolden, and optionally the glyph it is measured by.
-    if (!block.Has("faces") || !block["faces"].IsObject()) return in.Fail(where + ".faces", "is missing");
-    for (const auto& [id, value] : block["faces"].AsObject()) {
-        if (!id.empty() && id[0] == '_') continue;
-        const std::string at = where + ".faces." + id;
-        if (!in.Only(value, at, {"ratio", "embolden", "reference"})) return false;
-        FaceTuning tuning;
-        tuning.face = id;
-        if (!in.Number(value, at, "ratio", tuning.ratio) || !in.Number(value, at, "embolden", tuning.embolden)) return false;
-        if (tuning.ratio <= 0.0) return in.Fail(at + ".ratio", "is above zero");
-        if (tuning.embolden < 0.0 || tuning.embolden > 1.0) return in.Fail(at + ".embolden", "is from 0 to 1");
-        if (value.Has("reference")) {
-            std::uint32_t point = 0;
-            if (!value["reference"].IsString() || !FontBake::ParseCodePoint(value["reference"].AsString(), point)) return in.Fail(at + ".reference", "is not a code point like U+0078");
-            tuning.reference = point;
-        }
-        text.faces.push_back(tuning);
+    if (!ReadFaces(in, block, where, text.faces)) return false;
+    for (const FaceTuning& tuning : text.faces) {
+        // A line pitch of a face belongs to a paragraph: the other layouts refuse it rather than ignore it.
+        if (tuning.pitch != 0.0 && text.layout != Layout::Paragraph) return in.Fail(where + ".faces." + tuning.face + ".pitch", "belongs to a paragraph and this layout is not one");
+        if (tuning.pitch == 0.0 && text.layout == Layout::Paragraph) return in.Fail(where + ".faces." + tuning.face + ".pitch", "is missing: a paragraph's line pitch is set per face");
     }
-    if (!ReadShadow(in, block, where, text.shadow) || !ReadInner(in, block, where, text.inner)) return false;
+    if (!ReadShadow(in, block, where, text.shadow) || !ReadInner(in, block, where, text.inner) || !ReadInkLook(in, block, where, text)) return false;
+    if (block.Has("paint")) {
+        if (!in.RectOf(block, where, "paint", text.paint)) return false;
+        if (!InsidePicture(text.paint, recipe.width, recipe.height)) return in.Fail(where + ".paint", "is not inside the picture");
+        const Rect& r = recipe.erase.rect;
+        if (text.paint.x0 > r.x0 || text.paint.y0 > r.y0 || text.paint.x1 < r.x1 || text.paint.y1 < r.y1) return in.Fail(where + ".paint", "does not hold the erase's rectangle");
+        text.hasPaint = true;
+    }
 
     if (text.layout == Layout::Word) {
         if (!in.Number(block, where, "max_height", text.maxHeight)) return false;
@@ -488,17 +765,39 @@ bool ReadText(Reader& in, const Json::Value& block, const std::string& where, Re
         for (const char* key : {"first_baseline", "pitch", "gap", "max_lines", "safe"}) {
             if (block.Has(key)) return in.Fail(where + "." + key, "belongs to a stack and this layout is a word");
         }
+        for (const char* key : {"orphan", "save_lines"}) {
+            if (block.Has(key)) return in.Fail(where + "." + key, "belongs to a paragraph and this layout is a word");
+        }
         text.maxLines = 1;
         return true;
     }
-    if (!in.Number(block, where, "first_baseline", text.firstBaseline) || !in.Number(block, where, "pitch", text.pitch) || !in.Number(block, where, "gap", text.gap) ||
-        !in.WholeMember(block, where, "max_lines", text.maxLines) || !in.RectOf(block, where, "safe", text.safe)) {
+    if (text.layout == Layout::Stack) {
+        if (!in.Number(block, where, "first_baseline", text.firstBaseline) || !in.Number(block, where, "pitch", text.pitch) || !in.Number(block, where, "gap", text.gap) ||
+            !in.WholeMember(block, where, "max_lines", text.maxLines) || !in.RectOf(block, where, "safe", text.safe)) {
+            return false;
+        }
+        if (text.pitch <= 0.0 || text.gap < 0.0) return in.Fail(where + ".pitch", "is above zero (and the gap not below)");
+        if (text.maxLines < 1 || text.maxLines > 3) return in.Fail(where + ".max_lines", "is from 1 to 3");
+        if (!InsidePicture(text.safe, recipe.width, recipe.height)) return in.Fail(where + ".safe", "is not inside the picture");
+        if (block.Has("max_height")) return in.Fail(where + ".max_height", "belongs to a word and this layout is a stack");
+        for (const char* key : {"orphan", "save_lines"}) {
+            if (block.Has(key)) return in.Fail(where + "." + key, "belongs to a paragraph and this layout is a stack");
+        }
+        return true;
+    }
+    // A paragraph: the line pitch is per face, the lines are centred on the anchor's x and the block's ink on its y, and the ink must lie inside `safe`.
+    if (!in.Number(block, where, "gap", text.gap) || !in.WholeMember(block, where, "max_lines", text.maxLines) || !in.RectOf(block, where, "safe", text.safe) ||
+        !in.Number(block, where, "orphan", text.orphan) || !in.Number(block, where, "save_lines", text.saveLines)) {
         return false;
     }
-    if (text.pitch <= 0.0 || text.gap < 0.0) return in.Fail(where + ".pitch", "is above zero (and the gap not below)");
-    if (text.maxLines < 1 || text.maxLines > 3) return in.Fail(where + ".max_lines", "is from 1 to 3");
+    if (text.gap < 0.0) return in.Fail(where + ".gap", "is not below zero");
+    if (text.maxLines < 1 || text.maxLines > 4) return in.Fail(where + ".max_lines", "is from 1 to 4");
     if (!InsidePicture(text.safe, recipe.width, recipe.height)) return in.Fail(where + ".safe", "is not inside the picture");
-    if (block.Has("max_height")) return in.Fail(where + ".max_height", "belongs to a word and this layout is a stack");
+    if (text.orphan < 0.0 || text.orphan >= 1.0) return in.Fail(where + ".orphan", "is from 0 to below 1");
+    if (text.saveLines < 0.0 || text.saveLines >= 0.5) return in.Fail(where + ".save_lines", "is from 0 to below 0.5");
+    for (const char* key : {"first_baseline", "pitch", "max_height"}) {
+        if (block.Has(key)) return in.Fail(where + "." + key, "does not belong to a paragraph (its pitch is per face)");
+    }
     return true;
 }
 
@@ -545,8 +844,7 @@ bool LoadRecipes(const std::string& path, Recipes& out, std::string& error) {
         const std::string where = "recipes[" + std::to_string(i) + "]";
         Recipe recipe;
         const bool ok = in.Only(item, where, {"id", "key", "sprite", "size", "digest", "erase", "text"}) && in.Text(item, where, "id", recipe.id) &&
-                        in.Text(item, where, "key", recipe.key) && in.Text(item, where, "sprite", recipe.sprite) && in.Text(item, where, "digest", recipe.digest) &&
-                        in.WholePair(item, where, "size", recipe.width, recipe.height);
+                        in.Text(item, where, "sprite", recipe.sprite) && in.Text(item, where, "digest", recipe.digest) && in.WholePair(item, where, "size", recipe.width, recipe.height);
         if (!ok) {
             error = in.error;
             return false;
@@ -559,18 +857,68 @@ bool LoadRecipes(const std::string& path, Recipes& out, std::string& error) {
             error = path + ": " + where + ".digest is not 32 lower-case hex characters";
             return false;
         }
-        if (!ids.insert(recipe.id).second || !sprites.insert(recipe.sprite).second || !keys.insert(recipe.key).second) {
-            error = path + ": " + where + " repeats an id, a sprite or a key of another recipe";
-            return false;
-        }
         if (!item.Has("erase") || !ReadErase(in, item["erase"], where + ".erase", recipe) || !item.Has("text") || !ReadText(in, item["text"], where + ".text", recipe)) {
             error = in.error.empty() ? path + ": " + where + " needs an erase and a text block" : in.error;
             return false;
         }
-        if (recipe.erase.rule != Rule::Generated && recipe.text.layout == Layout::Stack) {
-            // The prototype's two kinds: a plate is a word, and a generated picture is a stack. (A later step may mix them; the writing of it needs a recipe to test.)
-            error = path + ": " + where + " is a plate with a stack of lines, which no recipe has been measured for";
+        // One key for a recipe that draws one phrase; a Bands recipe names a key in each band and has none of its own.
+        if (recipe.text.layout == Layout::Bands) {
+            if (item.Has("key")) {
+                error = path + ": " + where + ".key belongs to a recipe of one phrase: a bands recipe names its keys in its bands";
+                return false;
+            }
+        } else if (!in.Text(item, where, "key", recipe.key)) {
+            error = in.error;
             return false;
+        }
+        bool repeated = !ids.insert(recipe.id).second || !sprites.insert(recipe.sprite).second;
+        for (const std::string& key : recipe.Keys()) repeated = !keys.insert(key).second || repeated;
+        if (repeated) {
+            error = path + ": " + where + " repeats an id, a sprite or a key of another recipe";
+            return false;
+        }
+        // The pairs of an erase rule and a layout that a recipe has been measured for: a plate is a word, a generated picture is a stack, a plaque or a panel is a paragraph, a strip
+        // of words and names is its bands. (A later step may mix them; the writing of it needs a recipe to test.)
+        const Rule rule = recipe.erase.rule;
+        const Layout layout = recipe.text.layout;
+        bool paired = false;
+        switch (layout) {
+        case Layout::Word:
+            paired = rule == Rule::RowLerp || rule == Rule::Separable || rule == Rule::Twin || rule == Rule::Generated;
+            break;
+        case Layout::Stack:
+            paired = rule == Rule::Generated;
+            break;
+        case Layout::Paragraph:
+            paired = rule == Rule::Plaque || rule == Rule::Panel;
+            break;
+        case Layout::Bands:
+            paired = rule == Rule::ClearRows;
+            break;
+        }
+        if (!paired || (rule == Rule::ClearRows && layout != Layout::Bands)) {
+            error = layout == Layout::Stack ? path + ": " + where + " is a plate with a stack of lines, which no recipe has been measured for"
+                                            : path + ": " + where + " pairs this erase rule with this text layout, which no recipe has been measured for";
+            return false;
+        }
+        if (rule == Rule::ClearRows) {
+            // Each cleared band is drawn again in the window of the band of the same place, and the window holds it.
+            if (recipe.erase.clearRows.size() != recipe.text.bands.size()) {
+                error = path + ": " + where + " has " + std::to_string(recipe.erase.clearRows.size()) + " cleared bands and " + std::to_string(recipe.text.bands.size()) + " text bands";
+                return false;
+            }
+            Rect widened = recipe.erase.rect;
+            for (std::size_t b = 0; b < recipe.text.bands.size(); ++b) {
+                const Span& clear = recipe.erase.clearRows[b];
+                const Span& window = recipe.text.bands[b].inkRows;
+                if (window.a > clear.a || window.b < clear.b) {
+                    error = path + ": " + where + ".text.bands[" + std::to_string(b) + "].ink_rows does not hold the cleared rows " + std::to_string(clear.a) + ".." + std::to_string(clear.b);
+                    return false;
+                }
+                widened.y0 = std::min(widened.y0, window.a);
+                widened.y1 = std::max(widened.y1, window.b);
+            }
+            recipe.erase.rect = widened;
         }
         read.items.push_back(std::move(recipe));
     }
@@ -702,6 +1050,462 @@ bool SamePixel(const unsigned char* a, const unsigned char* b) {
     return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3];
 }
 
+// ---- plaque, panel and cleared rows (planning step 248) --------------------------------------------------------------------------------------------
+
+using Rgb = std::array<double, 3>;
+
+constexpr std::size_t kSlopeRows = 12; // the rows above a hole that its slope is compared with
+
+// numpy's median: the middle value of an odd count, the mean of the two middle ones of an even count.
+double Median(std::vector<double>& values) {
+    std::sort(values.begin(), values.end());
+    const std::size_t n = values.size();
+    return n % 2 == 1 ? values[n / 2] : (values[n / 2 - 1] + values[n / 2]) / 2.0;
+}
+
+std::vector<int> RowsOf(const std::vector<Span>& spans) {
+    std::vector<int> rows;
+    for (const Span& span : spans) {
+        for (int y = span.a; y < span.b; ++y) rows.push_back(y);
+    }
+    return rows;
+}
+
+// The mean over [cols) of one row of one channel.
+Rgb MeanOver(const Image& src, const Span& cols, int y) {
+    Rgb mean{0.0, 0.0, 0.0};
+    for (int x = cols.a; x < cols.b; ++x) {
+        for (int c = 0; c < 3; ++c) mean[Z(c)] += static_cast<double>(src.At(x, y)[c]);
+    }
+    for (int c = 0; c < 3; ++c) mean[Z(c)] /= static_cast<double>(cols.b - cols.a);
+    return mean;
+}
+
+double MaxAbs(const Rgb& a, const Rgb& b) {
+    double worst = 0.0;
+    for (std::size_t c = 0; c < 3; ++c) worst = std::max(worst, std::fabs(a[c] - b[c]));
+    return worst;
+}
+
+// What a plaque is made of: H(x), the horizontal vignette of the interior, F(x), the frame columns' constant colour, and V(y), the interior's vertical profile as knots.
+struct PlateModel {
+    int ix0 = 0;
+    std::vector<Rgb> h;               // H(x) for the interior columns, from ix0
+    std::vector<Rgb> frame;           // F(x) for every column of the picture, meaningful where isFrame
+    std::vector<char> isFrame;
+    std::vector<double> ky;           // V's knots, ascending
+    std::vector<Rgb> kv;
+    std::vector<int> acceptedMargin;  // the rows of the margin scan whose two margins agreed
+
+    // numpy.interp per channel: the line between the knots either side of y, the end values beyond the first and the last knot (NEVER extrapolated).
+    Rgb V(double y) const {
+        Rgb out{0.0, 0.0, 0.0};
+        for (std::size_t c = 0; c < 3; ++c) {
+            if (y <= ky.front()) {
+                out[c] = kv.front()[c];
+            } else if (y >= ky.back()) {
+                out[c] = kv.back()[c];
+            } else {
+                const std::size_t j = static_cast<std::size_t>(std::upper_bound(ky.begin(), ky.end(), y) - ky.begin()) - 1;
+                const double slope = (kv[j + 1][c] - kv[j][c]) / (ky[j + 1] - ky[j]);
+                out[c] = slope * (y - ky[j]) + kv[j][c];
+            }
+        }
+        return out;
+    }
+};
+
+// The model, from the picture's own text-free pixels: `vTop` are the rows V is read from the centre columns of (the checks build a second model from fewer of them).
+bool BuildPlateModel(const Image& src, const Erase& e, const Span& vTop, PlateModel& m, std::string& why) {
+    m = PlateModel{};
+    const auto px = [&src](int x, int y, std::size_t c) { return static_cast<double>(src.At(x, y)[c]); };
+    const std::vector<int> rows = RowsOf(e.refRows);
+    if (rows.empty()) {
+        why = "the plaque has no text-free rows to read the vignette from";
+        return false;
+    }
+    m.ix0 = e.interiorCols.a;
+    const int cols = e.interiorCols.b - e.interiorCols.a;
+    std::vector<Rgb> centre(rows.size());
+    for (std::size_t r = 0; r < rows.size(); ++r) centre[r] = MeanOver(src, e.centerCols, rows[r]);
+    // H(x): the median over the text-free rows of the pixel over that row's centre mean
+    m.h.assign(Z(cols), Rgb{0.0, 0.0, 0.0});
+    std::vector<double> samples(rows.size());
+    for (int x = e.interiorCols.a; x < e.interiorCols.b; ++x) {
+        for (std::size_t c = 0; c < 3; ++c) {
+            for (std::size_t r = 0; r < rows.size(); ++r) samples[r] = px(x, rows[r], c) / std::max(centre[r][c], 1e-6);
+            m.h[Z(x - m.ix0)][c] = Median(samples);
+        }
+    }
+    // columns a medal covers in every text-free row take their mirror column's value; the flat middle is exactly one by construction
+    if (e.hasMirror) {
+        for (int x = e.mirrorCols.a; x < e.mirrorCols.b; ++x) m.h[Z(x - m.ix0)] = m.h[Z((e.mirrorAxis - x) - m.ix0)];
+    }
+    for (int x = e.centerCols.a; x < e.centerCols.b; ++x) m.h[Z(x - m.ix0)] = Rgb{1.0, 1.0, 1.0};
+    if (e.hasFlat) {
+        for (int x = e.flatCols.a; x < e.flatCols.b; ++x) m.h[Z(x - m.ix0)] = Rgb{1.0, 1.0, 1.0};
+    }
+    // F(x): a straight frame does not change down the plate
+    m.frame.assign(Z(src.width), Rgb{0.0, 0.0, 0.0});
+    m.isFrame.assign(Z(src.width), 0);
+    for (const Span& span : e.frameCols) {
+        for (int x = span.a; x < span.b; ++x) {
+            for (std::size_t c = 0; c < 3; ++c) {
+                for (std::size_t r = 0; r < rows.size(); ++r) samples[r] = px(x, rows[r], c);
+                m.frame[Z(x)][c] = Median(samples);
+            }
+            m.isFrame[Z(x)] = 1;
+        }
+    }
+    // V's knots: the clean rows above (the mean of the centre columns), then the rows beside the lettering whose two margin columns agree
+    for (int y = vTop.a; y < vTop.b; ++y) {
+        m.ky.push_back(y);
+        m.kv.push_back(MeanOver(src, e.centerCols, y));
+    }
+    const Span left = e.refCols[0];
+    const Span right = e.refCols[1];
+    std::vector<double> side;
+    for (int y = e.vMarginRows.a; y < e.vMarginRows.b; ++y) {
+        Rgb vl{0.0, 0.0, 0.0};
+        Rgb vr{0.0, 0.0, 0.0};
+        for (std::size_t c = 0; c < 3; ++c) {
+            side.clear();
+            for (int x = left.a; x < left.b; ++x) side.push_back(px(x, y, c) / m.h[Z(x - m.ix0)][c]);
+            vl[c] = Median(side);
+            side.clear();
+            for (int x = right.a; x < right.b; ++x) side.push_back(px(x, y, c) / m.h[Z(x - m.ix0)][c]);
+            vr[c] = Median(side);
+        }
+        if (MaxAbs(vl, vr) > e.agreeTol) continue;
+        m.ky.push_back(y);
+        m.kv.push_back(Rgb{(vl[0] + vr[0]) / 2.0, (vl[1] + vr[1]) / 2.0, (vl[2] + vr[2]) / 2.0});
+        m.acceptedMargin.push_back(y);
+    }
+    return true;
+}
+
+// The pixels a medal and its ring cover: chromatic ones (the plate is neutral) and every pixel within `radius` of one, as the square a Chebyshev ball is.
+std::vector<char> ChromaKeep(const Image& src, const Chroma& chroma, int& count) {
+    std::vector<char> chromatic(Z(src.width) * Z(src.height), 0);
+    for (int y = 0; y < src.height; ++y) {
+        for (int x = 0; x < src.width; ++x) {
+            const unsigned char* p = src.At(x, y);
+            const int spread = std::max({p[0], p[1], p[2]}) - std::min({p[0], p[1], p[2]});
+            chromatic[Z(y) * Z(src.width) + Z(x)] = (spread > chroma.threshold && p[3] > 0) ? 1 : 0;
+        }
+    }
+    std::vector<char> across(chromatic.size(), 0);
+    for (int y = 0; y < src.height; ++y) {
+        for (int x = 0; x < src.width; ++x) {
+            for (int d = -chroma.radius; d <= chroma.radius; ++d) {
+                const int sx = x + d;
+                if (sx >= 0 && sx < src.width && chromatic[Z(y) * Z(src.width) + Z(sx)] != 0) {
+                    across[Z(y) * Z(src.width) + Z(x)] = 1;
+                    break;
+                }
+            }
+        }
+    }
+    std::vector<char> keep(chromatic.size(), 0);
+    count = 0;
+    for (int y = 0; y < src.height; ++y) {
+        for (int x = 0; x < src.width; ++x) {
+            for (int d = -chroma.radius; d <= chroma.radius; ++d) {
+                const int sy = y + d;
+                if (sy >= 0 && sy < src.height && across[Z(sy) * Z(src.width) + Z(x)] != 0) {
+                    keep[Z(y) * Z(src.width) + Z(x)] = 1;
+                    ++count;
+                    break;
+                }
+            }
+        }
+    }
+    return keep;
+}
+
+// The plaque's guards: the picture must be what the model says it is, or the English picture is kept. Each names itself in its reason.
+bool PlaqueChecks(const Recipe& recipe, const Image& src, const PlateModel& model, const std::vector<char>& keep, int kept, std::string& reason) {
+    const Erase& e = recipe.erase;
+    const PlaqueGuard& g = e.plaque;
+    const std::vector<int> rows = RowsOf(e.refRows);
+    const auto skipped = [&e](int x) { return e.hasSkip && x >= e.skipCols.a && x < e.skipCols.b; };
+    // (1) separability: V(y) H(x), V being the row's own centre mean, predicts the text-free rows
+    double sum = 0.0;
+    double worst = 0.0;
+    long long count = 0;
+    for (const int y : rows) {
+        const Rgb vy = MeanOver(src, e.centerCols, y);
+        for (int x = e.interiorCols.a; x < e.interiorCols.b; ++x) {
+            if (skipped(x)) continue;
+            for (std::size_t c = 0; c < 3; ++c) {
+                const double err = std::fabs(vy[c] * model.h[Z(x - model.ix0)][c] - static_cast<double>(src.At(x, y)[c]));
+                sum += err;
+                worst = std::max(worst, err);
+                ++count;
+            }
+        }
+    }
+    const double mean = count > 0 ? sum / static_cast<double>(count) : 0.0;
+    if (mean > g.sepMean || worst > g.sepMax) {
+        reason = Fmt("separability: V(y) H(x) predicts the text-free rows to a mean of %.2f and at worst %.2f grey levels (the limits are %.2f and %.2f): the picture is not this plaque", mean, worst,
+                     g.sepMean, g.sepMax);
+        return false;
+    }
+    // (2) hold-out: V made from every other top row predicts the rest
+    std::vector<int> top;
+    for (int y = e.vTopRows.a; y < e.vTopRows.b; ++y) top.push_back(y);
+    double holdout = 0.0;
+    {
+        std::vector<double> xs;
+        std::vector<Rgb> vs;
+        for (std::size_t i = 0; i < top.size(); i += 2) {
+            xs.push_back(top[i]);
+            vs.push_back(MeanOver(src, e.centerCols, top[i]));
+        }
+        PlateModel sparse;
+        sparse.ky = xs;
+        sparse.kv = vs;
+        for (std::size_t i = 1; i < top.size(); i += 2) holdout = std::max(holdout, MaxAbs(sparse.V(top[i]), MeanOver(src, e.centerCols, top[i])));
+    }
+    if (holdout > g.holdout) {
+        reason = Fmt("hold-out: V made from every other clean row predicts the rest to %.2f grey levels (the limit is %.2f): the plate is not a smooth profile", holdout, g.holdout);
+        return false;
+    }
+    // (3) the margin rows whose two margins agree, over the window beside the old lettering
+    int agreeing = 0;
+    for (const int y : model.acceptedMargin) agreeing += (y >= g.marginWindow.a && y < g.marginWindow.b) ? 1 : 0;
+    const double ratio = static_cast<double>(agreeing) / static_cast<double>(g.marginWindow.b - g.marginWindow.a);
+    if (ratio < g.marginRatio) {
+        reason = Fmt("margin rows: the two margin columns agree on %.0f%% of the rows beside the lettering (the recipe needs %.0f%%): there is ink in a margin", ratio * 100.0, g.marginRatio * 100.0);
+        return false;
+    }
+    // (4) the ring: the three rows above the first rectangle, predicted by a model built WITHOUT them (and without the rows beside them), are the model's, or the old lettering or its
+    // halo reaches out of the rectangle
+    int firstRow = e.rects[0].y0;
+    for (const Rect& r : e.rects) firstRow = std::min(firstRow, r.y0);
+    const Span ringTop{e.vTopRows.a, std::min(e.vTopRows.b, firstRow - 3)};
+    if (ringTop.b - ringTop.a < 2) {
+        reason = "ring: no clean row is left above the first rectangle to build the model of the ring from";
+        return false;
+    }
+    PlateModel without;
+    if (!BuildPlateModel(src, e, ringTop, without, reason)) return false;
+    double ring = 0.0;
+    const int xa = e.frameCols.front().a;
+    const int xb = e.frameCols.back().b;
+    for (int y = firstRow - 3; y < firstRow; ++y) {
+        const Rgb vy = without.V(y);
+        for (int x = xa; x < xb; ++x) {
+            if (keep[Z(y) * Z(src.width) + Z(x)] != 0 || skipped(x)) continue;
+            Rgb predicted{0.0, 0.0, 0.0};
+            if (without.isFrame[Z(x)] != 0) {
+                predicted = without.frame[Z(x)];
+            } else if (x >= e.interiorCols.a && x < e.interiorCols.b) {
+                for (std::size_t c = 0; c < 3; ++c) predicted[c] = vy[c] * without.h[Z(x - without.ix0)][c];
+            } else {
+                continue;
+            }
+            Rgb actual{static_cast<double>(src.At(x, y)[0]), static_cast<double>(src.At(x, y)[1]), static_cast<double>(src.At(x, y)[2])};
+            ring = std::max(ring, MaxAbs(predicted, actual));
+        }
+    }
+    if (ring > g.ringMax) {
+        reason = Fmt("ring: the three rows above the first rectangle differ from the model by %.2f grey levels (the limit is %.2f): ink reaches out of the rectangle", ring, g.ringMax);
+        return false;
+    }
+    // (5) the medal: the kept pixels (chromatic ones and their rings) number what the recipe says, so that another sprite under the recipe is refused
+    if (e.chroma.enabled && (kept < e.chroma.keepMin || kept > e.chroma.keepMax)) {
+        reason = Fmt("chroma: %d pixels are kept as a medal's (the recipe allows %d to %d): the picture is not this plaque", kept, e.chroma.keepMin, e.chroma.keepMax);
+        return false;
+    }
+    // (6) V's slope across a hole in its knots is its slope above the hole, to a band: a profile that bends where nothing was read is not trusted
+    if (g.slopeBand > 0.0 && model.ky.size() > 2) {
+        const auto level = [&model](std::size_t i) { return (model.kv[i][0] + model.kv[i][1] + model.kv[i][2]) / 3.0; };
+        const std::size_t lastTop = static_cast<std::size_t>(e.vTopRows.b - e.vTopRows.a) - 1;
+        // The slope above a hole is read over the last rows of the clean part, not all of it: a plate's top rows are its highlight's ramp and fall less steeply than the rows below.
+        const std::size_t span = std::min<std::size_t>(kSlopeRows, lastTop);
+        const double above = (level(lastTop) - level(lastTop - span)) / (model.ky[lastTop] - model.ky[lastTop - span]);
+        for (std::size_t i = lastTop; i + 1 < model.ky.size(); ++i) {
+            const double gap = model.ky[i + 1] - model.ky[i];
+            if (gap < 8.0) continue;
+            const double across = (level(i + 1) - level(i)) / gap;
+            if (std::fabs(across - above) > g.slopeBand) {
+                reason = Fmt("slope: V falls %.3f a row across the hole at rows %d to %d, %.3f above it (the band is %.3f)", across, static_cast<int>(model.ky[i]), static_cast<int>(model.ky[i + 1]), above,
+                             g.slopeBand);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool ErasePlaque(const Recipe& recipe, const Image& source, Image& out, std::string& reason) {
+    const Erase& e = recipe.erase;
+    PlateModel model;
+    if (!BuildPlateModel(source, e, e.vTopRows, model, reason)) return false;
+    std::vector<char> keep(Z(source.width) * Z(source.height), 0);
+    int kept = 0;
+    if (e.chroma.enabled) keep = ChromaKeep(source, e.chroma, kept);
+    if (!PlaqueChecks(recipe, source, model, keep, kept, reason)) return false;
+    out = source;
+    for (const Rect& r : e.rects) {
+        for (int y = r.y0; y < r.y1; ++y) {
+            const Rgb vy = model.V(y);
+            for (int x = r.x0; x < r.x1; ++x) {
+                if (keep[Z(y) * Z(source.width) + Z(x)] != 0) continue;
+                unsigned char* px = out.At(x, y);
+                for (std::size_t c = 0; c < 3; ++c) {
+                    const double value = model.isFrame[Z(x)] != 0 ? model.frame[Z(x)][c] : vy[c] * model.h[Z(x - model.ix0)][c];
+                    px[c] = Level(value);
+                }
+            }
+        }
+    }
+    return true;
+}
+
+// The panel: H(x) from the rows that hold no ink, V(y) for EVERY row from the left margin (the right margin carries a corner effect in the upper rows and is only a check).
+struct PanelModel {
+    int ix0 = 0;
+    std::vector<Rgb> h;
+};
+
+bool BuildPanelModel(const Image& src, const Erase& e, PanelModel& m, std::string& why) {
+    m = PanelModel{};
+    const std::vector<int> rows = RowsOf(e.refRows);
+    if (rows.empty()) {
+        why = "the panel has no ink-free rows to read the vignette from";
+        return false;
+    }
+    m.ix0 = e.interiorCols.a;
+    const int cols = e.interiorCols.b - e.interiorCols.a;
+    std::vector<Rgb> centre(rows.size());
+    for (std::size_t r = 0; r < rows.size(); ++r) centre[r] = MeanOver(src, e.centerCols, rows[r]);
+    m.h.assign(Z(cols), Rgb{0.0, 0.0, 0.0});
+    std::vector<double> samples(rows.size());
+    for (int x = e.interiorCols.a; x < e.interiorCols.b; ++x) {
+        for (std::size_t c = 0; c < 3; ++c) {
+            for (std::size_t r = 0; r < rows.size(); ++r) samples[r] = static_cast<double>(src.At(x, rows[r])[c]) / std::max(centre[r][c], 1e-6);
+            m.h[Z(x - m.ix0)][c] = Median(samples);
+        }
+    }
+    for (int x = e.centerCols.a; x < e.centerCols.b; ++x) m.h[Z(x - m.ix0)] = Rgb{1.0, 1.0, 1.0};
+    return true;
+}
+
+// V(y) as the margin `side` (0 left, 1 right) says it is on row y.
+Rgb PanelV(const Image& src, const Erase& e, const PanelModel& m, int side, int y) {
+    const Span cols = e.refCols[Z(side)];
+    Rgb v{0.0, 0.0, 0.0};
+    std::vector<double> samples;
+    for (std::size_t c = 0; c < 3; ++c) {
+        samples.clear();
+        for (int x = cols.a; x < cols.b; ++x) samples.push_back(static_cast<double>(src.At(x, y)[c]) / m.h[Z(x - m.ix0)][c]);
+        v[c] = Median(samples);
+    }
+    return v;
+}
+
+bool PanelChecks(const Image& src, const Erase& e, const PanelModel& m, std::string& reason) {
+    const PanelGuard& g = e.panel;
+    const std::vector<int> rows = RowsOf(e.refRows);
+    double sep = 0.0;
+    double vMargin = 0.0;
+    for (const int y : rows) {
+        const Rgb vy = MeanOver(src, e.centerCols, y);
+        for (int x = e.interiorCols.a; x < e.interiorCols.b; ++x) {
+            for (std::size_t c = 0; c < 3; ++c) sep = std::max(sep, std::fabs(vy[c] * m.h[Z(x - m.ix0)][c] - static_cast<double>(src.At(x, y)[c])));
+        }
+        vMargin = std::max(vMargin, MaxAbs(PanelV(src, e, m, 0, y), vy));
+    }
+    // The margin first: ink in a margin column is also a failure of the separability (the vignette is read from every interior column), and the reason should name the cause.
+    if (vMargin > g.vMargin) {
+        reason = Fmt("margin: the left margin's profile differs from the centre's by %.2f grey levels on the ink-free rows (the limit is %.2f): there is ink in the margin", vMargin, g.vMargin);
+        return false;
+    }
+    if (sep > g.sepMax) {
+        reason = Fmt("separability: V(y) H(x) predicts the ink-free rows to %.2f grey levels at worst (the limit is %.2f): the picture is not this panel", sep, g.sepMax);
+        return false;
+    }
+    int agreeing = 0;
+    for (int y = e.rect.y0; y < e.rect.y1; ++y) agreeing += MaxAbs(PanelV(src, e, m, 0, y), PanelV(src, e, m, 1, y)) <= e.agreeTol ? 1 : 0;
+    const double ratio = static_cast<double>(agreeing) / static_cast<double>(e.rect.Height());
+    if (ratio < g.agreeRatio) {
+        reason = Fmt("margin rows: the two margins agree on %.0f%% of the rectangle's rows (the recipe needs %.0f%%)", ratio * 100.0, g.agreeRatio * 100.0);
+        return false;
+    }
+    double ring = 0.0;
+    for (int k = 1; k <= 3; ++k) {
+        for (const int y : {e.rect.y0 - k, e.rect.y1 - 1 + k}) ring = std::max(ring, MaxAbs(PanelV(src, e, m, 0, y), MeanOver(src, e.centerCols, y)));
+    }
+    if (ring > g.ringMax) {
+        reason = Fmt("ring: the three rows above and below the rectangle differ from the model by %.2f grey levels (the limit is %.2f): ink reaches out of the rectangle", ring, g.ringMax);
+        return false;
+    }
+    return true;
+}
+
+bool ErasePanel(const Recipe& recipe, const Image& source, Image& out, std::string& reason) {
+    const Erase& e = recipe.erase;
+    PanelModel model;
+    if (!BuildPanelModel(source, e, model, reason) || !PanelChecks(source, e, model, reason)) return false;
+    out = source;
+    for (int y = e.rect.y0; y < e.rect.y1; ++y) {
+        const Rgb v = PanelV(source, e, model, 0, y);
+        for (int x = e.rect.x0; x < e.rect.x1; ++x) {
+            unsigned char* px = out.At(x, y);
+            for (std::size_t c = 0; c < 3; ++c) px[c] = Level(v[c] * model.h[Z(x - model.ix0)][c]);
+        }
+    }
+    return true;
+}
+
+bool RowIsTransparent(const Image& src, int y, int& at) {
+    for (int x = 0; x < src.width; ++x) {
+        if (src.At(x, y)[3] != 0) {
+            at = x;
+            return false;
+        }
+    }
+    return true;
+}
+
+// Cleared rows: each band is bounded by a fully transparent row above and below (so a clear can never cut a name or a logo), and the ink windows of the text hold no opaque pixel
+// outside the cleared rows (so a word drawn in a window can never overwrite one).
+bool EraseClearRows(const Recipe& recipe, const Image& source, Image& out, std::string& reason) {
+    const Erase& e = recipe.erase;
+    int at = 0;
+    for (const Span& span : e.clearRows) {
+        for (const int y : {span.a - 1, span.b}) {
+            if (!RowIsTransparent(source, y, at)) {
+                reason = Fmt("the cleared rows %d to %d are not bounded by transparent rows: row %d holds an opaque pixel at x %d", span.a, span.b - 1, y, at);
+                return false;
+            }
+        }
+    }
+    const auto cleared = [&e](int y) {
+        for (const Span& span : e.clearRows) {
+            if (y >= span.a && y < span.b) return true;
+        }
+        return false;
+    };
+    for (std::size_t b = 0; b < recipe.text.bands.size(); ++b) {
+        const Span& window = recipe.text.bands[b].inkRows;
+        for (int y = window.a; y < window.b; ++y) {
+            if (cleared(y)) continue;
+            if (!RowIsTransparent(source, y, at)) {
+                reason = Fmt("the ink window of band %d holds an opaque pixel at (%d, %d) outside the cleared rows: drawing there would overwrite it", static_cast<int>(b), at, y);
+                return false;
+            }
+        }
+    }
+    out = source;
+    for (const Span& span : e.clearRows) {
+        for (int y = span.a; y < span.b; ++y) std::memset(out.At(0, y), 0, Z(source.width) * 4);
+    }
+    return true;
+}
+
 } // namespace
 
 bool CheckSource(const Recipe& recipe, const Image& source, std::string& reason) {
@@ -731,6 +1535,9 @@ bool EraseWords(const Recipe& recipe, const Image& source, const Image* twin, Im
         reason = "the picture is not the recipe's size";
         return false;
     }
+    if (erase.rule == Rule::Plaque) return ErasePlaque(recipe, source, out, reason);
+    if (erase.rule == Rule::Panel) return ErasePanel(recipe, source, out, reason);
+    if (erase.rule == Rule::ClearRows) return EraseClearRows(recipe, source, out, reason);
     if (erase.rule == Rule::Twin) {
         if (twin == nullptr || twin->Empty()) {
             reason = "the twin picture " + erase.twinSprite + " is not there or cannot be read";
@@ -861,9 +1668,11 @@ struct Set {
     int height = 0;
 
     const Face* FaceOf(std::uint32_t codePoint) const {
-        const std::string& id = FontBake::FaceIdOf(*plan, *slot, codePoint);
+        const std::string* id = &FontBake::FaceIdOf(*plan, *slot, codePoint);
+        // The recipe may draw the ASCII digits from another face (Kurale's 3 reads like an 8 once emboldened at the strip's size).
+        if (!text->digitFace.empty() && codePoint >= '0' && codePoint <= '9') id = &text->digitFace;
         for (const Face& face : faces) {
-            if (face.id == id) return &face;
+            if (face.id == *id) return &face;
         }
         return nullptr;
     }
@@ -873,12 +1682,12 @@ struct Set {
     int EmboldenSteps(const Face& face, double scale) const { return RoundInt(face.embolden * text->px * scale * kSupersample); }
 };
 
-bool MakeSet(const Request& request, Set& set, std::string& why) {
+bool MakeSet(const Request& request, const Text& text, Set& set, std::string& why) {
     if (request.recipe == nullptr || request.plan == nullptr || request.faces == nullptr) {
         why = "the request has no recipe, plan or faces";
         return false;
     }
-    set.text = &request.recipe->text;
+    set.text = &text;
     set.plan = request.plan;
     set.lang = request.lang;
     set.width = request.recipe->width;
@@ -893,6 +1702,7 @@ bool MakeSet(const Request& request, Set& set, std::string& why) {
         (void)script;
         if (std::find(ids.begin(), ids.end(), face) == ids.end()) ids.push_back(face);
     }
+    if (!set.text->digitFace.empty() && std::find(ids.begin(), ids.end(), set.text->digitFace) == ids.end()) ids.push_back(set.text->digitFace);
     for (const FaceTuning& tuning : set.text->faces) {
         if (std::find(ids.begin(), ids.end(), tuning.face) == ids.end()) {
             why = "the recipe tunes the face '" + tuning.face + "', which the slot '" + set.slot->id + "' does not draw with";
@@ -950,12 +1760,15 @@ struct Phrase {
     std::vector<std::uint32_t> separators;
 };
 
-Phrase Pieces(std::string_view phrase) {
+// With BreakAt::AfterDash only the space after a dash that stands alone (" - ") is a place to break, so that a dash ends a line and never starts one; U+200B always is.
+Phrase Pieces(std::string_view phrase, BreakAt breakAt = BreakAt::Space) {
     Phrase out;
     std::vector<std::uint32_t> points = Utf8::Decode(phrase);
     std::vector<std::uint32_t> current;
-    for (const std::uint32_t point : points) {
-        if (point == kSpace || point == kZeroWidthSpace) {
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const std::uint32_t point = points[i];
+        const bool afterDash = i >= 2 && points[i - 1] == '-' && points[i - 2] == kSpace;
+        if (point == kZeroWidthSpace || (point == kSpace && (breakAt == BreakAt::Space || afterDash))) {
             out.pieces.push_back(Utf8::Encode(current));
             out.separators.push_back(point);
             current.clear();
@@ -981,11 +1794,11 @@ std::string JoinPieces(const Phrase& phrase, std::size_t from, std::size_t to) {
 // One line, ready to draw: break-only characters taken out (U+200B anywhere, and the ASCII space in Japanese), then the language's display step (Arabic shaped and put
 // in visual order), as the code points that will be drawn from left to right. The breaks were made in logical order BEFORE this, so the words of an Arabic phrase are on
 // the lines they belong on.
-std::vector<std::uint32_t> ShowLine(Strings::Lang lang, const std::string& logical) {
+std::vector<std::uint32_t> ShowLine(Strings::Lang lang, const std::string& logical, bool japaneseSpaces = false) {
     std::vector<std::uint32_t> kept;
     for (const std::uint32_t point : Utf8::Decode(logical)) {
         if (point == kZeroWidthSpace) continue;
-        if (point == kSpace && lang == Strings::Lang::Ja) continue;
+        if (point == kSpace && lang == Strings::Lang::Ja && !japaneseSpaces) continue;
         kept.push_back(point);
     }
     return Utf8::Decode(Strings::Display(lang, Utf8::Encode(kept)));
@@ -1162,16 +1975,27 @@ bool DrawLine(const Set& set, const std::vector<std::uint32_t>& points, double s
     return true;
 }
 
-// The picture's coverage: floats from 0 to 1, a block of kSupersample squared bytes averaged to one value.
+// The picture's coverage: floats from 0 to 1, a block of kSupersample squared bytes averaged to one value. The cells are those of a window of the picture whose first cell is the
+// picture pixel (x0, y0) (the paragraph and the bands lay out on a canvas the size of their window, not of the picture); the whole-picture layouts have it at (0, 0).
 struct Coverage {
+    int x0 = 0;
+    int y0 = 0;
     int w = 0;
     int h = 0;
     std::vector<float> v;
-    float At(int x, int y) const { return v[Z(y) * Z(w) + Z(x)]; }
+    // The coverage at a PICTURE pixel: zero outside the window.
+    float At(int x, int y) const {
+        const int lx = x - x0;
+        const int ly = y - y0;
+        if (lx < 0 || ly < 0 || lx >= w || ly >= h) return 0.0f;
+        return v[Z(ly) * Z(w) + Z(lx)];
+    }
 };
 
-Coverage Downsample(const std::vector<unsigned char>& canvas, int w, int h) {
+Coverage Downsample(const std::vector<unsigned char>& canvas, int w, int h, int originX = 0, int originY = 0) {
     Coverage out;
+    out.x0 = originX;
+    out.y0 = originY;
     out.w = w / kSupersample;
     out.h = h / kSupersample;
     out.v.assign(Z(out.w) * Z(out.h), 0.0f);
@@ -1205,9 +2029,9 @@ void PutLine(std::vector<unsigned char>& canvas, int w, int h, const LineRaster&
 
 // The box where the coverage is above `threshold`: [x0, x1) by [y0, y1). Empty (x1 <= x0) when nothing is.
 Rect InkBox(const Coverage& c, double threshold) {
-    Rect box{c.w, c.h, 0, 0};
-    for (int y = 0; y < c.h; ++y) {
-        for (int x = 0; x < c.w; ++x) {
+    Rect box{c.x0 + c.w, c.y0 + c.h, c.x0, c.y0};
+    for (int y = c.y0; y < c.y0 + c.h; ++y) {
+        for (int x = c.x0; x < c.x0 + c.w; ++x) {
             if (static_cast<double>(c.At(x, y)) <= threshold) continue;
             box.x0 = std::min(box.x0, x);
             box.y0 = std::min(box.y0, y);
@@ -1268,7 +2092,8 @@ void ColumnEdges(const LineRaster& raster, std::vector<int>& top, std::vector<in
 // line's, the two lines centred on one another by their ink as they will be drawn: a descender pushes the next line down only where an ascender really is under it.
 // The growth is the same octagon the embolden is (its reach in a column at a horizontal distance d is found by growing a single pixel), applied to the lower line's
 // highest solid row of each column.
-double FitPitch(const LineRaster& upper, const LineRaster& lower, double start, double gap) {
+// `leftAligned`: the two lines are laid with their ink's left edges on one column (the bands'), not centred on one another (a stack's and a paragraph's).
+double FitPitch(const LineRaster& upper, const LineRaster& lower, double start, double gap, bool leftAligned = false) {
     std::vector<int> upperTop;
     std::vector<int> upperBottom;
     std::vector<int> lowerTop;
@@ -1301,7 +2126,7 @@ double FitPitch(const LineRaster& upper, const LineRaster& lower, double start, 
     int lowerFirst = 0;
     int lowerEnd = 0;
     if (!InkColumns(upper, upperFirst, upperEnd) || !InkColumns(lower, lowerFirst, lowerEnd)) return start;
-    const int shift = RoundInt((upperFirst + upperEnd) / 2.0 - (lowerFirst + lowerEnd) / 2.0); // added to the lower line's columns
+    const int shift = leftAligned ? upperFirst - lowerFirst : RoundInt((upperFirst + upperEnd) / 2.0 - (lowerFirst + lowerEnd) / 2.0); // added to the lower line's columns
     // The lower line's top must stay below the upper line's bottom in every column where both are.
     int need = std::numeric_limits<int>::min(); // the least (lower row - upper row) offset that keeps them apart, in supersampled pixels
     for (int x = 0; x < upper.w; ++x) {
@@ -1460,7 +2285,7 @@ std::string ScaleFailure(const Recipe& recipe, double scale) {
 
 bool FitWord(const Set& set, const Recipe& recipe, const std::string& phrase, Fitted& out, std::string& why) {
     const Text& text = *set.text;
-    const std::vector<std::uint32_t> points = ShowLine(set.lang, phrase);
+    const std::vector<std::uint32_t> points = ShowLine(set.lang, phrase, text.japaneseSpaces);
     if (points.empty()) {
         why = "the phrase is empty";
         return false;
@@ -1495,18 +2320,21 @@ bool FitWord(const Set& set, const Recipe& recipe, const std::string& phrase, Fi
 }
 
 // Every way of cutting pieces [0, count) into `lines` runs at their gaps: the cut positions, ascending, first the earliest.
+void CutsFrom(std::size_t from, std::size_t count, int cutsLeft, std::vector<std::size_t>& current, std::vector<std::vector<std::size_t>>& out) {
+    if (cutsLeft == 0) {
+        out.push_back(current);
+        return;
+    }
+    for (std::size_t i = from; i + static_cast<std::size_t>(cutsLeft) <= count; ++i) {
+        current.push_back(i);
+        CutsFrom(i + 1, count, cutsLeft - 1, current, out);
+        current.pop_back();
+    }
+}
+
 void Cuts(std::size_t count, int lines, std::vector<std::vector<std::size_t>>& out) {
-    if (lines == 1) {
-        out.push_back({});
-        return;
-    }
-    if (lines == 2) {
-        for (std::size_t i = 1; i < count; ++i) out.push_back({i});
-        return;
-    }
-    for (std::size_t i = 1; i + 1 < count; ++i) {
-        for (std::size_t j = i + 1; j < count; ++j) out.push_back({i, j});
-    }
+    std::vector<std::size_t> current;
+    CutsFrom(1, count, lines - 1, current, out);
 }
 
 bool FitStack(const Set& set, const Recipe& recipe, const std::string& phrase, Fitted& out, std::string& why) {
@@ -1534,7 +2362,7 @@ bool FitStack(const Set& set, const Recipe& recipe, const std::string& phrase, F
             double widest = 0.0;
             bool ok = true;
             for (const std::string& line : lines) {
-                shown.push_back(ShowLine(set.lang, line));
+                shown.push_back(ShowLine(set.lang, line, text.japaneseSpaces));
                 const double advance = AdvanceOf(set, shown.back(), why);
                 if (advance < 0.0 || shown.back().empty()) {
                     ok = false;
@@ -1576,15 +2404,343 @@ bool FitStack(const Set& set, const Recipe& recipe, const std::string& phrase, F
     return false;
 }
 
+// ---- paragraphs and bands (planning step 248) --------------------------------------------------------------------------------------------------
+
+// How far a layout's canvas reaches beyond the box the ink may lie in: the ink of a phrase that does not fit is seen in this margin (and refused) instead of being cut off.
+constexpr int kWindowMargin = 24;
+
+Rect GrownWindow(const Rect& r, int width, int height) {
+    return Rect{std::max(0, r.x0 - kWindowMargin), std::max(0, r.y0 - kWindowMargin), std::min(width, r.x1 + kWindowMargin), std::min(height, r.y1 + kWindowMargin)};
+}
+
+enum class Align { Centre, Left };
+
+// What a block of lines is laid out by.
+struct BlockSpec {
+    Align align = Align::Centre;
+    double anchorX = 0.0;          // Centre: where each line's ink is centred; Left: where each line's ink begins
+    bool centreBlock = true;       // the block's solid ink is centred on anchorY (a paragraph); else anchorY is a baseline (a band's)
+    double anchorY = 0.0;
+    bool anchorLast = false;       // the baseline is the LAST line's: the block grows upward
+    bool slide = false;            // the block is slid up until its lowest solid ink is above slideBound (a descender must not pass the band's last ink row)
+    double slideBound = 0.0;
+    double startPitch = 0.0;       // the baselines' distance at this scale, before two lines are pushed apart
+    double gap = 0.0;              // the ink of two lines is kept this far apart (pixels at this scale)
+    Rect window;                   // the picture's pixels the canvas covers
+};
+
+// Several lines at one scale on a canvas of the block's window: baselines a pitch apart (more where the ink of two neighbours would touch), each line placed by its ink,
+// the block placed by `spec`. The coverage is in the window's cells, whose first is the window's first pixel.
+bool LayOutBlock(const Set& set, const std::vector<std::vector<std::uint32_t>>& lines, double scale, const BlockSpec& spec, Placement& out, std::string& why) {
+    const Text& text = *set.text;
+    const int n = static_cast<int>(lines.size());
+    if (n < 1 || !spec.window.Valid()) {
+        why = "nothing to lay out";
+        return false;
+    }
+    std::vector<LineRaster> rasters(Z(n));
+    for (int i = 0; i < n; ++i) {
+        if (!DrawLine(set, lines[Z(i)], scale, rasters[Z(i)], why)) return false;
+    }
+    std::vector<double> rel(Z(n), 0.0);
+    for (int i = 1; i < n; ++i) {
+        rel[Z(i)] = rel[Z(i - 1)] + FitPitch(rasters[Z(i - 1)], rasters[Z(i)], spec.startPitch, spec.gap, spec.align == Align::Left);
+    }
+    std::vector<double> top(Z(n));
+    std::vector<double> bottom(Z(n));
+    for (int i = 0; i < n; ++i) {
+        int first = 0;
+        int end = 0;
+        if (!SolidRows(rasters[Z(i)], first, end)) {
+            why = "a line of the phrase has no solid ink";
+            return false;
+        }
+        top[Z(i)] = rel[Z(i)] - static_cast<double>(rasters[Z(i)].baseY - first) / kSupersample;
+        bottom[Z(i)] = rel[Z(i)] + static_cast<double>(end - rasters[Z(i)].baseY) / kSupersample;
+    }
+    double base0 = 0.0; // the first line's baseline, in picture pixels
+    if (spec.centreBlock) {
+        base0 = spec.anchorY - (*std::min_element(top.begin(), top.end()) + *std::max_element(bottom.begin(), bottom.end())) / 2.0;
+    } else {
+        base0 = spec.anchorLast ? spec.anchorY - rel[Z(n - 1)] : spec.anchorY;
+        if (spec.slide) {
+            const double over = base0 + *std::max_element(bottom.begin(), bottom.end()) - spec.slideBound;
+            if (over > 0.0) base0 -= over;
+        }
+    }
+    const int cw = spec.window.Width() * kSupersample;
+    const int ch = spec.window.Height() * kSupersample;
+    std::vector<unsigned char> canvas(Z(cw) * Z(ch), 0);
+    std::vector<int> corners(Z(n) * 2, 0); // where each raster's top-left corner went, in the picture's supersampled pixels: x, y
+    for (int i = 0; i < n; ++i) {
+        int first = 0;
+        int end = 0;
+        if (!InkColumns(rasters[Z(i)], first, end)) {
+            why = "a line of the phrase has no ink";
+            return false;
+        }
+        const int ox = spec.align == Align::Centre ? RoundInt(spec.anchorX * kSupersample - (static_cast<double>(first) + end) / 2.0) : RoundInt(spec.anchorX * kSupersample - first);
+        const int oy = RoundInt((base0 + rel[Z(i)]) * kSupersample - rasters[Z(i)].baseY);
+        corners[Z(i) * 2] = ox;
+        corners[Z(i) * 2 + 1] = oy;
+        PutLine(canvas, cw, ch, rasters[Z(i)], ox - spec.window.x0 * kSupersample, oy - spec.window.y0 * kSupersample);
+        NotePlaced(rasters[Z(i)], i, ox, oy, out);
+    }
+    for (int i = 0; i + 1 < n; ++i) {
+        const double gap = MeasureLineGap(rasters[Z(i)], corners[Z(i) * 2], corners[Z(i) * 2 + 1], rasters[Z(i + 1)], corners[Z(i + 1) * 2], corners[Z(i + 1) * 2 + 1]);
+        if (gap < out.lineGap) out.lineGap = gap;
+    }
+    out.cov = Downsample(canvas, cw, ch, spec.window.x0, spec.window.y0);
+    out.ink = InkBox(out.cov, text.inkThreshold);
+    out.lines = n;
+    return true;
+}
+
+// A phrase cut into k lines, every way: each line as it is set (logical text), as it is drawn (shown), and its advance at scale 1.
+struct Arrangement {
+    std::vector<std::string> texts;
+    std::vector<std::vector<std::uint32_t>> shown;
+    double widest = 0.0;
+    double narrowest = 0.0;
+};
+
+// byLines[k - 1] holds every arrangement of the phrase in k lines, for k from 1 to the most the phrase and the recipe allow.
+bool Arrange(const Set& set, const std::string& phrase, BreakAt breakAt, int maxLines, std::vector<std::vector<Arrangement>>& byLines, std::string& why) {
+    const Phrase pieces = Pieces(phrase, breakAt);
+    const int available = static_cast<int>(pieces.pieces.size());
+    byLines.assign(Z(std::min(maxLines, available)), {});
+    for (int k = 1; k <= static_cast<int>(byLines.size()); ++k) {
+        std::vector<std::vector<std::size_t>> cuts;
+        Cuts(pieces.pieces.size(), k, cuts);
+        for (const std::vector<std::size_t>& cut : cuts) {
+            Arrangement arrangement;
+            std::size_t from = 0;
+            arrangement.narrowest = std::numeric_limits<double>::max();
+            for (std::size_t c = 0; c <= cut.size(); ++c) {
+                const std::size_t to = c < cut.size() ? cut[c] : pieces.pieces.size();
+                arrangement.texts.push_back(JoinPieces(pieces, from, to));
+                from = to;
+                arrangement.shown.push_back(ShowLine(set.lang, arrangement.texts.back(), set.text->japaneseSpaces));
+                if (arrangement.shown.back().empty()) {
+                    why = "a line of the phrase is empty";
+                    return false;
+                }
+                const double advance = AdvanceOf(set, arrangement.shown.back(), why);
+                if (advance < 0.0) return false;
+                arrangement.widest = std::max(arrangement.widest, advance);
+                arrangement.narrowest = std::min(arrangement.narrowest, advance);
+            }
+            byLines[Z(k - 1)].push_back(std::move(arrangement));
+        }
+    }
+    return true;
+}
+
+// The arrangement with the FEWEST lines whose widest line fits `maxWidth` at `scale` (and, with two lines or more, whose narrowest is at least `orphan` of its widest), the one with
+// the narrowest widest line of them, the earliest of equals. Null when none fits.
+const Arrangement* PickArrangement(const std::vector<std::vector<Arrangement>>& byLines, double scale, double maxWidth, double orphan) {
+    for (std::size_t k = 0; k < byLines.size(); ++k) {
+        const Arrangement* best = nullptr;
+        for (const Arrangement& candidate : byLines[k]) {
+            if (candidate.widest * scale > maxWidth + 1e-9) continue;
+            if (k >= 1 && candidate.narrowest < orphan * candidate.widest) continue;
+            if (best == nullptr || candidate.widest < best->widest) best = &candidate;
+        }
+        if (best != nullptr) return best;
+    }
+    return nullptr;
+}
+
+// The pitch ratio of the face the phrase is first drawn in: a paragraph's lines are as far apart as that face's tuning says.
+double PitchRatioOf(const Set& set, const std::vector<std::uint32_t>& points) {
+    for (const std::uint32_t point : points) {
+        if (IsGap(point)) continue;
+        const Face* face = set.FaceOf(point);
+        if (face == nullptr) continue;
+        for (const FaceTuning& tuning : set.text->faces) {
+            if (tuning.face == face->id) return tuning.pitch;
+        }
+        return 0.0;
+    }
+    return 0.0;
+}
+
+// A paragraph: at each scale from 1 down, the fewest lines that fit, laid out and tried against the recipe's box; the first scale that fits is the largest, and a layout of fewer lines
+// within `saveLines` of it below is taken instead (a line saved is worth a few pixels of size).
+bool FitParagraph(const Set& set, const Recipe& recipe, const std::string& phrase, Fitted& out, std::string& why) {
+    const Text& text = *set.text;
+    std::vector<std::vector<Arrangement>> byLines;
+    if (!Arrange(set, phrase, BreakAt::Space, text.maxLines, byLines, why)) return false;
+    if (byLines.empty() || byLines[0].empty()) {
+        why = "the phrase cannot be set";
+        return false;
+    }
+    const double pitchRatio = PitchRatioOf(set, byLines[0][0].shown[0]);
+    if (pitchRatio <= 0.0) {
+        why = "the recipe has no line pitch for the face the phrase is drawn in";
+        return false;
+    }
+    const Rect window = GrownWindow(text.safe, set.width, set.height);
+    bool found = false;
+    double finest = 0.0;
+    for (int n = 0; n < 100000; ++n) {
+        const double scale = std::pow(text.step, n);
+        if (found && scale < finest - text.saveLines - 1e-9) break;
+        if (scale < text.minScale - 1e-9) {
+            if (!found) why = ScaleFailure(recipe, scale);
+            break;
+        }
+        const Arrangement* arrangement = PickArrangement(byLines, scale, text.maxWidth, text.orphan);
+        if (arrangement == nullptr) continue;
+        BlockSpec spec;
+        spec.align = Align::Centre;
+        spec.anchorX = text.anchorX;
+        spec.anchorY = text.anchorY;
+        spec.centreBlock = true;
+        spec.startPitch = pitchRatio * text.px * scale;
+        spec.gap = text.gap * text.px * scale;
+        spec.window = window;
+        Placement placement;
+        if (!LayOutBlock(set, arrangement->shown, scale, spec, placement, why)) return false;
+        if (!FitsBox(text, placement.ink)) continue;
+        placement.lineTexts = arrangement->texts;
+        if (!found || placement.lines < out.placement.lines) {
+            if (!found) finest = scale;
+            found = true;
+            out.scale = scale;
+            out.placement = std::move(placement);
+        }
+        if (text.saveLines <= 0.0 || out.placement.lines == 1) break;
+    }
+    if (!found) {
+        if (why.empty()) why = ScaleFailure(recipe, text.minScale);
+        return false;
+    }
+    why.clear();
+    return true;
+}
+
+// The Text a band is drawn with: the recipe's, with the band's size and the band's own tunings over the shared ones.
+Text BandText(const Text& base, const Band& band) {
+    Text text = base;
+    text.px = band.px;
+    text.bands.clear();
+    for (const FaceTuning& over : band.faces) {
+        bool replaced = false;
+        for (FaceTuning& own : text.faces) {
+            if (own.face == over.face) {
+                own = over;
+                replaced = true;
+            }
+        }
+        if (!replaced) text.faces.push_back(over);
+    }
+    return text;
+}
+
+// One band: at each scale from 1 down, for 1 line up to the band's most, the cut with the narrowest widest line, left-aligned; the first that is within the right edge and the
+// band's ink rows is taken (wrapping wins over shrinking).
+bool FitBand(const Set& set, const Recipe& recipe, const Band& band, const std::string& phrase, Fitted& out, std::string& why) {
+    const Text& text = *set.text;
+    std::vector<std::vector<Arrangement>> byLines;
+    if (!Arrange(set, phrase, band.breakAt, band.maxLines, byLines, why)) return false;
+    if (byLines.empty() || byLines[0].empty()) {
+        why = "the phrase cannot be set";
+        return false;
+    }
+    const Rect rows{0, band.inkRows.a, set.width, band.inkRows.b};
+    const Rect window = GrownWindow(rows, set.width, set.height);
+    const double room = text.maxRight - text.left;
+    for (int n = 0; n < 100000; ++n) {
+        const double scale = std::pow(text.step, n);
+        if (scale < text.minScale - 1e-9) {
+            why = Fmt("%s would need scale %.3f, below the recipe's floor %.3f", band.key.c_str(), scale, text.minScale);
+            return false;
+        }
+        for (std::size_t k = 0; k < byLines.size(); ++k) {
+            const Arrangement* best = nullptr;
+            for (const Arrangement& candidate : byLines[k]) {
+                if (best == nullptr || candidate.widest < best->widest) best = &candidate;
+            }
+            if (best == nullptr || best->widest * scale > room + 1e-9) continue;
+            BlockSpec spec;
+            spec.align = Align::Left;
+            spec.anchorX = text.left;
+            spec.anchorY = band.firstBaseline;
+            spec.anchorLast = band.anchorLast;
+            spec.centreBlock = false;
+            spec.slide = true;
+            spec.slideBound = band.inkRows.b;
+            spec.startPitch = band.pitch * scale;
+            spec.gap = text.gap * band.px * scale;
+            spec.window = window;
+            Placement placement;
+            if (!LayOutBlock(set, best->shown, scale, spec, placement, why)) return false;
+            if (!placement.ink.Valid() || placement.ink.x1 > static_cast<int>(std::floor(text.maxRight)) || placement.ink.y0 < band.inkRows.a || placement.ink.y1 > band.inkRows.b) continue;
+            placement.lineTexts = best->texts;
+            out.scale = scale;
+            out.placement = std::move(placement);
+            return true;
+        }
+    }
+    (void)recipe;
+    why = "the phrase cannot be set";
+    return false;
+}
+
+// Every band of a recipe fitted to its own phrase (request.phrases, in the bands' order). Any band below the floor, or any phrase no face can draw, fails the whole picture.
+struct BandFit {
+    Text text;
+    Fitted fit;
+};
+
+bool FitBands(const Request& request, std::vector<BandFit>& out, std::string& why) {
+    const Recipe& recipe = *request.recipe;
+    if (request.phrases.size() != recipe.text.bands.size()) {
+        why = Fmt("the request holds %d phrases for the recipe's %d bands", static_cast<int>(request.phrases.size()), static_cast<int>(recipe.text.bands.size()));
+        return false;
+    }
+    out.clear();
+    for (std::size_t i = 0; i < recipe.text.bands.size(); ++i) {
+        const Band& band = recipe.text.bands[i];
+        const std::string& phrase = request.phrases[i];
+        if (phrase.empty() || !Utf8::IsValid(phrase)) {
+            why = band.key + ": the phrase is empty or not valid UTF-8";
+            return false;
+        }
+        BandFit made;
+        made.text = BandText(recipe.text, band);
+        Set set;
+        if (!MakeSet(request, made.text, set, why)) return false;
+        if (!FitBand(set, recipe, band, phrase, made.fit, why)) {
+            why = band.key + ": " + why;
+            return false;
+        }
+        out.push_back(std::move(made));
+    }
+    return true;
+}
+
 bool Fit(const Request& request, Set& set, Fitted& out, std::string& why) {
-    if (!MakeSet(request, set, why)) return false;
+    if (!MakeSet(request, request.recipe->text, set, why)) return false;
     const Recipe& recipe = *request.recipe;
     const std::string phrase(request.phrase);
     if (phrase.empty() || !Utf8::IsValid(phrase)) {
         why = "the phrase is empty or not valid UTF-8";
         return false;
     }
-    return recipe.text.layout == Layout::Word ? FitWord(set, recipe, phrase, out, why) : FitStack(set, recipe, phrase, out, why);
+    switch (recipe.text.layout) {
+    case Layout::Word:
+        return FitWord(set, recipe, phrase, out, why);
+    case Layout::Stack:
+        return FitStack(set, recipe, phrase, out, why);
+    case Layout::Paragraph:
+        return FitParagraph(set, recipe, phrase, out, why);
+    case Layout::Bands:
+        break;
+    }
+    why = "a bands recipe has a phrase per band, not one phrase";
+    return false;
 }
 
 // ---- the look: shadow, shade, composition ------------------------------------------------------------------------------------------------------
@@ -1690,7 +2846,7 @@ bool Compose(const Text& text, double scale, const Placement& placement, const R
     const double idy = static_cast<double>(RoundInt(text.inner.dy * measure));
     const double reach = std::ceil(kKernelSigmas * std::max(sigma, text.inner.k > 0.0 ? isigma : 0.0)) + std::ceil(std::max({std::fabs(dx), std::fabs(dy), std::fabs(idx), std::fabs(idy)})) + 2.0;
     const int margin = static_cast<int>(reach);
-    const Rect window{std::max(0, extent.x0 - margin), std::max(0, extent.y0 - margin), std::min(cov.w, extent.x1 + margin), std::min(cov.h, extent.y1 + margin)};
+    const Rect window{std::max(0, extent.x0 - margin), std::max(0, extent.y0 - margin), std::min(image.width, extent.x1 + margin), std::min(image.height, extent.y1 + margin)};
     Field coverage;
     coverage.w = window.Width();
     coverage.h = window.Height();
@@ -1698,8 +2854,16 @@ bool Compose(const Text& text, double scale, const Placement& placement, const R
     for (int y = 0; y < coverage.h; ++y) {
         for (int x = 0; x < coverage.w; ++x) coverage.At(x, y) = static_cast<double>(cov.At(window.x0 + x, window.y0 + y));
     }
-    Field shadow = Convolve(coverage, MakeKernel(dx, sigma), MakeKernel(dy, sigma));
-    for (double& s : shadow.v) s = std::min(text.shadow.cap, text.shadow.gain * s);
+    // No shadow at all (a recipe of bands, whose ink is plain): a field of zeros, not a blur of nothing.
+    Field shadow;
+    if (text.shadow.gain > 0.0) {
+        shadow = Convolve(coverage, MakeKernel(dx, sigma), MakeKernel(dy, sigma));
+        for (double& s : shadow.v) s = std::min(text.shadow.cap, text.shadow.gain * s);
+    } else {
+        shadow.w = coverage.w;
+        shadow.h = coverage.h;
+        shadow.v.assign(coverage.v.size(), 0.0);
+    }
     Field shade;
     const bool shaded = text.inner.k > 0.0;
     if (shaded) shade = Convolve(coverage, MakeKernel(idx, isigma), MakeKernel(idy, isigma));
@@ -1712,7 +2876,7 @@ bool Compose(const Text& text, double scale, const Placement& placement, const R
             const double s = shadow.At(fx, fy);
             if (c <= 0.0 && s <= 0.0) continue; // untouched: the plate's own pixel stays as it is
             // The ink is white, shaded along the edges the original's was: ink = 1 - k * (1 - shade), the shade being the blurred, moved coverage.
-            const double ink = shaded ? 1.0 - text.inner.k * (1.0 - shade.At(fx, fy)) : 1.0;
+            const double ink = (shaded ? 1.0 - text.inner.k * (1.0 - shade.At(fx, fy)) : 1.0) * (static_cast<double>(text.inkLevel) / 255.0);
             unsigned char* px = image.At(x, y);
             const double a = px[3] / 255.0;
             // black shadow over the plate, then the white ink over both, in straight alpha
@@ -1732,8 +2896,8 @@ bool Compose(const Text& text, double scale, const Placement& placement, const R
         }
     }
     // The ink must be inside the clip: a word that leaves its rectangle would be cut, and the rectangle is all the erase made room in.
-    for (int y = 0; y < cov.h; ++y) {
-        for (int x = 0; x < cov.w; ++x) {
+    for (int y = cov.y0; y < cov.y0 + cov.h; ++y) {
+        for (int x = cov.x0; x < cov.x0 + cov.w; ++x) {
             if (static_cast<double>(cov.At(x, y)) > text.inkThreshold && !clip.Contains(x, y)) {
                 why = Fmt("the ink reaches (%d, %d), outside the rectangle the erase made room in", x, y);
                 return false;
@@ -1745,8 +2909,59 @@ bool Compose(const Text& text, double scale, const Placement& placement, const R
 
 } // namespace
 
+namespace {
+
+// The rectangle every changed pixel is inside: the erase's, and where the word's shadow may be written beyond it.
+Rect Writable(const Recipe& recipe) {
+    Rect r = recipe.erase.rect;
+    if (recipe.text.hasPaint) {
+        r.x0 = std::min(r.x0, recipe.text.paint.x0);
+        r.y0 = std::min(r.y0, recipe.text.paint.y0);
+        r.x1 = std::max(r.x1, recipe.text.paint.x1);
+        r.y1 = std::max(r.y1, recipe.text.paint.y1);
+    }
+    return r;
+}
+
+// What a Bands recipe's fits say, in the outcome: each band's result, the least scale, the lines and the glyphs of all of them.
+void NoteBands(const Recipe& recipe, std::vector<BandFit>& fits, Outcome& outcome) {
+    outcome.scale = 1.0;
+    outcome.lines = 0;
+    Rect ink{recipe.width, recipe.height, 0, 0};
+    for (std::size_t i = 0; i < fits.size(); ++i) {
+        Placement& placement = fits[i].fit.placement;
+        BandResult result;
+        result.key = recipe.text.bands[i].key;
+        result.scale = fits[i].fit.scale;
+        result.lines = placement.lines;
+        result.lineTexts = placement.lineTexts;
+        result.ink = placement.ink;
+        outcome.bands.push_back(std::move(result));
+        outcome.scale = std::min(outcome.scale, fits[i].fit.scale);
+        outcome.lines += placement.lines;
+        outcome.lineTexts.insert(outcome.lineTexts.end(), placement.lineTexts.begin(), placement.lineTexts.end());
+        outcome.lineGap = std::min(outcome.lineGap, placement.lineGap);
+        ink.x0 = std::min(ink.x0, placement.ink.x0);
+        ink.y0 = std::min(ink.y0, placement.ink.y0);
+        ink.x1 = std::max(ink.x1, placement.ink.x1);
+        ink.y1 = std::max(ink.y1, placement.ink.y1);
+        for (Placed& placed : placement.placed) outcome.placed.push_back(placed);
+    }
+    outcome.ink = ink;
+    outcome.touched = recipe.erase.rect;
+}
+
+} // namespace
+
 Outcome FitPhrase(const Request& request) {
     Outcome outcome;
+    if (request.recipe != nullptr && request.recipe->text.layout == Layout::Bands) {
+        std::vector<BandFit> fits;
+        if (!FitBands(request, fits, outcome.reason)) return outcome;
+        NoteBands(*request.recipe, fits, outcome);
+        outcome.ok = true;
+        return outcome;
+    }
     Set set;
     Fitted fitted;
     if (!Fit(request, set, fitted, outcome.reason)) return outcome;
@@ -1757,7 +2972,7 @@ Outcome FitPhrase(const Request& request) {
     outcome.ink = fitted.placement.ink;
     outcome.lineGap = fitted.placement.lineGap;
     outcome.placed = std::move(fitted.placement.placed);
-    outcome.touched = request.recipe->erase.rect;
+    outcome.touched = Writable(*request.recipe);
     return outcome;
 }
 
@@ -1771,10 +2986,27 @@ Outcome Render(const Request& request, const Image& source, const Image* twin) {
     if (!CheckSource(recipe, source, outcome.reason)) return outcome;
     Image base;
     if (!EraseWords(recipe, source, twin, base, outcome.reason)) return outcome;
+    if (recipe.text.layout == Layout::Bands) {
+        // Each band is drawn into its own window of rows: the ink must lie in it, and a band's words can reach no name or logo of another band.
+        std::vector<BandFit> fits;
+        if (!FitBands(request, fits, outcome.reason)) return outcome;
+        for (std::size_t i = 0; i < fits.size(); ++i) {
+            const Band& band = recipe.text.bands[i];
+            const Rect rows{0, band.inkRows.a, recipe.width, band.inkRows.b};
+            if (!Compose(fits[i].text, fits[i].fit.scale, fits[i].fit.placement, rows, base, outcome.reason)) {
+                outcome.reason = band.key + ": " + outcome.reason;
+                return outcome;
+            }
+        }
+        NoteBands(recipe, fits, outcome);
+        outcome.image = std::move(base);
+        outcome.ok = true;
+        return outcome;
+    }
     Set set;
     Fitted fitted;
     if (!Fit(request, set, fitted, outcome.reason)) return outcome;
-    if (!Compose(recipe.text, fitted.scale, fitted.placement, recipe.erase.rect, base, outcome.reason)) return outcome;
+    if (!Compose(recipe.text, fitted.scale, fitted.placement, Writable(recipe), base, outcome.reason)) return outcome;
     outcome.ok = true;
     outcome.image = std::move(base);
     outcome.scale = fitted.scale;
@@ -1783,7 +3015,7 @@ Outcome Render(const Request& request, const Image& source, const Image* twin) {
     outcome.ink = fitted.placement.ink;
     outcome.lineGap = fitted.placement.lineGap;
     outcome.placed = std::move(fitted.placement.placed);
-    outcome.touched = recipe.erase.rect;
+    outcome.touched = Writable(recipe);
     return outcome;
 }
 
@@ -1889,12 +3121,16 @@ Written Ensure(const Wanted& wanted) {
     h.Text(wanted.languageCode);
     h.Number(static_cast<std::uint64_t>(wanted.lang));
     h.Text(wanted.phrase);
+    h.Number(wanted.phrases.size());
+    for (const std::string& phrase : wanted.phrases) h.Text(phrase);
     if (const FontBake::SlotSpec* slot = wanted.plan->Slot(recipe.text.slot)) {
         std::vector<std::string> ids{slot->textFace};
         for (const auto& [script, face] : slot->scriptFaces) {
             (void)script;
             if (std::find(ids.begin(), ids.end(), face) == ids.end()) ids.push_back(face);
         }
+        // The face the digits are drawn from is an input too, though no script routes to it.
+        if (!recipe.text.digitFace.empty() && std::find(ids.begin(), ids.end(), recipe.text.digitFace) == ids.end()) ids.push_back(recipe.text.digitFace);
         for (const std::string& id : ids) {
             h.Text(id);
             for (const FontBake::FaceBytes& bytes : faces) {
@@ -1920,6 +3156,7 @@ Written Ensure(const Wanted& wanted) {
     request.faces = &faces;
     request.lang = wanted.lang;
     request.phrase = wanted.phrase;
+    request.phrases = wanted.phrases;
     Outcome outcome = Render(request, source, recipe.erase.rule == Rule::Twin ? &twin : nullptr);
     if (!outcome.ok) return fail(outcome.reason);
     std::string bytes;

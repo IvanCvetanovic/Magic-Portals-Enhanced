@@ -991,6 +991,9 @@ void TheGlobesPickRefreshesThePicturesThatCarryWords() {
         session.BackToTheMainMenu();
         frame = menuFrame(run.registry, layer);
         CHECK_MSG(quadsNamed(frame, "tap_start_ja_") == 1 && quadsNamed(frame, "tap_start_de_") == 0 && quadsNamed(frame, "achievements_ja_") == 1, "Japanese replaces German on the main menu");
+        // The credits strip (planning step 248) is the picked language's too: the credits screen draws it from the menu's cache, which the pick remade.
+        const std::string stripFile = layer.MenuPictureFile("credit_name.png");
+        CHECK_MSG(stripFile.find("/credits_strip_ja_") != std::string::npos, "the pick of Japanese made the credits strip Japanese: " + stripFile);
         if (layer.AchievementsContent() != nullptr) {
             CHECK(layer.PressMainMenu(run.registry, MagicPortals::MainMenu::Button::Achievements));
             rest(layer, run.registry, 90);
@@ -1014,6 +1017,7 @@ void TheGlobesPickRefreshesThePicturesThatCarryWords() {
         frame = menuFrame(run.registry, layer);
         CHECK_MSG(quadsNamed(frame, "main_play_game_button.png") == 1 && quadsNamed(frame, "scores.png") == 1 && quadsNamed(frame, "tap_start_") == 0 && quadsNamed(frame, "achievements_") == 0,
                   "English gives the shipped pictures back");
+        CHECK_MSG(layer.MenuPictureFile("credit_name.png") == std::string(MAGICPORTALS_ORIGINAL_DIR) + "/sprites/hd/credit_name.png", "and the shipped credits strip");
     }
 }
 

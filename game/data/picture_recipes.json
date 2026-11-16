@@ -13,7 +13,9 @@
     "min_scale is the floor: a phrase that needs less keeps the English picture, and tests/test_mp_overflow.cpp fails a shipped translation that does.",
     "faces: the tuning of the faces the slot draws with (languages.json fonts): ratio (the kanji and the alef are drawn larger than a Latin x), embolden (a fraction of px, an octagon of the",
     "coverage at the supersampled grid), and `reference`, the glyph a face is measured by where it is not the plan's capital H. shadow and inner are fractions of the scaled px.",
-    "Every number was measured on the original's sprites by the prototype of planning step 247 (Pillow/FreeType); the port draws with stb_truetype, so the fit scales are recomputed there."
+    "Every number was measured on the original's sprites by the prototype of planning step 247 (Pillow/FreeType); the port draws with stb_truetype, so the fit scales are recomputed there.",
+    "Step 248 adds four more: the current and the golden score plaques (rule plaque: a frame column is constant down the plate, an interior pixel is V(y) H(x), V interpolated between the clean rows and the margin columns and never extrapolated, a chroma rule keeps the golden plaque's medal and a ring of 2 px round it; layout paragraph), the game-finished card (rule panel: V(y) from the left margin for every row; layout paragraph; the translated first paragraph only, no Facebook line: an owner decision) and the credits strip (rule clear_rows: the rows of five bands are cleared and drawn again; layout bands: each band its own phrase, left-aligned, black, no shadow). The rules' guards are numbers of grey levels the picture must satisfy, the prototype's measured maxima with a margin.",
+    "paragraph: the fewest lines that fit at each scale from 1 down (then the narrowest widest line; no line narrower than `orphan` of the widest), lines centred on the anchor's x by their ink and the block's ink centred on its y, shrunk until the ink is inside `safe`, a layout of fewer lines within `save_lines` below the finest scale taken instead; the line pitch is per face (a multiple of the scaled px); `paint` is where the word's shadow may be written beyond the erase's rectangle. bands: see the strip's own note; `break` after_dash cuts a phrase only after a dash that stands alone."
   ],
   "version": 1,
   "recipes": [
@@ -493,6 +495,587 @@
           "dx": 0.05,
           "dy": 0.05
         }
+      }
+    },
+    {
+      "id": "current_score",
+      "key": "picture.current_score",
+      "sprite": "current_score_plaque.png",
+      "size": [
+        128,
+        256
+      ],
+      "digest": "d8ebff57a7c2508a8cb488cb1d97f525",
+      "_measured": "A plate with a straight frame (frame columns 2..12 and 115..125 do not change down the plate: std 0.0 over rows 35..99; the left bevel runs bright to dark inward, the right one dark to bright), an interior x 13..114 that is a vertical profile times a horizontal vignette (rank-1 residual 0.07 mean, 0.79 max over the text-free rows 30..96), and two lines of hand lettering, ink x 12..116, y 110..149, which cover both bevels and whose halo dips the frame to x about 6. The rectangles replace everything the old lettering and its halo could touch: A = x 2..125, y 100..140 (frame columns take F(x), interior columns V(y) H(x)), B = x 17..110, y 141..156 (interior only: from row about 141 the outer corners round and the four-pixel inner corners are not separable, so columns 13..16 and 111..114 stay as drawn; they are clean). V is interpolated between the clean rows 20..99 and the margin columns 14..16 / 109..113 of the rows 137..156 whose two margins agree to 2 grey levels (17 of 17 do in 139..155), and NEVER extrapolated: a cubic fitted to the clean rows rises under the lettering while the real pixels fall. Held-out: V from every other clean row predicts the rest to 1.0, the three rows above A are predicted by a model built without them to 1.2, V falls 0.44 a row across the hole and 0.47 above it. The medal (sprites/hd/medal_*_l.png, drawn over the plaque at plaque row = medal row + 8) ends at plaque row 114 (its ribbon's last opaque row), so the translated ink starts at row 115: the gold medal's last row of alpha 128 or more is plaque row 114 (the bronze's is 113, the silver's 112), and an ink box that began at 114 had a few pixels of the top of a letter under the gold ribbon's tip (found by compositing the three medals over every language's plaque). The medals' soft shadows (alpha 8 to 127, to plaque row 123) still dim the first rows of the ink a little: they dim it, they hide none of it. chroma: the plate is exactly neutral, so a chromatic pixel means another sprite (the golden plaque's medal): none is allowed here. Measured by the step-248 prototype.",
+      "erase": {
+        "rule": "plaque",
+        "interior_cols": [
+          13,
+          115
+        ],
+        "frame_cols": [
+          [
+            2,
+            13
+          ],
+          [
+            115,
+            126
+          ]
+        ],
+        "center_cols": [
+          40,
+          89
+        ],
+        "h_rows": [
+          [
+            30,
+            97
+          ]
+        ],
+        "v_top_rows": [
+          20,
+          100
+        ],
+        "v_margin_rows": [
+          137,
+          157
+        ],
+        "margin_cols": [
+          [
+            14,
+            17
+          ],
+          [
+            109,
+            114
+          ]
+        ],
+        "agree_tol": 2.0,
+        "rects": [
+          [
+            2,
+            100,
+            126,
+            141
+          ],
+          [
+            17,
+            141,
+            111,
+            157
+          ]
+        ],
+        "chroma": {
+          "threshold": 10,
+          "radius": 2,
+          "min": 0,
+          "max": 0
+        },
+        "guard": {
+          "sep_mean": 0.8,
+          "sep_max": 3.0,
+          "holdout": 2.5,
+          "margin_window": [
+            139,
+            156
+          ],
+          "margin_ratio": 0.7,
+          "ring_max": 4.0,
+          "slope_band": 0.3,
+          "_limits": "the prototype's: measured 0.07 / 0.79, 1.0, 17 of 17, 1.2 and 0.03 on the real sprite, with the margins above for another picture's noise"
+        }
+      },
+      "text": {
+        "_floor": "FLOOR: chosen BEFORE any fit was looked at, from legibility alone: the plaques' lettering is `px` 20 hd px tall (a capital) at scale 1 and 0.60 of it is 12 hd px = 6 units = 8.4 screen px at 720p (the pause menu and the end screens draw a plaque at 1.4 screen px per hd px or more), about the least a bold capital reads at.",
+        "layout": "paragraph",
+        "slot": "matura",
+        "px": 20.0,
+        "faces": {
+          "kurale": {
+            "ratio": 1.0,
+            "embolden": 0.03,
+            "pitch": 1.4
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.0,
+            "embolden": 0.03,
+            "pitch": 1.3
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.0,
+            "embolden": 0.03,
+            "pitch": 1.5
+          }
+        },
+        "anchor": [
+          64.0,
+          134.5
+        ],
+        "min_scale": 0.6,
+        "step": 0.98,
+        "ink_threshold": 0.15,
+        "max_width": 96,
+        "shadow": {
+          "dx": 0.0,
+          "dy": 0.05,
+          "sigma": 0.0,
+          "sigma_min": 1.6,
+          "gain": 1.8,
+          "cap": 0.9,
+          "round_offsets": true
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        "gap": 0.05,
+        "max_lines": 2,
+        "safe": [
+          16,
+          115,
+          112,
+          154
+        ],
+        "orphan": 0.0,
+        "save_lines": 0.0
+      }
+    },
+    {
+      "id": "golden_score",
+      "key": "picture.golden_score",
+      "sprite": "golden_score_plaque.png",
+      "size": [
+        128,
+        256
+      ],
+      "digest": "a75faa03a80869588cf0dd201e31b7eb",
+      "_measured": "The same plate as the current score plaque, 55 rows lower (alpha rows 57..224, interior y 69..211, frame columns identical), with the golden medal and its ribbon BAKED IN (chromatic pixels x 23..65, y 59..109) and four lines of lettering (portals / for / golden / score), ink x 10..117, y 105..208, whose first letter's ascender is 4 rows under the ribbon tips. The rectangles: A = x 2..125, y 100..196, B = x 17..110, y 197..211 (interior only: the corners round from row about 197). The horizontal vignette is read from the columns RIGHT of the medal (72..98) in the rows 90..97 (not from 72..97: the frame's top-right corner is still curved above row 87), columns 23..27, which the medal covers in every clean row, take the mirror column 127 - x, and columns 28..100 are the flat middle. V is read from the clean rows 75..97 and from the margin columns of the rows 138..211 whose two margins agree (25 of 30 in 146..160 and the two small windows below: 146..160 all 15, 197, 198 and 203..210). MEDAL KEEP RULE: a pixel within 2 px (Chebyshev) of a pixel with max(rgb) - min(rgb) above 10 is never replaced (the plate is exactly neutral, so chroma finds the medal only: 2,007 pixels, 364 of them inside the rectangles; the medal's own pixels changed: 0). OFFLINE ground truth, never a donor: the current plaque is this plate 55 rows up, and the erase's rows 100..155 agree with its text-free rows to 0.45 grey levels mean and 2 at worst inside, exactly on the frame columns. The rows 161..196 (37 rows) have no truth and are interpolated: against the current plaque's model the spread is 1.35 mean, 3 at worst. Measured by the step-248 prototype.",
+      "erase": {
+        "rule": "plaque",
+        "interior_cols": [
+          13,
+          115
+        ],
+        "frame_cols": [
+          [
+            2,
+            13
+          ],
+          [
+            115,
+            126
+          ]
+        ],
+        "center_cols": [
+          72,
+          99
+        ],
+        "h_rows": [
+          [
+            90,
+            98
+          ]
+        ],
+        "v_top_rows": [
+          75,
+          98
+        ],
+        "v_margin_rows": [
+          138,
+          212
+        ],
+        "margin_cols": [
+          [
+            14,
+            17
+          ],
+          [
+            109,
+            114
+          ]
+        ],
+        "agree_tol": 2.0,
+        "rects": [
+          [
+            2,
+            100,
+            126,
+            197
+          ],
+          [
+            17,
+            197,
+            111,
+            212
+          ]
+        ],
+        "mirror": {
+          "cols": [
+            23,
+            28
+          ],
+          "axis": 127
+        },
+        "flat_cols": [
+          28,
+          101
+        ],
+        "skip_cols": [
+          20,
+          70
+        ],
+        "chroma": {
+          "threshold": 10,
+          "radius": 2,
+          "min": 1500,
+          "max": 2600
+        },
+        "guard": {
+          "sep_mean": 0.8,
+          "sep_max": 3.0,
+          "holdout": 2.5,
+          "margin_window": [
+            146,
+            161
+          ],
+          "margin_ratio": 0.7,
+          "ring_max": 4.0,
+          "slope_band": 0.3,
+          "_limits": "the prototype's: measured 0.08 / 1.0, 1.0, 15 of 15, 2.5 and a chroma count of 2,007 on the real sprite"
+        }
+      },
+      "text": {
+        "_floor": "FLOOR: chosen BEFORE any fit was looked at, from legibility alone: the plaques' lettering is `px` 20 hd px tall (a capital) at scale 1 and 0.60 of it is 12 hd px = 6 units = 8.4 screen px at 720p (the pause menu and the end screens draw a plaque at 1.4 screen px per hd px or more), about the least a bold capital reads at. The golden plaque's four-line paragraph is the same lettering.",
+        "layout": "paragraph",
+        "slot": "matura",
+        "px": 20.0,
+        "faces": {
+          "kurale": {
+            "ratio": 1.0,
+            "embolden": 0.03,
+            "pitch": 1.4
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.0,
+            "embolden": 0.03,
+            "pitch": 1.3
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.0,
+            "embolden": 0.03,
+            "pitch": 1.5
+          }
+        },
+        "anchor": [
+          64.0,
+          160.5
+        ],
+        "min_scale": 0.6,
+        "step": 0.98,
+        "ink_threshold": 0.15,
+        "max_width": 96,
+        "shadow": {
+          "dx": 0.0,
+          "dy": 0.05,
+          "sigma": 0.0,
+          "sigma_min": 1.6,
+          "gain": 1.8,
+          "cap": 0.9,
+          "round_offsets": true
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        "gap": 0.05,
+        "max_lines": 4,
+        "safe": [
+          16,
+          113,
+          112,
+          208
+        ],
+        "orphan": 0.0,
+        "save_lines": 0.0,
+        "paint": [
+          2,
+          100,
+          126,
+          216
+        ]
+      }
+    },
+    {
+      "id": "game_finished",
+      "key": "picture.game_finished",
+      "sprite": "game_finished.png",
+      "size": [
+        680,
+        512
+      ],
+      "digest": "043b548b83ded9ec14cc6de85bd8df03",
+      "_measured": "A purple panel (interior x 102..330, y 138..366, dark lines at x 101 and 331, y 137 and 367) inside a frame whose art (a spiked orb with a flame ring) is outside it and never touched. Two paragraphs of pixel lettering: 'Well done! Stay tuned for more' (ink x 115..316, y 168..217) and, after the gap where the Facebook button would have been, 'Like us on facebook!' (x 133..299, y 262..344); the ink comes within 13 px of the interior's edges. The rectangle x 107..324, y 160..352 replaces both and their shadow. H(x) is the median over the INK-FREE rows 226..255 and 286..318 of the pixel over that row's centre mean (rank-1 residual 0.035 mean, 0.64 max); V(y) is read for EVERY row of the rectangle, with no hole and no interpolation, from the LEFT margin columns 103..107 only (the right margin carries a corner effect in rows 150..195: +3 percent at x 325, +17 percent at x 329, which over-estimates V by up to 7; it is a check). Held-out: on the ink-free rows the margin-derived model equals the true pixels to 0.05 mean, 1.0 at worst; the margins agree to 9 on 92 percent of the rectangle's rows; the three rows above and below the rectangle are within 0.92. OWNER DECISION (2026-11-16, option A): a language other than English draws ONLY the translation of the first paragraph, centred, and no Facebook line: the Facebook button was omitted on purpose (owner ruling, dead services), and no replacement words are invented. English keeps the untouched picture, Facebook line and all. Measured by the step-248 prototype.",
+      "erase": {
+        "rule": "panel",
+        "rect": [
+          107,
+          160,
+          325,
+          353
+        ],
+        "interior_cols": [
+          102,
+          331
+        ],
+        "center_cols": [
+          150,
+          281
+        ],
+        "h_rows": [
+          [
+            226,
+            256
+          ],
+          [
+            286,
+            319
+          ]
+        ],
+        "margin_cols": [
+          [
+            103,
+            108
+          ],
+          [
+            325,
+            330
+          ]
+        ],
+        "agree_tol": 9.0,
+        "guard": {
+          "sep_max": 2.0,
+          "v_margin": 2.5,
+          "agree_ratio": 0.7,
+          "ring_max": 4.0,
+          "_limits": "the prototype's: measured 1.0, 0.74, 92 percent and 0.92 on the real sprite"
+        }
+      },
+      "text": {
+        "_floor": "FLOOR: chosen BEFORE any fit was looked at, from legibility alone: the card's lettering is `px` 24 hd px tall (a capital) at scale 1, 12 units on a card drawn 340 x 256 units at the screen's centre; 0.60 of it is 14.4 hd px = 7.2 units = about 10 screen px at 720p, the same least size as the plaques' (0.60) at the card's larger scale.",
+        "layout": "paragraph",
+        "slot": "verdana",
+        "px": 24.0,
+        "faces": {
+          "noto_sans_bold": {
+            "ratio": 1.0,
+            "embolden": 0.025,
+            "pitch": 1.32
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.0,
+            "embolden": 0.025,
+            "pitch": 1.3
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.0,
+            "embolden": 0.025,
+            "pitch": 1.5
+          }
+        },
+        "anchor": [
+          216.5,
+          256.5
+        ],
+        "min_scale": 0.6,
+        "step": 0.98,
+        "ink_threshold": 0.15,
+        "max_width": 201,
+        "shadow": {
+          "dx": 0.0,
+          "dy": 0.0833,
+          "sigma": 0.0,
+          "sigma_min": 2.0,
+          "gain": 1.8,
+          "cap": 0.9,
+          "round_offsets": true
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        },
+        "gap": 0.04,
+        "max_lines": 4,
+        "safe": [
+          116,
+          172,
+          317,
+          341
+        ],
+        "orphan": 0.4,
+        "save_lines": 0.0833
+      }
+    },
+    {
+      "id": "credits_strip",
+      "sprite": "credit_name.png",
+      "size": [
+        512,
+        1024
+      ],
+      "digest": "e0073da61e6192b940f04f358c89ec0c",
+      "_measured": "The credits strip (drawn 256 x 512 units, scrolling, at alpha 230 by ui.json credits.strip). Its words are five bands of black lettering on a transparent ground between names: 'game design - programming - art direction - level design' (two lines, rows 43..100), 'illustration - 2d art' (188..212), 'illustration - 2d art at' (302..326, the company's name is the next line, rows 328..358, and stays), '3d modelling' (447..478) and the big heading 'Special thanks' (524..580). Each band is bounded above and below by a fully transparent row (asserted); the cleared rows hold 26,364 of the 88,150 non-transparent pixels, and every other pixel (the four name bands, 'Daniel and Carol Santee' with its 'and', the company line, the Asantee and Ethanon logos) is left as it is (asserted by a test). The ink windows (`ink_rows`) hold no opaque pixel outside the cleared rows (asserted at run time). Every original role starts at x 63..66, so the ink's left edge is x 64 (32 units). The lines are as far apart as the original's (pitch 26.2; the heading's 40) and farther only where ink would touch; wrapping wins over shrinking; the block is slid up where a descender would pass the window's last row. The ink is black, rgb 0 with alpha = coverage and no shadow (the original's bands have none): the strip is drawn at alpha 230 and the baked ink rides it, so it is not multiplied again. ASCII digits are drawn from Noto Sans Bold (digit_face): Kurale's emboldened 3 reads as an 8 at this size. Sizes are x-heights of the original's lettering, measured by the step-248 prototype.",
+      "erase": {
+        "rule": "clear_rows",
+        "clear": [
+          [
+            43,
+            101
+          ],
+          [
+            188,
+            213
+          ],
+          [
+            302,
+            327
+          ],
+          [
+            447,
+            479
+          ],
+          [
+            524,
+            581
+          ]
+        ]
+      },
+      "text": {
+        "_floor": "FLOOR: 0.70, chosen before any fit was looked at, from legibility alone: a role's x-height is 13.1 to 13.5 hd px (6.6 units, 9.3 screen px at 720p) at scale 1, and 0.70 of it is 9.2 hd px = 4.6 units = 6.5 screen px, the least a lower-case x-height reads at in a strip that scrolls. The heading's x-height is 26.3.",
+        "layout": "bands",
+        "slot": "matura",
+        "faces": {
+          "kurale": {
+            "ratio": 1.0,
+            "embolden": 0.065,
+            "reference": "U+0078"
+          },
+          "noto_sans_bold": {
+            "ratio": 1.0,
+            "embolden": 0.065,
+            "reference": "U+0078"
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.25,
+            "embolden": 0.04
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.3,
+            "embolden": 0.03
+          }
+        },
+        "min_scale": 0.7,
+        "step": 0.97,
+        "ink_threshold": 0.02,
+        "gap": 0.05,
+        "left": 64.0,
+        "max_right": 470.0,
+        "digit_face": "noto_sans_bold",
+        "ink_level": 0,
+        "japanese_spaces": true,
+        "bands": [
+          {
+            "key": "credits.role.design",
+            "px": 13.2,
+            "first_baseline": 64.5,
+            "anchor": "first",
+            "pitch": 26.2,
+            "max_lines": 3,
+            "ink_rows": [
+              39,
+              129
+            ],
+            "break": "after_dash"
+          },
+          {
+            "key": "credits.role.illustration",
+            "px": 13.1,
+            "first_baseline": 209.8,
+            "anchor": "first",
+            "pitch": 26.2,
+            "max_lines": 2,
+            "ink_rows": [
+              181,
+              258
+            ],
+            "break": "after_dash"
+          },
+          {
+            "key": "credits.role.illustration_at",
+            "px": 13.3,
+            "first_baseline": 323.8,
+            "anchor": "first",
+            "pitch": 26.2,
+            "max_lines": 1,
+            "ink_rows": [
+              299,
+              328
+            ],
+            "break": "after_dash"
+          },
+          {
+            "key": "credits.role.modelling",
+            "px": 13.5,
+            "first_baseline": 469.7,
+            "anchor": "first",
+            "pitch": 26.2,
+            "max_lines": 1,
+            "ink_rows": [
+              440,
+              485
+            ],
+            "break": "after_dash"
+          },
+          {
+            "key": "credits.thanks",
+            "px": 26.3,
+            "first_baseline": 565.0,
+            "anchor": "last",
+            "pitch": 40.0,
+            "max_lines": 2,
+            "ink_rows": [
+              488,
+              598
+            ],
+            "break": "space",
+            "faces": {
+              "kurale": {
+                "ratio": 1.0,
+                "embolden": 0.05,
+                "reference": "U+0078"
+              },
+              "noto_sans_bold": {
+                "ratio": 1.0,
+                "embolden": 0.05,
+                "reference": "U+0078"
+              },
+              "noto_sans_jp_bold": {
+                "ratio": 1.25,
+                "embolden": 0.03
+              },
+              "noto_sans_arabic_bold": {
+                "ratio": 1.3,
+                "embolden": 0.02
+              }
+            }
+          }
+        ]
       }
     }
   ]

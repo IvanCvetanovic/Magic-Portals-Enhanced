@@ -1,7 +1,7 @@
 // The interface languages and their strings (planning step 236, PORT-32): sim/Strings and game/data/lang/.
 //
-// Eleven languages - en (the default) de es fr it pt ru tr uk ja ar - and twenty-one short strings each: fourteen the fonts draw and, since planning step 247
-// (LANG-2), seven the picture bake draws into the original's pictures (the picture keys). What is pinned:
+// Eleven languages - en (the default) de es fr it pt ru tr uk ja ar - and twenty-nine short strings each: fourteen the fonts draw and, since planning steps 247 and 248
+// (LANG-2), fifteen the picture bake draws into the original's pictures (the picture keys). What is pinned:
 //
 //   the table      languages.json lists exactly Strings::Lang's codes in its order, each with its own native name (pinned as code points), its
 //                  direction and its font set; and the loader REFUSES a file that does not (a swapped pair, an unknown code, a missing or extra
@@ -632,14 +632,14 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
     const Strings::LanguageTable table = RealLanguages();
     const Map english = ReadStrings("en");
     const std::set<std::string> keys = AllKeys();
-    CHECK_EQ(static_cast<int>(keys.size()), 21);
+    CHECK_EQ(static_cast<int>(keys.size()), 29);
     {
         std::set<std::string> found;
         for (const auto& [key, value] : english) {
             (void)value;
             found.insert(key);
         }
-        CHECK_MSG(found == keys, "en.json has exactly the twenty-one keys of Strings::kKeys");
+        CHECK_MSG(found == keys, "en.json has exactly the twenty-nine keys of Strings::kKeys");
     }
     int translated = 0;
     int pictureTranslated = 0;
@@ -667,8 +667,8 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
     // Ten languages by fourteen interface keys, of which a few are the same word in several languages (Modern, a name): a file that was copied from
     // English would be a handful.
     CHECK_MSG(translated >= 122, "the languages are translated, not copied: " + std::to_string(translated) + " of 140 differ from English");
-    // And ten languages by seven picture keys: every one differs from the English, except the ONE documented exception below.
-    CHECK_MSG(pictureTranslated == 69, "the picture words are translated, not copied: " + std::to_string(pictureTranslated) + " of 70 differ from English (69 are expected)");
+    // And ten languages by fifteen picture keys: every one differs from the English, except the ONE documented exception below.
+    CHECK_MSG(pictureTranslated == 149, "the picture words are translated, not copied: " + std::to_string(pictureTranslated) + " of 150 differ from English (149 are expected)");
 
     // Each Placeholder::k name is what the key table says, and the table's placeholders are the ones English really carries.
     for (const Strings::KeySpec& spec : Strings::kKeys) {
@@ -687,7 +687,7 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
     CHECK_MSG(listed == keys, "the Matura, Verdana and picture lists together are every key");
 }
 
-// The seven picture keys (planning step 247).
+// The fifteen picture keys (planning steps 247 and 248: the pictures' words, the two score plaques, the game-finished card's first paragraph and the credits strip's five bands).
 void ThePictureKeysAreTheWordsOfThePictures() {
     const Strings::LanguageTable table = RealLanguages();
     const Map english = ReadStrings("en");
@@ -696,13 +696,16 @@ void ThePictureKeysAreTheWordsOfThePictures() {
         {"picture.tap_start", "TAP START"},           {"picture.achievements", "Achievements"},         {"picture.select_chapter", "Select chapter"},
         {"picture.points", "points"},                 {"picture.level_finished", "level finished"},     {"picture.portals_created", "portals created"},
         {"picture.game_over", "game over"},
+        {"picture.current_score", "current score"}, {"picture.golden_score", "portals for golden score"}, {"picture.game_finished", "Well done! Stay tuned for more"},
+        {"credits.role.design", "game design - programming - art direction - level design"}, {"credits.role.illustration", "illustration - 2d art"},
+        {"credits.role.illustration_at", "illustration - 2d art at"}, {"credits.role.modelling", "3d modelling"}, {"credits.thanks", "Special thanks"},
     };
-    CHECK_EQ(static_cast<int>(Strings::kPictureKeys.size()), 7);
+    CHECK_EQ(static_cast<int>(Strings::kPictureKeys.size()), 15);
     for (const std::string_view key : Strings::kPictureKeys) {
         const std::string name(key);
         CHECK_MSG(pinned.count(name) == 1 && english.at(name) == pinned.at(name), "the English of " + name + " is the picture's word: " + english.at(name));
     }
-    // 14 + 7: the other fourteen are the ones the drift case reads through the rules.
+    // 14 + 15: the other fourteen are the ones the drift case reads through the rules.
     CHECK_EQ(static_cast<int>(Strings::kKeys.size()) - static_cast<int>(Strings::kPictureKeys.size()), 14);
     // The one word that is the same in a language as in English: French says "points". Any other copy of the English is a file that was not translated.
     const std::set<std::pair<std::string, std::string>> sameAsEnglish = {{"fr", "picture.points"}};

@@ -5220,9 +5220,12 @@ std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std:
         state.baked.emplace(key, std::string());
         return original;
     };
-    // A key the language's file lacks shows the English phrase (Table::Get): drawing that in a foreign face would be a picture in English that looks translated.
+    // A key the language's file lacks shows the English phrase (Table::Get): drawing that in a foreign face would be a picture in English that looks translated. A picture of
+    // several phrases (the credits strip: a key a band) keeps the English one if ANY of its keys is missing.
     const std::vector<std::string>& fellBack = m_strings.FellBack();
-    if (std::find(fellBack.begin(), fellBack.end(), recipe->key) != fellBack.end()) return english("the language has no " + recipe->key + " string");
+    for (const std::string& key : recipe->Keys()) {
+        if (std::find(fellBack.begin(), fellBack.end(), key) != fellBack.end()) return english("the language has no " + key + " string");
+    }
     const FontBake::Plan& plan = m_strings.Languages().Fonts();
     if (!plan.loaded) return english("game/data/lang/languages.json has no fonts plan");
     if (m_paths.prisms.empty()) return english("there is no scratch folder to write the picture in");
@@ -5234,7 +5237,10 @@ std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std:
     wanted.fontsDir = m_paths.portData + "/" + plan.folder;
     wanted.lang = m_language;
     wanted.languageCode = code;
-    wanted.phrase = m_strings.Get(recipe->key);
+    if (!recipe->key.empty()) wanted.phrase = m_strings.Get(recipe->key);
+    if (recipe->text.layout == PictureBake::Layout::Bands) {
+        for (const PictureBake::Band& band : recipe->text.bands) wanted.phrases.push_back(m_strings.Get(band.key));
+    }
     wanted.sourcePath = original;
     wanted.twinPath = (std::filesystem::path(original).parent_path() / recipe->erase.twinSprite).string();
     wanted.directory = (m_paths.prisms / PictureBake::kScratchFolder).string();
@@ -5247,7 +5253,7 @@ std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std:
 }
 
 void MagicPortalsLayer::refreshWordedPictures() {
-    const bool anything = !m_menuPictures.empty() || !m_pauseImages.empty() || !m_endImages.empty() || !m_popupImages.empty();
+    const bool anything = !m_menuPictures.empty() || !m_pauseImages.empty() || !m_endImages.empty() || !m_popupImages.empty() || !m_plaqueImage.empty();
     if (!anything) return;
     const std::string scratch = (m_paths.prisms / PictureBake::kScratchFolder).generic_string();
     // Whether `file` names a picture whose path the language changes: a recipe's (in a language that has the table), or - back in English - one that holds a baked file.
@@ -5280,6 +5286,8 @@ void MagicPortalsLayer::refreshWordedPictures() {
     for (auto& [file, path] : m_popupImages) {
         if (concerned(file, path)) path = readable(originalAsset(file));
     }
+    // The level HUD's plaque (current_score_plaque.png, planning step 248): one string, set when a level with a medal is laid out, and the language's like the rest.
+    if (!m_plaqueImage.empty() && concerned(m_hudRules.plaque.sprite, m_plaqueImage)) m_plaqueImage = readable(menuImage(m_hudRules.plaque.sprite));
     for (const auto& [file, image] : m_endImages) {
         if (m_endTexels.find(file) != m_endTexels.end()) m_endTexels[file] = image.empty() ? glm::ivec2(0) : glm::ivec2(imageSizePx(image));
     }

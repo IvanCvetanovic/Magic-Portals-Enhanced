@@ -84,7 +84,7 @@ add_mp_test(test_mp_numbers)
 add_mp_test(test_mp_levels SKIPS_WITH_77)
 
 # UTF-8 text and the interface languages (planning step 236, PORT-32): sim/Utf8's decoder and encoder (each malformed class pinned to its exact
-# output, a fuzz for the round trip), sim/Strings' language table and its twenty-one keys (fourteen interface strings and, since step 247, seven picture words) in eleven languages (key and placeholder parity, the
+# output, a fuzz for the round trip), sim/Strings' language table and its twenty-nine keys (fourteen interface strings and, since steps 247 and 248, fifteen picture words) in eleven languages (key and placeholder parity, the
 # original fonts' character set, the drift against the English the rules fields still hold, fallback to English), and sim/Language's saved
 # choice. Pure sim and a scratch directory; its drift case ties en.json to the English the rule tables still hold (the secret achievement's words are
 # Asantee's, in no committed table: the overlay's, test_mp_langsim).
@@ -427,16 +427,16 @@ set_property(SOURCE test_mp_langlayer.cpp APPEND PROPERTY
 add_mp_test(test_mp_langsim)
 
 # Does every translation fit its box? (planning step 238) The fourteen interface strings in the real font set of each of the eleven languages against
-# the limits the rule tables name (and, since step 247, the seven picture words against the boxes and floors of game/data/picture_recipes.json), and - a suite of its own that exits 77 without the gitignored achievements.<code>.json files - the achievements'
+# the limits the rule tables name (and, since steps 247 and 248, the fifteen picture words against the boxes and floors of game/data/picture_recipes.json), and - a suite of its own that exits 77 without the gitignored achievements.<code>.json files - the achievements'
 # titles, descriptions, unlock cards and popups, and the locked secret achievements' words.
 add_mp_test(test_mp_overflow)
 add_mp_test(test_mp_overflow_achievements IN_SOURCE test_mp_overflow SKIPS_WITH_77)
 
-# The words the original draws as pixels, drawn again in the language on the screen (planning step 247, LANG-2): sim/PictureBake over hand-authored synthetic
-# plates and a transparent canvas (the erase restores a known plate, the phrase stays in its box and stops at its floor, Arabic is drawn in the shaped order, a Japanese
+# The words the original draws as pixels, drawn again in the language on the screen (planning steps 247 and 248, LANG-2): sim/PictureBake over hand-authored synthetic
+# plates, a plaque with a straight frame and a medal, a panel, a strip with transparent gaps and a transparent canvas (the erase restores a known plate, the phrase stays in its box and stops at its floor, Arabic is drawn in the shaped order, a Japanese
 # space leaves no gap, a wrong size, digest or glyph keeps the English picture, the bytes are deterministic and a failed write leaves nothing), plus the table's loader and
 # the shipped phrases against the recipes' boxes. Pure sim: the committed faces and tables only, so it needs nothing outside this repository. The second suite is the
-# same code over the ORIGINAL's seven sprites (every recipe's guards on the real picture, all ten languages above the floors, every pixel outside the rectangle
+# same code over the ORIGINAL's eleven sprites (every recipe's guards on the real picture, all ten languages above the floors, every pixel outside the rectangle
 # bit-identical, the erase against the one ground truth there is) and exits 77 without them.
 add_mp_test(test_mp_picturebake)
 add_mp_test(test_mp_picturebake_original IN_SOURCE test_mp_picturebake SKIPS_WITH_77)
