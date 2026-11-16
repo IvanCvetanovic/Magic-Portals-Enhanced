@@ -2743,6 +2743,11 @@ bool FitBands(const Request& request, std::vector<BandFit>& out, std::string& wh
         made.text = BandText(recipe.text, band);
         Set set;
         if (!MakeSet(request, made.text, set, why)) return false;
+        // The loader only lets a band balance against an EARLIER one; a Recipe built in code (the tests do) may not keep that, and out[] holds the bands before this one only.
+        if (band.balanced && (band.balanceAbove < 0 || static_cast<std::size_t>(band.balanceAbove) >= i)) {
+            why = band.key + ": balances against band " + std::to_string(band.balanceAbove) + ", which is not an earlier band";
+            return false;
+        }
         const double aboveBottom = band.balanced ? static_cast<double>(out[Z(band.balanceAbove)].fit.placement.ink.y1) : -1.0;
         if (!FitBand(set, recipe, band, phrase, aboveBottom, made.fit, why)) {
             why = band.key + ": " + why;

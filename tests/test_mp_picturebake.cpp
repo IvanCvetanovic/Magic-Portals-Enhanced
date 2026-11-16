@@ -1236,8 +1236,13 @@ void EnsureWritesWholeOrNothing() {
     for (const std::size_t keep : {static_cast<std::size_t>(0), static_cast<std::size_t>(7), static_cast<std::size_t>(40), baked.rgba.size() / 100}) {
         std::string whole;
         CHECK(PB::EncodePng(baked, whole));
-        std::ifstream in(first.path, std::ios::binary);
-        const std::string held((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        // The file is read and CLOSED before it is cut and before Ensure runs: Windows refuses to put a new file over one that is open (the stream's share mode has no delete),
+        // which is the test's own handle and not a fault of the bake (the first run of this suite on Windows, planning step 250, said "cannot be put in place").
+        std::string held;
+        {
+            std::ifstream in(first.path, std::ios::binary);
+            held.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        }
         WriteText(first.path, held.substr(0, std::min(keep, held.size() - 1)));
         const PB::Written healed = PB::Ensure(wanted("TAP START", out));
         CHECK_MSG(healed.ok && !healed.cached, "a file cut to " + std::to_string(keep) + " bytes is rendered again: " + healed.reason);
@@ -2202,7 +2207,7 @@ void AWrappedHeadingIsBalancedBetweenTheInkAboveAndTheRowBelow() {
     double above = 0.0;
     double under = 0.0;
     gaps(balanced, 170.0, above, under);
-    CHECK_MSG(std::fabs(above - under) <= 2.0 && above >= 10.0, "balanced: the free rows above the heading (" + std::to_string(above) + ") are the free rows below it (" + std::to_string(under) + ") to within two");
+    CHECK_MSG(std::fabs(above - under) <= 1.0 && above >= 10.0, "balanced: the free rows above the heading (" + std::to_string(above) + ") are the free rows below it (" + std::to_string(under) + ") to within one");
     double aboveBefore = 0.0;
     double underBefore = 0.0;
     gaps(anchored, 170.0, aboveBefore, underBefore);
@@ -2236,7 +2241,7 @@ void AWrappedHeadingIsBalancedBetweenTheInkAboveAndTheRowBelow() {
         double a2 = 0.0;
         double u2 = 0.0;
         gaps(moved, 180.0, a2, u2);
-        CHECK_MSG(std::fabs(a2 - u2) <= 2.0 && moved.bands[1].ink.y0 >= balanced.bands[1].ink.y0 + 3 && moved.bands[1].ink.y0 <= balanced.bands[1].ink.y0 + 7,
+        CHECK_MSG(std::fabs(a2 - u2) <= 1.0 && moved.bands[1].ink.y0 >= balanced.bands[1].ink.y0 + 3 && moved.bands[1].ink.y0 <= balanced.bands[1].ink.y0 + 7,
                   "below_row 180 puts the heading half of ten rows lower, balanced to that row: " + std::to_string(moved.bands[1].ink.y0 - balanced.bands[1].ink.y0));
     } else {
         CHECK_MSG(false, "the lower row bakes: " + moved.reason);
@@ -2252,7 +2257,7 @@ void AWrappedHeadingIsBalancedBetweenTheInkAboveAndTheRowBelow() {
         double a3 = 0.0;
         double u3 = 0.0;
         gaps(follows, 170.0, a3, u3);
-        CHECK_MSG(follows.bands[0].ink.y1 > balanced.bands[0].ink.y1 + 6 && std::fabs(a3 - u3) <= 2.0 && follows.bands[1].ink.y0 > balanced.bands[1].ink.y0,
+        CHECK_MSG(follows.bands[0].ink.y1 > balanced.bands[0].ink.y1 + 6 && std::fabs(a3 - u3) <= 1.0 && follows.bands[1].ink.y0 > balanced.bands[1].ink.y0,
                   "the heading is balanced to where the role ended in THIS language (" + std::to_string(follows.bands[0].ink.y1) + "), not to a number: " + std::to_string(a3) + " above, " + std::to_string(u3) + " below");
     }
     // A heading with nowhere to go - its window cannot hold it balanced - shrinks a step (the fit's own rule), and is refused below the floor.
@@ -2906,7 +2911,7 @@ PB::Request RequestFromTable(const PB::Recipe& recipe, Lang lang, const Strings:
 // has as many free rows above it, under the ink of the role line above, as below it, above the row of the first name, to within kBalanceTolerance (the rows an ink box at the recipe's
 // threshold and a rounded baseline can differ by), and both are ten rows at least; a heading of one line keeps its last baseline, the recipe's 565.
 constexpr double kLeastLineGap = 1.5;
-constexpr double kBalanceTolerance = 3.0;
+constexpr double kBalanceTolerance = 1.0;
 constexpr double kLeastHeadingGap = 10.0;
 
 void CheckTheStripsBands(const PB::Recipe& recipe, const PB::Outcome& a, const std::string& name) {

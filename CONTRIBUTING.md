@@ -33,7 +33,7 @@ ctest --test-dir build
 
 **macOS and iOS** need a Mac. The configure lines are in `.github/workflows/apple.yml`; [docs/apple.md](docs/apple.md) has the rest.
 
-Without the original's converted levels, some suites exit with code 77 (on Linux, 36 of the 80 tests in a clean clone), which `ctest` reports as skipped, never as passed. The suites that touch your change are the ones to run: `build/tests/test_mp test_mp_<suite>` (`test_mp.exe` on Windows); `build/tests/test_mp --list` names them.
+Without the original's converted levels, some suites exit with code 77 (on Linux, 43 of the 97 tests in a clean clone), which `ctest` reports as skipped, never as passed. The suites that touch your change are the ones to run: `build/tests/test_mp test_mp_<suite>` (`test_mp.exe` on Windows); `build/tests/test_mp --list` names them.
 
 **The Python tools** use the standard library. From the repository root:
 

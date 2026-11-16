@@ -3085,6 +3085,16 @@ void aPopupsPictureIsTheLanguagesToo() {
     CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
     if (layer.SimLevel() == nullptr) return;
     checkBaked(layer.PopupPictureFile("sprites/game_finished.png"), finished, "de", "the game-finished card");
+    // A card left to the moment it is raised is made ONCE: take its file away, ask again, and nothing makes it again (a second ask that ran the bake once more - about 6 ms for a hit,
+    // 50 for a miss, on every draw of the popup - would put the file back).
+    {
+        const std::string made = layer.PopupPictureFile("sprites/game_finished.png");
+        std::error_code ignored;
+        std::filesystem::remove(made, ignored);
+        CHECK_MSG(!std::filesystem::exists(made), "the baked card is taken away: " + made);
+        CHECK_MSG(layer.PopupPictureFile("sprites/game_finished.png") == made, "a second ask names the same picture");
+        CHECK_MSG(!std::filesystem::exists(made), "and does not make it again: the picture is resolved once, not on every ask");
+    }
     CHECK(layer.SetLanguage(Lang::Ja));
     checkBaked(layer.PopupPictureFile("sprites/game_finished.png"), finished, "ja", "the game-finished card after the switch");
     CHECK(layer.SetLanguage(Lang::En));

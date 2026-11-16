@@ -936,6 +936,10 @@ struct Ink {
     int count = 0;
     double lowerFill = 0.0;
     double leftShare = 0.0;
+    // Where the ink's LOW end and its RIGHT end are, as shares of the ink box (0 = left or top, 1 = right or bottom): the mean column of the lowest two rows, and the mean row of the
+    // right-most fifth of the columns. They fix which way a check mark stands (its knee low and left, its long arm rising to the right), which the fill metrics above cannot.
+    double bottomX = 0.0;
+    double rightY = 0.0;
     std::vector<int> columns; // the ink pixels of each cell column, from column 0 of the cell
 };
 
@@ -980,6 +984,22 @@ Ink InkOf(const FontBake::Baked& baked, std::uint32_t id) {
     const int lowerArea = (ink.y1 - mid) * (ink.x1 - ink.x0);
     ink.lowerFill = lowerArea > 0 ? static_cast<double>(lower) / lowerArea : 0.0;
     ink.leftShare = static_cast<double>(left) / ink.count;
+    {
+        const double width = std::max(1, ink.x1 - ink.x0);
+        const double height = std::max(1, ink.y1 - ink.y0);
+        double bottomSum = 0.0, rightSum = 0.0;
+        int bottomN = 0, rightN = 0;
+        const int rightFrom = ink.x1 - std::max(1, (ink.x1 - ink.x0) / 5);
+        for (int y = ink.y0; y < ink.y1; ++y) {
+            for (int x = ink.x0; x < ink.x1; ++x) {
+                if (!white(x, y)) continue;
+                if (y >= ink.y1 - 2) { bottomSum += (x - ink.x0) / width; ++bottomN; }
+                if (x >= rightFrom) { rightSum += (y - ink.y0) / height; ++rightN; }
+            }
+        }
+        ink.bottomX = bottomN > 0 ? bottomSum / bottomN : 0.5;
+        ink.rightY = rightN > 0 ? rightSum / rightN : 0.5;
+    }
     return ink;
 }
 
@@ -1046,6 +1066,10 @@ void TheIconsAreOurOwnShapesDrawnByCode() {
     CHECK_MSG(lock.lowerFill > 0.75 && tick.lowerFill < 0.6, "lower-half fill: padlock " + std::to_string(lock.lowerFill) + " against check mark " + std::to_string(tick.lowerFill));
     CHECK_MSG(std::abs(lock.leftShare - 0.5) < 0.05 && tick.leftShare < 0.48 && tick.leftShare < lock.leftShare - 0.02, "left share: padlock " + std::to_string(lock.leftShare) + " (symmetric), check mark " + std::to_string(tick.leftShare) + " (long arm right)");
     CHECK_MSG(lock.count > tick.count / 2 && tick.count > 20, "and each has real ink: " + std::to_string(tick.count) + " and " + std::to_string(lock.count));
+    // The check mark stands the right way up and the right way round: its lowest ink (the knee) is in the left half of its box, and its right end (the long arm's tip) is in the upper
+    // half. Turned upside down the knee would be at the top and the tip at the bottom-right; mirrored, the knee would be on the right. Neither fill metric above tells those apart.
+    CHECK_MSG(tick.bottomX < 0.5 && tick.rightY < 0.5, "the check mark's knee is low and left (" + std::to_string(tick.bottomX) + " across) and its long arm ends high (" + std::to_string(tick.rightY) + " down)");
+    std::printf("  the check mark's knee at %.2f across, its long arm's end at %.2f down\n", tick.bottomX, tick.rightY);
     // The check mark's SHORT ARM: the ink left of the knee is a share of the whole between a ninth and a third (the long arm carries the rest), where a mark with no short arm has
     // none. The knee's column is the shape's knee_x of the capital from the ink's left edge in the cell (the padding's).
     {
