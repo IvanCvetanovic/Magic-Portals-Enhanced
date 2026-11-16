@@ -1,0 +1,499 @@
+{
+  "_about": [
+    "How the words the original draws as pixels are drawn again in the language on the screen (planning step 247, sim/PictureBake). NUMBERS ABOUT GEOMETRY ONLY: rectangles, rows,",
+    "columns, sizes and looks measured on the extracted sprites, each with the sprite's size and a digest of its decoded pixels, so that another version of a sprite is refused and the",
+    "English picture is kept. No pixel, colour table or gradient of the original is here, and nothing derived from one: the plate under a word is modelled at run time from the picture's",
+    "own text-free rows and columns, and the baked picture is written to the scratch folder, never to the repository.",
+    "rule: row_lerp = a plate that is flat along x, filled row by row between the means of two text-free column bands; separable = a vertical profile (from text-free columns) times a",
+    "horizontal vignette (from text-free rows); twin = the rectangle is copied from another shipped picture moved by `shift`, which must be bit-exact outside the word's window;",
+    "generated = no pixel is read, the picture is the words alone on a transparent canvas of the same size.",
+    "guard: what the erase must find true of the picture it reads, in grey levels; a number over its limit keeps the English picture (one log line says which).",
+    "text.layout: word = one line, ink centred on the anchor, sized by a reference glyph (`px` tall at scale 1) and shrunk by `step` until the ink is inside max_width by max_height; stack = up",
+    "to max_lines lines broken at spaces (the most lines that fit at or above min_scale), the block's ink centred on the anchor and inside `safe`, the widest line at most max_width.",
+    "min_scale is the floor: a phrase that needs less keeps the English picture, and tests/test_mp_overflow.cpp fails a shipped translation that does.",
+    "faces: the tuning of the faces the slot draws with (languages.json fonts): ratio (the kanji and the alef are drawn larger than a Latin x), embolden (a fraction of px, an octagon of the",
+    "coverage at the supersampled grid), and `reference`, the glyph a face is measured by where it is not the plan's capital H. shadow and inner are fractions of the scaled px.",
+    "Every number was measured on the original's sprites by the prototype of planning step 247 (Pillow/FreeType); the port draws with stb_truetype, so the fit scales are recomputed there."
+  ],
+  "version": 1,
+  "recipes": [
+    {
+      "id": "tap_start",
+      "key": "picture.tap_start",
+      "sprite": "main_play_game_button.png",
+      "size": [
+        512,
+        128
+      ],
+      "digest": "d17efe5ae96f120c776dd9957227c207",
+      "_measured": "The word's cap is 19 px (rows 54..72) and its ink x 183..327, on a translucent plate whose flat zone is x 160..350; the rectangle is the English word and its shadow (reach x 180..337). Reference bands agree to 0.21 grey levels on the real sprite, the 3 px collar to 4. Measured on the extracted sprite by the step-247 prototype.",
+      "erase": {
+        "rule": "row_lerp",
+        "rect": [
+          160,
+          46,
+          351,
+          84
+        ],
+        "ref_cols": [
+          [
+            160,
+            172
+          ],
+          [
+            338,
+            351
+          ]
+        ],
+        "guard": {
+          "agree_max": 3.0,
+          "collar_max": 5.0
+        }
+      },
+      "text": {
+        "layout": "word",
+        "slot": "verdana",
+        "px": 19.0,
+        "faces": {},
+        "anchor": [
+          255.5,
+          63.5
+        ],
+        "min_scale": 0.55,
+        "step": 0.995,
+        "ink_threshold": 0.04,
+        "max_width": 178,
+        "max_height": 34,
+        "shadow": {
+          "dx": 0.15,
+          "dy": 0.15,
+          "sigma": 0.1,
+          "sigma_min": 0.0,
+          "gain": 0.95,
+          "cap": 1.0,
+          "round_offsets": false
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        }
+      }
+    },
+    {
+      "id": "achievements",
+      "key": "picture.achievements",
+      "sprite": "scores.png",
+      "size": [
+        256,
+        64
+      ],
+      "digest": "dadf7fadad324a50cb80cf854a332d6f",
+      "_measured": "Cap 19-20 px (rows 22..41), ink x 27..228, shadow to x 234 and row 47; one file for the main menu and the pause menu. The only plate with a ground truth: the unshipped sister picture differs from it only inside x 24..234, y 18..48, and the erase agrees with it to a mean of 1.16 grey levels. Measured by the step-247 prototype.",
+      "erase": {
+        "rule": "separable",
+        "rect": [
+          22,
+          17,
+          237,
+          51
+        ],
+        "ref_cols": [
+          [
+            18,
+            22
+          ],
+          [
+            238,
+            242
+          ]
+        ],
+        "ref_rows": [
+          [
+            14,
+            18
+          ]
+        ],
+        "flat_cols": [
+          60,
+          190
+        ],
+        "guard": {
+          "collar_max": 4.0,
+          "holdout_mean": 3.0,
+          "holdout_max": 8.0
+        }
+      },
+      "text": {
+        "layout": "word",
+        "slot": "verdana",
+        "px": 20.0,
+        "faces": {},
+        "anchor": [
+          128.0,
+          31.5
+        ],
+        "min_scale": 0.52,
+        "step": 0.995,
+        "ink_threshold": 0.04,
+        "max_width": 200,
+        "max_height": 28,
+        "shadow": {
+          "dx": 0.15,
+          "dy": 0.15,
+          "sigma": 0.1,
+          "sigma_min": 0.0,
+          "gain": 0.95,
+          "cap": 1.0,
+          "round_offsets": false
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        }
+      }
+    },
+    {
+      "id": "select_chapter",
+      "key": "picture.select_chapter",
+      "sprite": "select_chapter.png",
+      "size": [
+        256,
+        64
+      ],
+      "digest": "9b6c80f36fad3b4a0c0e5ab8ddbaa2ad",
+      "_measured": "The same plate as the achievements' in grey; the word is longer (ink x 26..231, its shadow reaches x 236), so the rectangle is 22..237. No ground truth of its own: collar 2 and hold-out 4 grey levels at most on the real sprite. Measured by the step-247 prototype.",
+      "erase": {
+        "rule": "separable",
+        "rect": [
+          22,
+          17,
+          237,
+          51
+        ],
+        "ref_cols": [
+          [
+            18,
+            22
+          ],
+          [
+            238,
+            242
+          ]
+        ],
+        "ref_rows": [
+          [
+            14,
+            18
+          ]
+        ],
+        "flat_cols": [
+          60,
+          190
+        ],
+        "guard": {
+          "collar_max": 4.0,
+          "holdout_mean": 3.0,
+          "holdout_max": 8.0
+        }
+      },
+      "text": {
+        "layout": "word",
+        "slot": "verdana",
+        "px": 20.0,
+        "faces": {},
+        "anchor": [
+          128.0,
+          31.5
+        ],
+        "min_scale": 0.52,
+        "step": 0.995,
+        "ink_threshold": 0.04,
+        "max_width": 200,
+        "max_height": 28,
+        "shadow": {
+          "dx": 0.15,
+          "dy": 0.15,
+          "sigma": 0.1,
+          "sigma_min": 0.0,
+          "gain": 0.95,
+          "cap": 1.0,
+          "round_offsets": false
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        }
+      }
+    },
+    {
+      "id": "points",
+      "key": "picture.points",
+      "sprite": "achievement_points.png",
+      "size": [
+        128,
+        128
+      ],
+      "digest": "93e42f685828db855f5b070e0a01a71c",
+      "_measured": "The level grid's tile moved by (-2, -3) is bit-exact the same picture outside the English word's window (x 27..100, y 98..124: 1431 pixels differ inside it), so the erase is a copy, not a model. The word hangs on the bevel where the English one did: cap 16 px, ink x 28..95. Measured by the step-247 prototype.",
+      "erase": {
+        "rule": "twin",
+        "twin_sprite": "level_button.png",
+        "shift": [
+          -2,
+          -3
+        ],
+        "rect": [
+          22,
+          96,
+          106,
+          126
+        ],
+        "check_rect": [
+          27,
+          98,
+          101,
+          125
+        ],
+        "min_inside": 1000,
+        "twin_digest": "a8075e3bf561ffae3270f0f2a83f94a5"
+      },
+      "text": {
+        "layout": "word",
+        "slot": "verdana",
+        "px": 16.0,
+        "faces": {},
+        "anchor": [
+          62.0,
+          107.0
+        ],
+        "min_scale": 0.66,
+        "step": 0.995,
+        "ink_threshold": 0.04,
+        "max_width": 72,
+        "max_height": 26,
+        "shadow": {
+          "dx": 0.15,
+          "dy": 0.15,
+          "sigma": 0.1,
+          "sigma_min": 0.0,
+          "gain": 0.95,
+          "cap": 1.0,
+          "round_offsets": false
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.0,
+          "dx": 0.0,
+          "dy": 0.0
+        }
+      }
+    },
+    {
+      "id": "level_finished",
+      "key": "picture.level_finished",
+      "sprite": "level_finished.png",
+      "size": [
+        512,
+        128
+      ],
+      "digest": "e2a420ed1e43db323606ad9d94885529",
+      "_measured": "Generated: no pixel of the original is read. Two stacked lines, x-height 31.5 px, baselines 58.5 and 107.5, ink x 134..381 y 11..114 (centre 257.5, 62.5), a soft shadow offset (2, 2) with sigma 3.75..4 and at most 0.835 alpha, the ink shaded along its left and top edges (down to 206). The widest line is held to 262 px so that the restart button keeps its clearance at 16:9. Measured by the step-247 prototype.",
+      "erase": {
+        "rule": "generated"
+      },
+      "text": {
+        "layout": "stack",
+        "slot": "matura",
+        "px": 31.5,
+        "faces": {
+          "kurale": {
+            "ratio": 1.0,
+            "embolden": 0.065,
+            "reference": "U+0078"
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.25,
+            "embolden": 0.035
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.3,
+            "embolden": 0.02
+          }
+        },
+        "anchor": [
+          258.0,
+          62.5
+        ],
+        "min_scale": 0.6,
+        "step": 0.97,
+        "ink_threshold": 0.02,
+        "max_width": 262,
+        "first_baseline": 58.5,
+        "pitch": 49.0,
+        "gap": 0.08,
+        "max_lines": 2,
+        "safe": [
+          14,
+          10,
+          498,
+          114
+        ],
+        "shadow": {
+          "dx": 0.06,
+          "dy": 0.06,
+          "sigma": 0.12,
+          "sigma_min": 1.5,
+          "gain": 1.0,
+          "cap": 0.8,
+          "round_offsets": true
+        },
+        "inner": {
+          "k": 0.15,
+          "sigma": 0.07,
+          "dx": 0.07,
+          "dy": 0.07
+        }
+      }
+    },
+    {
+      "id": "portals_created",
+      "key": "picture.portals_created",
+      "sprite": "portals_created_plaque.png",
+      "size": [
+        128,
+        128
+      ],
+      "digest": "0b30608275d0180bfb5b07b62dad5d86",
+      "_measured": "Generated. Two stacked lines, x-height 15.5 px, baselines 59.8 and 86.8, ink x 7..123 y 36..87, white ink with no shade and a symmetric halo (no offset, sigma 1.75..2.25, at most 0.68 alpha). The weakest fit of the three generated looks (mean 3.0 of 255 over mid-blue). Measured by the step-247 prototype.",
+      "erase": {
+        "rule": "generated"
+      },
+      "text": {
+        "layout": "stack",
+        "slot": "matura",
+        "px": 15.5,
+        "faces": {
+          "kurale": {
+            "ratio": 1.0,
+            "embolden": 0.065,
+            "reference": "U+0078"
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.25,
+            "embolden": 0.035
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.3,
+            "embolden": 0.02
+          }
+        },
+        "anchor": [
+          65.0,
+          61.5
+        ],
+        "min_scale": 0.6,
+        "step": 0.97,
+        "ink_threshold": 0.02,
+        "max_width": 116,
+        "first_baseline": 59.8,
+        "pitch": 27.0,
+        "gap": 0.08,
+        "max_lines": 2,
+        "safe": [
+          6,
+          28,
+          122,
+          100
+        ],
+        "shadow": {
+          "dx": 0.0,
+          "dy": 0.0,
+          "sigma": 0.12,
+          "sigma_min": 1.5,
+          "gain": 1.5,
+          "cap": 0.7,
+          "round_offsets": true
+        },
+        "inner": {
+          "k": 0.0,
+          "sigma": 0.07,
+          "dx": 0.07,
+          "dy": 0.07
+        }
+      }
+    },
+    {
+      "id": "game_over",
+      "key": "picture.game_over",
+      "sprite": "game_over.png",
+      "size": [
+        256,
+        256
+      ],
+      "digest": "c9b714f1c8e395b7d7f76b17e20e5de6",
+      "_measured": "Generated. Two stacked lines, x-height 41.5 px, baselines 116.5 and 179.8, ink x 28..226 y 75..180 (centre 127, 127.5), a shadow offset (2, 2) with sigma 4.25..4.5 and at most 0.815 alpha, the ink shaded along its left and top edges. Measured by the step-247 prototype.",
+      "erase": {
+        "rule": "generated"
+      },
+      "text": {
+        "layout": "stack",
+        "slot": "matura",
+        "px": 41.5,
+        "faces": {
+          "kurale": {
+            "ratio": 1.0,
+            "embolden": 0.065,
+            "reference": "U+0078"
+          },
+          "noto_sans_jp_bold": {
+            "ratio": 1.25,
+            "embolden": 0.035
+          },
+          "noto_sans_arabic_bold": {
+            "ratio": 1.3,
+            "embolden": 0.02
+          }
+        },
+        "anchor": [
+          127.5,
+          127.5
+        ],
+        "min_scale": 0.6,
+        "step": 0.97,
+        "ink_threshold": 0.02,
+        "max_width": 224,
+        "first_baseline": 116.5,
+        "pitch": 63.3,
+        "gap": 0.08,
+        "max_lines": 2,
+        "safe": [
+          16,
+          52,
+          240,
+          204
+        ],
+        "shadow": {
+          "dx": 0.06,
+          "dy": 0.06,
+          "sigma": 0.1,
+          "sigma_min": 1.5,
+          "gain": 1.0,
+          "cap": 0.7,
+          "round_offsets": true
+        },
+        "inner": {
+          "k": 0.17,
+          "sigma": 0.06,
+          "dx": 0.05,
+          "dy": 0.05
+        }
+      }
+    }
+  ]
+}

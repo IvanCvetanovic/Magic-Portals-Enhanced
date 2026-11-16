@@ -913,6 +913,110 @@ void ATapOnAPlateChoosesAndKeepsTheLanguage() {
     }
 }
 
+// The pictures that carry the original's words as pixels are the picked language's too (planning step 247, LANG-2): a pick through the picker's own plates, as a player
+// makes it, and the main menu's TAP START and Achievements pictures, chapter select's title and the dashboard's points label are drawn from the language's baked copies
+// at the next frame of each screen; picking English gives the shipped files back.
+std::size_t quadsNamed(const std::vector<ScreenOverlay::Quad>& frame, const std::string& prefix) {
+    std::size_t count = 0;
+    for (const ScreenOverlay::Quad& quad : frame) {
+        const std::size_t slash = quad.texture.find_last_of("/\\");
+        const std::string file = slash == std::string::npos ? quad.texture : quad.texture.substr(slash + 1);
+        count += file.rfind(prefix, 0) == 0 ? 1u : 0u;
+    }
+    return count;
+}
+
+// What a player does at the picker, through its own plates.
+struct PickerSession {
+    Run& run;
+    std::string what;
+
+    void OpenThePicker() const {
+        MagicPortalsLayer& layer = run.layer;
+        click(layer, run.registry, Picker::EntryAt(layer.PickerRules(), layer.MainMenuRules().layer, layer.MainMenuRules().state, layer.ViewPx(), 1.0e9, false).rect.Centre());
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Language, what + ": the globe opens the picker");
+    }
+    void Pick(Lang lang) const {
+        MagicPortalsLayer& layer = run.layer;
+        click(layer, run.registry, Picker::PlateRect(layer.PickerRules(), layer.MenuBoxPx(), Strings::IndexOf(lang), Strings::kLangCount).Centre());
+        CHECK_MSG(layer.CurrentLanguage() == lang, what + ": the plate speaks the language");
+    }
+    void BackToTheMainMenu() const {
+        MagicPortalsLayer& layer = run.layer;
+        click(layer, run.registry, Credits::BackHitRect(layer.CreditsRules(), layer.MenuBoxPx(), 1.0e9).Centre());
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main, what + ": the back button returns to the main menu");
+    }
+};
+
+void TheGlobesPickRefreshesThePicturesThatCarryWords() {
+    if (!dataIsThere("TheGlobesPickRefreshesThePicturesThatCarryWords")) return;
+    const MagicPortalsLayer::Paths paths = playerPaths("words", false);
+    {
+        Run run(paths);
+        MagicPortalsLayer& layer = run.layer;
+        if (!layer.LoadError().empty() || !tickToTheMainMenu(layer, run.registry)) {
+            CHECK_MSG(false, "no main menu: " + layer.LoadError());
+            return;
+        }
+        rest(layer, run.registry, 60);
+        const PickerSession session{run, "first start"};
+        // English: the shipped pictures.
+        std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsNamed(frame, "main_play_game_button.png") == 1 && quadsNamed(frame, "scores.png") == 1 && quadsNamed(frame, "tap_start_") == 0, "English draws the shipped TAP START and Achievements");
+
+        session.OpenThePicker();
+        session.Pick(Lang::De);
+        session.BackToTheMainMenu();
+        frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsNamed(frame, "tap_start_de_") == 1 && quadsNamed(frame, "achievements_de_") == 1 && quadsNamed(frame, "main_play_game_button.png") == 0 && quadsNamed(frame, "scores.png") == 0,
+                  "after the pick of German the main menu draws the baked TAP START and Achievements");
+        // Chapter select's title is the language's at its first frame, and Back returns to the menu.
+        CHECK(layer.PressMainMenu(run.registry, MagicPortals::MainMenu::Button::Play));
+        rest(layer, run.registry, 90);
+        frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsNamed(frame, "select_chapter_de_") == 1 && quadsNamed(frame, "select_chapter.png") == 0, "chapter select draws its German title");
+        bool pressedBack = false;
+        for (const MagicPortalsLayer::MenuButton& button : layer.MenuButtons()) {
+            if (button.kind == MagicPortalsLayer::MenuButton::Kind::Back && !pressedBack) {
+                layer.PressMenu(run.registry, button);
+                pressedBack = true;
+            }
+        }
+        CHECK_MSG(pressedBack, "chapter select has its back button");
+        rest(layer, run.registry, 90);
+        CHECK_MSG(layer.MenuScreen() == MagicPortalsLayer::Screen::Main, "and it returns to the main menu");
+        // Japanese by the same plates replaces German; the dashboard's points label is Japanese too, at its first frame.
+        session.OpenThePicker();
+        session.Pick(Lang::Ja);
+        session.BackToTheMainMenu();
+        frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsNamed(frame, "tap_start_ja_") == 1 && quadsNamed(frame, "tap_start_de_") == 0 && quadsNamed(frame, "achievements_ja_") == 1, "Japanese replaces German on the main menu");
+        if (layer.AchievementsContent() != nullptr) {
+            CHECK(layer.PressMainMenu(run.registry, MagicPortals::MainMenu::Button::Achievements));
+            rest(layer, run.registry, 90);
+            frame = menuFrame(run.registry, layer);
+            CHECK_MSG(quadsNamed(frame, "points_ja_") == 1 && quadsNamed(frame, "achievement_points.png") == 0 && quadsNamed(frame, "points_de_") == 0, "the dashboard draws its Japanese points label");
+        }
+    }
+    {
+        // A fresh start on the same save folder is in the player's language, with the pictures found and not made again; English by the plates gives the shipped ones back.
+        Run run(paths);
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.CurrentLanguage() == Lang::Ja, "the choice is kept across a start");
+        if (!tickToTheMainMenu(layer, run.registry)) return;
+        rest(layer, run.registry, 60);
+        std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsNamed(frame, "tap_start_ja_") == 1, "a start in Japanese draws the baked TAP START");
+        const PickerSession session{run, "second start"};
+        session.OpenThePicker();
+        session.Pick(Lang::En);
+        session.BackToTheMainMenu();
+        frame = menuFrame(run.registry, layer);
+        CHECK_MSG(quadsNamed(frame, "main_play_game_button.png") == 1 && quadsNamed(frame, "scores.png") == 1 && quadsNamed(frame, "tap_start_") == 0 && quadsNamed(frame, "achievements_") == 0,
+                  "English gives the shipped pictures back");
+    }
+}
+
 void TheBackKeyAndTheCornerGlobeReturnToTheScreenThatOpenedThePicker() {
     if (!dataIsThere("TheBackKeyAndTheCornerGlobeReturnToTheScreenThatOpenedThePicker")) return;
     Run run(playerPaths("back", true));
@@ -1029,6 +1133,7 @@ static int mpPickerLayerMain(int, char**) {
     ABareLayerOffersNoPicker();
     TheGlobeOpensThePickerWhichIsDrawnWithoutAHoleInEveryLanguage();
     ATapOnAPlateChoosesAndKeepsTheLanguage();
+    TheGlobesPickRefreshesThePicturesThatCarryWords();
     TheBackKeyAndTheCornerGlobeReturnToTheScreenThatOpenedThePicker();
     AForcedRunKeepsItsChoiceInMemoryOnly();
     APickerTableThatWillNotReadCostsOnlyThePicker();

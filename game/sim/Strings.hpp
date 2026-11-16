@@ -4,14 +4,17 @@
 //
 // Magic Portals is English; the Enhanced port is shown in eleven languages, in the order of the Magic Rampage Companion app's picker and of
 // Penumbra's Languages.hpp: en (the default) de es fr it pt ru tr uk ja ar. This module is the DATA side of that: which languages there are
-// (game/data/lang/languages.json), the fourteen short interface strings of each (game/data/lang/<code>.json), and the one place text is
+// (game/data/lang/languages.json), the twenty-one short strings of each (game/data/lang/<code>.json), and the one place text is
 // prepared for the screen (Display). It draws nothing and knows no font; the layer wires it (planning step 238), with the fonts
 // (FontBake) and the achievements' translations (Achievements::Localized); the picker is a later step's.
 //
-// WHAT IS TRANSLATED AND WHAT IS NOT. Only text the port draws with a FONT can be: the fourteen keys below, and the achievements and the secret
-// achievement's two sentences (Asantee's words, so their translations stay out of git: they are Achievements::LoadTranslation's gitignored overlay). Text BAKED INTO the original's pictures stays
-// English - TAP START, Achievements, Select chapter, level finished, game over, portals created, golden score, current score, points, the
-// game-finished card and the credits strip's names - and the credits' proper nouns, the brand and the developer text do too.
+// WHAT IS TRANSLATED AND WHAT IS NOT. Only text the port draws with a FONT can be: the fourteen interface keys below, the achievements and the secret
+// achievement's two sentences (Asantee's words, so their translations stay out of git: they are Achievements::LoadTranslation's gitignored overlay),
+// and, since planning step 247 (LANG-2), the seven PICTURE keys: the words the original draws as pixels inside its pictures - TAP START, Achievements,
+// Select chapter, points, level finished, portals created, game over - which sim/PictureBake draws into a copy of the picture at run time (the copy
+// is in the scratch folder and is never committed; the words are text, here). Text BAKED INTO the original's pictures that no recipe covers yet stays
+// English - golden score, current score, the game-finished card and the credits strip's names - and the credits' proper nouns, the brand and the
+// developer text do too.
 //
 // ENGLISH IS BIT FOR BIT WHAT IT WAS. The rules fields that hold the English today (ui.json's 'Part ', 'Chapter ', 'new!', ...) stay as the
 // defaults of a caller that has no Table, and en.json is tied to them by a test (the drift case of tests/test_mp_strings.cpp).
@@ -68,7 +71,7 @@ constexpr bool InOriginalFonts(std::uint32_t codePoint) {
 
 // ---- the keys ---------------------------------------------------------------------------------------------------------
 
-// The fourteen strings. A key is a name, never a bare literal at a call site. Per-achievement text is not here, and neither is the secret
+// The twenty-one strings: fourteen the fonts draw and seven the picture bake draws. A key is a name, never a bare literal at a call site. Per-achievement text is not here, and neither is the secret
 // achievement's (its title, and its sentence with the chapter and the level): they are Asantee's words, and the achievements overlay
 // (Achievements::LoadTranslation, planning step 238) has its own gitignored files, which hold the achievements by id and a `secret` block.
 namespace Key {
@@ -86,6 +89,16 @@ inline constexpr std::string_view kOptionsClassic = "options.classic";
 inline constexpr std::string_view kOptionsAdjust = "options.adjust";
 inline constexpr std::string_view kHintCamera = "hint.camera";
 inline constexpr std::string_view kLanguageTitle = "language.title";
+// The words of the original's pictures (planning step 247): drawn by sim/PictureBake with the committed faces, never by a font slot's atlas. The English
+// values are the words the pictures carry, not a rule table's, and the phrases are stored as they are drawn (upper case where the picture is, Arabic in
+// logical order, a space a line may break at and, in Japanese, never a gap).
+inline constexpr std::string_view kPictureTapStart = "picture.tap_start";
+inline constexpr std::string_view kPictureAchievements = "picture.achievements";
+inline constexpr std::string_view kPictureSelectChapter = "picture.select_chapter";
+inline constexpr std::string_view kPicturePoints = "picture.points";
+inline constexpr std::string_view kPictureLevelFinished = "picture.level_finished";
+inline constexpr std::string_view kPicturePortalsCreated = "picture.portals_created";
+inline constexpr std::string_view kPictureGameOver = "picture.game_over";
 } // namespace Key
 
 // The placeholders a string can carry, as the names between braces.
@@ -103,7 +116,7 @@ struct KeySpec {
     std::array<std::string_view, 2> placeholders;
 };
 
-inline constexpr std::array<KeySpec, 14> kKeys = {{
+inline constexpr std::array<KeySpec, 21> kKeys = {{
     {Key::kHudPart, {Placeholder::kN, ""}},
     {Key::kDashboardChapter, {Placeholder::kN, ""}},
     {Key::kDashboardNew, {"", ""}},
@@ -118,11 +131,18 @@ inline constexpr std::array<KeySpec, 14> kKeys = {{
     {Key::kOptionsAdjust, {"", ""}},
     {Key::kHintCamera, {"", ""}},
     {Key::kLanguageTitle, {"", ""}},
+    {Key::kPictureTapStart, {"", ""}},
+    {Key::kPictureAchievements, {"", ""}},
+    {Key::kPictureSelectChapter, {"", ""}},
+    {Key::kPicturePoints, {"", ""}},
+    {Key::kPictureLevelFinished, {"", ""}},
+    {Key::kPicturePortalsCreated, {"", ""}},
+    {Key::kPictureGameOver, {"", ""}},
 }};
 
 // The strings the Matura slot (Matura84_shadow.fnt) draws, and the ones the Verdana slot (Verdana40_shadow.fnt) does. Matura draws a
 // capital I like a J (the glyph at id 73 is a swash), so no Matura string of a language set in the original's fonts may hold a capital 'I'
-// (the translators were told, and tests/test_mp_strings.cpp checks). Every key is in exactly one list.
+// (the translators were told, and tests/test_mp_strings.cpp checks). Every key is in exactly one list: these two, or the picture keys below.
 inline constexpr std::array<std::string_view, 11> kMaturaKeys = {
     Key::kHudPart,        Key::kDashboardChapter, Key::kSelectorRequires, Key::kCreditsEnhanced,
     Key::kCreditsEngine,  Key::kOptionsTitle,     Key::kOptionsModern,    Key::kOptionsClassic,
@@ -130,6 +150,12 @@ inline constexpr std::array<std::string_view, 11> kMaturaKeys = {
 };
 inline constexpr std::array<std::string_view, 3> kVerdanaKeys = {
     Key::kDashboardNew, Key::kCardUnlocked, Key::kCardLockedLevel,
+};
+// The keys no font slot draws: sim/PictureBake draws them into pictures, so SlotCodePoints does not read them and the atlases FontBake makes
+// are what they were (a picture's glyphs come from the faces themselves).
+inline constexpr std::array<std::string_view, 7> kPictureKeys = {
+    Key::kPictureTapStart,      Key::kPictureAchievements,   Key::kPictureSelectChapter, Key::kPicturePoints,
+    Key::kPictureLevelFinished, Key::kPicturePortalsCreated, Key::kPictureGameOver,
 };
 
 // ---- the language table (game/data/lang/languages.json) ------------------------------------------------------------------

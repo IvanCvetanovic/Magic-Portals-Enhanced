@@ -12,6 +12,10 @@
 //                                  string is ever shrunk), and no translation may need a font smaller than kReadableScale of the rule's: below
 //                                  that a line is not readable on a phone, and the translation has to be shortened, not squeezed. Prints each
 //                                  language's tightest slot.
+//                                  And, since planning step 247 (LANG-2), the seven PICTURE words: every phrase of every language is drawn by sim/PictureBake
+//                                  into its recipe's box (game/data/picture_recipes.json) at a scale at or above the recipe's floor, with the committed faces and no
+//                                  original asset. A phrase that would need less is a defect of the TRANSLATION, and fails here instead of silently keeping the
+//                                  English picture at run time. Prints each language's tightest picture.
 //   test_mp_overflow_achievements  the same for the achievements' titles and descriptions (the dashboard's bar), for the unlock card with each
 //                                  title in it, for the pause's popup of every level, and for the LOCKED secret achievements' title and sentence
 //                                  (the overlay's `secret` block, with each such achievement's chapter and level in it), in each language that has
@@ -35,6 +39,7 @@
 #include "sim/Hud.hpp"
 #include "sim/Notificator.hpp"
 #include "sim/Options.hpp"
+#include "sim/PictureBake.hpp"
 #include "sim/Selector.hpp"
 #include "sim/Strings.hpp"
 
@@ -249,8 +254,64 @@ void EveryTranslationFitsItsSlot() {
     }
 }
 
+// The picture words (planning step 247): the recipes' boxes against the shipped phrases, in the committed faces. Pure: no original asset is read, the fit is the
+// layout of the bake and nothing is drawn onto a picture.
+void ThePictureWordsFitTheirBoxes() {
+    Strings::LanguageTable languages;
+    std::vector<FontBake::FaceBytes> faces;
+    PictureBake::Recipes recipes;
+    std::string error;
+    CHECK_MSG(Strings::LoadLanguages(kData + Strings::kLanguagesFile, languages, error), error);
+    if (!languages.Loaded()) return;
+    CHECK_MSG(FontBake::LoadFaces(languages.Fonts(), kData + "/" + languages.Fonts().folder, faces, error), error);
+    CHECK_MSG(PictureBake::LoadRecipes(kData + PictureBake::kRecipesFile, recipes, error), error);
+    if (faces.empty() || !recipes.loaded) return;
+    CHECK_EQ(static_cast<int>(recipes.items.size()), 7);
+    for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
+        const Lang lang = static_cast<Lang>(i);
+        const std::string code = CodeOf(lang);
+        Strings::Table table;
+        CHECK_MSG(table.Load(kData, lang, error), code + ": " + error);
+        double tightest = 9.0;
+        std::string tightestWhat = "-";
+        double thinnest = 9.0; // the least scale over the floor, as a ratio
+        std::string thinnestWhat = "-";
+        for (const PictureBake::Recipe& recipe : recipes.items) {
+            PictureBake::Request request;
+            request.recipe = &recipe;
+            request.plan = &languages.Fonts();
+            request.faces = &faces;
+            request.lang = lang;
+            const std::string phrase = table.Get(recipe.key);
+            request.phrase = phrase;
+            const PictureBake::Outcome outcome = PictureBake::FitPhrase(request);
+            CHECK_MSG(outcome.ok && outcome.scale >= recipe.text.minScale - 1e-9,
+                      code + ": " + recipe.id + " does not fit its box at or above its floor (a defect of the translation, not of the code): " + outcome.reason);
+            if (!outcome.ok) continue;
+            if (outcome.scale < tightest) {
+                tightest = outcome.scale;
+                tightestWhat = recipe.id;
+            }
+            if (outcome.scale / recipe.text.minScale < thinnest) {
+                thinnest = outcome.scale / recipe.text.minScale;
+                thinnestWhat = recipe.id;
+            }
+            CHECK_MSG(outcome.ink.Valid() && outcome.ink.x0 >= 0 && outcome.ink.y0 >= 0 && outcome.ink.x1 <= recipe.width && outcome.ink.y1 <= recipe.height,
+                      code + ": " + recipe.id + "'s ink is inside the picture");
+            if (recipe.erase.rule != PictureBake::Rule::Generated) {
+                const PictureBake::Rect& rect = recipe.erase.rect;
+                CHECK_MSG(outcome.ink.x0 >= rect.x0 && outcome.ink.x1 <= rect.x1 && outcome.ink.y0 >= rect.y0 && outcome.ink.y1 <= rect.y1,
+                          code + ": " + recipe.id + "'s ink is inside the rectangle the erase made room in");
+            }
+        }
+        std::printf("  %s: the tightest picture word is %s at scale %.3f; the nearest to a floor is %s at %.2f of it\n", code.c_str(), tightestWhat.c_str(), tightest,
+                    thinnestWhat.c_str(), thinnest);
+    }
+}
+
 void runTests() {
     TheLimitsAreInTheTables();
+    ThePictureWordsFitTheirBoxes();
     EveryTranslationFitsItsSlot();
 }
 

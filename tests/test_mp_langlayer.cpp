@@ -32,6 +32,7 @@
 #include "core/BitmapFont.hpp"
 #include "core/Input.hpp"
 #include "core/Json.hpp"
+#include "core/Log.hpp"
 #include "core/PhysicsSystem.hpp"
 #include "core/ScreenOverlay.hpp"
 #include "core/ViewportInfo.hpp"
@@ -42,6 +43,7 @@
 #include "sim/FontBake.hpp"
 #include "sim/Hud.hpp"
 #include "sim/Language.hpp"
+#include "sim/PictureBake.hpp"
 #include "sim/Strings.hpp"
 #include "sim/MainMenu.hpp"
 #include "sim/Options.hpp"
@@ -1664,6 +1666,7 @@ int recordGolden(const std::string& dir) {
 namespace Strings = MagicPortals::Strings;
 namespace FontBake = MagicPortals::FontBake;
 namespace Language = MagicPortals::Language;
+namespace PictureBake = MagicPortals::PictureBake;
 using Strings::Lang;
 
 const std::string kOriginal = MAGICPORTALS_ORIGINAL_DIR;
@@ -2876,6 +2879,339 @@ void aTightLimitScalesTheHintTheCardAndThePopup() {
     }
 }
 
+// ---- the pictures that carry words (planning step 247, LANG-2) ----------------------------------------------------------------------
+
+// The seven sprites a recipe names, as the screens name them, with the recipe's id (the stem of the baked file's name).
+struct WordedSprite {
+    const char* sprite;
+    const char* id;
+};
+constexpr WordedSprite kMenuSprites[] = {{"main_play_game_button.png", "tap_start"}, {"scores.png", "achievements"}, {"select_chapter.png", "select_chapter"},
+                                         {"achievement_points.png", "points"}};
+
+std::string fileOfTexture(const std::string& texture) {
+    const std::size_t slash = texture.find_last_of("/\\");
+    return slash == std::string::npos ? texture : texture.substr(slash + 1);
+}
+
+// The quads of a frame whose picture's file name starts with `prefix` (a baked picture is <id>_<code>_<hash>.png, a shipped one <sprite>.png).
+std::vector<const ScreenOverlay::Quad*> quadsStartingWith(const std::vector<ScreenOverlay::Quad>& frame, const std::string& prefix) {
+    std::vector<const ScreenOverlay::Quad*> found;
+    for (const ScreenOverlay::Quad& quad : frame) {
+        if (fileOfTexture(quad.texture).rfind(prefix, 0) == 0) found.push_back(&quad);
+    }
+    return found;
+}
+
+std::size_t bakedQuads(const std::vector<ScreenOverlay::Quad>& frame) {
+    std::size_t count = 0;
+    for (const ScreenOverlay::Quad& quad : frame) {
+        count += quad.texture.find("/" + std::string(PictureBake::kScratchFolder) + "/") != std::string::npos ? 1u : 0u;
+    }
+    return count;
+}
+
+std::size_t filesIn(const std::filesystem::path& dir) {
+    std::error_code ec;
+    std::size_t count = 0;
+    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) ++count;
+    return count;
+}
+
+std::string shippedPicture(const std::string& sprite) {
+    return kOriginal + "/sprites/hd/" + sprite;
+}
+
+// A picture the layer asks the renderer for, in `lang`: a file of the scratch folder named for the recipe and the language, there, whole, and the shipped picture's size.
+void checkBaked(const std::string& path, const WordedSprite& sprite, const std::string& code, const std::string& what) {
+    const std::string name = fileOfTexture(path);
+    CHECK_MSG(name.rfind(std::string(sprite.id) + "_" + code + "_", 0) == 0 && name.size() > 4 && name.substr(name.size() - 4) == ".png" &&
+                  path.find("/" + std::string(PictureBake::kScratchFolder) + "/") != std::string::npos,
+              what + ": " + sprite.sprite + " is the baked picture for " + code + ": " + path);
+    PictureBake::Image baked;
+    PictureBake::Image shipped;
+    std::string error;
+    const bool read = PictureBake::ReadImage(path, baked, error) && PictureBake::ReadImage(shippedPicture(sprite.sprite), shipped, error);
+    CHECK_MSG(read && baked.width == shipped.width && baked.height == shipped.height && baked.rgba != shipped.rgba,
+              what + ": " + sprite.sprite + " is a whole picture of the shipped one's size, not the shipped picture: " + error);
+}
+
+void everyLanguageDrawsItsPicturesOnTheMainMenuAndEnglishDrawsTheShippedOnes() {
+    if (!dataIsThere("everyLanguageDrawsItsPicturesOnTheMainMenuAndEnglishDrawsTheShippedOnes")) return;
+    // ENGLISH FIRST: the shipped files, no baked picture anywhere, and the bake never touched (there is no folder for its pictures).
+    {
+        const MagicPortalsLayer::Paths paths = langPaths("words-en", "en");
+        Run run(paths, "");
+        CHECK(tickToTheMainMenu(run.layer, run.registry));
+        rest(run.layer, run.registry, 30);
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+        CHECK_MSG(bakedQuads(frame) == 0, "English draws no baked picture");
+        CHECK_MSG(quadsStartingWith(frame, "main_play_game_button.png").size() == 1 && quadsStartingWith(frame, "scores.png").size() == 1,
+                  "English draws the shipped TAP START and Achievements pictures");
+        for (const WordedSprite& sprite : kMenuSprites) CHECK_MSG(run.layer.MenuPictureFile(sprite.sprite) == shippedPicture(sprite.sprite), std::string("English: ") + sprite.sprite + " is the shipped file");
+        std::error_code ec;
+        CHECK_MSG(!std::filesystem::exists(paths.prisms / PictureBake::kScratchFolder, ec), "and English never made the folder of baked pictures");
+    }
+    for (std::size_t i = 1; i < Strings::kLangCount; ++i) {
+        const Lang lang = static_cast<Lang>(i);
+        const std::string code = codeOf(lang);
+        const MagicPortalsLayer::Paths paths = langPaths("words-" + code, code);
+        Run run(paths, "");
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.CurrentLanguage() == lang, code + ": the language is on the screen");
+        CHECK(tickToTheMainMenu(layer, run.registry));
+        rest(layer, run.registry, 30);
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, layer);
+        const auto play = quadsStartingWith(frame, "tap_start_" + code + "_");
+        const auto achievements = quadsStartingWith(frame, "achievements_" + code + "_");
+        CHECK_MSG(play.size() == 1 && achievements.size() == 1, code + ": the main menu draws the baked TAP START and Achievements, once each");
+        CHECK_MSG(quadsStartingWith(frame, "main_play_game_button.png").empty() && quadsStartingWith(frame, "scores.png").empty(), code + ": and not the shipped ones");
+        if (play.size() == 1) {
+            checkBaked(play[0]->texture, kMenuSprites[0], code, code + " main menu");
+            CHECK_MSG(layer.MenuPictureFile("main_play_game_button.png") == play[0]->texture, code + ": the quad's picture is the layer's answer");
+        }
+        if (achievements.size() == 1) checkBaked(achievements[0]->texture, kMenuSprites[1], code, code + " main menu");
+        // No temporary file is left in the folder, and only what was shown was baked: the other two menu pictures are not drawn on this screen.
+        std::size_t leftovers = 0;
+        std::error_code ec;
+        for (std::filesystem::directory_iterator it(paths.prisms / PictureBake::kScratchFolder, ec), end; !ec && it != end; it.increment(ec)) {
+            leftovers += it->path().extension() == ".tmp" ? 1u : 0u;
+        }
+        CHECK_MSG(leftovers == 0, code + ": no temporary file is left behind");
+    }
+}
+
+void aSwitchRemakesEveryPathAndIsLazyAndEnglishGivesTheShippedFilesBack() {
+    if (!dataIsThere("aSwitchRemakesEveryPathAndIsLazyAndEnglishGivesTheShippedFilesBack")) return;
+    const MagicPortalsLayer::Paths paths = langPaths("words-switch");
+    const std::filesystem::path pictures = paths.prisms / PictureBake::kScratchFolder;
+    Run run(paths, "");
+    MagicPortalsLayer& layer = run.layer;
+    CHECK(tickToTheMainMenu(layer, run.registry));
+    rest(layer, run.registry, 30);
+    for (const WordedSprite& sprite : kMenuSprites) CHECK_MSG(layer.MenuPictureFile(sprite.sprite) == shippedPicture(sprite.sprite), std::string("English at the start: ") + sprite.sprite);
+
+    // A switch costs nothing until a picture is shown: right after it, no file of that language has been made.
+    CHECK_MSG(layer.SetLanguage(Lang::Fr), "French is set");
+    std::error_code ec;
+    CHECK_MSG(!std::filesystem::exists(pictures, ec) || filesIn(pictures) == 0, "a language switch bakes nothing by itself: no picture was shown yet");
+    rest(layer, run.registry, 1);
+    std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, layer);
+    CHECK_MSG(quadsStartingWith(frame, "tap_start_fr_").size() == 1 && quadsStartingWith(frame, "achievements_fr_").size() == 1 && filesIn(pictures) == 2,
+              "the first frame shows two pictures, and two are baked: " + std::to_string(filesIn(pictures)));
+    CHECK_MSG(quadsStartingWith(frame, "main_play_game_button.png").empty(), "and the shipped TAP START is not drawn");
+
+    // The other two come when their screens are shown: chapter select's title, with the language switched while the screen is up.
+    CHECK(layer.PressMainMenu(run.registry, MagicPortals::MainMenu::Button::Play));
+    rest(layer, run.registry, 90);
+    frame = menuFrame(run.registry, layer);
+    CHECK_MSG(quadsStartingWith(frame, "select_chapter_fr_").size() == 1 && filesIn(pictures) == 3, "chapter select draws its French title, baked at its first draw");
+    CHECK_MSG(layer.SetLanguage(Lang::Es) && layer.MenuScreen() == MagicPortalsLayer::Screen::Worlds, "Spanish is set with chapter select up");
+    rest(layer, run.registry, 1);
+    frame = menuFrame(run.registry, layer);
+    CHECK_MSG(quadsStartingWith(frame, "select_chapter_es_").size() == 1 && quadsStartingWith(frame, "select_chapter_fr_").empty(),
+              "the next frame of the screen already draws the Spanish title (the caches were remade)");
+    const std::string spanishTitle = layer.MenuPictureFile("select_chapter.png");
+    checkBaked(spanishTitle, kMenuSprites[2], "es", "chapter select");
+
+    // Every language in turn: each of the four menu pictures is that language's.
+    for (const Lang lang : {Lang::De, Lang::Ja, Lang::Ar, Lang::Ru, Lang::Tr, Lang::Uk, Lang::It, Lang::Pt}) {
+        const std::string code = codeOf(lang);
+        CHECK(layer.SetLanguage(lang));
+        for (const WordedSprite& sprite : kMenuSprites) checkBaked(layer.MenuPictureFile(sprite.sprite), sprite, code, "after the switch to " + code);
+    }
+    // Back to English: the shipped files, byte for byte, as the shipped path.
+    CHECK(layer.SetLanguage(Lang::En));
+    for (const WordedSprite& sprite : kMenuSprites) CHECK_MSG(layer.MenuPictureFile(sprite.sprite) == shippedPicture(sprite.sprite), std::string("English again: ") + sprite.sprite + " is the shipped file");
+    rest(layer, run.registry, 1);
+    frame = menuFrame(run.registry, layer);
+    CHECK_MSG(bakedQuads(frame) == 0 && quadsStartingWith(frame, "select_chapter.png").size() == 1, "and the screen draws no baked picture");
+    // And German again finds the files it made, and makes none: the cache is the folder.
+    const std::size_t before = filesIn(pictures);
+    CHECK(layer.SetLanguage(Lang::De));
+    for (const WordedSprite& sprite : kMenuSprites) checkBaked(layer.MenuPictureFile(sprite.sprite), sprite, "de", "German again");
+    CHECK_MSG(filesIn(pictures) == before, "a language that was baked is found again: no file is made");
+}
+
+void theLevelsPicturesAreTheLanguagesToo() {
+    if (!dataIsThere("theLevelsPicturesAreTheLanguagesToo")) return;
+    // The pause's Achievements button and the end screens' three pictures are resolved when the level loads, in the language of the run; a switch remakes them.
+    const WordedSprite pause = {"scores.png", "achievements"};
+    const WordedSprite finished = {"level_finished.png", "level_finished"};
+    const WordedSprite portals = {"portals_created_plaque.png", "portals_created"};
+    const WordedSprite lost = {"game_over.png", "game_over"};
+    {
+        Run run(langPaths("words-level-de", "de"), "level30");
+        MagicPortalsLayer& layer = run.layer;
+        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+        if (layer.SimLevel() == nullptr) return;
+        rest(layer, run.registry, 30);
+        checkBaked(layer.PausePictureFile("scores.png"), pause, "de", "the pause");
+        checkBaked(layer.EndPictureFile("level_finished.png"), finished, "de", "the finished screen");
+        checkBaked(layer.EndPictureFile("portals_created_plaque.png"), portals, "de", "the finished screen");
+        checkBaked(layer.EndPictureFile("game_over.png"), lost, "de", "the lost screen");
+        // Switched in the middle of the level: remade for the new language, and English gives the shipped files back.
+        CHECK(layer.SetLanguage(Lang::Ja));
+        checkBaked(layer.PausePictureFile("scores.png"), pause, "ja", "the pause after the switch");
+        checkBaked(layer.EndPictureFile("game_over.png"), lost, "ja", "the lost screen after the switch");
+        CHECK(layer.SetLanguage(Lang::En));
+        CHECK_MSG(layer.PausePictureFile("scores.png") == shippedPicture("scores.png") && layer.EndPictureFile("level_finished.png") == shippedPicture("level_finished.png") &&
+                      layer.EndPictureFile("portals_created_plaque.png") == shippedPicture("portals_created_plaque.png") &&
+                      layer.EndPictureFile("game_over.png") == shippedPicture("game_over.png"),
+                  "English again: the pause's and the end screens' pictures are the shipped files");
+    }
+    {
+        Run run(langPaths("words-level-en"), "level30");
+        rest(run.layer, run.registry, 30);
+        CHECK_MSG(run.layer.EndPictureFile("level_finished.png") == shippedPicture("level_finished.png") && run.layer.PausePictureFile("scores.png") == shippedPicture("scores.png"),
+                  "a run in English loads the shipped end-screen pictures");
+    }
+}
+
+// A popup that draws a worded picture. No popup of the game does today (the game-finished card is the first that will), so the case gives the popups' framework card the
+// Achievements button's picture in a COPY of the data, and checks that a level's popup cache is remade by a switch like the pause's and the end screens' are: the loop
+// that does it would otherwise have nothing in the game to run on.
+void aPopupsPictureIsTheLanguagesToo() {
+    if (!dataIsThere("aPopupsPictureIsTheLanguagesToo")) return;
+    MagicPortalsLayer::Paths paths = langPaths("words-popup", "de");
+    const std::filesystem::path copy = scratchDir("langlayer-words-popup-data");
+    std::error_code ec;
+    std::filesystem::copy(paths.portData, copy, std::filesystem::copy_options::recursive, ec);
+    CHECK_MSG(!ec, "the data is copied: " + ec.message());
+    paths.portData = copy.string();
+    std::string table;
+    {
+        std::ifstream in(copy / "ui.json", std::ios::binary);
+        table.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    }
+    const std::string card = "\"sprite\": \"sprites/help_popup.png\"";
+    const std::size_t at = table.find(card);
+    CHECK_MSG(at != std::string::npos && table.find(card, at + 1) == std::string::npos, "ui.json names the popups' framework card once");
+    if (at == std::string::npos) return;
+    table.replace(at, card.size(), "\"sprite\": \"sprites/scores.png\"");
+    std::ofstream(copy / "ui.json", std::ios::binary | std::ios::trunc) << table;
+
+    const WordedSprite scores = {"scores.png", "achievements"};
+    Run run(paths, "level30");
+    MagicPortalsLayer& layer = run.layer;
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    checkBaked(layer.PopupPictureFile("sprites/scores.png"), scores, "de", "the popup card");
+    CHECK(layer.SetLanguage(Lang::Ja));
+    checkBaked(layer.PopupPictureFile("sprites/scores.png"), scores, "ja", "the popup card after the switch");
+    CHECK(layer.SetLanguage(Lang::En));
+    CHECK_MSG(layer.PopupPictureFile("sprites/scores.png") == shippedPicture("scores.png"), "English again: the popup's picture is the shipped file");
+}
+
+// How many lines the engine's log holds, from the Magic Portals category, whose text has every part in `parts`.
+std::size_t logLinesWith(std::initializer_list<const char*> parts) {
+    std::size_t count = 0;
+    for (const Supersonic::Log::Entry& entry : Supersonic::Log::Snapshot()) {
+        if (entry.category != "Magic Portals") continue;
+        bool all = true;
+        for (const char* part : parts) all = all && entry.message.find(part) != std::string::npos;
+        count += all ? 1u : 0u;
+    }
+    return count;
+}
+
+void aPictureThatFailsItsCheckStaysEnglishWithOneLogLine() {
+    if (!dataIsThere("aPictureThatFailsItsCheckStaysEnglishWithOneLogLine")) return;
+    const auto copyOfTheData = [](const std::string& name, MagicPortalsLayer::Paths& paths) {
+        const std::filesystem::path copy = scratchDir("langlayer-" + name);
+        std::error_code ec;
+        std::filesystem::copy(paths.portData, copy, std::filesystem::copy_options::recursive, ec);
+        CHECK_MSG(!ec, "the data is copied: " + ec.message());
+        paths.portData = copy.string();
+        return copy;
+    };
+    const auto readAll = [](const std::filesystem::path& path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    const auto writeAll = [](const std::filesystem::path& path, const std::string& text) { std::ofstream(path, std::ios::binary | std::ios::trunc) << text; };
+    {
+        // The recipe for TAP START says another digest: the shipped picture is "another version of the sprite", and is kept; the other pictures are baked as ever.
+        MagicPortalsLayer::Paths paths = langPaths("words-check", "de");
+        const std::filesystem::path copy = copyOfTheData("words-check-data", paths);
+        std::string table = readAll(copy / "picture_recipes.json");
+        const std::string key = "\"digest\": \"";
+        const std::size_t at = table.find(key);
+        CHECK_MSG(at != std::string::npos, "the table has a digest");
+        if (at == std::string::npos) return;
+        table.replace(at + key.size(), 32, "00000000000000000000000000000000");
+        writeAll(copy / "picture_recipes.json", table);
+        Supersonic::Log::Clear();
+        Run run(paths, "");
+        CHECK(tickToTheMainMenu(run.layer, run.registry));
+        rest(run.layer, run.registry, 30);
+        std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+        CHECK_MSG(quadsStartingWith(frame, "main_play_game_button.png").size() == 1 && quadsStartingWith(frame, "tap_start_").empty(), "the TAP START that failed its check is the shipped picture");
+        CHECK_MSG(quadsStartingWith(frame, "achievements_de_").size() == 1, "and the picture beside it, whose recipe is fine, is baked");
+        CHECK_MSG(run.layer.MenuPictureFile("main_play_game_button.png") == shippedPicture("main_play_game_button.png"), "the layer's answer is the shipped path");
+        for (int i = 0; i < 5; ++i) {
+            rest(run.layer, run.registry, 10);
+            (void)menuFrame(run.registry, run.layer);
+        }
+        CHECK_MSG(logLinesWith({"main_play_game_button.png", "in de stays English", "digest"}) == 1, "ONE log line says which picture, which language and why: " + std::to_string(logLinesWith({"stays English"})));
+        // Away and back: the failure is remembered, and is not said again; another language says its own.
+        CHECK(run.layer.SetLanguage(Lang::Fr));
+        (void)menuFrame(run.registry, run.layer);
+        CHECK(run.layer.SetLanguage(Lang::De));
+        (void)menuFrame(run.registry, run.layer);
+        CHECK_MSG(logLinesWith({"main_play_game_button.png", "in de stays English"}) == 1 && logLinesWith({"main_play_game_button.png", "in fr stays English"}) == 1,
+                  "back in German the failure is not said again, and French says its own once");
+    }
+    {
+        // A table that is not there: every picture is shipped, the run starts, and one ERROR line says why.
+        MagicPortalsLayer::Paths paths = langPaths("words-notable", "de");
+        const std::filesystem::path copy = copyOfTheData("words-notable-data", paths);
+        std::error_code ec;
+        std::filesystem::remove(copy / "picture_recipes.json", ec);
+        Supersonic::Log::Clear();
+        Run run(paths, "");
+        CHECK_MSG(run.layer.LoadError().empty() && tickToTheMainMenu(run.layer, run.registry), "a missing table does not stop the game: " + run.layer.LoadError());
+        rest(run.layer, run.registry, 30);
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+        CHECK_MSG(bakedQuads(frame) == 0 && quadsStartingWith(frame, "main_play_game_button.png").size() == 1, "every picture is the shipped one");
+        CHECK_MSG(logLinesWith({"table of recipes could not be read"}) == 1, "and the one line says so");
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::De, "the language is still German");
+    }
+    {
+        // A language file without the picture's key: the English phrase would be drawn in a foreign face, so the picture stays English.
+        MagicPortalsLayer::Paths paths = langPaths("words-nokey", "de");
+        const std::filesystem::path copy = copyOfTheData("words-nokey-data", paths);
+        std::string german = readAll(copy / "lang" / "de.json");
+        const std::string line = "\"picture.tap_start\"";
+        const std::size_t at = german.find(line);
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) return;
+        german.replace(at, line.size(), "\"picture.tap_start_gone\"");
+        writeAll(copy / "lang" / "de.json", german);
+        Supersonic::Log::Clear();
+        Run run(paths, "");
+        CHECK(tickToTheMainMenu(run.layer, run.registry));
+        rest(run.layer, run.registry, 30);
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+        CHECK_MSG(quadsStartingWith(frame, "main_play_game_button.png").size() == 1 && quadsStartingWith(frame, "achievements_de_").size() == 1,
+                  "the picture whose key the language lacks is the shipped one, the others are baked");
+        CHECK_MSG(logLinesWith({"main_play_game_button.png", "in de stays English", "picture.tap_start"}) == 1, "one line says the key is missing");
+    }
+    {
+        // No scratch folder: a language set in the original's own fonts still speaks, and its pictures are the shipped ones, said once for each.
+        MagicPortalsLayer::Paths paths = langPaths("words-noprisms", "fr");
+        paths.prisms.clear();
+        Supersonic::Log::Clear();
+        Run run(paths, "");
+        CHECK(tickToTheMainMenu(run.layer, run.registry));
+        rest(run.layer, run.registry, 30);
+        const std::vector<ScreenOverlay::Quad> frame = menuFrame(run.registry, run.layer);
+        CHECK_MSG(run.layer.CurrentLanguage() == Lang::Fr && bakedQuads(frame) == 0 && quadsStartingWith(frame, "main_play_game_button.png").size() == 1,
+                  "with no scratch folder French is spoken and its pictures are the shipped ones");
+        CHECK_MSG(logLinesWith({"main_play_game_button.png", "in fr stays English", "scratch folder"}) == 1, "and one line says why");
+    }
+}
+
 void runTests() {
     theNumericGoldenComparesWithATolerance();
     theCommittedGoldenHidesAsanteesWords();
@@ -2893,6 +3229,11 @@ void runTests() {
     settingTheLanguageTwiceReturnsToTheSameEnglish();
     noStringOfAnyLanguageIsDrawnWithAHole();
     aFailingBakeFallsBackToEnglishLoudly();
+    everyLanguageDrawsItsPicturesOnTheMainMenuAndEnglishDrawsTheShippedOnes();
+    aSwitchRemakesEveryPathAndIsLazyAndEnglishGivesTheShippedFilesBack();
+    theLevelsPicturesAreTheLanguagesToo();
+    aPopupsPictureIsTheLanguagesToo();
+    aPictureThatFailsItsCheckStaysEnglishWithOneLogLine();
     theHintIsMirroredInArabic();
     theFlagAndTheSavedChoiceAndEnglish();
     theSystemLanguageIsFollowedUntilThePlayerPicks();

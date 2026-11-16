@@ -66,6 +66,7 @@ add_library(MagicPortalsSim STATIC
     Particles.cpp
     Pause.cpp
     Picker.cpp
+    PictureBake.cpp
     Pictures.cpp
     Player.cpp
     Popup.cpp

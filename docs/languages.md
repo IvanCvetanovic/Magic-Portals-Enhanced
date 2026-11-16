@@ -4,7 +4,7 @@ The original game is in English only. Magic Portals Enhanced shows its interface
 Companion app's picker: **English** (the original's, and what a system that speaks none of the others gets), **Deutsch, Español, Français, Italiano,
 Português, Русский, Türkçe, Українська, 日本語, العربية** (`en de es fr it pt ru tr uk ja ar`). A first run speaks the system's language when it is one of
 the eleven (below); the globe on the main menu changes it. This page is the design, how to add a language, where the translations came from,
-and what is not translated. The record of how it was built, step by step, with its gates, is Steps 236-239 and 245 of
+and what is not translated. The record of how it was built, step by step, with its gates, is Steps 236-239, 245 and 247 of
 [the remaster plan](planning/2026-09-11-magic-portals-remaster.md); the open questions are `LANG-1` to `LANG-8` in
 [parity-backlog.md](parity-backlog.md) section 7.
 
@@ -54,11 +54,13 @@ and what is not translated. The record of how it was built, step by step, with i
 | What | Where |
 |---|---|
 | The eleven codes, their own names, direction, which fonts, and how a generated font is drawn | `game/data/lang/languages.json` |
-| The fourteen interface strings of each language (`hud.part`, `dashboard.chapter`, `options.title`, `language.title`, ...), `{n}`, `{percent}`, `{title}` placeholders | `game/data/lang/<code>.json` (UTF-8 JSON); `en.json` is the reference every other file is held to |
+| The twenty-one short strings of each language: fourteen interface strings (`hud.part`, `dashboard.chapter`, `options.title`, `language.title`, ...) with `{n}`, `{percent}`, `{title}` placeholders, and, since step 247, seven picture words (`picture.tap_start`, `picture.achievements`, `picture.select_chapter`, `picture.points`, `picture.level_finished`, `picture.portals_created`, `picture.game_over`) | `game/data/lang/<code>.json` (UTF-8 JSON); `en.json` is the reference every other file is held to |
+| Where the English word of each of seven pictures was, the box the translated word is drawn in, its smallest scale, its shadow (numbers about geometry, and a digest of each sprite so another version is refused; no pixel) | `game/data/picture_recipes.json` |
 | The achievements' titles and descriptions in each language, and the secret achievement's title and sentence (with `{world}` and `{level}`) as a `secret` block | `out/data/achievements.<code>.json` (**not in git**, see below) |
 | The picker and its two globes: places, sizes, colours | `game/data/picker.json` |
 | The four open-licence faces and their licence texts | `game/data/fonts/` (`README.md` there says where each came from) |
 | The string tables, the saved choice, UTF-8, the picker's layout | `game/sim/Strings`, `Language`, `Utf8`, `Picker` |
+| The words of the original's pictures, drawn again in the language on the screen | `game/sim/PictureBake` (pure, no renderer); the layer only asks it for a file (`MagicPortalsLayer::wordedPicture`) |
 | The fonts made at run time, and the Arabic shaper | `game/sim/FontBake`, `ArabicShaping` |
 
 * **Text is UTF-8, in JSON only.** No non-ASCII character is written in C++ (MSVC is built without `/utf-8`). The layout decodes UTF-8 itself
@@ -82,7 +84,9 @@ and what is not translated. The record of how it was built, step by step, with i
 1. **The code and its place.** Add it to `Strings::Lang` and `kLangCodes` (`game/sim/Strings.hpp`) and to `languages.json`'s `languages`, in the same order: the loader
    refuses a table whose order is not the enum's. Give its own name in its own script, `rtl`, and `font_set`: `original` only if every character of its strings is in
    Latin-1 (the loader checks), otherwise `generated`.
-2. **The strings.** Copy `en.json` to `<code>.json` and translate the fourteen values; keep every placeholder. Keep the `_about` that says who translated it and how
+2. **The strings.** Copy `en.json` to `<code>.json` and translate the twenty-one values; keep every placeholder. The seven `picture.*` values are drawn INTO the original's
+   pictures at run time and must fit their boxes: keep them short, and run `test_mp_overflow`, which fails a phrase that would need less than its recipe's floor (and
+   `test_mp_picturebake`, which fails one with a character the faces lack). Keep the `_about` that says who translated it and how
    (a test requires the machine-translation statement on every file but English's, and a native reader's review is the thing to add there).
    A language set in the original's fonts must not use a capital `I` in a Matura-font string (the font draws it like a `J`).
 3. **A new script.** Add the face to `game/data/fonts/` through `tools/l10n/make_fonts.py` (pinned download, subset, licence text, `NOTICE.md`), its code point ranges as a
@@ -96,20 +100,70 @@ and what is not translated. The record of how it was built, step by step, with i
 
 ## The translations
 
-The fourteen interface strings, the 82 achievements' titles and descriptions and the secret achievement's two texts, in each of the ten other languages, were **machine-translated by a language
+The fourteen interface strings, the seven picture words (step 247), the 82 achievements' titles and descriptions and the secret achievement's two texts, in each of the ten other languages, were **machine-translated by a language
 model from the English, with the terms aligned with the Magic Rampage Companion app, and reviewed by a second model pass. They have NOT been read by a native speaker.**
 Each file says so. Expect wrong register, awkward phrasing and the occasional mistranslation; a reviewer's corrections go straight into the JSON (`LANG-1`).
 
+**The seven picture words are machine translations too, with no native reader, and the shipped wording is the machine's first or second choice, not a settled one.** They were made
+for this step from the Magic Rampage Companion app's terms (*tap*, *skill points*, *achievements*, *choose the chapter*, *portal*) and checked only for fit and for the characters the faces hold. Five of them are
+a SHORTER wording chosen only so that the phrase fits its picture at a readable size: *game over* in Russian, Ukrainian, French and Italian (the longer, more usual phrases needed a
+scale under the floor), and *portals created* in Turkish (`yaratılan portallar` for the longer `oluşturulan portallar`). In Japanese a space inside *level finished*, *portals created* and *game over*
+is a place the line may break and is **never drawn**; whether those three are what a Japanese player expects (and whether *Select chapter*, which uses *chapter* written as a loanword,
+should say *stage* or *chapter*) is a native reader's call. The Ukrainian *Select chapter* says `розділ` (the game's own dashboard word) where the Companion says `главу`.
+
 ## What is not translated
 
-* **Text baked into the original's pictures** cannot be changed without redrawing them: TAP START, *Achievements*, *Select chapter*, the *level finished* and *game over*
-  screens, *portals created*, *golden score*, *current score*, *points*, the game-finished card, and the names on the credits strip. They stay English in every language
-  (`LANG-2`).
+* **Text baked into the original's pictures**: seven of them are drawn again in the language on the screen since step 247 (the next section): TAP START, *Achievements*,
+  *Select chapter*, *points*, *level finished*, *portals created* and *game over*. **Four still stay English in every language** (`LANG-2`): the *golden score* and *current score*
+  plaques, the game-finished card and the names on the credits strip (prototyped, built by the next step). **And English itself is never redrawn**: the shipped picture is used, byte for byte.
 * **Proper nouns:** the game's name, the developer's, the engine's, the names of the people in the credits.
 * **Developer and failure text:** the start-up error dialog (it runs before any language is known), the log, `--help`, and the failure labels. These are English.
 * **A card already on screen** when the language changes keeps its words until it goes.
 * **A system language the game does not have** (`LANG-3`, closed by step 245 for the eleven it has): Chinese, Hebrew, Polish, Korean and every other language get English.
   Only the FIRST of Windows' preferred UI languages is read (a Windows whose list is `zh-CN`, `de-DE` gets English, not German), and macOS' and iOS' first too.
+
+## The pictures that carry words (`LANG-2`, planning step 247)
+
+Eleven of the original's pictures carry their words as pixels, so a player who chose German still read TAP START: that was the cause of the first report ("the text on the screen and
+in the buttons always has English"). Seven of them are now drawn again in the language on the screen: TAP START (`main_play_game_button.png`), *Achievements* (`scores.png`, on the main
+menu and in the pause), *Select chapter*, *points* (`achievement_points.png`, the dashboard's), *level finished*, *portals created* (`portals_created_plaque.png`) and *game over*.
+
+* **What is done.** `game/sim/PictureBake` decodes the sprite's hd twin and, by the sprite's recipe in `game/data/picture_recipes.json`: **erases** the English word and draws the phrase in
+  its place (TAP START, *Achievements*, *Select chapter*: the plate under the word is a model made of the picture's OWN text-free rows and columns, `row_lerp` or `separable`, with no donor
+  picture and no ink detection; *points* is `level_button.png` moved by (-2, -3), which is bit-exactly the same plate without the word, `twin`); or **generates** the picture (*level finished*,
+  *portals created*, *game over*: the picture is only words on a transparent ground, so no pixel of the original is read, and the phrase is drawn with the look of the original's lettering,
+  white with a soft shadow). The phrase is drawn with the committed faces (Kurale, Noto Sans, Noto Sans JP and Noto Sans Arabic, by the slot's routing; Arabic shaped by `Strings::Display`),
+  with a drop shadow like the original's, and shrunk step by step from its natural size to the recipe's box, never below the recipe's floor. The result is a same-size PNG in the scratch folder
+  (`<scratch>/pictures/<id>_<code>_<hash>.png`, the hash over the algorithm, the table, the phrase, the language and the faces' bytes), and the layer draws it instead of the shipped file.
+* **English is never baked.** The hook is in `MagicPortalsLayer::menuImage` and `originalAsset`, and the first thing it does is return the shipped path for English (and for any picture no
+  recipe names), so the English path is what it always was: the tests' English frames (`tests/golden/menu_screens.json`) are unchanged and a run in English makes no folder of baked pictures.
+  Switching back to English gives the shipped files back.
+* **Where the words live.** The seven phrases are the `picture.*` keys of `game/data/lang/<code>.json`, as text, like every other string (upper case where the picture is upper case, Arabic in
+  logical order, a space a line may break at; in Japanese a space is never drawn; U+200B only breaks; U+00A0 is a space that does not). `en.json` holds the English words of the pictures. **Nothing
+  derived from the original's pictures is committed**: `picture_recipes.json` holds numbers about geometry (rectangles, rows, floors, a look) and, for each sprite, its size and a DIGEST of its
+  decoded pixels, so that another version of the sprite is refused; the baked pictures exist only in the scratch folder at run time. (The test suites write them out only when `MP_PICTUREBAKE_DUMP=<dir>` is set, so that a reviewer can look.)
+* **Fail closed.** Each bake checks the sprite's size and digest, the recipe's guards (the reference rows and columns the model reads agree with each other and with the picture in a 3-pixel collar;
+  a twin is bit-exact outside the word's window and differs inside it), that every code point is in its face, that the fit reaches the floor, that no ink falls outside the rectangle, and that the
+  PNG reaches the disk whole (written under a temporary name and renamed). If any check fails the shipped picture is used for that sprite in that language and ONE log line says which sprite, which
+  language and why (`picture <sprite> in <code> stays English: ...`); nothing throws and no half-written file is left. A language file without the key, a missing scratch folder and a missing or
+  refused `picture_recipes.json` (an older package folder, say) do the same: the pictures stay English, the game starts, and the log says why once.
+* **The floors.** TAP START 0.55, *Select chapter* and *Achievements* 0.52, *points* 0.66, *level finished*, *portals created* and *game over* 0.60 (a fraction of the size at which the original's
+  word is drawn). The tightest shipped phrase of each, measured with stb_truetype on the Linux machine: TAP START French 0.634, *Select chapter* French 0.790, *Achievements* Arabic 0.942, *points*
+  German 0.918, *level finished* Turkish 0.715, *portals created* Russian 0.784, *game over* Ukrainian 0.808. A phrase that would need less is a defect of the TRANSLATION, not a run-time fall-back:
+  `tests/test_mp_overflow.cpp` fails it. French TAP START has the least margin (0.634 against 0.55, about 14 percent; it is also the smallest word, about 17 screen pixels of cap height at 720p).
+* **The cost.** A switch bakes nothing: a picture is made at its first draw, and one already made is found again in the scratch folder. Measured on the Linux machine (bake and PNG encode, least of
+  three, Russian): TAP START 3.9 ms, *Achievements* 1.9, *Select chapter* 2.0, *points* 1.2, *portals created* 2.4, and **12 to 19 ms for *level finished* and *game over*** (their canvases are large).
+  **Never timed on a phone** (the caveat of *The bake is synchronous on the tap*, in the known limits below, applies here too).
+* **Every cache is remade by a switch.** `SetLanguage` takes out of the menu's picture cache every picture a recipe names (the menu puts each back at its first draw), and makes again the pause's, the
+  end screens' and the popups' (a level that is loaded holds them). A test reads the rule tables and fails if one of the seven pictures is named anywhere else (the HUD's pads and plaque, the
+  achievement cards): a cache the switch does not reach would leave it in the old language.
+* **What it looks like.** The baked pictures were compared on contact sheets with the prototype's (the C++ differs by the glyph edges of another rasteriser and by a few pixels in the size of
+  a word), and a residual test on the real sprites holds that the English word leaves no edge in the erased window (the sharpest edge of the window is 0 grey levels where the original's was over 200) and
+  that nothing outside the rectangle changes by a byte. The one ground truth an erase has is the *Achievements* plate's unshipped sister picture (the erase agrees with it to a mean of 1.16 grey levels,
+  worst 3 on 3,434 text-free pixels); *points* is exact. **Not compared with the original on a screen**: no emulator run, no phone, and no native reader has looked.
+  In *points* the word sits where the original's did, on the plate's lower bevel (the picture's design, not a defect of the bake).
+* **Open, and the owner's** (`LANG-1`, `LANG-2`): whether these machine translations ship before a native reader has seen them; the Japanese wording (`レベル クリア`, `作成した ポータル`, `ゲーム オーバー`
+  and the loanword *chapter*); and whether English should ever get the same erase (it does not: the shipped picture is the original's).
 
 ## Arabic
 
@@ -125,7 +179,7 @@ The achievements' titles and descriptions are Asantee's words, so a translation 
 the gitignored `out/data/` beside the English list, made by `tools/l10n/make_achievement_languages.py` from the translators' files, and shipped only in the release's
 content package (the same rule as every other piece of the original). A checkout without them shows the English achievements in any language and says so once.
 
-**What is committed, exactly.** The **fourteen** short interface strings, in `game/data/lang/<code>.json`. **What is not:** the achievements' titles and descriptions
+**What is committed, exactly.** The **twenty-one** short strings (the fourteen interface strings and the seven picture words), in `game/data/lang/<code>.json`, and `game/data/picture_recipes.json` (geometry and digests, no pixel). **What is not:** the achievements' titles and descriptions
 **and the secret achievement's title and sentence** (the words a locked secret achievement shows, with its chapter and level in them), in every language: they are the
 overlay `out/data/achievements.<code>.json` (a `secret` block beside `achievements`), made from `out/data/lang_src/<code>.json`. The English of the secret achievement is
 what it was before the languages: the original's, composed from `out/data/achievements.json` (`secret`), so a checkout without the converted data holds none of it either.
@@ -141,7 +195,7 @@ committed file and the suite compares when it is there (when it is not, the suit
 strings already in git and to percent strings and the loading dots: the original's cell geometry for this port's own characters, and no word of Asantee's. A content guard in the suite
 lays every line of the achievements out through the original's fonts and fails when a frame that spells one is not flagged hidden, and when a flagged frame spells none.
 
-Seven of the fourteen are short interface words of the original's own, already in the repository in English since before the languages (`Part N`, `Chapter N`, `new!`,
+The seven picture words are the words of the original's pictures (TAP START, *Achievements*, ...): their English is committed as text in `en.json`, as the owner decided for this step, and their ten translations are new in git too. Seven of the fourteen interface strings are short interface words of the original's own, already in the repository in English since before the languages (`Part N`, `Chapter N`, `new!`,
 `requires N%`, `Achievement unlocked! {title}`, `This level is locked!`, `move the camera around`); **their ten translations are new in git**, and whether short
 translated UI phrases count as the original's text is the owner's call (`LANG-1`). The rest (`Controls`, `Modern`, `Classic`, `Adjust controls`, `Language`, and the
 two credits lines) are this port's own words.
@@ -151,9 +205,9 @@ two credits lines) are this port's own words.
 * **A first run now meets the ten machine translations without choosing them** (`LANG-1`, step 245). A German, Spanish, French, Italian, Portuguese, Russian, Turkish, Ukrainian,
   Japanese or Arabic system now starts in words that no native reader has read, where before a player met them only by opening the globe. Leaving the system's language out is one
   line (`main.cpp`'s call of `Language::ApplySystemLocale`) and the tests that pin it say what would change; whether to keep it until a reviewer has read them is the owner's call.
-* **The main menu is still English in every language, so a first run in another language is a mixed screen** (`LANG-2`). The main menu draws no word of the string table at all
-  (TAP START and *Achievements* are pixels of the original's pictures); the translated surface is the 14 interface strings and the 82 achievements: the Options screen, the picker,
-  the level captions, the dashboard and the cards. A player who says the game is "always English" may be seeing the menu and the pictures, which this does not change.
+* **A first run in another language is still a partly mixed screen** (`LANG-2`). Since step 247 the main menu's TAP START and *Achievements*, chapter select's title, the dashboard's *points* and the
+  end screens' *level finished*, *portals created* and *game over* are the language's. What stays English: the *golden score* and *current score* plaques (the pause, the end screens), the
+  game-finished card and the credits strip's names (the next step), and every proper noun. The translated surface is the 14 interface strings, the 7 picture words and the 82 achievements.
 * **A first run in Russian, Turkish, Ukrainian, Japanese or Arabic bakes its fonts before the first frame.** The two atlases of a generated language are made while the game starts
   (60-90 ms on the Linux machine of step 245's launches, from an empty scratch folder; a language already baked is read from the cache). Never timed on a phone. If they cannot be made,
   the run speaks English and says why in the log, as a pick does (`LANG-7`), and the next start tries again.
@@ -201,7 +255,8 @@ two credits lines) are this port's own words.
 ## Checking it
 
 `test_mp_strings` (the files and their keys and placeholders), `test_mp_utf8`, `test_mp_language` (the saved choice), `test_mp_fontbake` and `test_mp_arabic`, `test_mp_langsim` and
-`test_mp_langlayer` (the layer in each language, and the golden of English), `test_mp_overflow` (every translation against its box), and for the picker `test_mp_picker` and
+`test_mp_langlayer` (the layer in each language, and the golden of English), `test_mp_overflow` (every translation against its box, the seven picture words against theirs and their floors), `test_mp_picturebake` (the bake, on synthetic pictures, and the table's loader) and
+`test_mp_picturebake_original` (the same on the original's seven sprites; skipped without them), and for the picker `test_mp_picker` and
 `test_mp_pickerlayer`. `tools/package/test_package.py` and `test_android_package.py` hold that the tables, the faces and the translations travel, and
 `tests/test_mp_unpack.cpp` that the Android unpack accepts their paths. `tools/l10n/test_make_achievement_languages.py` holds the overlay's maker (the secret block's
 placeholders and character set among its checks), `tools/ci/test_fonts_pinned.py` the pinned faces, and `tools/asbc/test_asbc.py` the decoder of the original's strings.

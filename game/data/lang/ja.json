@@ -1,8 +1,9 @@
 {
   "_about": [
-    "The 14 short interface strings of one language, keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
+    "The 21 short strings of one language (14 interface strings and 7 picture words), keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
     "PROVENANCE: machine-translated by a language model from English, terms aligned with the Magic Rampage Companion app, reviewed by a second model pass, NOT by a native speaker.",
-    "Native review is open (planning step 236, LEFT FOR THE OWNER). A key missing from this file shows the English one, and a placeholder that differs from the English one is refused for that key."
+    "Native review is open (planning step 236, LEFT FOR THE OWNER). A key missing from this file shows the English one, and a placeholder that differs from the English one is refused for that key.",
+    "The seven picture.* keys (planning step 247) are machine translations too, with no native reader (LANG-1); some are the SHORTER of two wordings, chosen only so that the phrase fits the picture's box at a readable size (tests/test_mp_overflow.cpp)."
   ],
   "strings": {
     "hud.part": "レベル{n}",
@@ -18,6 +19,13 @@
     "options.classic": "クラシック",
     "options.adjust": "操作を調整",
     "hint.camera": "カメラを動かそう",
-    "language.title": "言語"
+    "language.title": "言語",
+    "picture.tap_start": "タップでスタート",
+    "picture.achievements": "実績",
+    "picture.select_chapter": "チャプターを選ぶ",
+    "picture.points": "ポイント",
+    "picture.level_finished": "レベル クリア",
+    "picture.portals_created": "作成した ポータル",
+    "picture.game_over": "ゲーム オーバー"
   }
 }

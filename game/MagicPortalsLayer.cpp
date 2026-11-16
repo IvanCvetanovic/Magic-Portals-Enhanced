@@ -41,6 +41,7 @@
 #include "renderer/TextureRegistry.hpp"
 
 #include "sim/PadArt.hpp"
+#include "sim/PictureBake.hpp"
 #include "sim/Player.hpp"
 #include "sim/Roles.hpp"
 #include "sim/Units.hpp"
@@ -3979,7 +3980,9 @@ std::string MagicPortalsLayer::menuImage(const std::string& file) const {
     // that reason.
     std::error_code ec;
     const std::string hd = m_paths.original + "/sprites/hd/" + file;
-    if (std::filesystem::exists(hd, ec)) return hd;
+    // The pictures that carry words as pixels are drawn again in the language on the screen (planning step 247): English, and every picture no recipe names, gets
+    // the shipped file exactly as before, and only the hd twin is ever replaced (it is the one the port draws, at density 2, at every window size).
+    if (std::filesystem::exists(hd, ec)) return wordedPicture(file, hd);
     const std::string sprites = m_paths.original + "/sprites/" + file;
     if (std::filesystem::exists(sprites, ec)) return sprites;
     return m_paths.original + "/entities/" + file;
@@ -5144,8 +5147,140 @@ bool MagicPortalsLayer::menuStateUp() const {
 
 const std::string& MagicPortalsLayer::menuPicture(const std::string& file) const {
     static const std::string none;
-    const auto found = m_menuPictures.find(file);
+    auto found = m_menuPictures.find(file);
+    if (found == m_menuPictures.end() && m_pictureLazy.erase(file) != 0) {
+        // A picture a language switch took out because its words are baked for the language (refreshWordedPictures): resolved now, at its first draw, which is when
+        // its bake is paid for. The baked file is there when this answers; a picture whose bake failed answers with the shipped file it began with.
+        std::string path = menuImage(file);
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(path, ec)) {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "menu picture could not be read: " << path << std::endl;
+            path.clear();
+        }
+        found = m_menuPictures.emplace(file, std::move(path)).first;
+    }
     return found != m_menuPictures.end() ? found->second : none;
+}
+
+std::string MagicPortalsLayer::PausePictureFile(const std::string& file) const {
+    const auto found = m_pauseImages.find(file);
+    return found != m_pauseImages.end() ? found->second : std::string();
+}
+
+std::string MagicPortalsLayer::EndPictureFile(const std::string& file) const {
+    const auto found = m_endImages.find(file);
+    return found != m_endImages.end() ? found->second : std::string();
+}
+
+std::string MagicPortalsLayer::PopupPictureFile(const std::string& file) const {
+    const auto found = m_popupImages.find(file);
+    return found != m_popupImages.end() ? found->second : std::string();
+}
+
+// ---- the pictures that carry words (planning step 247, LANG-2) ------------------------------------------------------------------------
+
+struct MagicPortalsLayer::PictureState {
+    PictureBake::Recipes recipes;
+    bool tried = false;                            // the table was asked for (once, and only for a language that is not English)
+    std::map<std::string, std::string> baked;      // "<code>|<picture>" -> the baked file, or empty: the shipped picture stays (the failure was said once)
+};
+
+std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std::string& original) const {
+    // ENGLISH IS NEVER BAKED: the shipped file, and nothing below runs, so the English path is what it always was and the tests/golden/menu_screens.json frames hold.
+    if (m_language == Strings::kDefaultLang || !m_stringsReady) return original;
+    if (!m_pictures) m_pictures = std::make_shared<PictureState>();
+    PictureState& state = *m_pictures;
+    if (!state.tried) {
+        state.tried = true;
+        std::string why;
+        if (!PictureBake::LoadRecipes(m_paths.portData + PictureBake::kRecipesFile, state.recipes, why)) {
+            // A table that is missing or refused is the English pictures, said once: an older package folder without it still starts.
+            state.recipes = PictureBake::Recipes{};
+            SUPERSONIC_LOG_ERROR("Magic Portals") << "picture bake: the table of recipes could not be read, the pictures stay English: " << why << std::endl;
+        }
+    }
+    if (!state.recipes.loaded) return original;
+    const PictureBake::Recipe* recipe = state.recipes.Find(file);
+    if (recipe == nullptr) return original;
+    const std::string code = m_strings.Languages().CodeOf(m_language);
+    const std::string key = code + "|" + file;
+    if (const auto known = state.baked.find(key); known != state.baked.end()) return known->second.empty() ? original : known->second;
+
+    const auto english = [&](const std::string& why) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "picture " << file << " in " << code << " stays English: " << why << std::endl;
+        state.baked.emplace(key, std::string());
+        return original;
+    };
+    // A key the language's file lacks shows the English phrase (Table::Get): drawing that in a foreign face would be a picture in English that looks translated.
+    const std::vector<std::string>& fellBack = m_strings.FellBack();
+    if (std::find(fellBack.begin(), fellBack.end(), recipe->key) != fellBack.end()) return english("the language has no " + recipe->key + " string");
+    const FontBake::Plan& plan = m_strings.Languages().Fonts();
+    if (!plan.loaded) return english("game/data/lang/languages.json has no fonts plan");
+    if (m_paths.prisms.empty()) return english("there is no scratch folder to write the picture in");
+
+    PictureBake::Wanted wanted;
+    wanted.recipe = recipe;
+    wanted.recipes = &state.recipes;
+    wanted.plan = &plan;
+    wanted.fontsDir = m_paths.portData + "/" + plan.folder;
+    wanted.lang = m_language;
+    wanted.languageCode = code;
+    wanted.phrase = m_strings.Get(recipe->key);
+    wanted.sourcePath = original;
+    wanted.twinPath = (std::filesystem::path(original).parent_path() / recipe->erase.twinSprite).string();
+    wanted.directory = (m_paths.prisms / PictureBake::kScratchFolder).string();
+    const PictureBake::Written written = PictureBake::Ensure(wanted);
+    if (!written.ok) return english(written.reason);
+    SUPERSONIC_LOG_INFO("Magic Portals") << "picture " << file << " in " << code << ": " << written.path
+                                         << (written.cached ? " (already there)" : (" (baked in " + std::to_string(written.milliseconds) + " ms, scale " + std::to_string(written.scale) + ")")) << std::endl;
+    state.baked.emplace(key, written.path);
+    return written.path;
+}
+
+void MagicPortalsLayer::refreshWordedPictures() {
+    const bool anything = !m_menuPictures.empty() || !m_pauseImages.empty() || !m_endImages.empty() || !m_popupImages.empty();
+    if (!anything) return;
+    const std::string scratch = (m_paths.prisms / PictureBake::kScratchFolder).generic_string();
+    // Whether `file` names a picture whose path the language changes: a recipe's (in a language that has the table), or - back in English - one that holds a baked file.
+    const auto concerned = [&](const std::string& key, const std::string& path) {
+        if (m_language == Strings::kDefaultLang) return !scratch.empty() && path.rfind(scratch, 0) == 0;
+        // A popup's picture is named with its folder ("sprites/x.png"), a menu's by its name: the recipe's sprite is the name.
+        const std::string folder = "sprites/";
+        const std::string file = key.compare(0, folder.size(), folder) == 0 ? key.substr(folder.size()) : key;
+        if (!m_pictures) m_pictures = std::make_shared<PictureState>();
+        PictureState& state = *m_pictures;
+        if (!state.tried) {
+            state.tried = true;
+            std::string why;
+            if (!PictureBake::LoadRecipes(m_paths.portData + PictureBake::kRecipesFile, state.recipes, why)) {
+                state.recipes = PictureBake::Recipes{};
+                SUPERSONIC_LOG_ERROR("Magic Portals") << "picture bake: the table of recipes could not be read, the pictures stay English: " << why << std::endl;
+            }
+        }
+        return state.recipes.loaded && state.recipes.Find(file) != nullptr;
+    };
+    // The menu's: taken out, and put back by menuPicture at the first draw of each (the bake is paid for there, and not for a picture nobody shows).
+    for (auto it = m_menuPictures.begin(); it != m_menuPictures.end();) {
+        if (concerned(it->first, it->second)) {
+            m_pictureLazy.insert(it->first);
+            it = m_menuPictures.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // The pause's, the end screens' and the popups' are made per level, and only a level that is loaded holds any: made again now.
+    const auto readable = [this](const std::string& image) -> std::string { return imageSizePx(image) == glm::dvec2(0.0) ? std::string() : image; };
+    for (std::map<std::string, std::string>* images : {&m_pauseImages, &m_endImages}) {
+        for (auto& [file, path] : *images) {
+            if (concerned(file, path)) path = readable(menuImage(file));
+        }
+    }
+    for (auto& [file, path] : m_popupImages) {
+        if (concerned(file, path)) path = readable(originalAsset(file));
+    }
+    for (const auto& [file, image] : m_endImages) {
+        if (m_endTexels.find(file) != m_endTexels.end()) m_endTexels[file] = image.empty() ? glm::ivec2(0) : glm::ivec2(imageSizePx(image));
+    }
 }
 
 std::string MagicPortalsLayer::fontFile(const std::string& name) const {
@@ -5352,6 +5487,9 @@ bool MagicPortalsLayer::SetLanguage(Strings::Lang requested) {
     m_languageRequested = requested;
     m_generatedFonts = std::move(baked);
     if (m_achievementsLoaded) m_achievementsShown = std::move(content);
+    // The pictures that carry words as pixels are the language's too (planning step 247): every cache that holds one's path is made again, and English gets the
+    // shipped files back.
+    refreshWordedPictures();
 
     // Every font read so far is read again from where this language has it, and the caption's with them.
     const bool captionWanted = m_captionFontTried;
@@ -14605,7 +14743,11 @@ std::string MagicPortalsLayer::originalAsset(const std::string& relative) const 
     std::error_code ec;
     const std::filesystem::path path(relative);
     const std::string hd = m_paths.original + "/" + (path.parent_path() / "hd" / path.filename()).generic_string();
-    if (std::filesystem::exists(hd, ec)) return hd;
+    if (std::filesystem::exists(hd, ec)) {
+        // A picture of sprites/ whose words are pixels (planning step 247) is the language's; the entities', the particles' and the hand's are never replaced.
+        const std::string sprites = "sprites/";
+        return relative.compare(0, sprites.size(), sprites) == 0 ? wordedPicture(relative.substr(sprites.size()), hd) : hd;
+    }
     return m_paths.original + "/" + relative;
 }
 

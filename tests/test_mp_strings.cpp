@@ -1,6 +1,7 @@
 // The interface languages and their strings (planning step 236, PORT-32): sim/Strings and game/data/lang/.
 //
-// Eleven languages - en (the default) de es fr it pt ru tr uk ja ar - and fourteen short strings each. What is pinned:
+// Eleven languages - en (the default) de es fr it pt ru tr uk ja ar - and twenty-one short strings each: fourteen the fonts draw and, since planning step 247
+// (LANG-2), seven the picture bake draws into the original's pictures (the picture keys). What is pinned:
 //
 //   the table      languages.json lists exactly Strings::Lang's codes in its order, each with its own native name (pinned as code points), its
 //                  direction and its font set; and the loader REFUSES a file that does not (a swapped pair, an unknown code, a missing or extra
@@ -22,7 +23,12 @@
 //                  as it is, lone and unfinished braces untouched
 //   drift          en.json is the English the rules fields still hold, read through the loaders that read them (ui.json's caption, pause title,
 //                  dashboard header and new label, selector warning with locking's percent, credits tail, controls.json's options words,
-//                  camera.json's hint and achievements.json's two cards; the secret achievement's words are not in git at all: the overlay's, tests/test_mp_langsim)
+//                  camera.json's hint and achievements.json's two cards; the secret achievement's words are not in git at all: the overlay's, tests/test_mp_langsim).
+//                  THE DOCUMENTED EXCEPTION: the seven picture keys have no rule-table English - their English is the words the original's pictures carry as
+//                  pixels - so they are pinned here by value instead (a change of one is deliberate), and the fourteen that remain are the ones read through the rules
+//   picture keys   (planning step 247) the seven exist in all eleven languages, are not empty, carry no placeholder and no line break, are not a copy of the English in
+//                  any of the ten languages (the one documented exception: French 'points' IS the English word), are in LOGICAL order for Arabic (no
+//                  presentation form), have no ASCII lower case in the picture whose words are capitals (TAP START), and are in no font slot's list
 //   charset        a language set in the ORIGINAL fonts uses no code point outside U+0020-007E and U+00A0-00FF (the .fnt files hold exactly
 //                  ids 32-126 and 160-255) - none of the typographic quotes, dashes, ellipsis or ligatures that translators reach for - and
 //                  no Matura string holds a capital I (Matura draws it like a J); every language is valid UTF-8 without a U+FFFD
@@ -626,16 +632,19 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
     const Strings::LanguageTable table = RealLanguages();
     const Map english = ReadStrings("en");
     const std::set<std::string> keys = AllKeys();
-    CHECK_EQ(static_cast<int>(keys.size()), 14);
+    CHECK_EQ(static_cast<int>(keys.size()), 21);
     {
         std::set<std::string> found;
         for (const auto& [key, value] : english) {
             (void)value;
             found.insert(key);
         }
-        CHECK_MSG(found == keys, "en.json has exactly the fourteen keys of Strings::kKeys");
+        CHECK_MSG(found == keys, "en.json has exactly the twenty-one keys of Strings::kKeys");
     }
     int translated = 0;
+    int pictureTranslated = 0;
+    std::set<std::string> pictureKeys;
+    for (const std::string_view key : Strings::kPictureKeys) pictureKeys.insert(std::string(key));
     for (const Lang lang : AllLangs()) {
         const std::string code = table.CodeOf(lang);
         const Map own = ReadStrings(code);
@@ -652,12 +661,14 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
             CHECK_MSG(!text.empty(), code + "." + key + " is not empty");
             CHECK_MSG(Placeholders(text) == Placeholders(english.at(key)), code + "." + key + " carries English's placeholders: " + text);
             CHECK_MSG(Breaks(text) == Breaks(english.at(key)), code + "." + key + " has English's line breaks");
-            if (lang != Lang::En && text != english.at(key)) ++translated;
+            if (lang != Lang::En && text != english.at(key)) (pictureKeys.count(key) == 1 ? pictureTranslated : translated) += 1;
         }
     }
-    // Ten languages by fourteen keys, of which a few are the same word in several languages (Modern, a name): a file that was copied from
+    // Ten languages by fourteen interface keys, of which a few are the same word in several languages (Modern, a name): a file that was copied from
     // English would be a handful.
     CHECK_MSG(translated >= 122, "the languages are translated, not copied: " + std::to_string(translated) + " of 140 differ from English");
+    // And ten languages by seven picture keys: every one differs from the English, except the ONE documented exception below.
+    CHECK_MSG(pictureTranslated == 69, "the picture words are translated, not copied: " + std::to_string(pictureTranslated) + " of 70 differ from English (69 are expected)");
 
     // Each Placeholder::k name is what the key table says, and the table's placeholders are the ones English really carries.
     for (const Strings::KeySpec& spec : Strings::kKeys) {
@@ -668,11 +679,60 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
         std::sort(expected.begin(), expected.end());
         CHECK_MSG(Placeholders(english.at(std::string(spec.key))) == expected, std::string(spec.key) + ": the key table names English's placeholders");
     }
-    // Every key is in exactly one font list.
+    // Every key is in exactly one list: the Matura slot's, the Verdana slot's, or the picture keys (no font slot draws those: the picture bake does).
     std::set<std::string> listed;
     for (const std::string_view key : Strings::kMaturaKeys) CHECK_MSG(listed.insert(std::string(key)).second, "in the Matura list once: " + std::string(key));
     for (const std::string_view key : Strings::kVerdanaKeys) CHECK_MSG(listed.insert(std::string(key)).second, "in one list only: " + std::string(key));
-    CHECK_MSG(listed == keys, "the Matura and Verdana lists together are every key");
+    for (const std::string_view key : Strings::kPictureKeys) CHECK_MSG(listed.insert(std::string(key)).second, "in one list only: " + std::string(key));
+    CHECK_MSG(listed == keys, "the Matura, Verdana and picture lists together are every key");
+}
+
+// The seven picture keys (planning step 247).
+void ThePictureKeysAreTheWordsOfThePictures() {
+    const Strings::LanguageTable table = RealLanguages();
+    const Map english = ReadStrings("en");
+    // The documented exception to the drift case: the English of these keys is not a rule table's, it is the words the pictures carry, pinned by value.
+    const std::map<std::string, std::string> pinned = {
+        {"picture.tap_start", "TAP START"},           {"picture.achievements", "Achievements"},         {"picture.select_chapter", "Select chapter"},
+        {"picture.points", "points"},                 {"picture.level_finished", "level finished"},     {"picture.portals_created", "portals created"},
+        {"picture.game_over", "game over"},
+    };
+    CHECK_EQ(static_cast<int>(Strings::kPictureKeys.size()), 7);
+    for (const std::string_view key : Strings::kPictureKeys) {
+        const std::string name(key);
+        CHECK_MSG(pinned.count(name) == 1 && english.at(name) == pinned.at(name), "the English of " + name + " is the picture's word: " + english.at(name));
+    }
+    // 14 + 7: the other fourteen are the ones the drift case reads through the rules.
+    CHECK_EQ(static_cast<int>(Strings::kKeys.size()) - static_cast<int>(Strings::kPictureKeys.size()), 14);
+    // The one word that is the same in a language as in English: French says "points". Any other copy of the English is a file that was not translated.
+    const std::set<std::pair<std::string, std::string>> sameAsEnglish = {{"fr", "picture.points"}};
+    for (const Lang lang : AllLangs()) {
+        if (lang == Lang::En) continue;
+        const std::string code = table.CodeOf(lang);
+        const Map own = ReadStrings(code);
+        for (const std::string_view key : Strings::kPictureKeys) {
+            const std::string name(key);
+            CHECK_MSG(own.count(name) == 1, code + " has " + name);
+            if (own.count(name) == 0) continue;
+            const std::string& text = own.at(name);
+            CHECK_MSG(!text.empty() && Placeholders(text).empty() && Breaks(text) == 0, code + "." + name + " is a phrase with no placeholder and no line break");
+            CHECK_MSG(text.front() != ' ' && text.back() != ' ' && text.find("  ") == std::string::npos, code + "." + name + " has no stray space");
+            const bool same = text == english.at(name);
+            CHECK_MSG(same == (sameAsEnglish.count({code, name}) == 1), code + "." + name + (same ? " is a copy of the English" : " differs from the English the exception list says it equals"));
+            // Arabic is stored in logical order, as the shaper wants it.
+            if (lang == Lang::Ar) {
+                for (const std::uint32_t point : Cps(text)) CHECK_MSG(!(point >= 0xFB50 && point <= 0xFEFF), code + "." + name + " is not pre-shaped");
+            }
+            // The main menu's picture is in capitals in the original: no ASCII lower case, and no Cyrillic lower case.
+            if (name == "picture.tap_start") {
+                for (const std::uint32_t point : Cps(text)) {
+                    CHECK_MSG(!(point >= 'a' && point <= 'z') && !(point >= 0x430 && point <= 0x45F), code + ".picture.tap_start is in capitals: " + text);
+                }
+            }
+        }
+    }
+    // Only Japanese has a space that is never drawn; the picture keys of every other language use a space only where one is drawn or a line may break.
+    CHECK_MSG(ReadStrings("ja").at("picture.level_finished").find(' ') != std::string::npos, "the Japanese 'level finished' has the space a line breaks at");
 }
 
 void EveryLanguageLoads() {
@@ -959,6 +1019,15 @@ void EnglishIsTheEnglishTheRulesFieldsStillHold() {
     }
     CHECK_MSG(achievements.locked.message == en.Get(Strings::Key::kCardLockedLevel), "the locked-level card: " + achievements.locked.message);
 
+    // The seven picture keys have no rule-table English (the documented exception: ThePictureKeysAreTheWordsOfThePictures pins their values), so the keys this
+    // case read through the rules are the other fourteen.
+    int ruleKeys = 0;
+    for (const Strings::KeySpec& spec : Strings::kKeys) {
+        bool picture = false;
+        for (const std::string_view key : Strings::kPictureKeys) picture = picture || key == spec.key;
+        ruleKeys += picture ? 0 : 1;
+    }
+    CHECK_EQ(ruleKeys, 14);
     // The secret achievement's words are Asantee's and are in no committed table: no key of Strings::kKeys is about it, and no language file has one.
     for (const Strings::KeySpec& spec : Strings::kKeys) CHECK_MSG(std::string(spec.key).find("secret") == std::string::npos, "no key is the secret achievement's: " + std::string(spec.key));
 }
@@ -1131,6 +1200,7 @@ void runTests() {
     TheLoaderRefusesABadFontsBlock();
     EnglishIsReadStrictly();
     EveryLanguageHasExactlyEnglishsKeysAndPlaceholders();
+    ThePictureKeysAreTheWordsOfThePictures();
     EveryLanguageLoads();
     AMissingOrBadStringShowsEnglishOnce();
     FillIsOneLeftToRightScan();

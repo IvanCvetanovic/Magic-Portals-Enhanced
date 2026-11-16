@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -1814,6 +1815,17 @@ public:
     }
     // The level's caption as composed, "Part 1" in the language on the screen; empty with no level.
     const std::string& CaptionWords() const { return m_captionText; }
+
+    // THE PICTURES THAT CARRY WORDS (planning step 247, LANG-2): the file the layer asks the renderer for when it draws one of the original's pictures whose words are
+    // pixels (TAP START, Achievements, Select chapter, points, level finished, portals created, game over). In English, and for a picture no recipe names, it is the
+    // shipped file, byte for byte; in another language it is the copy sim/PictureBake made of it in the scratch folder (the language's code is in its name), or the
+    // shipped file again when the bake failed (one log line says which picture, which language and why). `file` is the sprite's name as the screens name it
+    // ("scores.png"). For the suites: empty for a picture the screen has not resolved.
+    std::string MenuPictureFile(const std::string& file) const { return menuPicture(file); }
+    std::string PausePictureFile(const std::string& file) const;
+    std::string EndPictureFile(const std::string& file) const;
+    // A popup's picture, named with its folder as the rules name it ("sprites/scores.png"); empty for one the level has not resolved.
+    std::string PopupPictureFile(const std::string& file) const;
     // What the run was told about its language.
     const Language::Policy& LanguagePolicy() const { return m_paths.language; }
 
@@ -2067,6 +2079,17 @@ private:
     void menuTick(entt::registry& registry, const ScriptClock::Step& step);
     // One of the original's own menu images, which live beside its entities.
     std::string menuImage(const std::string& file) const;
+    // The file to draw for the picture the screens call `file`, whose shipped path is `original` (planning step 247): `original` in English and for every picture
+    // no recipe names, else the picture baked for the language on the screen, else `original` again. Bakes on the first ask of a (picture, language) and remembers
+    // the answer, failures too, so the one log line of a failure is one.
+    std::string wordedPicture(const std::string& file, const std::string& original) const;
+    // After a language switch: the caches that hold the path of one of those pictures (the menu's, the pause's, the end screens' and the popups') are made again for the
+    // language on the screen. The menu's are made at their first draw, so a switch costs nothing until a picture is shown.
+    void refreshWordedPictures();
+    struct PictureState; // sim/PictureBake's table and the pictures baked so far, defined in the .cpp so that this header does not include the module
+    mutable std::shared_ptr<PictureState> m_pictures;
+    // The keys a switch took out of m_menuPictures, which menuPicture puts back at their first draw.
+    mutable std::set<std::string> m_pictureLazy;
 
     // The entities' particle systems: built with a level's art, carried per
     // FRAME, and taken away with the level.
@@ -3390,7 +3413,7 @@ private:
     double m_mainMusicDismissedMs{-1.0};
     // The pictures the menu states draw through the overlay, by the name ui.json
     // gives them, each resolved to its hd twin once.
-    std::map<std::string, std::string> m_menuPictures;
+    mutable std::map<std::string, std::string> m_menuPictures; // mutable: menuPicture resolves, at its first draw, a picture a language switch took out
     // Credits: its rules, the strip, and the one touch it follows.
     Credits::Rules m_creditsRules;
     Credits::Scroll m_credits;
