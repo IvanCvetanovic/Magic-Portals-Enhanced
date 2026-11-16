@@ -99,7 +99,7 @@ inline constexpr std::string_view kPicturePoints = "picture.points";
 inline constexpr std::string_view kPictureLevelFinished = "picture.level_finished";
 inline constexpr std::string_view kPicturePortalsCreated = "picture.portals_created";
 inline constexpr std::string_view kPictureGameOver = "picture.game_over";
-// Planning step 248: the two score plaques, the game-finished card (its first paragraph only; the Facebook line stays English), and the credits strip's five bands:
+// Planning step 248: the two score plaques, the game-finished card (its first paragraph only; a language other than English shows no Facebook line), and the credits strip's five bands:
 // the four roles and the big heading. The credits' phrases are the picture's lower case; the heading is as the picture spells it.
 inline constexpr std::string_view kPictureCurrentScore = "picture.current_score";
 inline constexpr std::string_view kPictureGoldenScore = "picture.golden_score";

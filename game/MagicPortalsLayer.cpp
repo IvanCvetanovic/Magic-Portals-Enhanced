@@ -5223,8 +5223,8 @@ std::string MagicPortalsLayer::wordedPicture(const std::string& file, const std:
     // A key the language's file lacks shows the English phrase (Table::Get): drawing that in a foreign face would be a picture in English that looks translated. A picture of
     // several phrases (the credits strip: a key a band) keeps the English one if ANY of its keys is missing.
     const std::vector<std::string>& fellBack = m_strings.FellBack();
-    for (const std::string& key : recipe->Keys()) {
-        if (std::find(fellBack.begin(), fellBack.end(), key) != fellBack.end()) return english("the language has no " + key + " string");
+    for (const std::string& missingKey : recipe->Keys()) {
+        if (std::find(fellBack.begin(), fellBack.end(), missingKey) != fellBack.end()) return english("the language has no " + missingKey + " string");
     }
     const FontBake::Plan& plan = m_strings.Languages().Fonts();
     if (!plan.loaded) return english("game/data/lang/languages.json has no fonts plan");

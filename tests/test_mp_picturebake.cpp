@@ -18,8 +18,11 @@
 //   the loader   the new rules, layouts and pairs are refused one fault at a time (a mini table of one recipe tries every pair the loader does not allow)
 // The original-sprite suite adds the golden erase against the current plaque's text-free rows (the OFFLINE ground truth, never a donor), the medal untouched, no edge of the old
 // lettering left, the strip's names and logos identical in ten languages, and the three medals composited over every language's current plaque (they hide no ink).
-// MUTANTS of the step (37, one at a time, by an environment-variable switchboard in a copy of the sources) are listed in the planning record; all are failed by this file or by
-// test_mp_langlayer (the layer's three).
+// MUTANTS of the step (37, one at a time, by an environment-variable switchboard in a copy of the sources) are listed in the planning record; each is failed by one of this file's
+// two suites (the pure cases, or the original-sprite cases), by test_mp_langlayer or by test_mp_pickerlayer (the layer's three). The review of the step found eleven more alive,
+// each closed by a case here: the ring of the plaque and of the panel read in one row only, the ink window of the first band alone, the digit rule at either end ('0' and '9'),
+// kSlopeRows read over four rows, the strip's ink alpha multiplied twice, a heading not anchored by its last line, a band's own tunings ignored, the bands' pitch halved, the
+// `paint` rectangle ignored, and the ink's right edge left out of the fit of a band.
 //
 //   table        game/data/picture_recipes.json loads as the seven pictures it should, each with its string key, and the loader REFUSES, one fault at a time, a missing member,
 //                a size of zero, an upside-down rectangle, an unknown rule or layout or member, a digest that is not hex, a repeated id, a version it does not read, a step
@@ -212,6 +215,18 @@ void TheShippedTableLoadsAsTheElevenPictures() {
     for (const PB::Recipe& recipe : recipes.items) {
         if (recipe.erase.rule == PB::Rule::Plaque || recipe.erase.rule == PB::Rule::Panel) CHECK_MSG(recipe.text.layout == PB::Layout::Paragraph && !recipe.key.empty(), recipe.id + " is a paragraph of one key");
         if (recipe.erase.rule == PB::Rule::ClearRows) CHECK_MSG(recipe.text.layout == PB::Layout::Bands && recipe.key.empty() && recipe.text.bands.size() == 5 && recipe.erase.clearRows.size() == 5, recipe.id + " is five bands and no key of its own");
+        // The strip's heading (the fifth band) is set from its LAST baseline and has tunings of its own that are lighter than the roles' (the two are read by the loader, and a bake that
+        // ignored either would change every language's strip: TheStripsAlphaTuningsPitchAnchorAndRightEdgeAreHeld holds them at the layout).
+        if (recipe.erase.rule == PB::Rule::ClearRows && recipe.text.bands.size() == 5) {
+            const PB::Band& heading = recipe.text.bands.back();
+            bool lighter = !heading.faces.empty() && !recipe.text.faces.empty();
+            for (const PB::FaceTuning& own : heading.faces) {
+                for (const PB::FaceTuning& shared : recipe.text.faces) lighter = lighter && (own.face != shared.face || own.embolden < shared.embolden);
+            }
+            bool others = true;
+            for (std::size_t i = 0; i + 1 < recipe.text.bands.size(); ++i) others = others && !recipe.text.bands[i].anchorLast && recipe.text.bands[i].faces.empty();
+            CHECK_MSG(heading.anchorLast && lighter && others, recipe.id + ": only the heading is anchored by its last line and has an embolden of its own");
+        }
     }
 }
 
@@ -1609,14 +1624,12 @@ void ThePlaqueGuardsFailClosedEachByItself() {
         CHECK_MSG(!erased && Contains(why, "chroma"), "current art under the golden recipe: " + why);
     }
     }
-    // stray ink one row above the rectangle (row 78: the rectangle begins at 80, the clean rows end at 75)
-    {
+    // stray ink in EACH of the three rows above the rectangle (77, 78 and 79: the rectangle begins at 80, the clean rows end at 75): a check of one row only would let two of them through
+    for (const int row : {77, 78, 79}) {
         PlaqueFixture f = MakePlaque(false);
-        for (int x = 30; x < 70; ++x) Put(f.picture, x, 78, 235, 235, 235, 255);
-        {
+        for (int x = 30; x < 70; ++x) Put(f.picture, x, row, 235, 235, 235, 255);
         const bool erased = PB::EraseWords(f.recipe, f.picture, nullptr, out, why);
-        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink above the rectangle: " + why);
-    }
+        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink in row " + std::to_string(row) + " above the rectangle: " + why);
     }
     // ink in the margin columns of the rows beside the lettering
     {
@@ -1788,19 +1801,18 @@ void APanelIsErasedFromItsLeftMarginAlone() {
         CHECK_MSG(!erased && Contains(why, "left margin's profile"), "ink in the left margin: " + why);
     }
     }
-    {
+    // stray ink in EACH of the three rows above (37, 38, 39: the rectangle begins at 40) and below (100, 101, 102: it ends at 100) the rectangle
+    for (const int row : {37, 38, 39}) {
         PanelFixture bad = MakePanel();
-        for (int x = 30; x < 70; ++x) Put(bad.picture, x, 38, 235, 235, 235, 255);
-        {
+        for (int x = 30; x < 70; ++x) Put(bad.picture, x, row, 235, 235, 235, 255);
         const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
-        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink above the rectangle: " + why);
+        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink in row " + std::to_string(row) + " above the rectangle: " + why);
     }
-        PanelFixture below = MakePanel();
-        for (int x = 30; x < 70; ++x) Put(below.picture, x, 101, 235, 235, 235, 255);
-        {
-        const bool erased = PB::EraseWords(below.recipe, below.picture, nullptr, out, why);
-        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink below the rectangle: " + why);
-    }
+    for (const int row : {100, 101, 102}) {
+        PanelFixture bad = MakePanel();
+        for (int x = 30; x < 70; ++x) Put(bad.picture, x, row, 235, 235, 235, 255);
+        const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
+        CHECK_MSG(!erased && Contains(why, "ring"), "stray ink in row " + std::to_string(row) + " below the rectangle: " + why);
     }
     {
         // not a profile times a vignette, in the columns between the margins and the centre only, so that the margins and the centre still agree with each other
@@ -1965,6 +1977,15 @@ void AStripClearsItsBandsAndDrawsThemAgainLeftAligned() {
     const PB::Outcome withFace = PB::Render(RequestForBands(digits, Lang::En, {"3333", "x"}), f.picture, nullptr);
     const PB::Outcome withoutFace = PB::Render(RequestForBands(f.recipe, Lang::En, {"3333", "x"}), f.picture, nullptr);
     CHECK_MSG(withFace.ok && withoutFace.ok && withFace.image.rgba != withoutFace.image.rgba, "the digit face draws other digits");
+    // ALL ten digits and no other character: '/' and ':' (the characters either side of '0' and '9') are drawn from the slot's own face with the digit face and without it
+    for (char c = '/'; c <= ':'; ++c) {
+        const std::string text(4, c);
+        const PB::Outcome with = PB::Render(RequestForBands(digits, Lang::En, {text, "x"}), f.picture, nullptr);
+        const PB::Outcome without = PB::Render(RequestForBands(f.recipe, Lang::En, {text, "x"}), f.picture, nullptr);
+        const bool isDigit = c >= '0' && c <= '9';
+        CHECK_MSG(with.ok && without.ok && (with.image.rgba != without.image.rgba) == isDigit,
+                  std::string("'") + c + "' " + (isDigit ? "is drawn from the digit face" : "is not a digit and is drawn from the slot's face") + ": " + with.reason + without.reason);
+    }
     digits.text.digitFace = "no_such_face";
     digits.text.faces.pop_back();
     const PB::Outcome unknown = PB::FitPhrase(RequestForBands(digits, Lang::En, {"3333", "x"}));
@@ -1998,17 +2019,164 @@ void AStripClearsItsBandsAndDrawsThemAgainLeftAligned() {
         CHECK_MSG(!erased && Contains(why, "bounded"), "and the row below: " + why);
     }
     }
-    {
+    // in EACH band's window (the first band's is rows 12..47, the second's 82..117): a check of the first window only would let a stray pixel under the second one through
+    for (const int band : {0, 1}) {
         StripFixture bad = MakeStrip();
-        Put(bad.picture, 40, 40, 0, 0, 0, 255); // inside the first window, outside the cleared rows
-        {
+        Put(bad.picture, 40, band == 0 ? 40 : 110, 0, 0, 0, 255); // inside the window, outside the cleared rows
         const bool erased = PB::EraseWords(bad.recipe, bad.picture, nullptr, out, why);
-        CHECK_MSG(!erased && Contains(why, "ink window"), "an ink window with an opaque pixel outside the cleared rows: " + why);
-    }
+        CHECK_MSG(!erased && Contains(why, "ink window") && Contains(why, "band " + std::to_string(band)), "an ink window with an opaque pixel outside the cleared rows, band " + std::to_string(band) + ": " + why);
     }
     // And a recipe that asks for fewer or more phrases than it has bands is refused.
     const PB::Outcome few = PB::FitPhrase(RequestForBands(f.recipe, Lang::En, {"only one"}));
     CHECK_MSG(!few.ok && Contains(few.reason, "phrases"), "a phrase too few: " + few.reason);
+}
+
+// The strip's ink, the bands' own tunings, the lines' pitch, the anchor of the last line and the right edge, each by a case of its own: the review of step 248 found a mutant of every
+// one of them that no test failed.
+void TheStripsAlphaTuningsPitchAnchorAndRightEdgeAreHeld() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    const StripFixture f = MakeStrip();
+    // ALPHA IS THE COVERAGE and is not applied twice: the layer draws the strip at alpha 230 and the baked ink rides it. On a transparent ground with no shadow the ink's alpha IS its
+    // coverage, so a pixel the stem of a capital covers whole is alpha 255 (a bake that multiplied the 230 in again would top out at 230).
+    {
+        PB::Recipe big = f.recipe;
+        PB::Band& band = big.text.bands[0];
+        band.px = 14.0;
+        band.firstBaseline = 42.0;
+        band.maxLines = 1;
+        const PB::Outcome o = PB::Render(RequestForBands(big, Lang::En, {"HH", "x"}), f.picture, nullptr);
+        CHECK_MSG(o.ok, "a large capital is baked: " + o.reason);
+        if (o.ok) {
+            int maxAlpha = 0;
+            int whole = 0;
+            for (int y = band.inkRows.a; y < band.inkRows.b; ++y) {
+                for (int x = 0; x < o.image.width; ++x) {
+                    maxAlpha = std::max(maxAlpha, static_cast<int>(o.image.At(x, y)[3]));
+                    whole += o.image.At(x, y)[3] == 255 ? 1 : 0;
+                }
+            }
+            CHECK_MSG(maxAlpha == 255 && whole >= 10, "the ink's alpha is its coverage, 255 where a stem covers the pixel whole, and not multiplied again: the most is " + std::to_string(maxAlpha) + ", " + std::to_string(whole) + " whole pixels");
+        }
+    }
+    // A band's OWN tuning replaces the shared one for that band alone (the heading's embolden is 0.05 against the others' 0.065): a heavier tuning on the first band gives it much more ink
+    // and leaves every pixel of the second band's rows as they were.
+    {
+        PB::Recipe heavy = f.recipe;
+        heavy.text.bands[0].faces = {PB::FaceTuning{"kurale", 1.0, 0x78, 0.25}};
+        const PB::Outcome plain = PB::Render(RequestForBands(f.recipe, Lang::En, {"ab - cd", "ef"}), f.picture, nullptr);
+        const PB::Outcome bold = PB::Render(RequestForBands(heavy, Lang::En, {"ab - cd", "ef"}), f.picture, nullptr);
+        CHECK_MSG(plain.ok && bold.ok, "both are baked: " + plain.reason + bold.reason);
+        if (plain.ok && bold.ok) {
+            const auto ink = [](const PB::Image& image, int y0, int y1) {
+                long long sum = 0;
+                for (int y = y0; y < y1; ++y) {
+                    for (int x = 0; x < image.width; ++x) sum += image.At(x, y)[3];
+                }
+                return sum;
+            };
+            CHECK_MSG(ink(bold.image, 12, 48) * 10 > ink(plain.image, 12, 48) * 13, "a band's own embolden gives its band more ink: " + std::to_string(ink(bold.image, 12, 48)) + " against " + std::to_string(ink(plain.image, 12, 48)));
+            bool second = true;
+            for (int y = 82; y < 118; ++y) second = second && std::equal(plain.image.At(0, y), plain.image.At(0, y) + plain.image.width * 4, bold.image.At(0, y));
+            CHECK_MSG(second, "and leaves the other band's rows as they were");
+        }
+    }
+    // The lines' PITCH and the ANCHOR. One band of two lines, no descender, so that nothing pushes the lines apart or slides the block: set from its first baseline the lines are a pitch
+    // apart (the first at the baseline, the second one pitch below), and set from its LAST baseline (the heading's) the last line is at the baseline and the first one pitch above.
+    {
+        PB::Recipe one = f.recipe;
+        one.text.bands = {f.recipe.text.bands[0]};
+        one.text.maxRight = 142.0;
+        PB::Band& band = one.text.bands[0];
+        band.maxLines = 2;
+        band.inkRows = PB::Span{12, 48};
+        const std::vector<std::string> phrase{"aaaa bbbb - cc dd - eeee ffff"};
+        band.anchorLast = false;
+        band.firstBaseline = 28.0;
+        const PB::Outcome fromFirst = PB::FitPhrase(RequestForBands(one, Lang::En, phrase));
+        band.anchorLast = true;
+        band.firstBaseline = 40.0;
+        const PB::Outcome fromLast = PB::FitPhrase(RequestForBands(one, Lang::En, phrase));
+        CHECK_MSG(fromFirst.ok && fromFirst.lines == 2 && fromLast.ok && fromLast.lines == 2, "the phrase is two lines both ways: " + fromFirst.reason + fromLast.reason);
+        if (fromFirst.ok && fromFirst.lines == 2 && fromLast.ok && fromLast.lines == 2) {
+            const double pitchFirst = band.pitch * fromFirst.bands[0].scale;
+            const double pitchLast = band.pitch * fromLast.bands[0].scale;
+            CHECK_MSG(std::fabs(fromFirst.placed.front().baseline - 28.0) < 0.3 && std::fabs(fromFirst.placed.back().baseline - (28.0 + pitchFirst)) < 0.3,
+                      "set from its first baseline the lines are a pitch apart: " + std::to_string(fromFirst.placed.front().baseline) + " and " + std::to_string(fromFirst.placed.back().baseline) + ", pitch " + std::to_string(pitchFirst));
+            CHECK_MSG(std::fabs(fromLast.placed.back().baseline - 40.0) < 0.3 && std::fabs(fromLast.placed.front().baseline - (40.0 - pitchLast)) < 0.3,
+                      "set from its LAST baseline the last line is at the baseline and the block grows upward: " + std::to_string(fromLast.placed.front().baseline) + " and " + std::to_string(fromLast.placed.back().baseline) +
+                          ", pitch " + std::to_string(pitchLast));
+        }
+    }
+    // The RIGHT EDGE is the ink's, not only the advance's: an embolden of three pixels makes the ink wider than the advance, and a right edge one pixel short of the ink (the advance
+    // still fits it) refuses the full size.
+    {
+        PB::Recipe fat = f.recipe;
+        fat.text.bands = {f.recipe.text.bands[0]};
+        fat.text.bands[0].maxLines = 1;
+        fat.text.faces[0].embolden = 0.5;
+        const std::vector<std::string> phrase{"abab"};
+        const PB::Outcome wide = PB::FitPhrase(RequestForBands(fat, Lang::En, phrase));
+        CHECK_MSG(wide.ok && std::fabs(wide.bands[0].scale - 1.0) < 1e-9, "a word fits its band at full size: " + wide.reason);
+        if (wide.ok && std::fabs(wide.bands[0].scale - 1.0) < 1e-9) {
+            fat.text.maxRight = wide.bands[0].ink.x1 - 1.0;
+            const PB::Outcome tight = PB::FitPhrase(RequestForBands(fat, Lang::En, phrase));
+            CHECK_MSG(tight.ok && tight.bands[0].scale < 1.0 && tight.bands[0].ink.x1 <= static_cast<int>(std::floor(fat.text.maxRight)),
+                      "an ink one pixel past the right edge is shrunk until it is inside: scale " + std::to_string(tight.bands[0].scale) + ", ink to " + std::to_string(tight.bands[0].ink.x1) + " of " + std::to_string(fat.text.maxRight) +
+                          ": " + tight.reason);
+        }
+    }
+}
+
+// The halo of a word is written beyond the erased rectangle only where the recipe's `paint` rectangle says so (the golden plaque's, to row 216): with it the halo darkens plate pixels
+// below the rectangle and none beyond the paint rectangle, without it none outside the erased one is touched.
+void ThePaintRectangleLetsTheHaloReachPastTheErasedRectangle() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    PlaqueFixture f = MakePlaque(false);
+    PB::Text& t = f.recipe.text;
+    t.anchorY = 132.0; // ink to about row 138, inside the rectangle (to 140); its halo reaches row 142 and below
+    t.safe = PB::Rect{14, 100, 98, 140};
+    t.maxLines = 1;
+    const std::string phrase = "ON ME";
+    const PB::Outcome without = PB::Render(RequestFor(f.recipe, Lang::En, phrase), f.picture, nullptr);
+    CHECK_MSG(without.ok, "a word at the bottom of the plaque is baked: " + without.reason);
+    t.hasPaint = true;
+    t.paint = PB::Rect{2, 80, 106, 150};
+    const PB::Outcome with = PB::Render(RequestFor(f.recipe, Lang::En, phrase), f.picture, nullptr);
+    CHECK_MSG(with.ok, "and with a paint rectangle: " + with.reason);
+    if (!without.ok || !with.ok) return;
+    const PB::Rect erased = f.recipe.erase.rect;
+    CHECK_MSG(ChangedOutsideRects(without.image, f.picture, {erased}) == 0, "without a paint rectangle nothing outside the erased one changes");
+    CHECK_MSG(without.touched.y1 == erased.y1 && with.touched.y1 == 150 && with.touched.y0 == erased.y0, "and the outcome says what it may touch: " + std::to_string(without.touched.y1) + ", " + std::to_string(with.touched.y1));
+    int reached = 0;
+    for (int y = erased.y1; y < 150; ++y) {
+        for (int x = 0; x < f.picture.width; ++x) reached += std::equal(with.image.At(x, y), with.image.At(x, y) + 4, f.picture.At(x, y)) ? 0 : 1;
+    }
+    CHECK_MSG(reached >= 20, "with it the halo darkens plate pixels below the erased rectangle: " + std::to_string(reached));
+    CHECK_MSG(ChangedOutsideRects(with.image, f.picture, {PB::Rect{2, 80, 106, 150}}) == 0, "and nothing beyond the paint rectangle");
+}
+
+// V's slope across a hole in its knots is compared with its slope over the LAST TWELVE clean rows: a plate whose profile flattens over its last five clean rows (a lift of half a level
+// more each row) passes at twelve, and a check that read only the last four would refuse it.
+void TheSlopeIsReadOverTheLastTwelveCleanRows() {
+    const World& world = TheWorld();
+    if (!world.ok) return;
+    PlaqueFixture f = MakePlaque(false);
+    for (int y = 71; y < 76; ++y) {
+        const double lift = 0.5 * (y - 70);
+        for (int x = 10; x < 98; ++x) {
+            for (int c = 0; c < 3; ++c) f.picture.At(x, y)[c] = static_cast<unsigned char>(std::clamp(std::lround(f.picture.At(x, y)[c] * (PlaqueV(y) + lift) / PlaqueV(y)), 0L, 255L));
+        }
+    }
+    f.recipe.erase.plaque.slopeBand = 0.45;
+    f.recipe.erase.plaque.ringMax = 6.0; // the last clean rows are lifted by 2.5 levels, and the ring is read from rows that are not
+    PB::Image out;
+    std::string why;
+    CHECK_MSG(PB::EraseWords(f.recipe, f.picture, nullptr, out, why), "a profile that flattens over its last five clean rows is erased (the slope is read over twelve): " + why);
+    // and the band is a real limit: a band of 0.2 refuses the same plate, naming the slope
+    f.recipe.erase.plaque.slopeBand = 0.2;
+    CHECK_MSG(!PB::EraseWords(f.recipe, f.picture, nullptr, out, why) && Contains(why, "slope"), "a band of 0.2 refuses it: " + why);
 }
 
 // ---- paragraphs -----------------------------------------------------------------------------------------------------------------------------------
@@ -2336,6 +2504,9 @@ void runFreeCases() {
     ThePlaqueGuardsFailClosedEachByItself();
     APanelIsErasedFromItsLeftMarginAlone();
     AStripClearsItsBandsAndDrawsThemAgainLeftAligned();
+    TheStripsAlphaTuningsPitchAnchorAndRightEdgeAreHeld();
+    ThePaintRectangleLetsTheHaloReachPastTheErasedRectangle();
+    TheSlopeIsReadOverTheLastTwelveCleanRows();
     AParagraphIsCentredInsideItsBoxWithTheFewestLines();
     AnOrphanLineAndTheLinesSavedAreWeighedByTheRecipe();
     TheBreakMarksOfTheNewPhrasesAreHandled();
@@ -2845,15 +3016,21 @@ void TheStripKeepsItsNamesAndLogosAndTheMedalStaysOnTheBakedPlaque() {
         for (const PB::BandResult& band : o.bands) {
             CHECK_MSG(band.ink.Valid() && band.ink.x0 >= 63 && band.ink.x0 <= 66 && band.ink.x1 <= 470, name + ": " + band.key + " starts at the original's left edge and ends inside the right one: " + std::to_string(band.ink.x0) + ".." + std::to_string(band.ink.x1));
         }
+        int maxAlpha = 0;
         for (const PB::Span& span : strip->erase.clearRows) {
             for (int y = span.a; y < span.b; ++y) {
                 for (int x = 0; x < o.image.width; ++x) {
                     const unsigned char* px = o.image.At(x, y);
                     notBlack += (px[3] != 0 && (px[0] != 0 || px[1] != 0 || px[2] != 0)) ? 1 : 0;
+                    maxAlpha = std::max(maxAlpha, static_cast<int>(px[3]));
                 }
             }
         }
         CHECK_MSG(notBlack == 0, name + ": the new ink is black: " + std::to_string(notBlack) + " pixels are not");
+        // The alpha is the coverage and is NOT multiplied by the strip's own 230 (the layer draws the picture at 230): where a stem covers a pixel whole, its alpha is 255.
+        CHECK_MSG(maxAlpha == 255, name + ": the ink's alpha is its coverage, 255 at most and at least: " + std::to_string(maxAlpha));
+        // The heading ('Special thanks') grows UPWARD from its last baseline: in one line or two, its last line stands on the original's baseline, row 565.
+        CHECK_MSG(!o.placed.empty() && std::fabs(o.placed.back().baseline - 565.0) < 0.5, name + ": the heading's last line stands on baseline 565: " + std::to_string(o.placed.empty() ? 0.0 : o.placed.back().baseline));
     }
 }
 
