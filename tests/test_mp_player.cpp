@@ -1155,14 +1155,19 @@ void ThePlayerRestsAtHisBodysHeightOnAFloorARampAndACrate() {
 void ALevelMayHaveItsOwnAirBrakeAndNoOtherLevelDoes() {
     const Player::Tuning base = ReadTuning();
     CHECK_EQ(base.airRateHz, 120.0);
-    // The shipped table names 2-17 and nothing else: a second name would take another level off the ruling unseen.
-    CHECK_EQ(base.airRateByLevel.size(), static_cast<std::size_t>(1));
-    CHECK_MSG(base.airRateByLevel.count("level16a") == 1, "2-17 (level16a) is the level the table names");
+    // The shipped table names 2-17 and 3-21 and nothing else: a third name would take another level off the ruling unseen.
+    CHECK_EQ(base.airRateByLevel.size(), static_cast<std::size_t>(2));
+    CHECK_MSG(base.airRateByLevel.count("level16a") == 1, "2-17 (level16a) is a level the table names");
+    CHECK_MSG(base.airRateByLevel.count("level20b") == 1, "3-21 (level20b) is the other (planning step 253)");
     CHECK_EQ(base.airRateByLevel.at("level16a"), 42.0);
+    CHECK_EQ(base.airRateByLevel.at("level20b"), 42.0);
 
     Player::Tuning own = base;
     Player::ForLevel(own, "level16a");
     CHECK_EQ(own.airRateHz, 42.0);
+    Player::Tuning own3 = base;
+    Player::ForLevel(own3, "level20b");
+    CHECK_EQ(own3.airRateHz, 42.0);
     // The formula at 42 Hz: min(1, 42 / 60 x 0.86) = 0.602, the share the drop off 1146's left end is lived at (the replay is in test_mp_routes).
     const ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
     CHECK_WITHIN(Player::AirShare(own, step), 0.86 * 42.0 / 60.0, 1e-12);

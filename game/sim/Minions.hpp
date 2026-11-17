@@ -162,6 +162,16 @@ struct Rules {
     double settlePx = 0.0;       // minDist * 2: only a lone guard stops inside this
     double brake = 0.0;          // what a minion serving its hold multiplies x by
     double bodyRadiusPx = 0.0;   // one circle for the original's two
+    // The original's two circles as their hull, where minions.json body.capsule names the level (planning step 253): ForLevel turns `capsuleOn`
+    // for a level in `capsule.levels`, and a body is then built as the capsule instead of the circle. Its bottom is the circle's and its centre
+    // the entity point, which LoadRules makes true by refusing a height whose half is not entityAboveFeetPx.
+    struct Capsule {
+        double radiusPx = 0.0;
+        double heightPx = 0.0;
+        std::vector<std::string> levels;
+    };
+    Capsule capsule;
+    bool capsuleOn = false;
     double entityAboveFeetPx = 0.0; // where the original's entity stands over its feet
     std::string killerName;      // the entity name of the floor that kills a minion
     // What a marker adds (minions.json spawn): the entity spawnMinion falls back to
@@ -185,6 +195,9 @@ struct Rules {
 };
 
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// The rules one level plays: `capsuleOn` where body.capsule names the level (its file's stem, "level20b" for 3-21), untouched where it does not.
+void ForLevel(Rules& rules, const std::string& level);
 
 struct Waypoint {
     std::string name;          // the node's name, waypointName + index

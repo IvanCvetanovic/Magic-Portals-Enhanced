@@ -967,6 +967,110 @@ void theBlackKnightsBodyIsAMinions() {
     std::printf("  ghost_minion.ent's body is minion.ent's: %d of 11 attributes and blocks the same\n", same);
 }
 
+// THE ORIGINAL'S BODY, FOR THE LEVELS THAT NAME IT (planning step 253; minions.json body.capsule; backlog G1b-6). minion.ent is two circles of 9.1
+// at +-9, the hull the player's own capsule is; the port builds one circle of 7 everywhere but in 3-21 (level20b), where the owner needs a knight
+// pushed off a platform to be shoved further while it falls. The capsule's bottom is the circle's and its centre the entity point, so the feet, the
+// waypoints and the sight's origin stand where they did.
+void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
+    const std::string minionsJson = std::string(MAGICPORTALS_PORT_DATA_DIR) + "/minions.json";
+    Minions::Rules shipped;
+    std::string why;
+    CHECK_MSG(Minions::LoadRules(minionsJson, shipped, why), why);
+    CHECK_EQ(shipped.capsule.radiusPx, 9.1);
+    CHECK_EQ(shipped.capsule.heightPx, 36.2);
+    // Exactly one level, and reading the table turns nothing on: ForLevel does, per level, and back.
+    CHECK_EQ(shipped.capsule.levels.size(), static_cast<std::size_t>(1));
+    CHECK_MSG(!shipped.capsule.levels.empty() && shipped.capsule.levels.front() == "level20b", "3-21 (level20b) is the level the table names");
+    CHECK(!shipped.capsuleOn);
+    Minions::Rules own = shipped;
+    Minions::ForLevel(own, "level20b");
+    CHECK(own.capsuleOn);
+    for (const char* other : {"level0b", "level20", "level20a", "level20bb", "LEVEL20B", ""}) {
+        Minions::ForLevel(own, other);
+        CHECK_MSG(!own.capsuleOn, std::string("the level '") + other + "' keeps the one circle");
+    }
+    Minions::ForLevel(own, "level20b");
+    CHECK(own.capsuleOn);
+
+    // 3-21's three knights have it, built where the circles were.
+    {
+        Run run;
+        if (!Begin("level20b", run)) return;
+        const Minions::Rules& rules = run.level.minions.rules;
+        CHECK(rules.capsuleOn);
+        CHECK_EQ(rules.bodyRadiusPx, 7.0); // the circle's numbers stay: every reader of the entity point and the feet reads them
+        int built = 0;
+        const auto check = [&](entt::entity body, const std::string& what) {
+            ++built;
+            const auto* capsule = run.registry.try_get<Supersonic::CapsuleColliderComponent>(body);
+            CHECK_MSG(capsule != nullptr, what + " has the capsule");
+            CHECK_MSG(run.registry.try_get<Supersonic::SphereColliderComponent>(body) == nullptr, what + " has no circle beside it");
+            if (capsule == nullptr) return;
+            CHECK_MSG(std::fabs(capsule->radius * Units::kPixelsPerMetre - 9.1) < 1e-4, what + ": the capsule is 9.1 of radius");
+            CHECK_MSG(std::fabs(capsule->height * Units::kPixelsPerMetre - 36.2) < 1e-4, what + ": and 36.2 tall");
+            const double centreUpPx = static_cast<double>(capsule->center.y) * Units::kPixelsPerMetre;
+            CHECK_MSG(std::fabs(centreUpPx - rules.EntityAboveCentrePx()) < 1e-4, what + ": its centre is the entity point, 11.1 over the circle's");
+            const double bodyY = Units::ToPixels(run.registry.get<TransformComponent>(body).position).y;
+            const double bottomPx = bodyY - centreUpPx + static_cast<double>(capsule->height) * 0.5 * Units::kPixelsPerMetre;
+            CHECK_MSG(std::fabs(bottomPx - (bodyY + rules.bodyRadiusPx)) < 1e-4, what + ": its bottom is the circle's, so the feet stand where they stood");
+        };
+        for (const auto& minion : run.level.minions.minions) {
+            if (minion.body != entt::null) check(minion.body, minion.name);
+        }
+        CHECK_EQ(built, 3); // knights A, B and C
+        // One summoned there is built the same way.
+        const entt::entity summoned = run.level.minions.Summon(run.registry, "knight", glm::dvec2(500.0, 100.0), {});
+        CHECK(summoned != entt::null);
+        if (summoned != entt::null) check(summoned, "a summoned knight");
+    }
+
+    // And another level's knights keep the circle.
+    {
+        Run run;
+        if (!Begin(kLevel, run)) return;
+        CHECK(!run.level.minions.rules.capsuleOn);
+        int seen = 0;
+        for (const auto& minion : run.level.minions.minions) {
+            if (minion.body == entt::null) continue;
+            ++seen;
+            const auto* sphere = run.registry.try_get<Supersonic::SphereColliderComponent>(minion.body);
+            CHECK_MSG(sphere != nullptr && std::fabs(sphere->radius * Units::kPixelsPerMetre - 7.0) < 1e-4, minion.name + " is the circle of 7");
+            CHECK_MSG(run.registry.try_get<Supersonic::CapsuleColliderComponent>(minion.body) == nullptr, minion.name + " has no capsule");
+        }
+        CHECK(seen >= 2);
+    }
+
+    // The table's refusals, each by the key's name.
+    std::ifstream file(minionsJson, std::ios::binary);
+    std::ostringstream read;
+    read << file.rdbuf();
+    const std::string good = read.str();
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-minions-capsule";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const auto refused = [&](const char* name, const std::string& from, const std::string& to, const char* named) {
+        std::string text = good;
+        const std::size_t at = text.find(from);
+        CHECK_MSG(at != std::string::npos, std::string(name) + ": the fixture finds '" + from + "'");
+        if (at == std::string::npos) return;
+        text.replace(at, from.size(), to);
+        const std::string path = (dir / name).string();
+        {
+            std::ofstream out(path, std::ios::binary);
+            out << text;
+        }
+        Minions::Rules rules;
+        std::string refusal;
+        CHECK_MSG(!Minions::LoadRules(path, rules, refusal) && refusal.find(named) != std::string::npos, std::string(name) + " is refused by name: " + refusal);
+    };
+    refused("no_radius.json", "\"radius_px\": 9.1,", "\"radius_px\": 0,", "body.capsule.radius_px");
+    refused("short.json", "\"height_px\": 36.2,", "\"height_px\": 30,", "body.capsule.height_px");      // its half is not what the entity stands over its feet
+    refused("round.json", "\"radius_px\": 9.1,", "\"radius_px\": 20,", "body.capsule.height_px");       // 36.2 is under twice 20
+    refused("no_levels.json", "\"levels\": [\"level20b\"],", "\"levels\": \"level20b\",", "body.capsule.levels");
+    refused("empty_name.json", "\"levels\": [\"level20b\"],", "\"levels\": [\"\"],", "body.capsule.levels");
+    std::filesystem::remove_all(dir, ec);
+}
+
 void runTests() {
     theWalkIsTheDecodedSpeedNotTheRemakesGuess();
     aMarkerResolvesItsWaypointsByPrefix();
@@ -986,6 +1090,7 @@ void runTests() {
     aMarkerTheScriptHasNoCallbackForSpawnsNothing();
     anEntityTheRulesDoNotKnowIsRefused();
     theBlackKnightsBodyIsAMinions();
+    theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel();
 }
 
 } // namespace

@@ -129,6 +129,39 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     if (!number("patrol", "brake", read.brake)) return false;
     if (!number("body", "radius_px", read.bodyRadiusPx)) return false;
     if (!number("body", "entity_above_feet_px", read.entityAboveFeetPx)) return false;
+    // body.capsule (planning step 253): optional; the original's body for the levels it names.
+    if (root["body"].Has("capsule")) {
+        const Json::Value& capsule = root["body"]["capsule"];
+        const auto field = [&](const char* key, double& into) {
+            if (!capsule.IsObject() || !capsule.Has(key) || !capsule[key].IsNumber() || !(capsule[key].AsNumber() > 0.0)) {
+                error = path + ": body.capsule." + key + " is missing or not a number above zero";
+                return false;
+            }
+            into = capsule[key].AsNumber();
+            return true;
+        };
+        if (!field("radius_px", read.capsule.radiusPx) || !field("height_px", read.capsule.heightPx)) return false;
+        // The centre is the entity point and the bottom is the feet only when half the height is what the entity stands over its feet.
+        if (std::fabs(read.capsule.heightPx * 0.5 - read.entityAboveFeetPx) > 1e-9) {
+            error = path + ": body.capsule.height_px is twice body.entity_above_feet_px (the capsule's bottom is the feet and its centre the entity point)";
+            return false;
+        }
+        if (read.capsule.heightPx < 2.0 * read.capsule.radiusPx) {
+            error = path + ": body.capsule.height_px is at least twice body.capsule.radius_px";
+            return false;
+        }
+        if (!capsule.Has("levels") || !capsule["levels"].IsArray()) {
+            error = path + ": body.capsule.levels is missing or not a list";
+            return false;
+        }
+        for (const Json::Value& level : capsule["levels"].AsArray()) {
+            if (!level.IsString() || level.AsString().empty()) {
+                error = path + ": body.capsule.levels names a level that is not a name";
+                return false;
+            }
+            read.capsule.levels.push_back(level.AsString());
+        }
+    }
 
     const Json::Value& killer = root["killer"];
     if (!killer.Has("entity_name") || !killer["entity_name"].IsString()) {
@@ -373,6 +406,24 @@ double WalkCarried(const Rules& rules, const ScriptClock::Step& step) {
     return ScriptClock::CarriedVelocity(WalkOriginal(rules, step), step);
 }
 
+void ForLevel(Rules& rules, const std::string& level) {
+    rules.capsuleOn = std::find(rules.capsule.levels.begin(), rules.capsule.levels.end(), level) != rules.capsule.levels.end();
+}
+
+namespace {
+
+// The original's body in place of the one circle: its collider only, the transform and the mass left as BuildRigidCircle made them. The capsule's
+// bottom is the circle's bottom and its centre the entity point, EntityAboveCentrePx over the circle's centre.
+void UseCapsule(entt::registry& registry, entt::entity body, const Rules& rules) {
+    registry.remove<Supersonic::SphereColliderComponent>(body);
+    auto& capsule = registry.emplace<Supersonic::CapsuleColliderComponent>(body);
+    capsule.radius = Units::ToMetres(rules.capsule.radiusPx);
+    capsule.height = Units::ToMetres(rules.capsule.heightPx);
+    capsule.center = glm::vec3(0.0f, Units::ToMetres(rules.EntityAboveCentrePx()), 0.0f);
+}
+
+} // namespace
+
 std::vector<entt::entity> State::Spawn(entt::registry& registry) {
     std::vector<entt::entity> made;
     for (Minion& minion : minions) {
@@ -388,6 +439,7 @@ std::vector<entt::entity> State::Spawn(entt::registry& registry) {
         // The original cannot do that, and with z locked neither can this. The
         // suite pins it, with a guard given three times a walk to carry.
         registry.get<RigidBodyComponent>(minion.body).lockRotation = glm::bvec3(true, true, true);
+        if (rules.capsuleOn) UseCapsule(registry, minion.body, rules);
         made.push_back(minion.body);
     }
     return made;
@@ -411,6 +463,7 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
                                        LevelBuilder::Options{}, minion.entity);
     if (minion.body == entt::null) return entt::null;
     registry.get<RigidBodyComponent>(minion.body).lockRotation = glm::bvec3(true, true, true);
+    if (rules.capsuleOn) UseCapsule(registry, minion.body, rules);
 
     minions.push_back(minion);
     return minion.body;

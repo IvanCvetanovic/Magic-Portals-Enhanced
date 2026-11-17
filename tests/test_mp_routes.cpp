@@ -67,6 +67,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -1043,6 +1044,28 @@ void TheMedalKeyIsHeldToOneTwoOrThree() {
 // own point, then a walk left from tick 455 for L ticks (L 5 and 6 roll over the corner slowly, L 8 and up leave at full speed, 21 holds the key
 // to the landing): every one lives with the shipped table and, as the control, the long ones die with the table's name removed - a test that cannot
 // fail on the ruling's own share proves nothing about the drop.
+// player.json's text without one level's entry of movement.air_decay_rate_hz_by_level (its comma goes with it), for the controls below.
+std::string WithoutAirRateOf(std::string text, const std::string& level) {
+    const std::string named = "\"" + level + "\": 42.0";
+    const std::size_t at = text.find(named);
+    CHECK_MSG(at != std::string::npos, "player.json names " + level + " at 42.0 (the control removes the name)");
+    if (at == std::string::npos) return text;
+    std::size_t from = at;
+    std::size_t to = at + named.size();
+    std::size_t after = to;
+    while (after < text.size() && std::isspace(static_cast<unsigned char>(text[after]))) ++after;
+    if (after < text.size() && text[after] == ',') {
+        to = after + 1;
+        while (to < text.size() && std::isspace(static_cast<unsigned char>(text[to]))) ++to;
+    } else {
+        std::size_t before = from;
+        while (before > 0 && std::isspace(static_cast<unsigned char>(text[before - 1]))) --before;
+        if (before > 0 && text[before - 1] == ',') from = before - 1;
+    }
+    text.erase(from, to - from);
+    return text;
+}
+
 void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
     Route::Plan gold;
     std::string error;
@@ -1080,10 +1103,7 @@ void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
             std::ifstream in(kData + "/player.json", std::ios::binary);
             text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
         }
-        const std::string named = "\"level16a\": 42.0";
-        const std::size_t at = text.find(named);
-        CHECK_MSG(at != std::string::npos, "player.json names level16a at 42.0 (this control removes the name)");
-        if (at != std::string::npos) text.erase(at, named.size());
+        text = WithoutAirRateOf(text, "level16a");
         std::ofstream out(dir / "player.json", std::ios::binary | std::ios::trunc);
         out << text;
     }
@@ -1109,6 +1129,96 @@ void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
         }
     }
     std::filesystem::remove_all(dir, ec);
+}
+
+// 3-21'S DROP TO THE KNIGHT'S RIGHT (planning step 253). The owner: the first knight (B, on the top platform, with the blue key) is pushed off the platform's
+// left end so that its key opens the blue door; he cannot then jump down to its right and shove it into the pit, which the original let him do - there,
+// pushed while it falls, the knight ends further left and leaves room. The port's knight was a circle of 7 and the walk off the end flew on over the strip
+// (the ruling's share of 1). With the original's body for this level (minions.json body.capsule) and its own air-brake rate (player.json) the sequence is:
+// the exit portal on the platform to B's right, a walk left that pushes B off the end (the key opens the door), a walk off the end that lands him on B's
+// right between it and the door, and a short push that sends B into the pit - alive on tick 330, `door_unlocked` heard, `minion_fell` heard. The control
+// takes each of the two away in turn on a copy of the tables, and the sequence is no longer there.
+void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
+    Route::Plan base;
+    std::string error;
+    CHECK_MSG(Route::Load(kRoutes + "/level20b.json", base, error), error);
+    if (base.level != "level20b") return;
+    const auto plan = [&](int walkTicks) {
+        Route::Plan made = base;
+        made.medal = 0;
+        made.winBy = 330;
+        made.taps.resize(2); // the route's first two taps: a portal, and the player's own point on tick 93
+        made.taps[0].atPx = glm::dvec2(225.0, 62.0); // the exit on the platform to B's right, not over the block to its left
+        made.holds.clear();
+        made.holds.push_back(Route::Hold{98, 98 + walkTicks, -1.0f});  // left, pushing B off the end, and off it himself
+        made.holds.push_back(Route::Hold{215, 227, -1.0f});            // after the landing: 12 ticks, which send B over the pit's edge and leave him on the floor
+        return made;
+    };
+    const auto sequence = [](const Outcome& outcome) {
+        const bool alive = outcome.problems.size() == 1 && outcome.problems.front().find("not won by tick 330") != std::string::npos;
+        const auto heard = [&](const char* event) { return outcome.census.count(event) != 0; };
+        return alive && heard("door_unlocked") && heard("minion_fell");
+    };
+    const auto describe = [](const Outcome& outcome) {
+        std::string problems;
+        for (const std::string& problem : outcome.problems) problems += (problems.empty() ? "" : "; ") + problem;
+        return problems + " [" + Describe(outcome.census) + " ]";
+    };
+
+    // The two controls: the tables without 3-21's rate, and the knights' table without 3-21's capsule.
+    const std::filesystem::path root = std::filesystem::temp_directory_path() / "supersonic-test-mp-routes-drop20b";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "data", ec);
+    for (const auto& entry : std::filesystem::directory_iterator(kData)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            std::filesystem::copy_file(entry.path(), root / "data" / entry.path().filename(), std::filesystem::copy_options::overwrite_existing, ec);
+        }
+    }
+    {
+        std::string text;
+        {
+            std::ifstream in(kData + "/player.json", std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        text = WithoutAirRateOf(text, "level20b");
+        std::ofstream out(root / "data" / "player.json", std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    const std::filesystem::path portCopy = root / "port";
+    std::filesystem::copy(std::string(MAGICPORTALS_PORT_DATA_DIR), portCopy, std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
+    CHECK_MSG(!ec, "the port's tables are copied for the control: " + ec.message());
+    {
+        std::string text;
+        {
+            std::ifstream in(portCopy / "minions.json", std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        const std::string named = "\"levels\": [\"level20b\"]";
+        const std::size_t at = text.find(named);
+        CHECK_MSG(at != std::string::npos, "minions.json names level20b in body.capsule.levels (the control empties the list)");
+        if (at != std::string::npos) text.replace(at, named.size(), "\"levels\": []");
+        std::ofstream out(portCopy / "minions.json", std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    MagicPortalsLayer::Paths withoutRate = RoutePaths();
+    withoutRate.data = (root / "data").string();
+    MagicPortalsLayer::Paths withoutCapsule = RoutePaths();
+    withoutCapsule.portData = portCopy.string();
+
+    const Options plain{};
+    for (const int walk : {78, 80, 84, 90}) {
+        const std::string label = "3-21 walk off the top platform's left end, " + std::to_string(walk) + " ticks";
+        const Outcome shipped = Play(plan(walk), plain, label);
+        CHECK_MSG(sequence(shipped), label + ": the door opens, he lands on B's right alive and B goes into the pit: " + describe(shipped));
+        // Without the rate (the ruling's share of 1) he flies on over B and into the pit himself; without the capsule B is left a circle and he lands on its
+        // other side. Either way the sequence is gone - for the walks that leave the end at speed.
+        const Outcome flown = Play(plan(walk), plain, label + " (the ruling's share)", withoutRate);
+        CHECK_MSG(!sequence(flown), label + " is not the sequence at the ruling's share of 1, or the test never reaches the drop: " + describe(flown));
+        const Outcome circle = Play(plan(walk), plain, label + " (the circle)", withoutCapsule);
+        CHECK_MSG(!sequence(circle), label + " is not the sequence with the knight a circle, or the test never reaches the drop: " + describe(circle));
+    }
+    std::filesystem::remove_all(root, ec);
 }
 
 void RunRoutes(const Options& options) {
@@ -1187,6 +1297,7 @@ void RunRoutes(const Options& options) {
                   "the display check ran on " + std::to_string(g_displayChecked) + " routes, not the " + std::to_string(std::size(kDisplayRoutes)) + " it names");
         TheMedalKeyIsHeldToOneTwoOrThree();
         TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt();
+        TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded();
     }
 }
 

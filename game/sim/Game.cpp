@@ -187,6 +187,8 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Fire::LoadRules(portDataDirectory + "/fire.json", read.fire, error)) return false;
     if (!Hinge::LoadRules(portDataDirectory + "/hinge.json", read.hinge, error)) return false;
     if (!Minions::LoadRules(portDataDirectory + "/minions.json", read.minions, error)) return false;
+    // The original's two-circle body for the levels minions.json body.capsule names (planning step 253).
+    Minions::ForLevel(read.minions, std::filesystem::path(levelPath).stem().string());
     if (!Keys::LoadRules(portDataDirectory + "/keys.json", read.keys, error)) return false;
     if (!RedKey::LoadRules(portDataDirectory + "/keys.json", read.redKey, error)) return false;
     if (!Diamonds::LoadRules(portDataDirectory + "/diamonds.json", read.diamonds, error)) return false;
