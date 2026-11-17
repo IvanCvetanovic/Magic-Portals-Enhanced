@@ -38,13 +38,15 @@
     "ticks)."
   ],
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[2].to 884 -> 883, holds[3].from 929 -> 949, taps[1].tick 95 -> 93, taps[4].tick 764 -> 758, taps[5].tick 846 -> 845 (largest move 20 ticks) and it wins on tick 1216 with win_by 1260. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
+  "_gold": "GOLD (planning step 254; found by a search over replays on the build after 0.1.8, nobody has done it by hand): the last walk starts on tick 898 instead of 949, so that he walks right the moment he lands on the arm's left end (905-906) while the arm is still ringing from the landing, and crosses its right end higher: he passes within 20.0 units of crystal_ent_1830 (490, 146), which the old start missed by 28.5 (the reach is 26). 6 portals, 5 of 5 crystals, medal 3, won on tick 1132 (win_by 1260 stays). Every start from 890 to 906 gives the identical play (17 of 17); 907 to 913 gives medal 2, 914 and later medal 2 or a death on 1020-1053. The early stages (the stone drop and the first portals) are as fragile as the note above says. The medal is pinned.",
   "level": "level21b",
   "win_by": 1260,
+  "medal": 3,
   "holds": [
     {"walk": "left", "from": 140, "to": 170},
     {"walk": "right", "from": 839, "to": 846},
     {"walk": "right", "from": 864, "to": 883},
-    {"walk": "right", "from": 949, "to": 1540}
+    {"walk": "right", "from": 898, "to": 1540}
   ],
   "taps": [
     {"tick": 29, "at": [170, 40]},

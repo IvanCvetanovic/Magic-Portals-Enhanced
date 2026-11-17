@@ -49,6 +49,7 @@
     "(9 ticks or more); a walk stopped as the capsule rolls over the corner (7 or 8 ticks) still drifts left 0.9 units a tick and burns too (30.9 and 26.2 from the flame, the first 1.1 inside). A straight drop",
     "from above clears both the flame's 32 on the floor and the platform's face only between x 239.9 and 244.9."
   ],
+  "_step254": "NOTE OF 2026-11-17 (planning steps 252 and 253): the drop described above, which burns him whatever the length of the walk, is true at the ruling of step 213 (a share of 1); this level now plays at 42 Hz (data/player.json air_decay_rate_hz_by_level), where walks of 5 to 21 ticks land outside the flame's reach if the key is released in the air. This route does not use the drop and wins on tick 506 either way.",
   "level": "level16a",
   "medal": 3,
   "win_by": 535,

@@ -1,0 +1,34 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "3-21 (level20b) GOLD route, found by search (a scratch file, not in tests/routes): 12 portals, 5 of 5 crystals, medal 3, won on tick 856. This build's golden_score for level20b is 14 (out/data/chapters.json).",
+    "P0 (taps 27, 93): exit on top of block 1561 (crystal 1576), own point in the pocket. B is pushed off the top platform's left end by walking left (hold 104-206; crystal 1569 on the way), and the hold 240-251 pushes it into the pit (door_unlocked 209, minion_fell about 270).",
+    "T_A from the strip (taps 342, 398): exit (345,150) at the yellow keyhole, entry on A (door 400 gone 542). X1 (455, 485): own point to the top of block 1573 (crystal 1575). X2 (548, 621): from there to block 1568's top at x 455 (crystal 1570 on the fall). x 455 to 455.9 is the one standing place C, holding left at 546.6 from tick 596, cannot see; at 456 he is shot (tick 684).",
+    "T_C (650, 702): exit (602,112) on the platform in front of its keyhole, entry on C. He walks right at 710 to the floor's right end (crystal 1572; C is on the platform); tap 730 puts an end on C there (C holds still until the door is gone, 818); tap 799 on his own point swaps him with C. Right to the exit.",
+    "The route this replaces (a recorded play of wave 4a, 843 ticks, 12 portals, 1 of 5 crystals, medal 2) is in the repository's history (git log -- tests/routes/level20b.json); its note explained how each knight is sent through a portal pair."
+  ],
+  "level": "level20b",
+  "medal": 3,
+  "win_by": 900,
+  "holds": [
+    {"walk": "left", "from": 104, "to": 206},
+    {"walk": "left", "from": 240, "to": 251},
+    {"walk": "right", "from": 290, "to": 340},
+    {"walk": "right", "from": 710, "to": 796},
+    {"walk": "right", "from": 802, "to": 900}
+  ],
+  "taps": [
+    {"tick": 27, "at": [256, 60]},
+    {"tick": 93, "at": [327, 78.4]},
+    {"tick": 342, "at": [345, 150]},
+    {"tick": 398, "at": [375, 206]},
+    {"tick": 455, "at": [224, 168]},
+    {"tick": 485, "at": [183.5, 206.4]},
+    {"tick": 548, "at": [455, 150]},
+    {"tick": 621, "at": [224.0, 174.4]},
+    {"tick": 650, "at": [602, 112]},
+    {"tick": 702, "at": [546.6, 196.5]},
+    {"tick": 730, "at": [602, 116]},
+    {"tick": 799, "at": [662.0, 206.4]}
+  ]
+}

@@ -14,6 +14,7 @@
     "Leans on R23 (the tap-time ray and the retry, step 156), G1a and G1b (the knights' row, buckets and occluding ray, and a shot 39 ticks behind a sighting, steps 158 and 159), G10 (the walk is 144 u/s, the air brake of the drop), G4 (the shot's flight) and the step 153 capsule. Not measured on the original: B falling into the pit from 2 units past the floor's end (the port's circle slides off the edge), and a knight inside a portal that opens 20 units above its body. Unlocks no achievement.",
     "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
+  "_step254": "NOTE OF 2026-11-17 (planning steps 253 and 254): the note step 213 left above, that the air brake is off, no longer holds on this level, which plays at 42 Hz (a share of 0.602) since step 253, and the knights have the original's capsule body (minions.json body.capsule), so a knight shoved off the top platform ends further left than the 'circle slides off the edge' note says. This recorded play still wins on tick 843 (12 portals, 1 of 5 crystals, medal 2). A play that earns gold (12 portals, 5 of 5 crystals; gold here is 14 portals) is in tests/routes_gold/level20b.json: it is not here because replacing this file moves the controls census by one tap (tests/golden, the owner's).",
   "level": "level20b",
   "win_by": 855,
   "holds": [

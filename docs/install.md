@@ -18,7 +18,7 @@ The download is **not code-signed** (it has no digital signature from a publishe
 
 ## Windows PC
 
-**You need:** a 64-bit Windows PC and a graphics driver that supports Vulkan 1.2 (most PCs from the last eight years or so have one; update the driver through Windows Update, or from NVIDIA, AMD or Intel). The maker's own builds of the game have been run on Windows 11 (the program in the download has not been started on any PC); whether it starts on Windows 10 was not tried.
+**You need:** a 64-bit Windows PC and a graphics driver that supports Vulkan 1.2 (most PCs from the last eight years or so have one; update the driver through Windows Update, or from NVIDIA, AMD or Intel). The maker's own builds of the game have been run on Windows 11 (the test program of the release after 0.1.8 was not: Windows refused to start it; the program in the download has not been started on any PC); whether it starts on Windows 10 was not tried.
 
 > **Check this first on Windows 11:** because the download is not code-signed, a PC with **Smart App Control** turned on may refuse to run it, and then there is no *Run anyway* button. To see whether it is on, open **Settings**, **Privacy & security**, **Windows Security**, **App & browser control**, **Smart App Control settings**. If it says *On*, the game will probably not start; turning it off is a choice about your whole PC, so decide for yourself.
 

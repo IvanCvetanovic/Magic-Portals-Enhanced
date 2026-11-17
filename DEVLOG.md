@@ -5169,3 +5169,20 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - he repeated 2-17 without the answers I asked for, then sent two more reports in one afternoon; patient, and wants the game to play like the original he remembers.
 
 **Where it stands / next:** see `git log` for what is pushed; nothing is released (0.1.8 is live). The owner's list: does 2-17's and 3-21's drop play by hand once he has a build (needs his word: "build the test APK"), how he places the boulder in 3-22 and when the knight dies, which phone model the original is played on (PACE-1), keep, change or remove the two provisional table entries, and the Windows suites to run once on his machine.
+
+### 2026-11-17 16:30 - Session 79, later: release 0.1.9 built, audited, published; the gold plays of 3-21 and 3-22 found; the owner's three answers - Step 254
+
+**Built:** Step 254 and release 0.1.9: the bump `1433ac0` (versionCode 109), `release.yml` run 44077491730 green, the content package (925 files), the Android release APK (37,245,987 bytes, the 0.1.8 certificate by bytes), the Windows and Linux archives, a clean 32-bit rebuild (0 warnings) and its whole `ctest` (97 of 97), a six-lens audit, the pre-release created and the Mac and iPhone files made by `apple-release.yml` (run 44086403683, success, its logs read), then made the latest. After it: the gold plays (`tests/routes/level21b.json` pinned to medal 3, `tests/routes_gold/level20b.json`, `TheGoldRoutesEarnGold`) and the corrections of the records.
+
+**Broke / dead ends:** (1) **I told the gold searchers that gold is 8 portals on 3-21; the game's table says 14**: one searcher worked to the wrong number and proved nothing; the other found gold at 12 portals. (2) The audit's claims lens found seven must-fix sentences in my notes: the unfilled Linux paragraph, two claims overtaken by the owner's answer (he compared with a video he filmed nine years ago, not a Pixel), the wrong gold number, "every other level", a quantifier wider than the replays, a 32-bit sentence claiming the same compiler flags (it was GCC against NDK clang), and "exactly 0.1.8's" proved on 64-bit only; all text, nothing in a file or hash. (3) The 3-21 gold play cannot replace the recorded play without moving the controls census by one tap (28 failures), which only the owner may sign: it lives in `tests/routes_gold`. (4) The Bash tool again ate `$var` and backticks, twice. (5) The 32-bit that the owner asked for is a stand-in on x86 with GCC; the library a 32-bit phone would run was compiled and linked and never run, and the notes and the message say so.
+
+**Decision:** publish as a pre-release first and promote after the Mac and iPhone files, as 0.1.8; do not rebuild for the `PLAYING.txt` sentence; never say "32-bit works"; give the owner the tag's addresses while the README's buttons still serve 0.1.8; ask for his video.
+
+**Assets check:** yes. `git diff --name-only d439623 HEAD` holds no image, audio, `.esc`, `.ent`, `.enml`, `.par` or `.fnt` file and nothing under `reference/` or `out/`; the audit's legal lens hashed all 927 content files against every blob reachable from main (73 equal, all the repository's own tables and the fonts' texts) and found no secret and no path of this PC in either archive or the notes.
+
+**[CLIP] --:--** - none.
+**[BROLL]** - none.
+**Numbers:** release files 27.2 + 37.2 + 28.8 MB + the Mac and iPhone files; Linux 64-bit whole `ctest` 97 of 97, 32-bit 97 of 97; `test_mp_routes` 2,487; MSVC /W4 0 warnings; Windows suites NOT RUN; audit 6 lenses, 1.29 M tokens, 7 corrected sentences; gold search 3 searchers, about 1,500 replays.
+**Inferred mood:** a guess - practical: "I will check it but you have to make a new release first"; he wants the gold badge and does not care about the settings' names.
+
+**Where it stands / next:** 0.1.9 is live and the latest, with all eight files, tag v0.1.9 on 1433ac0. The owner's list is at the end of Step 254: try the release, send the video, say where he puts the boulder in 3-22, sign the census if the 3-21 gold play may replace the recorded one.

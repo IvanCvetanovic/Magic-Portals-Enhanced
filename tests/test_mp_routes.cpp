@@ -1225,6 +1225,44 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
     std::filesystem::remove_all(root, ec);
 }
 
+// GOLD ROUTES (planning step 254). tests/routes holds one recorded play per level, and the controls census (tests/golden) counts the taps of exactly those, so a
+// play that earns the gold badge where the recorded one does not lives beside them, in tests/routes_gold: 3-21 (level20b: its recorded play takes 1 of 5 crystals
+// with 12 portals, and gold there is 14 portals and every crystal). The play was found by a search over replays on this build; nobody has done it by hand.
+// Each is replayed and must win, earn the medal it pins (3) and end with no problem.
+void TheGoldRoutesEarnGold() {
+    const std::filesystem::path dir = std::filesystem::path(kRoutes).parent_path() / "routes_gold";
+    std::error_code ec;
+    CHECK_MSG(std::filesystem::is_directory(dir, ec), "tests/routes_gold is there: " + dir.string());
+    if (ec || !std::filesystem::is_directory(dir)) return;
+    MagicPortals::Chapters::Table chapters;
+    std::string error;
+    CHECK_MSG(MagicPortals::Chapters::Load(kChapters, chapters, error), error);
+    int seen = 0;
+    bool level20b = false;
+    const Options plain{};
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        if (entry.path().extension() != ".json") continue;
+        ++seen;
+        Route::Plan plan;
+        if (!Route::Load(entry.path().string(), plan, error)) {
+            CHECK_MSG(false, error);
+            continue;
+        }
+        level20b = level20b || plan.level == "level20b";
+        CHECK_MSG(entry.path().stem().string() == plan.level, entry.path().filename().string() + " is named for its level, " + plan.level);
+        CHECK_MSG(plan.medal == 3, plan.level + ": a gold route pins medal 3");
+        const std::string label = Label(chapters, plan.level) + " gold";
+        const Outcome outcome = Play(plan, plain, label);
+        std::string problems;
+        for (const std::string& problem : outcome.problems) problems += (problems.empty() ? "" : "; ") + problem;
+        CHECK_MSG(outcome.problems.empty(), label + " " + plan.level + ": " + problems);
+        CHECK_MSG(outcome.wonTick > 0 && outcome.wonTick <= plan.winBy, label + " " + plan.level + " is won by tick " + std::to_string(plan.winBy));
+        const std::string got = outcome.door.has_value() ? std::to_string(outcome.door->medal) : std::string("none (no door result)");
+        CHECK_MSG(outcome.door.has_value() && outcome.door->medal == 3, label + " " + plan.level + " earns medal 3, got " + got);
+    }
+    CHECK_MSG(seen >= 1 && level20b, "tests/routes_gold holds 3-21's gold route (level20b.json); found " + std::to_string(seen) + " file(s)");
+}
+
 void RunRoutes(const Options& options) {
     MagicPortals::Chapters::Table chapters;
     std::string error;
@@ -1302,6 +1340,7 @@ void RunRoutes(const Options& options) {
         TheMedalKeyIsHeldToOneTwoOrThree();
         TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt();
         TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded();
+        TheGoldRoutesEarnGold();
     }
 }
 
