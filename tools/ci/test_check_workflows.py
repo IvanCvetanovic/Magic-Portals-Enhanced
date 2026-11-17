@@ -364,6 +364,12 @@ class TheMutations(unittest.TestCase):
         self.assertTrue([p for p in problems if p.rule == 'W07'], [str(p) for p in problems])
 
     @requires_yaml
+    def test_w07_the_three_windows_launches_have_one_too(self):
+        self.mutated('ci.yml', 'timeout 300 "$tmpw/build-tests/game/MagicPortals.exe"', '"$tmpw/build-tests/game/MagicPortals.exe"', 'W07', expect='no wall limit')
+        self.mutated('ci.yml', 'timeout 300 "$player/MagicPortals.exe" --root', '"$player/MagicPortals.exe" --root', 'W07', expect='no wall limit')
+        self.mutated('ci.yml', 'timeout 60 "$player/MagicPortals.exe" --fixed-step', '"$player/MagicPortals.exe" --fixed-step', 'W07', expect='no wall limit')
+
+    @requires_yaml
     def test_w07_ctest_without_a_timeout(self):
         self.mutated('ci.yml', 'ctest --test-dir "$build" --output-on-failure --timeout 900 2>&1', 'ctest --test-dir "$build" --output-on-failure 2>&1', 'W07', expect='ctest')
 
@@ -515,8 +521,9 @@ class TheTies(unittest.TestCase):
         self.assertRegex(sha, r'^[0-9a-f]{64}$')
         self.assertNotEqual(sha, '0' * 64)
         self.assertRegex(re.search(r'ACTIONLINT_VERSION: (\S+)', ci).group(1), r'^\d+\.\d+\.\d+$')
-        self.assertIn('sha256sum -c -', ci)
-        self.assertLess(ci.index('sha256sum -c -'), ci.index('tar xzf "$RUNNER_TEMP/actionlint.tar.gz"'), 'checked before it is unpacked')
+        step = ci[ci.index('      - name: actionlint\n'):]  # the tools job's step, not the first `sha256sum -c -` of the file (the Windows job has one for its driver)
+        self.assertIn('sha256sum -c -', step)
+        self.assertLess(step.index('sha256sum -c -'), step.index('tar xzf "$RUNNER_TEMP/actionlint.tar.gz"'), 'checked before it is unpacked')
 
     def test_the_avd_of_the_emulator_workflow_is_made_from_the_maker_scripts_own_table(self):
         text = workflow('android-emulator.yml')
@@ -544,10 +551,74 @@ class TheTies(unittest.TestCase):
             self.assertIn('--window 1280x720 --fixed-step --frames 300', text)
             self.assertIn('--min-size 640x360', text)
 
-    def test_the_windows_fixture_run_is_said_not_to_have_run(self):
+    def test_the_windows_starts_are_said_in_the_header_to_have_never_run_on_a_runner(self):
         text = workflow('ci.yml')
-        self.assertIn('NOT RUN', text[text.index('Run the fixture (NOT RUN on Windows)'):])
-        self.assertNotIn('MagicPortals.exe" --root', text, 'no launch of the Windows program with a fixture')
+        header = text[:text.index('\non:\n')]
+        self.assertIn('HAVE NEVER RUN ON A RUNNER', header)
+        self.assertNotIn('NOT RUN on Windows', text, 'the step that said the fixture was not started on Windows is gone: the job starts the game now')
+
+
+    @requires_yaml
+    def test_the_windows_job_starts_the_game_three_times_each_with_a_wall_limit_and_after_the_archive(self):
+        job = yaml.safe_load(workflow('ci.yml'))['jobs']['windows']
+        found = {}
+        for step in job['steps']:
+            if 'run' in step and step.get('shell') in (None, 'bash'):
+                program, _ = cw.launches(step['run'])
+                for _, wrappers in program:
+                    found.setdefault(step['name'], []).append(wrappers)
+        self.assertEqual(found, {'Run the fixture': [['timeout']], 'Run the fixture from the archive': [['timeout']], 'Run with no game data (must fail in words)': [['timeout']]})
+        by_name = {s['name']: s for s in job['steps'] if 'name' in s}
+        for name in found:
+            self.assertIn('timeout-minutes', by_name[name], '%s has a wall limit of the step as well as of the launch' % name)
+            self.assertEqual(by_name[name].get('if'), '${{ !cancelled() }}', '%s runs whatever an earlier step did, so that one dispatch says as much as it can' % name)
+        names = [s.get('name') for s in job['steps']]
+        self.assertLess(names.index('Assemble the archive without game data'), names.index('Software Vulkan driver (lavapipe, pinned)'), 'nothing new hides the build, the check and the archive')
+        self.assertLess(names.index('Software Vulkan driver (lavapipe, pinned)'), names.index('Run the fixture'))
+        self.assertLess(names.index('Unpack as a player would'), names.index('Run the fixture from the archive'))
+        self.assertLess(names.index('Run the fixture from the archive'), names.index('Check the picture of the release program'))
+        # the picture is checked by the repository's one checker, with the tolerance the Linux jobs use (a size floor: a window may be made smaller than asked)
+        for picture in ('ci_level-windows.png', 'ci_level-windows-release.png'):
+            self.assertIn('python tools/apple/check_png.py "$RUNNER_TEMP/shots/%s" --min-size 640x360' % picture, workflow('ci.yml'))
+
+    def test_the_lavapipe_pin_is_one_release_with_a_real_sha256_that_is_checked_before_anything_is_unpacked(self):
+        ci = workflow('ci.yml')
+        version = re.search(r'  LAVAPIPE_VERSION: (\S+)', ci).group(1)
+        url = re.search(r'  LAVAPIPE_URL: (\S+)', ci).group(1)
+        sha = re.search(r'  LAVAPIPE_SHA256: (\S+)', ci).group(1)
+        self.assertRegex(version, r'^\d+\.\d+\.\d+$')
+        self.assertEqual(url, 'https://github.com/mmozeiko/build-mesa/releases/download/%s/mesa-lavapipe-x64-%s.7z' % (version, version), 'a release tag and its asset, never a "latest"')
+        self.assertRegex(sha, r'^[0-9a-f]{64}$')
+        self.assertNotEqual(sha, '0' * 64)
+        step = ci[ci.index('      - name: Software Vulkan driver (lavapipe, pinned)\n'):]
+        step = step[:step.index('\n      - name: Run the fixture\n')]
+        self.assertLess(step.index('curl -fsSL'), step.index('sha256sum -c -'))
+        self.assertLess(step.index('sha256sum -c -'), step.index('"$seven" x'), 'the hash is checked before the archive is unpacked')
+        self.assertIn('|| { echo "::error::the lavapipe archive is not the pinned one', step)
+        self.assertIn('exit 1; }', step[step.index('sha256sum -c -'):step.index('"$seven" x')], 'a mismatch ends the step')
+        self.assertIn('vulkan_lvp.dll lvp_icd.x86_64.json 2>&1 | tail', step, 'only the two files are unpacked')
+        # the driver is told to the loader twice: variables (ignored by a loader of high integrity) and the registry key (read at any integrity level)
+        for text in ('echo "VK_DRIVER_FILES=$manifest" >> "$GITHUB_ENV"', 'echo "VK_ICD_FILENAMES=$manifest" >> "$GITHUB_ENV"', "reg add 'HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers'", 'MSYS_NO_PATHCONV=1'):
+            self.assertIn(text, step)
+        # the version the game's log must show is the driver's version as the driver writes it: (major << 22) | (minor << 12) | patch
+        major, minor, patch = (int(n) for n in version.split('.'))
+        self.assertIn('driver 0x%x ' % ((major << 22) | (minor << 12) | patch), step)
+
+    def test_the_fixture_runs_require_the_games_own_line_that_it_selected_the_software_driver(self):
+        ci = workflow('ci.yml')
+        for step in ('Run the fixture', 'Run the fixture from the archive'):
+            body = ci[ci.rindex('      - name: %s\n' % step):]
+            body = body[:body.index('\n      - name: ', 10)]
+            self.assertIn("grep -q -s 'Selected Physical GPU: llvmpipe'", body, step)
+            self.assertIn('test "$rc" = 0', body, step)
+            self.assertIn('VK_LOADER_DEBUG: error,warn,info,driver', body, step)
+            self.assertIn('TMP=', body, step)
+
+    def test_the_document_states_the_pin_the_workflow_holds(self):
+        ci, doc = workflow('ci.yml'), read(os.path.join(REPO, 'docs', 'ci.md'))
+        for key in ('LAVAPIPE_URL', 'LAVAPIPE_SHA256'):
+            value = re.search(r'  %s: (\S+)' % key, ci).group(1)
+            self.assertIn(value, doc, '%s is written in docs/ci.md' % key)
 
     def test_no_workflow_says_that_a_step_works_on_github(self):
         for name in sorted(os.listdir(WORKFLOWS)):
@@ -590,7 +661,7 @@ class TheExtraction(unittest.TestCase):
             self.skipTest('no bash: the scripts were NOT syntax-checked')
         tmp = tempfile.mkdtemp(prefix='mp-jobscript-')
         self.addCleanup(shutil.rmtree, tmp, True)
-        for workflow_name, job in (('ci.yml', 'linux'), ('ci.yml', 'linux-release'), ('ci.yml', 'tools'), ('release.yml', 'collect'), ('android-emulator.yml', 'smoke')):
+        for workflow_name, job in (('ci.yml', 'linux'), ('ci.yml', 'linux-release'), ('ci.yml', 'windows'), ('ci.yml', 'tools'), ('release.yml', 'collect'), ('android-emulator.yml', 'smoke')):
             folder = os.path.join(tmp, workflow_name, job)
             lines = js.write(js.extract(workflow(workflow_name), job), folder)
             for line in lines:

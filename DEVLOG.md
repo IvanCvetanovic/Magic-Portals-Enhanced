@@ -5198,3 +5198,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - relieved to have a reference at last, and impatient for the levels to be finishable ("I just want to be able to finish the level with the golden badge").
 
 **Where it stands / next:** the release of Step 254 is live and the latest, unchanged; this entry's commit is records only. The owner's questions are at the end of Step 255: the pace first.
+
+### 2026-11-17 17:10 - Session 79, CI: the Windows job starts the game on a pinned software Vulkan driver (written, never run) - Step 256
+**Built:** the seven steps of `ci.yml`'s `windows` job that download Mesa's lavapipe 26.2.6 (sha256-pinned), start the fixture level from the developer's build and from the shipped program, and start the shipped program with no data; their checker ties; `docs/ci.md` section 4.
+**Broke / dead ends:** none that ran: nothing here has met a runner. The agent that wrote it found the first two drivers wrong (mesa-dist-win has no software Vulkan in its MSVC build; a rasterizers repository has no ICD manifest) before it chose the third.
+**Decision:** write it now although the owner's GitHub credits are spent ("it may not work until the reset"): it costs nothing until dispatched, and the file is checked as far as a PC can check it. Do not claim it works.
+**Assets check:** yes: no asset staged; the downloaded driver is third-party, referenced by URL and hash, never committed; nothing from `reference/` or `out/`.
+**[CLIP] --:--** - none.
+**[BROLL]** - none.
+**Numbers:** 7 new steps, 1 pinned archive (2 files), 88 checker tests, 344 + 428 + 145 other CI/package/apple tests, 0 runs on a runner.
+**Inferred mood:** a guess - resigned: the credits are gone and the Windows program has still never been started anywhere.
+
+**Where it stands / next:** committed with this entry; the first dispatch waits for the credit reset.

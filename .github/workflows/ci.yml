@@ -16,9 +16,11 @@ name: CI
 #             a picture that is checked. `Linux - release program` (Ubuntu 22.04, the oldest image that was meant to build it: see docs/ci.md): the release recipe (no baked paths, no
 #             developer tools, libstdc++ and libgcc linked in, stripped), check-program with the glibc floor, the archive without game data twice (the same bytes), unpacked, and the
 #             fixture level and a start with no game data run from it.
-#   windows   MSVC: the developer's build, every suite, the release program (check-program, the archive without game data). The fixture level is NOT RUN on Windows: the runner has no
-#             Vulkan driver that was checked, and the step that wrote this file downloaded none (it was allowed no download but the linter's: a fact about that step, not about software drivers); the
-#             step says so in the log.
+#   windows   MSVC: the developer's build, every suite, the release program (check-program, the archive without game data) and the game STARTED, on the software Vulkan driver Mesa's lavapipe for
+#             Windows (a pinned release of the build-mesa project, its sha256 checked before it is unpacked: LAVAPIPE_* below): the fixture level from the developer's build, then from the unpacked
+#             archive's release program (no baked path, the GUI program), a picture checked each time, and that program started with no game data, which must say so and exit 1. THE WINDOWS
+#             STARTS WERE WRITTEN AFTER THE REST AND HAVE NEVER RUN ON A RUNNER: whether the loader of this runner's elevated processes finds the driver, whether a window opens on the runner's desktop
+#             and whether the release program starts at all are NOT KNOWN until a run; docs/ci.md section 4 says what to read first in that run's log.
 #   android   the Android SDK and NDK: the shell APK without game data for the three ABIs, the packager's inspect, and the release check that must REFUSE a debug APK.
 #   tools     the Python tests (package, ci, apple, converter), the version check, the workflow checker, the public-readiness checker (tools/ci/check_public.py) and actionlint.
 # The jobs do not wait for one another (no needs:) and no step of one cancels another, so one failure never hides the next job's result. Every job ends by uploading its logs,
@@ -58,6 +60,12 @@ env:
   # The actionlint release the tools job downloads, and the sha256 of its Linux tarball taken from the release's own checksums file (docs/ci.md says how it was checked).
   ACTIONLINT_VERSION: 1.7.12
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  # The software Vulkan driver the Windows job starts the game on (docs/ci.md section 4): Mesa's lavapipe built for Windows by the build-mesa project, one release whose tag is Mesa's version. The
+  # archive holds the driver and its manifest and nothing else (statically linked). The sha256 is the one GitHub lists for the asset and the one computed from a download on 2026-11-17; the job checks
+  # it before it unpacks anything. WRITTEN, NEVER RUN on a runner.
+  LAVAPIPE_VERSION: 26.2.6
+  LAVAPIPE_URL: https://github.com/mmozeiko/build-mesa/releases/download/26.2.6/mesa-lavapipe-x64-26.2.6.7z
+  LAVAPIPE_SHA256: 4ed980046a8d42de4efa74085f00e238a51c774b854d63ecece6dfee59ab3bf3
   CCACHE_MAXSIZE: 600M
 
 jobs:
@@ -314,15 +322,20 @@ jobs:
       - name: Engine submodule
         run: |
           git -C engine log --oneline -1
-          mkdir -p "$RUNNER_TEMP/logs"
+          mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots" "$RUNNER_TEMP/saves"
 
       - name: Runner
         run: |
           python --version
           cmake --version | sed -n 1p
           ninja --version
-          # The Vulkan loader: the program imports vulkan-1.dll. Whether this image has a graphics driver is what the fixture run below depends on.
+          # The Vulkan loader: the program imports vulkan-1.dll, and the CMake configure below stops without it in System32. Its version, and whether the processes of a step are of high integrity (which
+          # decides how a loader finds a driver: the step "Software Vulkan driver (lavapipe, pinned)"), are printed here and not assumed. The image has no graphics driver of its own that was checked.
           ls -l /c/Windows/System32/vulkan-1.dll 2>&1 || echo "no vulkan-1.dll in System32"
+          powershell -NoProfile -Command '(Get-Item C:\Windows\System32\vulkan-1.dll).VersionInfo.FileVersion' || echo "the loader's version could not be read"
+          level="$(MSYS_NO_PATHCONV=1 /c/Windows/System32/whoami.exe /groups | grep -o 'S-1-16-[0-9]*' || true)"
+          echo "integrity level of the steps: ${level:-not printed} (S-1-16-8192 medium, 12288 high, 16384 system; the Vulkan loader ignores VK_DRIVER_FILES and VK_ICD_FILENAMES from 12288 up)"
+          command -v 7z timeout curl sha256sum cygpath || echo "a tool the driver step uses is not on the PATH of this shell"
 
       # The developer's build, configured as tools/parity/port_build.bat does (Ninja, Release, MSVC's cl named outright) with validation off and no shader compiler, so that the
       # committed shaders are never rewritten. MSVC's environment comes from the newest Visual Studio on the image. The two targets the Linux job builds (build_linux.sh's default), not the
@@ -346,13 +359,6 @@ jobs:
           grep -E 'tests passed, [0-9]+ tests failed out of' "$log" || true
           echo "skipped: $(grep -c '(Skipped)' "$log" || true) (never counted as passed)"
           test "$status" = 0
-
-      # The fixture level needs a Vulkan driver. This image has none that was checked, and the step that wrote this file downloaded no software driver (it was allowed no download but the
-      # linter's; that says nothing about the drivers), so the run is NOT RUN, and this step says so. (The Linux job runs the same level on the software driver; docs/ci.md has the table of what ran where.)
-      - name: Run the fixture (NOT RUN on Windows)
-        run: |
-          echo "NOT RUN: the fixture level is not started on the Windows runner. No Vulkan driver is installed on the image that this workflow has checked, and no software driver is downloaded."
-          echo "The Linux job runs the level; the Windows program is built, its suites are run and the release program is checked as bytes."
 
       - name: Make the icon
         run: python tools/art/make_app_icon.py --out "$RUNNER_TEMP/icons"
@@ -379,7 +385,149 @@ jobs:
           python tools/package/release.py assemble --platform windows --program "$RUNNER_TEMP/build-release/game/MagicPortals.exe" --no-data \
             --out "$RUNNER_TEMP/archive" 2>&1 | tee "$RUNNER_TEMP/logs/assemble-windows.log"
 
+      # ---- THE GAME STARTED. Everything from here to "Source tree untouched" is WRITTEN, NEVER RUN on a runner (docs/ci.md section 4). It comes after the build, the check and the archive above, and each step
+      # runs whatever an earlier one did (not when the run was cancelled), so that one dispatch says as much as it can: a driver that is not found fails the two fixture runs, and the start with no game
+      # data, which needs no Vulkan driver, still reports.
+
+      # Mesa's lavapipe, the software Vulkan driver, pinned (env: LAVAPIPE_*): downloaded with curl, its sha256 checked BEFORE anything is unpacked (a mismatch ends the step and the job), then only the two files it
+      # is for are unpacked (7-Zip, which the image has) into a folder of this job's. Nothing downloaded is started here: the driver is a DLL that the Vulkan loader loads when the game asks for a device.
+      # HOW THE LOADER IS TOLD, TWICE: the variables VK_DRIVER_FILES and VK_ICD_FILENAMES (written to GITHUB_ENV for the steps after this one) AND the loader's registry key HKLM\SOFTWARE\Khronos\Vulkan\Drivers.
+      # Both, because the loader IGNORES the variables in a process of high integrity (Vulkan-Loader docs/LoaderDriverInterface.md, "Exception for Elevated Privileges") and reads the key whatever the process is, and
+      # whether a runner's steps are of high integrity is NOT KNOWN here: the Runner step prints it. Which driver answered is not assumed either: the two fixture runs fail unless the game's own log says it selected llvmpipe.
+      - name: Software Vulkan driver (lavapipe, pinned)
+        run: |
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          archive="$tmp/lavapipe-$LAVAPIPE_VERSION.7z"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$archive" "$LAVAPIPE_URL"
+          ls -l "$archive"
+          echo "$LAVAPIPE_SHA256 *$archive" | sha256sum -c - || { echo "::error::the lavapipe archive is not the pinned one (sha256 $LAVAPIPE_SHA256, $LAVAPIPE_URL): nothing was unpacked"; exit 1; }
+          seven="$(command -v 7z || true)"
+          if [ -z "$seven" ]; then seven="/c/Program Files/7-Zip/7z.exe"; fi
+          mkdir -p "$tmp/lavapipe"
+          cd "$tmp/lavapipe"
+          "$seven" x -y "$(cygpath -m "$archive")" vulkan_lvp.dll lvp_icd.x86_64.json 2>&1 | tail -8
+          ls -l
+          cat lvp_icd.x86_64.json
+          manifest="$(cygpath -w "$tmp/lavapipe/lvp_icd.x86_64.json")"
+          echo "VK_DRIVER_FILES=$manifest" >> "$GITHUB_ENV"
+          echo "VK_ICD_FILENAMES=$manifest" >> "$GITHUB_ENV"
+          level="$(MSYS_NO_PATHCONV=1 /c/Windows/System32/whoami.exe /groups | grep -o 'S-1-16-[0-9]*' || true)"
+          echo "integrity level of this step: ${level:-not printed} (the variables above count only below S-1-16-12288; the registry key counts at any level)"
+          MSYS_NO_PATHCONV=1 reg add 'HKLM\SOFTWARE\Khronos\Vulkan\Drivers' /v "$manifest" /t REG_DWORD /d 0 /f \
+            || echo "::warning::the manifest could not be written to the registry (no administrator?): only the environment variables tell the loader where the driver is"
+          MSYS_NO_PATHCONV=1 reg query 'HKLM\SOFTWARE\Khronos\Vulkan\Drivers' || echo "no driver key"
+          echo "driver: Mesa lavapipe $LAVAPIPE_VERSION; expected in the game's log, derived from Mesa's packing of its version and not yet seen in any log: llvmpipe, driver 0x6802006 (26, 2, 6 as major << 22 | minor << 12 | patch). Only llvmpipe is required."
+
+      # The fixture level from the developer's build (a console program with baked paths that point at this checkout, which has none of the owner's data, so --root names the fixture, as the Linux job does): 300
+      # fixed ticks at 1280x720 and one picture. TEMP and TMP point at a folder of this step's, so that the game's own log (magicportals.log: better evidence of which GPU it chose than a redirect) is copied to
+      # the logs. The loader says what it finds on stderr (VK_LOADER_DEBUG). A wall limit on the launch (timeout) and on the step: the minutes are paid.
+      - name: Run the fixture
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        env:
+          VK_LOADER_DEBUG: error,warn,info,driver
+        run: |
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          tmpw="$(cygpath -m "$RUNNER_TEMP")"
+          root="$(cygpath -m "$GITHUB_WORKSPACE")"
+          mkdir -p "$tmp/gametemp-fixture"
+          rc=0
+          TEMP="$tmpw/gametemp-fixture" TMP="$tmpw/gametemp-fixture" timeout 300 "$tmpw/build-tests/game/MagicPortals.exe" --root "$root/tests/fixtures/ci" --port-data "$root/game/data" --level ci_level \
+            --window 1280x720 --fixed-step --frames 300 --saves "$tmpw/saves" --screenshot "$tmpw/shots/ci_level-windows.png" \
+            > "$tmp/logs/run-windows.log" 2>&1 || rc=$?
+          for f in "$tmp"/gametemp-fixture/magicportals*.log; do
+            if [ -f "$f" ]; then cp "$f" "$tmp/logs/windows-fixture-$(basename "$f")"; fi
+          done
+          echo "::group::everything the program and the loader wrote"
+          cat "$tmp/logs/run-windows.log"
+          echo "::endgroup::"
+          tail -15 "$tmp/logs/run-windows.log"
+          echo "exit code: $rc"
+          echo "which driver answered:"
+          grep -h -s -E 'GPU offered|Selected Physical GPU|elevated' "$tmp/logs/run-windows.log" "$tmp/gametemp-fixture/magicportals.log" || echo "no line names a GPU"
+          test "$rc" = 0
+          grep -q -s 'Selected Physical GPU: llvmpipe' "$tmp/logs/run-windows.log" "$tmp/gametemp-fixture/magicportals.log" || { echo "::error::the game did not select the software driver (llvmpipe): see the lines above"; exit 1; }
+
+      - name: Check the picture
+        if: ${{ !cancelled() }}
+        run: python tools/apple/check_png.py "$RUNNER_TEMP/shots/ci_level-windows.png" --min-size 640x360
+
+      # The archive as a player gets it, unpacked with python's zipfile (the shell's own unzip was not checked).
+      - name: Unpack as a player would
+        if: ${{ !cancelled() }}
+        run: |
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$tmp/player"
+          archive="$(ls "$tmp"/archive/MagicPortals-*-nodata.zip)"
+          python -m zipfile -e "$(cygpath -m "$archive")" "$(cygpath -m "$tmp/player")"
+          ls -l "$tmp"/player/MagicPortals-*/
+          sed -n 1,30p "$tmp"/player/MagicPortals-*/PLAYING.txt
+
+      # THE SHIPPED PROGRAM (the release recipe's: no baked path, no developer tools, the GUI program) started from the unpacked archive in an unrelated folder; the archive has no game, so --root names the
+      # fixture. It has no console: what it writes to stderr reaches the redirect only if the shell hands its handles down (NOT KNOWN), and its own log is read as well.
+      - name: Run the fixture from the archive
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        env:
+          VK_LOADER_DEBUG: error,warn,info,driver
+        run: |
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          tmpw="$(cygpath -m "$RUNNER_TEMP")"
+          root="$(cygpath -m "$GITHUB_WORKSPACE")"
+          player="$(ls -d "$tmp"/player/MagicPortals-*)"
+          mkdir -p "$tmp/gametemp-release"
+          cd "$tmp"
+          rc=0
+          TEMP="$tmpw/gametemp-release" TMP="$tmpw/gametemp-release" timeout 300 "$player/MagicPortals.exe" --root "$root/tests/fixtures/ci" --port-data "$root/game/data" --level ci_level \
+            --window 1280x720 --fixed-step --frames 300 --saves "$tmpw/saves" --screenshot "$tmpw/shots/ci_level-windows-release.png" \
+            > "$tmp/logs/run-windows-release.log" 2>&1 || rc=$?
+          for f in "$tmp"/gametemp-release/magicportals*.log; do
+            if [ -f "$f" ]; then cp "$f" "$tmp/logs/windows-release-$(basename "$f")"; fi
+          done
+          echo "::group::everything the program and the loader wrote"
+          cat "$tmp/logs/run-windows-release.log"
+          echo "::endgroup::"
+          tail -15 "$tmp/logs/run-windows-release.log"
+          echo "exit code: $rc"
+          echo "which driver answered:"
+          grep -h -s -E 'GPU offered|Selected Physical GPU|elevated' "$tmp/logs/run-windows-release.log" "$tmp/gametemp-release/magicportals.log" || echo "no line names a GPU"
+          test "$rc" = 0
+          grep -q -s 'Selected Physical GPU: llvmpipe' "$tmp/logs/run-windows-release.log" "$tmp/gametemp-release/magicportals.log" || { echo "::error::the program did not select the software driver (llvmpipe): see the lines above"; exit 1; }
+
+      - name: Check the picture of the release program
+        if: ${{ !cancelled() }}
+        run: python tools/apple/check_png.py "$RUNNER_TEMP/shots/ci_level-windows-release.png" --min-size 640x360
+
+      # The start with no game data and no --root: it must say so in words and exit 1. Nothing is opened before that check, so it needs no driver and no window, and no log file exists: only what the program
+      # wrote to stderr says it, and a program with no console may hand the redirect nothing (NOT KNOWN). The fixture run from the archive says whether its output reaches a redirect: an EMPTY capture with
+      # exit code 1 is a warning only when that run's capture was empty too, and a failure when it was not; a capture that says something else, or any other exit code, fails.
+      - name: Run with no game data (must fail in words)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: |
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          tmpw="$(cygpath -m "$RUNNER_TEMP")"
+          player="$(ls -d "$tmp"/player/MagicPortals-*)"
+          cd "$tmp"
+          rc=0
+          timeout 60 "$player/MagicPortals.exe" --fixed-step --frames 1 --saves "$tmpw/saves" > "$tmp/logs/run-windows-nodata.log" 2>&1 || rc=$?
+          cat "$tmp/logs/run-windows-nodata.log"
+          echo "exit code: $rc"
+          test "$rc" = 1
+          if grep -q -s "the game's data was not found" "$tmp/logs/run-windows-nodata.log"; then
+            echo "the program said so in words"
+          elif [ -s "$tmp/logs/run-windows-nodata.log" ]; then
+            echo "::error::the program exited 1 and wrote something other than the sentence about the game's data"
+            exit 1
+          elif [ -s "$tmp/logs/run-windows-release.log" ]; then
+            echo "::error::the program exited 1 and wrote nothing, although its output reached the redirect in the fixture run from the archive: it did not say the data was missing"
+            exit 1
+          else
+            echo "::warning::the program exited 1 and wrote nothing, and nothing of its output reached the redirect in the fixture run either: only the exit code was checked (a program with no console)"
+          fi
+
       - name: Source tree untouched
+        if: ${{ !cancelled() }}
         run: |
           git status --short --untracked-files=no
           test -z "$(git status --porcelain --untracked-files=no)"
@@ -401,7 +549,9 @@ jobs:
           name: windows-logs
           retention-days: 7
           if-no-files-found: ignore
-          path: ${{ runner.temp }}/logs
+          path: |
+            ${{ runner.temp }}/logs
+            ${{ runner.temp }}/shots
 
   android:
     name: Android - shell APK, inspect, release refusal

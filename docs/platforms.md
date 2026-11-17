@@ -40,9 +40,9 @@ pad button): gamepad play is NOT KNOWN to work and should be assumed not to.
   step 202 (MSVC, no baked path, no developer tools, the file properties, the icon) was built and launched there, and `release.py check-program` reads it as bytes and passes it
   (`packaging.md` section 8, step 208); that program is the owner's own build, not the file of the release. CHECKED on GitHub (2026-11-03, `ci.md` section 9): the `windows` job of `release.yml` built the release program on `windows-2025-vs2026` (MSVC 19.51) in its second dispatch
   and `release.py check-program` passed it (its first dispatch failed in that job, at the CMake configure: the `windows-2022` image has no Vulkan loader). That program, which is the one in the release's Windows archive, was read as bytes and **has not been started on any PC**.
-  WRITTEN, never run: the `windows` job of `ci.yml` (the developer's build and the suites on a Windows runner).
+  WRITTEN, never run: the `windows` job of `ci.yml` (the developer's build and the suites on a Windows runner, and, since step 256, the fixture level started from the developer's build and from the unpacked archive's release program on a pinned software Vulkan driver, and the release program started with no game data: `ci.md` section 4).
 * **NOT KNOWN.** Windows 10 and every other version; any GPU but the owner's; a PC without the C++ runtime or with a Windows N edition (the text exists in `PLAYING.txt`, the case was not seen); an
-  archive with the game in it started on a PC that is not the owner's (none has been); the Windows archive of the release started on any PC (it has not been started on the owner's own either); a touch screen; whether a Windows runner can start the fixture level (it has no checked Vulkan driver: `ci.md` section 4).
+  archive with the game in it started on a PC that is not the owner's (none has been); the Windows archive of the release started on any PC (it has not been started on the owner's own either); a touch screen; whether a Windows runner can start the fixture level (step 256 wrote the steps that try it, on a pinned Mesa lavapipe: never run on a runner, `ci.md` section 4).
 
 ## Linux
 
