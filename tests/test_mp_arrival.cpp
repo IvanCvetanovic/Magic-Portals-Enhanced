@@ -161,6 +161,39 @@ void TheSeamOfTheSlabAndTheBridge() {
     }
 }
 
+// A KNIGHT WITH THE ORIGINAL'S BODY (planning step 253): the capsule of 3-21's knights is centred on the entity point, 11.1 over the body's position,
+// and the lowering above must judge the capsule where it is. Platform 1558's underside is flat at y 128 from x 104 to 348, over the strip of floor (top 224).
+// A knight put down 1.5 to 12 units under it, its axis's top end through the face, is lowered to just under it and falls to the floor; ignoring the
+// collider's centre would leave the top of its axis 11.1 inside the platform, where the engine's answer is UP.
+void AKnightWithTheOriginalsBodyPutDownUnderAPlatformIsNotPushedUpIntoIt() {
+    for (const double below : {1.5, 4.0, 8.0, 12.0}) {
+        Run run;
+        if (!Begin("level20b", run)) return;
+        for (int tick = 0; tick < 30; ++tick) Tick(run);
+        entt::entity knight = entt::null;
+        for (const auto& minion : run.level.minions.minions) {
+            if (minion.name == "minion_spawn_1582") knight = minion.body; // knight A, on the floor strip
+        }
+        CHECK_MSG(knight != entt::null, "3-21's knight A is there");
+        if (knight == entt::null) return;
+        const double above = run.level.minions.rules.EntityAboveCentrePx();
+        const auto bodyPx = [&] { return Units::ToPixels(run.registry.get<TransformComponent>(knight).position); };
+        const std::string at = "3-21 knight, exit " + std::to_string(below) + " under the underside: ";
+        CHECK_MSG(run.level.portals.TryPlace(glm::dvec2(200.0, 128.0 + below)), at + "the exit portal opens");
+        CHECK_MSG(run.level.portals.TryPlace(bodyPx()), at + "the portal on the knight opens");
+        double leastCentreY = std::numeric_limits<double>::infinity();
+        for (int tick = 0; tick < kTicksAfter; ++tick) {
+            Tick(run);
+            if (run.level.portals.traversals == 0) continue;
+            leastCentreY = std::min(leastCentreY, bodyPx().y - above);
+        }
+        CHECK_MSG(run.level.portals.traversals >= 1, at + "the knight went through the pair");
+        CHECK_MSG(leastCentreY >= 128.0 - kRoundingPx, at + "its capsule's centre never went up into the platform (least y " + std::to_string(leastCentreY) + ")");
+        // It falls to what stands under the platform there: block00_low_emissive_ent_1573 (x 192 to 256, top 192) and the strip of floor beyond it.
+        CHECK_MSG(bodyPx().y > 175.0, at + "and it ends standing well under the platform, at " + Px(bodyPx()));
+    }
+}
+
 void The1_20ArrivalThatWalkedThroughThePlankStaysUnderIt() {
     // The recorded route's third pair is aimed at (300, 168), not (300, 150): the exit 6 units under the plank's underside (y 144) put the capsule INTO the
     // plank, and he walked left through it and the post. From exits 1 to 12 units under it he is now put under it and falls to the alcove's floor.
@@ -209,6 +242,7 @@ void runTests() {
     AnArrivalUnderAPlatformIsNotPushedUpIntoIt();
     TheSeamOfTheSlabAndTheBridge();
     The1_20ArrivalThatWalkedThroughThePlankStaysUnderIt();
+    AKnightWithTheOriginalsBodyPutDownUnderAPlatformIsNotPushedUpIntoIt();
     AnArrivalClearOfEveryHullIsExactlyWhereThePortalIs();
 }
 

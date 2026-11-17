@@ -45,7 +45,7 @@
     "air_decay_fps": 60.0,
     "air_decay_rate_hz": 120.0,
     "_air_decay_rate_hz": [
-      "THE OWNER'S RULING, 2026-11-04 (planning step 213; it answers G10-2's open question and R3-2): the formula above is EVALUATED at 120 Hz, his phone's,",
+      "THE OWNER'S RULING, 2026-11-04 (planning step 213; it answers G10-2's open question and R3-2): the formula above is EVALUATED, for every level but the two named in air_decay_rate_hz_by_level below, at 120 Hz, his phone's,",
       "where min(1, 120 / 60 x 0.86) = 1: a body off the floor keeps ALL its x velocity, the share the original keeps from about 70 frames a second (every",
       "phone of 90 Hz and up). Why: the original's air brake depends on the phone's frame rate and the port plays the same on every phone (its tick is fixed",
       "and the simulation reads no display delta or alpha: test_mp_routes --display replays recorded input through the engine's tick pump at 30 to 144 Hz and finds every tick identical; the device-to-tick input path, a second finger under about 25 ms at 90 Hz and above, is NOT covered), so ONE rate has to be chosen. At the matched 60 Hz (0.86) the port's",
@@ -55,18 +55,19 @@
       "60 Hz or above: the rig cannot run it there, and a model of it (step 213's research) says the original's own jump needs about 30 frames a second.",
       "The decoded 0.86 and 60 stay as the formula's immediates; Player::AirShareAt takes any rate and the tests pin it at 60, 30, 17 and 120."
     ],
+    "_air_decay_rate_hz_by_level_guess": true,
     "air_decay_rate_hz_by_level": {
       "level16a": 42.0,
       "level20b": 42.0
     },
     "_air_decay_rate_hz_by_level": [
-      "THE OWNER'S REQUEST, 2026-11-17 (planning step 252; backlog DROP-1; the same complaint as his of 2026-11-08): 2-17 (level16a) is evaluated at 42 Hz, a share of 0.602, not at the 120 above. A GUESS, NOT A MEASUREMENT OF THE",
+      "PROVISIONAL, MADE IN ANSWER TO THE OWNER'S REPORT OF 2026-11-17 (planning step 252; backlog DROP-1, which stays open; the same complaint as his of 2026-11-08), NOT A RULING OF HIS: 2-17 (level16a) is evaluated, for the whole level, at 42 Hz, a share of 0.602, not at the 120 above. A GUESS, NOT A MEASUREMENT OF THE",
       "ORIGINAL: no clip of the original doing this drop exists, and the original's share is min(1, fps / 60 x 0.86) of the phone it runs on. Why this level and not the whole game: the ruling above (120 Hz, a share of 1) is what gives",
       "1-04 its gold, 2-30 its leap and the 20 routes step 213 re-timed, and 2-17's drop needs a share under 0.7: no single rate serves both (step 230), so the one level the owner cannot play at 1.0 plays at its own.",
-      "WHAT IT BUYS: walking left off platform_no_emissive_ent_1146's left end (x 254, the one ledge of 2-17 within the flame's reach) lands the player at x 242.7 to 244.6 on the floor, 34.7 to 36.6 units from fire_agent_ent_1183 (reach 32), for a held",
-      "walk and for every tap from 5 ticks up (a 4-tick tap stays on the ledge); at the ruling's share 1 the same walk burns him in the air at 19.0 (tick 476), at the decoded 0.86 at 30.7. Measured by replay on the port (planning step 252): every",
-      "share tried from 0.3 to 0.7, in steps of 0.05, lives, 0.7 by 0.8 unit only; 0.6 is the middle of the band, 2.7 units off the flame at the least and 0.3 off the ledge's face at the least (the player's centre must stay between x 239.9 and 244.9 as he falls).",
-      "3-21 (level20b) is the second name (planning step 253), the owner's request of the same day: pushed off the top platform's left end, knight B lands in the strip between the pit and the door, and he wants to walk off the same end and land on its right, in the 20 units between the knight and the door's face. At 120 Hz the walk off flies on at 2.4 units a tick and over the knight into the pit; at 42 Hz he drops by the end and lands at x 92 to 94.6, alive (every rate tried from 30 to 48, every walk of 76 ticks and more; 50 and above lose some walks, 60 and the ruling lose most). It needs the knight's capsule too (minions.json body.capsule): with the circle B ends at x 96 to 99 and he lands on its other side at every rate. Same guess, same rate.",
+      "WHAT IT BUYS: walking left off platform_no_emissive_ent_1146's left end (x 254, the one ledge of 2-17 the investigation took for his drop; Step 230 called that a reading) lands the player at x 242.7 to 244.6 on the floor, 34.7 to 36.6 units from fire_agent_ent_1183 (reach 32), for",
+      "every walk of 5 to 21 ticks, the key RELEASED IN THE AIR (a key held through the landing walks him into the flame, 1 to 2 ticks on; a 4-tick walk stays on the ledge); at the ruling's share 1 a walk of 9 ticks and more burns him in the air at 19.0 (tick 476), at the decoded 0.86 at 30.7. Measured by replay on the port (planning step 252): every",
+      "share tried from 0.3 to 0.7, in steps of 0.05, lives (walks of 5 to 10 and 21 ticks), 0.7 by 0.8 unit only, 0.65 by 1.9; the band that keeps both the flame and the ledge's face is 0.5 to 0.65 and 0.6 was taken inside it: at the shipped 0.602, 2.7 to 4.6 units off the flame and 0.3 to 2.2 off the face (the player's centre must stay between x 239.9 and 244.9 as he falls).",
+      "3-21 (level20b) is the second name (planning step 253), in answer to the owner's report of the same day: pushed off the top platform's left end, knight B lands in the strip between the pit and the door, and he wants to walk off the same end and land on its right, between the knight and the door. At 120 Hz the walk off flies on at 2.4 units a tick and over the knight into the pit; at 42 Hz he drops by the end and lands at x 92 to 94.6, alive (every rate tried from 30 to 48, walks of 76 to 90 ticks; 50 and above lose some walks, 60 and the ruling lose most), with 9 to 12 units of floor between him and the door's face. It needs the knight's capsule too (minions.json body.capsule): with the circle B ends at x 93 to 99 and he lands on its other side (tried at 30 and 42 Hz). Same guess, same rate. The whole level flies at that rate, not only the drop: portal exits and thrown crates too; only the recorded routes were run.",
       "To give another level its own rate, name it here; a level not named plays at air_decay_rate_hz."
     ],
     "_air_decay": [

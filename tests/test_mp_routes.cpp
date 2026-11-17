@@ -1037,12 +1037,12 @@ void TheMedalKeyIsHeldToOneTwoOrThree() {
 }
 
 // 2-17's WALK OFF THE LEDGE NEXT TO THE FLAME (planning step 252; backlog DROP-1). The owner cannot drop from the left end of
-// platform_no_emissive_ent_1146 (x 254, 156 units above the floor) beside fire_agent_ent_1183 (reach 32, at (208, 254)) without being burned in the
+// platform_no_emissive_ent_1146 (x 254, its top 150 units above the floor) beside fire_agent_ent_1183 (reach 32, at (208, 254)) without being burned in the
 // air, which he says the original lets him do. The port keeps all of a body's x velocity off the floor (the owner's ruling of step 213, a share
 // of 1), so the walk off the end carries 40 units left and burns him on tick 476; player.json gives 2-17 its own rate (a share of 0.602), which
 // lands him 2.7 to 4.6 units outside the reach. This plays the gold route's first seven shots, an exit portal on top of the ledge and the player's
-// own point, then a walk left from tick 455 for L ticks (L 5 and 6 roll over the corner slowly, L 8 and up leave at full speed, 21 holds the key
-// to the landing): every one lives with the shipped table and, as the control, the long ones die with the table's name removed - a test that cannot
+// own point, then a walk left from tick 455 for L ticks (L 5 and 6 roll over the corner slowly, L 7 and 8 leave at a roll, L 9 and up at full speed, 21 holds the key
+// until the landing: a key held through it walks him into the flame, which is a walk and not the drop): every one lives with the shipped table and, as the control, the long ones die with the table's name removed - a test that cannot
 // fail on the ruling's own share proves nothing about the drop.
 // player.json's text without one level's entry of movement.air_decay_rate_hz_by_level (its comma goes with it), for the controls below.
 std::string WithoutAirRateOf(std::string text, const std::string& level) {
@@ -1120,7 +1120,9 @@ void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
         // a death is its own problem, first.
         CHECK_MSG(own.problems.size() == 1 && own.problems.front().find("not won by tick 530") != std::string::npos,
                   label + " is lived at 2-17's own rate (alive on tick 530): " + problems);
-        // The control: a walk that leaves the ledge at full speed (8 ticks and up) is burned at the ruling's share 1.
+        // That he left the ledge and landed, so that a walk that never leaves it cannot pass for the drop (a 4-tick one stays on it):
+        CHECK_MSG(own.census.count("player_landed") != 0, label + " ends with a landing (player_landed heard)");
+        // The control: a walk that leaves the ledge at full speed (9 ticks and up) is burned at the ruling's share 1.
         if (walk >= 9) {
             const Outcome burned = Play(dropPlan(walk), plain, label + " (the ruling's share)", ruling);
             CHECK_MSG(!burned.problems.empty() && burned.problems.front().find("died") != std::string::npos,
@@ -1214,8 +1216,10 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
         // Without the rate (the ruling's share of 1) he flies on over B and into the pit himself; without the capsule B is left a circle and he lands on its
         // other side. Either way the sequence is gone - for the walks that leave the end at speed.
         const Outcome flown = Play(plan(walk), plain, label + " (the ruling's share)", withoutRate);
+        CHECK_MSG(flown.census.count("door_unlocked") != 0, label + " (the ruling's share): the control ran to B's fall, the key opened the door: " + describe(flown));
         CHECK_MSG(!sequence(flown), label + " is not the sequence at the ruling's share of 1, or the test never reaches the drop: " + describe(flown));
         const Outcome circle = Play(plan(walk), plain, label + " (the circle)", withoutCapsule);
+        CHECK_MSG(circle.census.count("door_unlocked") != 0, label + " (the circle): the control ran to B's fall, the key opened the door: " + describe(circle));
         CHECK_MSG(!sequence(circle), label + " is not the sequence with the knight a circle, or the test never reaches the drop: " + describe(circle));
     }
     std::filesystem::remove_all(root, ec);

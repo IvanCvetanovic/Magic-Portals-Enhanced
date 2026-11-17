@@ -145,12 +145,14 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
               const std::filesystem::path& prismDirectory, Data& out, std::string& error,
               const std::string& portDataDirectory) {
     Data read;
+    // The level's name as the converter writes it, its file's stem: what resting.json, contact_order.json and the two per-level tables key on.
+    read.levelName = std::filesystem::path(levelPath).stem().string();
     if (!Tscn::Load(levelPath, read.scene, error)) return false;
     if (!Roles::Load(dataDirectory + "/entity_roles.json", read.roles, error)) return false;
     if (!Player::LoadTuning(dataDirectory + "/player.json", read.tuning, error)) return false;
     // The level's own air-brake rate, where player.json names one (movement.air_decay_rate_hz_by_level, planning step 252): the
     // level is its file's stem, the name the converter wrote it under.
-    Player::ForLevel(read.tuning, std::filesystem::path(levelPath).stem().string());
+    Player::ForLevel(read.tuning, read.levelName);
     if (!LevelBuilder::LoadMaterials(portDataDirectory + "/materials.json", read.materials, error)) return false;
     if (!Goals::LoadRules(dataDirectory + "/portals.json", read.goals, error)) return false;
     // After it, which starts the rules afresh: what takes a crystal, decoded (MainCharacter::crystalPicker, planning step 243).
@@ -188,7 +190,7 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Hinge::LoadRules(portDataDirectory + "/hinge.json", read.hinge, error)) return false;
     if (!Minions::LoadRules(portDataDirectory + "/minions.json", read.minions, error)) return false;
     // The original's two-circle body for the levels minions.json body.capsule names (planning step 253).
-    Minions::ForLevel(read.minions, std::filesystem::path(levelPath).stem().string());
+    Minions::ForLevel(read.minions, read.levelName);
     if (!Keys::LoadRules(portDataDirectory + "/keys.json", read.keys, error)) return false;
     if (!RedKey::LoadRules(portDataDirectory + "/keys.json", read.redKey, error)) return false;
     if (!Diamonds::LoadRules(portDataDirectory + "/diamonds.json", read.diamonds, error)) return false;
@@ -213,7 +215,6 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!ContactOrder::LoadRules(portDataDirectory + "/contact_order.json", read.contactOrder, error)) return false;
     // The friction between the player and a rolling stone (sim/StoneGrip).
     if (!StoneGrip::LoadRules(portDataDirectory + "/stone_grip.json", read.stoneGrip, error)) return false;
-    read.levelName = std::filesystem::path(levelPath).stem().string();
     // The entities a boss adds that no level places (sim/Restock): read beside the
     // level, whose root lighting the table's scene takes, and built by no one until
     // a restock asks for one.

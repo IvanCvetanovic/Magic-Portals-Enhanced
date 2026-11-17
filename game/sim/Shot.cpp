@@ -17,8 +17,10 @@ namespace MagicPortals::Shot {
 
 using glm::dvec2;
 using Supersonic::BoxColliderComponent;
+using Supersonic::CapsuleColliderComponent;
 using Supersonic::ConvexHullColliderComponent;
 using Supersonic::SphereColliderComponent;
+using Supersonic::TagComponent;
 using Supersonic::TransformComponent;
 
 namespace {
@@ -155,7 +157,7 @@ namespace {
 // with the body - a box's four corners, a hull's outline, or a sphere's centre
 // and radius - skipping the bodies in `ignore` and, unless `sensors`, every
 // trigger. One walk for the three questions below, in the registry's order:
-// boxes, then spheres, then hulls.
+// boxes, then spheres, then capsules that are not the player's, then hulls.
 template <class Polygon, class Circle>
 void EachShape(entt::registry& registry, std::span<const entt::entity> ignore, bool sensors, Polygon&& polygon,
                Circle&& circle) {
@@ -175,6 +177,23 @@ void EachShape(entt::registry& registry, std::span<const entt::entity> ignore, b
         if (ignored(entity) || (sphere.isTrigger && !sensors)) continue;
         const Frame frame(transform);
         circle(entity, frame(dvec2(sphere.center.x, sphere.center.y)), static_cast<double>(sphere.radius));
+    }
+    // A capsule is the stadium of its two circles and the rectangle between them. The only ones the port builds are the player's, which no shot meets (the
+    // dragons ask with no body to ignore and rely on that, and the knights' sight tests his circles apart), and the original's body of a knight in the levels
+    // minions.json body.capsule names (planning step 253), which a shot's ray, a tap on it and the push test meet as they met its circle.
+    for (auto [entity, transform, capsule] : registry.view<TransformComponent, CapsuleColliderComponent>().each()) {
+        if (ignored(entity) || (capsule.isTrigger && !sensors)) continue;
+        if (const auto* tag = registry.try_get<TagComponent>(entity); tag != nullptr && tag->tag == "player") continue;
+        const Frame frame(transform);
+        const dvec2 centre(capsule.center.x, capsule.center.y);
+        const double radius = static_cast<double>(capsule.radius);
+        const double reach = std::max(static_cast<double>(capsule.height) * 0.5 - radius, 0.0); // its height is the whole capsule, caps included
+        if (reach > 0.0) {
+            polygon(entity, std::vector<dvec2>{frame(centre + dvec2(-radius, -reach)), frame(centre + dvec2(radius, -reach)),
+                                               frame(centre + dvec2(radius, reach)), frame(centre + dvec2(-radius, reach))});
+        }
+        circle(entity, frame(centre + dvec2(0.0, -reach)), radius);
+        if (reach > 0.0) circle(entity, frame(centre + dvec2(0.0, reach)), radius);
     }
     for (auto [entity, transform, hull, outline] :
          registry.view<TransformComponent, ConvexHullColliderComponent, LevelBuilder::PlanePolygon>().each()) {

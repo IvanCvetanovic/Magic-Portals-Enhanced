@@ -293,7 +293,7 @@ void Steer(entt::registry& registry, entt::entity player, const Tuning& tuning, 
         }
     } else {
         // #63-84: the pad is ignored and the body keeps min(1, GetFPSRate() / 60 x 0.86) of its x - evaluated at the file's
-        // air_decay_rate_hz (120: all of it, planning step 213), not at the tick's rate.
+        // air_decay_rate_hz (120: all of it, planning step 213; the level's own in 2-17 and 3-21, planning steps 252 and 253), not at the tick's rate.
         rigid.velocity.x *= static_cast<float>(AirShare(tuning, step));
     }
 

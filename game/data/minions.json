@@ -160,9 +160,9 @@
       "collision size of 14 x 36, with fixedRotation=1, density=0.5, gravityScale=1,",
       "sensor=0. LevelBuilder can build a rigid circle and nothing else, so the port builds",
       "one circle of the body's half-width. A minion is therefore shorter than the",
-      "original's capsule; it patrols level floors, so its collisions in worlds 3-4 do not",
-      "turn on the difference, but a capsule builder would be the honest fix. Its ARRIVAL",
-      "does, and entity_above_feet_px below is what squares it.",
+      "original's capsule. Its collisions DO turn on the difference where a knight is pushed or a shot meets it (3-21, planning step 253), so the capsule below is built for the",
+      "levels body.capsule names and every other level keeps the circle (backlog G1b-6). Its ARRIVAL",
+      "turns on it too, and entity_above_feet_px below is what squares it.",
       "",
       "fixedRotation=1 is NOT a detail here, and the suite proved it. A circle that may turn",
       "rolls under friction rather than stopping, so a guard that stops being driven inside the",
@@ -180,10 +180,11 @@
         "18.2 wide and 36.2 tall. It is built with its bottom where the one circle's is (the feet stand where they stood) and its centre at the ENTITY point, EntityAboveCentrePx over",
         "the circle's centre, so every number measured from the entity point or from the feet - the waypoints, arrive_px, settle_px, the sight's origin - is unchanged. Refused",
         "unless the height's half is entity_above_feet_px, which is what makes that true.",
-        "WHY ONLY SOME LEVELS: tried on every level, the capsule changes 8 of the 128 routes (3-20, 3-29, 3-30, 3-31, 3-32, 4-28, 4-29 and 4-31: deaths to a knight's shot, one tap off the view,",
-        "five not won), each of which would have to be re-authored; the move to every level is backlog G1b-6. A level is named here when its own route still wins with it AND a report needs it.",
+        "WHY ONLY SOME LEVELS: tried on every level (a scratch build), the capsule changes 5 of the 128 routes (3-09, 3-20, 4-25, 4-29 and 4-31: three die, two are not won), each of which",
+        "would have to be re-authored (before the shot's and the arrival's code saw a capsule at all it changed 8, so the count depends on the rest of the code); the move to every level is",
+        "backlog G1b-6. A level is named here when its own route still wins with it AND a report needs it: a table policy of the maintainer's, not a ruling of the owner's.",
         "3-21 (level20b), the owner, 2026-11-17: pushed off the platform, knight B can be shoved further left WHILE IT FALLS in the original, leaving room to jump down to its right. With the",
-        "circle B ends at x 91 to 99 (the player's capsule is clear of it a few ticks after the edge); with this body, whose 36 units stay alongside the player's longer, at 74 to 83. Not measured on the original."
+        "circle B ends at x 91 to 99; with this body, whose 36 units stay alongside the player's longer (an inference from the positions), at 74 to 83. Not measured on the original."
       ]
     },
     "entity_above_feet_px": 18.1,

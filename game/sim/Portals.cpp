@@ -77,11 +77,13 @@ std::optional<double> OutlineBottomAt(const std::vector<glm::dvec2>& outline, do
 }
 
 // Where `atPx` should be for a traveller put down there: itself, unless the traveller is a capsule whose axis's top end is inside a hull that is over it
-// (see above), and then just under the lowest such hull. The capsule's centre is the body's position, as the player's is built (Player.cpp).
+// (see above), and then just under the lowest such hull. The capsule's centre is the body's position, as the player's is built (Player.cpp), or above it by
+// the collider's own `center` (a knight's, in the levels minions.json body.capsule names: its centre is the entity point, 11.1 over the body).
 glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const glm::dvec2& atPx) {
     const auto* capsule = registry.try_get<CapsuleColliderComponent>(body);
     if (capsule == nullptr) return atPx;
     const double radiusPx = static_cast<double>(capsule->radius) * Units::kPixelsPerMetre;
+    const double centreUpPx = static_cast<double>(capsule->center.y) * Units::kPixelsPerMetre; // 0 for the player
     const double halfAxisPx =
         std::max(static_cast<double>(capsule->height) * 0.5 - static_cast<double>(capsule->radius), 0.0) *
         Units::kPixelsPerMetre;
@@ -90,7 +92,7 @@ glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const
     // and the ones the contact itself moves (a dynamic body) are left out.
     std::vector<entt::entity> candidates;
     Supersonic::PhysicsSystem::OverlapSphere(registry, Units::ToWorld(atPx.x, atPx.y),
-                                             Units::ToMetres(radiusPx + (kMostLowerings + 1) * halfAxisPx), candidates, body, false);
+                                             Units::ToMetres(radiusPx + (kMostLowerings + 1) * halfAxisPx + std::fabs(centreUpPx)), candidates, body, false);
     std::vector<std::vector<glm::dvec2>> outlines;
     for (const entt::entity solid : candidates) {
         if (registry.try_get<ConvexHullColliderComponent>(solid) == nullptr) continue;
@@ -103,7 +105,8 @@ glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const
 
     glm::dvec2 at = atPx;
     for (int pass = 0; pass < kMostLowerings; ++pass) {
-        const glm::dvec2 top(at.x, at.y - halfAxisPx);
+        // The exit is where the body's position is put, in free air; a capsule's own centre can lie `centreUpPx` over it, and so can its axis's top end.
+        const glm::dvec2 top(at.x, at.y - centreUpPx - halfAxisPx);
         std::optional<double> lowest;
         for (const std::vector<glm::dvec2>& outline : outlines) {
             if (!OutlineHolds(outline, top) || OutlineHolds(outline, at)) continue;
@@ -111,7 +114,7 @@ glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const
             if (bottom && (!lowest || *bottom > *lowest)) lowest = bottom;
         }
         if (!lowest) break;
-        at.y = *lowest + kAxisClearancePx + halfAxisPx;
+        at.y = *lowest + kAxisClearancePx + halfAxisPx + centreUpPx;
     }
     return at;
 }

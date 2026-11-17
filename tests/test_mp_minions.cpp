@@ -50,11 +50,13 @@
 #include "core/PhysicsSystem.hpp"
 #include "sim/Achievements.hpp"
 #include "sim/Art.hpp"
+#include "sim/Chapters.hpp"
 #include "sim/Game.hpp"
 #include "sim/Minions.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Roles.hpp"
 #include "sim/ScriptClock.hpp"
+#include "sim/Shot.hpp"
 #include "sim/Tscn.hpp"
 #include "sim/Units.hpp"
 
@@ -65,6 +67,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -1018,6 +1021,21 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
             if (minion.body != entt::null) check(minion.body, minion.name);
         }
         CHECK_EQ(built, 3); // knights A, B and C
+        // A shot's ray meets a capsule knight (Shot walked boxes, circles and hulls only): 10 above the entity point, where the circle of 7 was not, and
+        // never the player's own capsule, which the dragons' and the sight's rules rely on being invisible to it.
+        for (const auto& minion : run.level.minions.minions) {
+            if (minion.body == entt::null) continue;
+            const glm::dvec2 bodyPx = Units::ToPixels(run.registry.get<TransformComponent>(minion.body).position);
+            const glm::dvec2 entityPx = bodyPx - glm::dvec2(0.0, rules.EntityAboveCentrePx());
+            const double y = entityPx.y - 10.0;
+            const std::optional<Shot::Hit> hit = Shot::FirstBody(run.registry, glm::dvec2(entityPx.x - 20.0, y), glm::dvec2(entityPx.x, y), entt::null);
+            CHECK_MSG(hit.has_value() && hit->body == minion.body, minion.name + ": a ray 10 above its entity point meets its capsule");
+            const std::optional<Shot::Hit> contact = Shot::ClosestContact(run.registry, glm::dvec2(entityPx.x - 20.0, y), glm::dvec2(entityPx.x, y), run.level.player);
+            CHECK_MSG(contact.has_value(), minion.name + ": and so does the push test's ray (Player::Pushing)");
+        }
+        const glm::dvec2 playerPx = Units::ToPixels(run.registry.get<TransformComponent>(run.level.player).position);
+        const std::optional<Shot::Hit> onPlayer = Shot::FirstBody(run.registry, playerPx - glm::dvec2(4.0, 0.0), playerPx + glm::dvec2(4.0, 0.0), entt::null);
+        CHECK_MSG(!onPlayer.has_value() || onPlayer->body != run.level.player, "a shot still never meets the player's own capsule");
         // One summoned there is built the same way.
         const entt::entity summoned = run.level.minions.Summon(run.registry, "knight", glm::dvec2(500.0, 100.0), {});
         CHECK(summoned != entt::null);
@@ -1071,6 +1089,28 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     std::filesystem::remove_all(dir, ec);
 }
 
+// THE BLAST RADIUS (planning steps 252 and 253): of the 128 levels, the two the tables name play their own rate and one of them the knight's capsule, and
+// every other level loads exactly as before.
+void onlyTheNamedLevelsPlayTheirOwnRateAndBody() {
+    Chapters::Table chapters;
+    std::string error;
+    CHECK_MSG(Chapters::Load(MAGICPORTALS_CHAPTERS_FILE, chapters, error), error);
+    int seen = 0;
+    for (const auto& entry : chapters.levels) {
+        Game::Data data;
+        const bool ok = Game::LoadData(kLevels + "/" + entry.name + ".tscn", kData,
+                                       std::filesystem::temp_directory_path() / "supersonic-test-mp-minions", data, error);
+        CHECK_MSG(ok, entry.name + std::string(": ") + error);
+        if (!ok) continue;
+        ++seen;
+        const bool airOwn = entry.name == "level16a" || entry.name == "level20b";
+        CHECK_MSG((data.tuning.airRateHz == 42.0) == airOwn && (airOwn || data.tuning.airRateHz == 120.0),
+                  entry.name + " plays at " + std::to_string(data.tuning.airRateHz) + " Hz");
+        CHECK_MSG(data.minions.capsuleOn == (entry.name == "level20b"), entry.name + ": the knight's capsule is on only for 3-21");
+    }
+    CHECK_EQ(seen, 128);
+}
+
 void runTests() {
     theWalkIsTheDecodedSpeedNotTheRemakesGuess();
     aMarkerResolvesItsWaypointsByPrefix();
@@ -1091,6 +1131,7 @@ void runTests() {
     anEntityTheRulesDoNotKnowIsRefused();
     theBlackKnightsBodyIsAMinions();
     theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel();
+    onlyTheNamedLevelsPlayTheirOwnRateAndBody();
 }
 
 } // namespace

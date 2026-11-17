@@ -77,7 +77,7 @@ struct Tuning {
     double airDecayFps = 0.0;   // movement.air_decay_fps: ...at this GetFPSRate (the 60 of fps / 60)
     double airRateHz = 0.0;     // movement.air_decay_rate_hz: the GetFPSRate the port EVALUATES the formula at (the owner's ruling, planning step 213)
     // movement.air_decay_rate_hz_by_level: a level's own rate, by its name as the converter writes it ("level16a" for 2-17), which ForLevel puts
-    // in airRateHz. Empty for a level the file does not name. The owner's request for one level's drop (planning step 252), a guess.
+    // in airRateHz. Empty for a level the file does not name. The levels are the owner's reports of two levels' drops (planning steps 252 and 253), a guess.
     std::map<std::string, double> airRateByLevel;
     double worldGravity = 0.0;  // gravity.world_m_s2: the world's scale(10)
     double gravityScale = 0.0;  // gravity.scale: SetGravityScale(2)
@@ -116,7 +116,7 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error);
 
 // The tuning one level plays: `tuning` with airRateHz replaced by the level's own rate where player.json names the level
 // (movement.air_decay_rate_hz_by_level), untouched where it does not. `level` is the name the converter writes, the stem of the
-// level's file ("level16a"). Idempotent: the table stays, so a level asked twice gets the same answer.
+// level's file ("level16a"). It only overwrites, never restores: call it once on a tuning freshly loaded for that level (Game::LoadData does).
 void ForLevel(Tuning& tuning, const std::string& level);
 
 entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tuning& tuning);
@@ -167,7 +167,7 @@ double WalkCarried(const Tuning& tuning, const ScriptClock::Step& step);
 // min(1, fps / 60 x 0.86) - 0.86 at 60, 0.43 at 30, 1 from 70 frames a second.
 double AirShareAt(const Tuning& tuning, double fps);
 
-// The share the port uses a tick: the formula at movement.air_decay_rate_hz, NOT at the tick's own rate. The original's brake
+// The share the port uses a tick: the formula at movement.air_decay_rate_hz (or the level's own, movement.air_decay_rate_hz_by_level: 2-17 and 3-21), NOT at the tick's own rate. The original's brake
 // depends on the phone's frame rate and the port plays the same on every phone, so one rate has to be chosen; the owner chose
 // 120 Hz (his phone's, planning step 213), where it is 1 and a body off the floor keeps all its x velocity. `step` is not read.
 double AirShare(const Tuning& tuning, const ScriptClock::Step& step);
