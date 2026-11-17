@@ -86,6 +86,28 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         }
         read.*(field.field) = value.AsNumber();
     }
+    // movement.air_decay_rate_hz_by_level (planning step 252): optional, a level's name to the rate its air brake is evaluated at. A
+    // file without it plays every level at air_decay_rate_hz; one that names a level a rate of nothing, or a name of nothing, is
+    // refused rather than read as "no brake" or as a level that cannot be found.
+    if (root["movement"].Has("air_decay_rate_hz_by_level")) {
+        const Json::Value& byLevel = root["movement"]["air_decay_rate_hz_by_level"];
+        if (!byLevel.IsObject()) {
+            error = path + ": movement.air_decay_rate_hz_by_level is not an object";
+            return false;
+        }
+        for (const std::string& level : byLevel.OrderedKeys()) {
+            const Json::Value& rate = byLevel[level];
+            if (level.empty() || level.front() == '_') {
+                error = path + ": movement.air_decay_rate_hz_by_level names a level '" + level + "'; a comment belongs in the key beside the table";
+                return false;
+            }
+            if (!rate.IsNumber() || !(rate.AsNumber() > 0.0)) {
+                error = path + ": movement.air_decay_rate_hz_by_level." + level + " is not a number above zero";
+                return false;
+            }
+            read.airRateByLevel[level] = rate.AsNumber();
+        }
+    }
     // The capsule is the hull of dark_mage.ent's two circles, and the two numbers a reader sees are what they come to: a
     // circle's radius is its share of half the box's width, its centre its share of half the box's height (ETHCompoundShape.cpp:
     // 65-71), so the hull is 2 x radius wide and 2 x (centre + radius) tall. A file whose width and height say otherwise is
@@ -105,6 +127,11 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
     read.screenPxPerUnit = read.referencePxPerUnit;
     out = read;
     return true;
+}
+
+void ForLevel(Tuning& tuning, const std::string& level) {
+    const auto own = tuning.airRateByLevel.find(level);
+    if (own != tuning.airRateByLevel.end()) tuning.airRateHz = own->second;
 }
 
 double WalkOriginal(const Tuning& tuning, const ScriptClock::Step& step) {

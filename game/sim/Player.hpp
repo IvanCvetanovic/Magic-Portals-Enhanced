@@ -56,6 +56,7 @@
 
 #include "sim/ScriptClock.hpp"
 
+#include <map>
 #include <string>
 
 #include <entt/entt.hpp>
@@ -75,6 +76,9 @@ struct Tuning {
     double airDecay = 0.0;      // movement.air_decay: the x velocity kept a frame off the floor...
     double airDecayFps = 0.0;   // movement.air_decay_fps: ...at this GetFPSRate (the 60 of fps / 60)
     double airRateHz = 0.0;     // movement.air_decay_rate_hz: the GetFPSRate the port EVALUATES the formula at (the owner's ruling, planning step 213)
+    // movement.air_decay_rate_hz_by_level: a level's own rate, by its name as the converter writes it ("level16a" for 2-17), which ForLevel puts
+    // in airRateHz. Empty for a level the file does not name. The owner's request for one level's drop (planning step 252), a guess.
+    std::map<std::string, double> airRateByLevel;
     double worldGravity = 0.0;  // gravity.world_m_s2: the world's scale(10)
     double gravityScale = 0.0;  // gravity.scale: SetGravityScale(2)
     double maxTranslationM = 0.0;       // gravity.max_translation_m: b2_maxTranslation, Box2D metres a step
@@ -109,6 +113,11 @@ struct Tuning {
 // From player.json. False, with `error`, when a number is missing: player.gd falls
 // back to literals, the port does not invent them.
 bool LoadTuning(const std::string& path, Tuning& out, std::string& error);
+
+// The tuning one level plays: `tuning` with airRateHz replaced by the level's own rate where player.json names the level
+// (movement.air_decay_rate_hz_by_level), untouched where it does not. `level` is the name the converter writes, the stem of the
+// level's file ("level16a"). Idempotent: the table stays, so a level asked twice gets the same answer.
+void ForLevel(Tuning& tuning, const std::string& level);
 
 entt::entity Spawn(entt::registry& registry, const glm::dvec2& atPx, const Tuning& tuning);
 

@@ -75,6 +75,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <random>
@@ -1034,6 +1035,82 @@ void TheMedalKeyIsHeldToOneTwoOrThree() {
     std::filesystem::remove_all(dir, ec);
 }
 
+// 2-17's WALK OFF THE LEDGE NEXT TO THE FLAME (planning step 252; backlog DROP-1). The owner cannot drop from the left end of
+// platform_no_emissive_ent_1146 (x 254, 156 units above the floor) beside fire_agent_ent_1183 (reach 32, at (208, 254)) without being burned in the
+// air, which he says the original lets him do. The port keeps all of a body's x velocity off the floor (the owner's ruling of step 213, a share
+// of 1), so the walk off the end carries 40 units left and burns him on tick 476; player.json gives 2-17 its own rate (a share of 0.602), which
+// lands him 2.7 to 4.6 units outside the reach. This plays the gold route's first seven shots, an exit portal on top of the ledge and the player's
+// own point, then a walk left from tick 455 for L ticks (L 5 and 6 roll over the corner slowly, L 8 and up leave at full speed, 21 holds the key
+// to the landing): every one lives with the shipped table and, as the control, the long ones die with the table's name removed - a test that cannot
+// fail on the ruling's own share proves nothing about the drop.
+void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
+    Route::Plan gold;
+    std::string error;
+    CHECK_MSG(Route::Load(kRoutes + "/level16a.json", gold, error), error);
+    if (gold.level != "level16a") return;
+    const auto dropPlan = [&](int walkTicks) {
+        Route::Plan plan = gold;
+        plan.medal = 0;
+        plan.winBy = 530; // the walk is over by 476 and the landing by 490: the plan's last tick finds him standing or dead
+        for (Route::Tap& tap : plan.taps) {
+            if (tap.tick == 372) tap.atPx = glm::dvec2(270.0, 85.0); // the exit on top of 1146, not in the right room
+            if (tap.tick == 427) {                                   // his own point, once that exit is open
+                tap.tick = 440;
+                tap.releaseTick = 441;
+            }
+        }
+        plan.holds.resize(2); // the two walks of the left room; the gold route's third (right, from 452) is not this route's
+        plan.holds.push_back(Route::Hold{455, 455 + walkTicks, -1.0f});
+        return plan;
+    };
+
+    // The control's data: Enhanced's tables as shipped, but for player.json without 2-17's name.
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "supersonic-test-mp-routes-drop217";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::create_directories(dir, ec);
+    for (const auto& entry : std::filesystem::directory_iterator(kData)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            std::filesystem::copy_file(entry.path(), dir / entry.path().filename(), std::filesystem::copy_options::overwrite_existing, ec);
+        }
+    }
+    {
+        std::string text;
+        {
+            std::ifstream in(kData + "/player.json", std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        const std::string named = "\"level16a\": 42.0";
+        const std::size_t at = text.find(named);
+        CHECK_MSG(at != std::string::npos, "player.json names level16a at 42.0 (this control removes the name)");
+        if (at != std::string::npos) text.erase(at, named.size());
+        std::ofstream out(dir / "player.json", std::ios::binary | std::ios::trunc);
+        out << text;
+    }
+    MagicPortalsLayer::Paths ruling = RoutePaths();
+    ruling.data = dir.string();
+
+    const Options plain{};
+    for (const int walk : {5, 6, 7, 8, 9, 12, 21}) {
+        const std::string label = "2-17 walk off 1146's left end, " + std::to_string(walk) + " ticks";
+        const Outcome own = Play(dropPlan(walk), plain, label);
+        std::string problems;
+        for (const std::string& problem : own.problems) problems += (problems.empty() ? "" : "; ") + problem;
+        // A plan that is not a route to the door ends at its win_by with the one problem "not won by tick N": alive and standing on the floor;
+        // a death is its own problem, first.
+        CHECK_MSG(own.problems.size() == 1 && own.problems.front().find("not won by tick 530") != std::string::npos,
+                  label + " is lived at 2-17's own rate (alive on tick 530): " + problems);
+        // The control: a walk that leaves the ledge at full speed (8 ticks and up) is burned at the ruling's share 1.
+        if (walk >= 9) {
+            const Outcome burned = Play(dropPlan(walk), plain, label + " (the ruling's share)", ruling);
+            CHECK_MSG(!burned.problems.empty() && burned.problems.front().find("died") != std::string::npos,
+                      label + " burns at the ruling's share of 1, or the test never reaches the drop: " +
+                          (burned.problems.empty() ? std::string("no problem") : burned.problems.front()));
+        }
+    }
+    std::filesystem::remove_all(dir, ec);
+}
+
 void RunRoutes(const Options& options) {
     MagicPortals::Chapters::Table chapters;
     std::string error;
@@ -1109,6 +1186,7 @@ void RunRoutes(const Options& options) {
         CHECK_MSG(g_displayChecked == static_cast<int>(std::size(kDisplayRoutes)),
                   "the display check ran on " + std::to_string(g_displayChecked) + " routes, not the " + std::to_string(std::size(kDisplayRoutes)) + " it names");
         TheMedalKeyIsHeldToOneTwoOrThree();
+        TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt();
     }
 }
 

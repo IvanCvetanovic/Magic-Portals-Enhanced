@@ -148,6 +148,9 @@ bool LoadData(const std::string& levelPath, const std::string& dataDirectory,
     if (!Tscn::Load(levelPath, read.scene, error)) return false;
     if (!Roles::Load(dataDirectory + "/entity_roles.json", read.roles, error)) return false;
     if (!Player::LoadTuning(dataDirectory + "/player.json", read.tuning, error)) return false;
+    // The level's own air-brake rate, where player.json names one (movement.air_decay_rate_hz_by_level, planning step 252): the
+    // level is its file's stem, the name the converter wrote it under.
+    Player::ForLevel(read.tuning, std::filesystem::path(levelPath).stem().string());
     if (!LevelBuilder::LoadMaterials(portDataDirectory + "/materials.json", read.materials, error)) return false;
     if (!Goals::LoadRules(dataDirectory + "/portals.json", read.goals, error)) return false;
     // After it, which starts the rules afresh: what takes a crystal, decoded (MainCharacter::crystalPicker, planning step 243).

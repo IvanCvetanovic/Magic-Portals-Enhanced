@@ -55,6 +55,18 @@
       "60 Hz or above: the rig cannot run it there, and a model of it (step 213's research) says the original's own jump needs about 30 frames a second.",
       "The decoded 0.86 and 60 stay as the formula's immediates; Player::AirShareAt takes any rate and the tests pin it at 60, 30, 17 and 120."
     ],
+    "air_decay_rate_hz_by_level": {
+      "level16a": 42.0
+    },
+    "_air_decay_rate_hz_by_level": [
+      "THE OWNER'S REQUEST, 2026-11-17 (planning step 252; backlog DROP-1; the same complaint as his of 2026-11-08): 2-17 (level16a) is evaluated at 42 Hz, a share of 0.602, not at the 120 above. A GUESS, NOT A MEASUREMENT OF THE",
+      "ORIGINAL: no clip of the original doing this drop exists, and the original's share is min(1, fps / 60 x 0.86) of the phone it runs on. Why this level and not the whole game: the ruling above (120 Hz, a share of 1) is what gives",
+      "1-04 its gold, 2-30 its leap and the 20 routes step 213 re-timed, and 2-17's drop needs a share under 0.7: no single rate serves both (step 230), so the one level the owner cannot play at 1.0 plays at its own.",
+      "WHAT IT BUYS: walking left off platform_no_emissive_ent_1146's left end (x 254, the one ledge of 2-17 within the flame's reach) lands the player at x 242.7 to 244.6 on the floor, 34.7 to 36.6 units from fire_agent_ent_1183 (reach 32), for a held",
+      "walk and for every tap from 5 ticks up (a 4-tick tap stays on the ledge); at the ruling's share 1 the same walk burns him in the air at 19.0 (tick 476), at the decoded 0.86 at 30.7. Measured by replay on the port (planning step 252): every",
+      "share tried from 0.3 to 0.7, in steps of 0.05, lives, 0.7 by 0.8 unit only; 0.6 is the middle of the band, 2.7 units off the flame at the least and 0.3 off the ledge's face at the least (the player's centre must stay between x 239.9 and 244.9 as he falls).",
+      "To give another level its own rate, name it here; a level not named plays at air_decay_rate_hz."
+    ],
     "_air_decay": [
       "DECODED FORMULA (applyForces ins 75-79): min(1, GetFPSRate() / 60 x 0.86). The port evaluates it at `air_decay_rate_hz` above (the owner's ruling, planning step 213), where it is 1; at the",
       "matched 60 Hz it was 0.86 (the spec's ruling, step CK's clock) from step 148 to step 213. GetFPSRate is the video's frames counted over a window just over a second long, times that window (GLES2Video.cpp",

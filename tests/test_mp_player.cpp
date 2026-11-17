@@ -125,9 +125,9 @@ std::string TuningText(const std::string& speed = "3", const std::string& scale 
                        const std::string& world = "10",
                        const std::string& hold = "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, "
                                                  "\"probe_line_tol_px\": 0.05}",
-                       const std::string& body = kBody) {
+                       const std::string& body = kBody, const std::string& movementExtra = "") {
     return "{\"movement\": {\"speed\": " + speed + ", \"elapsed_cap_ms\": 66, \"air_decay\": 0.86, "
-           "\"air_decay_fps\": 60, \"air_decay_rate_hz\": 120}, \"gravity\": {\"world_m_s2\": " + world + ", \"scale\": " + scale +
+           "\"air_decay_fps\": 60, \"air_decay_rate_hz\": 120" + movementExtra + "}, \"gravity\": {\"world_m_s2\": " + world + ", \"scale\": " + scale +
            ", \"max_translation_m\": 2, \"reference_px_per_unit\": 2.8125}, \"body\": " + body + ", "
            "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"offset_box_share\": 0.5, \"touch_px\": 0.5}, "
            "\"hold\": " + hold + "}";
@@ -1150,11 +1150,72 @@ void ThePlayerRestsAtHisBodysHeightOnAFloorARampAndACrate() {
     CHECK_MSG(Player::Grounded(registry, rider, tuning), "standing on the crate");
 }
 
+// A level's own air-brake rate (planning step 252): the owner's request for 2-17's walk-off, a guess. The base is the ruling of step 213
+// (120 Hz, a share of 1) and stays the base for every level the table does not name - 1-04 (level3) and 2-30 (level29a) need it.
+void ALevelMayHaveItsOwnAirBrakeAndNoOtherLevelDoes() {
+    const Player::Tuning base = ReadTuning();
+    CHECK_EQ(base.airRateHz, 120.0);
+    // The shipped table names 2-17 and nothing else: a second name would take another level off the ruling unseen.
+    CHECK_EQ(base.airRateByLevel.size(), static_cast<std::size_t>(1));
+    CHECK_MSG(base.airRateByLevel.count("level16a") == 1, "2-17 (level16a) is the level the table names");
+    CHECK_EQ(base.airRateByLevel.at("level16a"), 42.0);
+
+    Player::Tuning own = base;
+    Player::ForLevel(own, "level16a");
+    CHECK_EQ(own.airRateHz, 42.0);
+    // The formula at 42 Hz: min(1, 42 / 60 x 0.86) = 0.602, the share the drop off 1146's left end is lived at (the replay is in test_mp_routes).
+    const ScriptClock::Step step = ScriptClock::TickStep(ReadRules(), kTick);
+    CHECK_WITHIN(Player::AirShare(own, step), 0.86 * 42.0 / 60.0, 1e-12);
+    // Idempotent, and the other levels - above all the two whose reach needs a share of 1 - are untouched.
+    Player::ForLevel(own, "level16a");
+    CHECK_EQ(own.airRateHz, 42.0);
+    for (const char* level : {"level3", "level29a", "level0", "level16b", "level16", "", "LEVEL16A"}) {
+        Player::Tuning other = base;
+        Player::ForLevel(other, level);
+        CHECK_MSG(other.airRateHz == 120.0, std::string("the level '") + level + "' plays at the ruling's 120 Hz");
+        CHECK_WITHIN(Player::AirShare(other, step), 1.0, 1e-12);
+    }
+
+    // The file's reading: the table is optional, an empty one is the same as none, two names are two rates.
+    Player::Tuning out;
+    std::string error;
+    CHECK_MSG(Load(TuningText(), out, error), error);
+    CHECK(out.airRateByLevel.empty());
+    CHECK_MSG(Load(TuningText("3", "2", "10", "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}",
+                              kBody, ", \"air_decay_rate_hz_by_level\": {}"), out, error), error);
+    CHECK(out.airRateByLevel.empty());
+    CHECK_MSG(Load(TuningText("3", "2", "10", "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}",
+                              kBody, ", \"air_decay_rate_hz_by_level\": {\"a\": 30, \"b\": 60.5}, \"_air_decay_rate_hz_by_level\": [\"a note\"]"),
+                   out, error), error);
+    CHECK_EQ(out.airRateByLevel.size(), static_cast<std::size_t>(2));
+    CHECK_EQ(out.airRateByLevel.at("a"), 30.0);
+    CHECK_EQ(out.airRateByLevel.at("b"), 60.5);
+    CHECK_EQ(out.airRateHz, 120.0); // reading the table does not apply it: only ForLevel does
+    // And what is refused, naming the key: not an object, a rate of nothing or of the wrong kind, a name of nothing, a comment inside the table.
+    const std::pair<std::string, std::string> refused[] = {
+        {", \"air_decay_rate_hz_by_level\": 42", "air_decay_rate_hz_by_level"},
+        {", \"air_decay_rate_hz_by_level\": [\"level16a\"]", "air_decay_rate_hz_by_level"},
+        {", \"air_decay_rate_hz_by_level\": {\"level16a\": 0}", "level16a"},
+        {", \"air_decay_rate_hz_by_level\": {\"level16a\": -3}", "level16a"},
+        {", \"air_decay_rate_hz_by_level\": {\"level16a\": \"42\"}", "level16a"},
+        {", \"air_decay_rate_hz_by_level\": {\"level16a\": null}", "level16a"},
+        {", \"air_decay_rate_hz_by_level\": {\"\": 42}", "air_decay_rate_hz_by_level"},
+        {", \"air_decay_rate_hz_by_level\": {\"_note\": 42}", "air_decay_rate_hz_by_level"},
+    };
+    for (const auto& [extra, key] : refused) {
+        CHECK_MSG(!Load(TuningText("3", "2", "10", "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}",
+                                   kBody, extra), out, error),
+                  "refused: " + extra);
+        CHECK_MSG(error.find(key) != std::string::npos, error);
+    }
+}
+
 void runTests() {
     TheNumbersAreTheListingsAndAFileWithoutThemIsRefused();
     TheWalkIsTwoPointFourUnitsATick();
     TheWalkIsSetOutrightAndStopsDead();
     InTheAirThePadIsIgnoredAndTheXVelocityKeepsTheAirShare();
+    ALevelMayHaveItsOwnAirBrakeAndNoOtherLevelDoes();
     TheBodyIsDarkMagesTwoCirclesAndTheCapsuleIsTheirHull();
     TheFeetAreAnOctagonFourteenWideAndAWalkerLeavesTheGroundSevenClear();
     AMinionsBodyIsGroundAsACrateAndAPlatformAre();
