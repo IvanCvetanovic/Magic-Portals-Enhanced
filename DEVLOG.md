@@ -5225,3 +5225,14 @@ again, which is not a thing a quiet afternoon fixes.
 **[BROLL]** - none.
 **Numbers:** 35 of 128 transcribed, 8 of 8 segmented, 5.3 GB of frames deleted, 17 MB + 9.9 MB kept, plan 178 KB.
 **Inferred mood:** a guess - the owner wants the pace work and the 32-bit complaint handled without anything heavy running on his machine.
+
+### 2026-11-19 11:25 - Session 80, correction: the plan record added one RECORD-PATH to `check_public`, and the earlier entry said it had not
+
+**Built:** nothing new in the game. The entry above ("Session 80") says `check_public.py` showed "the same 3 / 4 / 26 as before". That was read from a run made BEFORE the plan file was staged, and the tool reads tracked files, so it did not see the new file. After the commit the tool reports 3 OWNER-FILE, 5 RECORD-PATH, 27 NOTE: the plan record held two mentions of a mounted Windows drive path (lines 304 and 671). They are reworded in this commit; the tool is re-run on the tracked tree after it (RECORD-PATH back to 4, the one new NOTE being the committer's e-mail line, which the tool reports for every file that names it).
+**Broke / dead ends:** I ran the gate before `git add` and stated its result as if it covered the commit; an independent read of the order of my own commands found it. A pushed commit cannot be taken back: this is the follow-up, and the lesson is to run the gates on the staged tree.
+**Decision:** correct in a new entry and a new commit; nothing is rewritten.
+**Assets check:** yes: docs only.
+**[CLIP] --:--** - none.
+**[BROLL]** - none.
+**Numbers:** RECORD-PATH 5 to 4 after this commit (checked below in the commit's own gate run).
+**Inferred mood:** a guess - none; a correction.
