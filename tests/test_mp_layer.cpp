@@ -1893,6 +1893,35 @@ void TheLevelsStepCountFixesTheFramePhaseAcrossAPauseAndARetry() {
     layer.OnDetach(registry);
 }
 
+// A LEVEL THE CLOCK TABLE NAMES IS PLAYED AT ITS OWN PACE (planning step 262; clock.json original_frame_hz_by_level). 3-22 (level21b) is at the 30 of the owner's videos - an
+// original frame is two ticks, the ratio exactly 1 - and a level the table does not name is at the file's own 60, the ratio 2, from its first step on.
+void ALevelTheClockTableNamesIsPlayedAtItsOwnPace() {
+    struct Case {
+        const char* level;
+        int frameTicks;
+        int hz;
+        double ratio;
+    };
+    for (const Case& one : {Case{"level21b", 2, 30, 1.0}, Case{"level11", 1, 60, 2.0}, Case{"level20b", 1, 60, 2.0}}) {
+        entt::registry registry;
+        publishViewport(registry);
+        MagicPortalsLayer layer(TestPaths(), one.level);
+        layer.OnAttach(registry);
+        CHECK_MSG(layer.SimLevel() != nullptr, std::string(one.level) + ": " + layer.LoadError());
+        if (layer.SimLevel() == nullptr) continue;
+        CHECK_MSG(layer.FrameTicks() == one.frameTicks && layer.OriginalFrameHz() == one.hz,
+                  std::string(one.level) + " is " + std::to_string(layer.FrameTicks()) + " ticks a frame at " + std::to_string(layer.OriginalFrameHz()) + " Hz");
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < 6; ++tick) {
+            tickWith(layer, registry, kRest, {}, {});
+            layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+        }
+        CHECK_MSG(layer.TickStep().frameTicks == one.frameTicks && ScriptClock::SimRatio(layer.TickStep()) == one.ratio,
+                  std::string(one.level) + "'s steps carry the ratio " + std::to_string(ScriptClock::SimRatio(layer.TickStep())));
+        layer.OnDetach(registry);
+    }
+}
+
 void TheShippedPaceIsOneTickAFrameAndEveryPhaseIsZero() {
     entt::registry registry;
     publishViewport(registry);
@@ -16783,6 +16812,67 @@ void TheGhostComesWithItsKnightsDeath() {
                       ") and the sim's key never moved (" + std::to_string(keyMoved) + ")");
         std::printf("  level31b: the key the ghost dropped flew into the keyhole and went on tick %d since the unlock\n", effectGoneAt);
     }
+    layer.OnDetach(registry);
+}
+
+// A FIRE DIAMOND THE GHOST PUT BACK IS DRAWN AGAIN (planning step 262; the owner's report of 2026-11-19 on 3-32: "when the fire diamond respawns I cannot really
+// see it, but I can pick it up again"). A gone diamond's picture is destroyed, and the put-back (Game: `gone` off, no owner, at fire_diamond_spawn) used to leave it
+// destroyed, so the new diamond was only its effects. The diamond is carried (drawn at 0.1), drained, and put back as Game puts one back: the picture is there again, whole.
+void AFireDiamondThePutBackIsDrawnAgain() {
+    if (!OriginalArtIsThere("AFireDiamondThePutBackIsDrawnAgain")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31b");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    // The suites hold the level const; the put-back below is Game's own assignment (Game::Tick, restockDiamond), made by hand.
+    auto& level = const_cast<MagicPortals::Game::Level&>(*layer.SimLevel());
+    const auto step = [&]() {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    };
+    MagicPortals::Diamonds::Diamond* diamond = nullptr;
+    for (MagicPortals::Diamonds::Diamond& one : level.diamonds.diamonds) {
+        if (one.fire) diamond = &one;
+    }
+    CHECK_MSG(diamond != nullptr, "level31b places a fire diamond");
+    if (diamond == nullptr) return;
+    const std::string name = diamond->name;
+    const glm::dvec2 spawnPx = diamond->atPx;
+
+    step();
+    step();
+    CHECK_MSG(layer.DrawnPicture(name).drawn && std::fabs(layer.DrawnPicture(name).alpha - 1.0f) < 1e-6f, "the diamond lying there is drawn whole");
+    // Carried: nearly invisible from the second tick it is held.
+    diamond->owner = level.player;
+    for (int tick = 0; tick < 4; ++tick) step();
+    CHECK_MSG(layer.DrawnPicture(name).drawn && std::fabs(layer.DrawnPicture(name).alpha - 0.1f) < 1e-6f, "carried, it is drawn at 0.1");
+    // Down the drain: gone, and its picture with it.
+    diamond->gone = true;
+    diamond->owner = entt::null;
+    step();
+    step();
+    CHECK_MSG(!layer.DrawnPicture(name).drawn, "a drained diamond has no picture");
+    // Put back, as Game does.
+    diamond->gone = false;
+    diamond->owner = entt::null;
+    diamond->atPx = spawnPx;
+    diamond->fromPx = spawnPx;
+    diamond->toPx = spawnPx;
+    diamond->sinceAimMs = 0.0;
+    step();
+    step();
+    const MagicPortalsLayer::DrawnPictureReport back = layer.DrawnPicture(name);
+    CHECK_MSG(back.drawn, "the diamond put back has its picture again");
+    CHECK_MSG(std::fabs(back.alpha - 1.0f) < 1e-6f, "drawn whole, not at the carried 0.1: " + std::to_string(back.alpha));
+    CHECK_MSG(back.drawn && glm::distance(back.ownerPx, spawnPx) < 1e-6, "at its spawn: " + Point(back.ownerPx));
+    // A diamond that stays gone (the level's drain with no ghost to put one back) stays without a picture.
+    diamond->gone = true;
+    step();
+    step();
+    CHECK_MSG(!layer.DrawnPicture(name).drawn, "and gone again, it has none");
     layer.OnDetach(registry);
 }
 
@@ -35342,6 +35432,7 @@ void runTests() {
     TheBlackKnightCarriesItsAuraAsAMultiply();
     TheBlackKnightsLandingMakesNoTremble();
     TheGhostComesWithItsKnightsDeath();
+    AFireDiamondThePutBackIsDrawnAgain();
     TheDarkDragonIsDrawnAsItsCallbackLeavesIt();
     ARestockedBarrelBlinksFromItsOwnBirth();
     Level31DrawsTheBeholder();
@@ -35373,6 +35464,7 @@ void runTests() {
     AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth();
     TheScriptClockIsTheFloorOfEachTicksMilliseconds();
     TheShippedPaceIsOneTickAFrameAndEveryPhaseIsZero();
+    ALevelTheClockTableNamesIsPlayedAtItsOwnPace();
     TheLevelsStepCountFixesTheFramePhaseAcrossAPauseAndARetry();
     AFireAgentWearsItsOwnFace();
     BlueAndRedKeysKeyholesAndDoorsAreTheirColours();

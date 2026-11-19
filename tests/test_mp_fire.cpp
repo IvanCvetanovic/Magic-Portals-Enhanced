@@ -633,6 +633,53 @@ void AFlameBurnsAMinionOnTheNextTick() {
                 run.level.fire.agents.front().name.c_str());
 }
 
+// A FIREBALL AT A KNIGHT'S HEAD (planning step 262; the owner's report of 2026-11-19 on 3-23: "the fireball goes through the enemies and does not kill it, it only hurts
+// the spot where I tapped"). ETHBeginContactCallback_fireball burns whatever the fireball's circle (9.6) touches, and minion.ent is two circles of 9.1 at +-9 round its
+// entity point: a fireball 14 beside it and 18 over the entity point is 16.6 from the head circle's centre, inside the 18.7 they reach, and is a hit. The port built the
+// knight as ONE circle of 7, 11.1 under the entity point, 32.3 from that fireball and well outside its 16.6: the fireball flew on over his head. So with the table's
+// capsule on (3-23, level22b: minions.json body.capsule.levels) the knight burns, and with the circle (the control, the table's flag turned off) it does not.
+void AFireballAtAKnightsHeadBurnsItWithTheOriginalsBodyAndNotTheCircle() {
+    constexpr const char* kLevel = "level22b";
+    const auto fireOverTheHead = [&](bool capsule, int& burned, bool& spent) {
+        Run run;
+        std::string error;
+        const bool ok = Game::LoadData(kLevels + "/" + kLevel + ".tscn", kData,
+                                       std::filesystem::temp_directory_path() / "supersonic-test-mp-fire", run.data, error);
+        CHECK_MSG(ok, error);
+        if (!ok) return;
+        CHECK_MSG(run.data.minions.capsuleOn, "the shipped table names 3-23: its knights have the original's body");
+        run.data.minions.capsuleOn = capsule; // the control builds the circle every other level has
+        CHECK_MSG(Game::Start(run.data, run.registry, run.level, error), error);
+        if (run.level.minions.minions.empty()) {
+            CHECK_MSG(false, "3-23 places a knight");
+            return;
+        }
+        const entt::entity knight = run.level.minions.minions.front().body;
+        const glm::dvec2 bodyPx = Units::ToPixels(run.registry.get<TransformComponent>(knight).position);
+        const glm::dvec2 entityPx = bodyPx - glm::dvec2(0.0, run.level.minions.rules.EntityAboveCentrePx());
+        Turrets::Fireball ball;
+        ball.name = "test#1";
+        ball.atPx = entityPx + glm::dvec2(-14.0, -18.0);
+        ball.velocityPx = glm::dvec2(130.0, 0.0);
+        ball.killsPlayer = false;
+        run.level.turrets.fireballs.push_back(ball);
+        const int burnedBefore = run.level.minions.burned;
+        for (int tick = 0; tick < 6; ++tick) Tick(run);
+        burned = run.level.minions.burned - burnedBefore;
+        spent = run.level.turrets.fireballs.empty();
+    };
+    int burnedWith = 0;
+    int burnedWithout = 0;
+    bool spentWith = false;
+    bool spentWithout = false;
+    fireOverTheHead(true, burnedWith, spentWith);
+    fireOverTheHead(false, burnedWithout, spentWithout);
+    CHECK_MSG(burnedWith == 1 && spentWith, "with the original's body the fireball burns the knight it passes at head height and is spent on it");
+    CHECK_MSG(burnedWithout == 0, "with the circle (the control) the same fireball flies over him and burns nothing");
+    std::printf("  %s: a fireball 14 beside a knight and 18 over its entity point burned %d with the capsule and %d with the circle\n", kLevel,
+                burnedWith, burnedWithout);
+}
+
 void runTests() {
     TheDecodedNumbersAreNotTheRemakesGuesses();
     TheReaderRefusesWhatWouldBeSilent();
@@ -650,6 +697,7 @@ void runTests() {
     AShotThroughTheFlameBecomesAFireball();
     AShotThatMissesTheFlameFliesOn();
     AFlameBurnsAMinionOnTheNextTick();
+    AFireballAtAKnightsHeadBurnsItWithTheOriginalsBodyAndNotTheCircle();
 }
 
 } // namespace

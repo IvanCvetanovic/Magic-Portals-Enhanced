@@ -174,7 +174,7 @@
     "capsule": {
       "radius_px": 9.1,
       "height_px": 36.2,
-      "levels": ["level20b"],
+      "levels": ["level20b", "level22b", "level18b", "level27c"],
       "_note": [
         "THE ORIGINAL'S BODY, for the levels named in `levels` (planning step 253): minion.ent's two circles of radius 9.1 at +-9 are the hull the player's own capsule is,",
         "18.2 wide and 36.2 tall. It is built with its bottom where the one circle's is (the feet stand where they stood) and its centre at the ENTITY point, EntityAboveCentrePx over",
@@ -184,7 +184,12 @@
         "would have to be re-authored (before the shot's and the arrival's code saw a capsule at all it changed 8, so the count depends on the rest of the code); the move to every level is",
         "backlog G1b-6. A level is named here when its own route still wins with it AND a report needs it: a table policy of the maintainer's, not a ruling of the owner's.",
         "3-21 (level20b), the owner, 2026-11-17: pushed off the platform, knight B can be shoved further left WHILE IT FALLS in the original, leaving room to jump down to its right. With the",
-        "circle B ends at x 91 to 99; with this body, whose 36 units stay alongside the player's longer (an inference from the positions), at 74 to 83. Not measured on the original."
+        "circle B ends at x 91 to 99; with this body, whose 36 units stay alongside the player's longer (an inference from the positions), at 74 to 83. Not measured on the original.",
+        "3-23 (level22b), the owner, 2026-11-19: a fireball (a shot through the fire agent's flame) goes through a knight without killing it, and only burns what stands at the point he tapped. The",
+        "cause is this body: ETHBeginContactCallback_fireball burns whatever the fireball's circle (9.6) touches, and the original's knight reaches 18.7 from either of its two circle centres, 9 over and 9 under",
+        "its entity point, so a fireball over a floor knight at head height (about 179 to 200) touches it; the port's circle of 7 reaches 16.6 from a centre 11.1 under the entity point, which a fireball at that",
+        "height misses by 12 units or more. 3-19 (level18b) and 4-28 (level27c) carry the same fire agent and knights, and are named with it: the capsule moves none of the 128 routes' outcomes there, and",
+        "3-23's own route wins one tick earlier (506, not 507). The knight's body itself is not measured on the original: the two circles are minion.ent's decode."
       ]
     },
     "entity_above_feet_px": 18.1,

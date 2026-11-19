@@ -547,6 +547,64 @@ void ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate() {
     CHECK(!Load(PaceText("40", "30"), refusedOut, refusedError));
 }
 
+// ---- a level's own pace: original_frame_hz_by_level (planning step 262) -----------------------------------------------
+
+void ALevelCanPlayAtItsOwnPaceAndOnlyAtOneTheKeyTakes() {
+    // The shipped file: 3-22 (level21b) at the 30 of the owner's videos, every other level at the file's own 60.
+    const ScriptClock::Rules shipped = ReadRules();
+    CHECK_EQ(shipped.baseOriginalFrameHz, 60);
+    CHECK_MSG(shipped.originalFrameHzByLevel.size() == 1 && shipped.originalFrameHzByLevel.count("level21b") == 1 &&
+                  shipped.originalFrameHzByLevel.at("level21b") == 30,
+              "3-22 (level21b) is the one level the shipped table names, at 30");
+    ScriptClock::Rules rules = shipped;
+    CHECK(rules.ForLevel("level21b"));
+    CHECK_MSG(rules.originalFrameHz == 30 && rules.frameTicks == 2, "level21b plays an original frame in two ticks");
+    CHECK(ScriptClock::SimRatio(ScriptClock::TickStep(rules, kPhysicsStep)) == 1.0);
+    // Back to the file's own for every level the table does not name, and for what is no level at all.
+    for (const char* other : {"level0b", "level21a", "level21bb", "LEVEL21B", ""}) {
+        CHECK(rules.ForLevel("level21b"));
+        CHECK(rules.ForLevel(other));
+        CHECK_MSG(rules.originalFrameHz == 60 && rules.frameTicks == 1, std::string("'") + other + "' plays at the file's own 60");
+    }
+    // A Rules built in code has no table: ForLevel leaves every level at its pace.
+    ScriptClock::Rules bare{};
+    CHECK(bare.ForLevel("level21b"));
+    CHECK(bare.originalFrameHz == 60 && bare.frameTicks == 1);
+
+    // The table beside a file's own pace of 30: one level back at 60, the rest at 30, and ForLevel puts the FILE's pace back (not the
+    // last level's).
+    const auto text = [](const std::string& base, const std::string& table) {
+        return "{\"matched_hz\": 60, \"snap_ms\": 0.001, \"physics_step_s\": 0.03333333507180214, \"original_frame_hz\": " + base +
+               ", \"original_frame_hz_by_level\": " + table + "}";
+    };
+    ScriptClock::Rules mixed;
+    std::string error;
+    CHECK_MSG(Load(text("30", "{\"level0b\": 60, \"level1b\": 20}"), mixed, error), error);
+    CHECK(mixed.baseOriginalFrameHz == 30 && mixed.originalFrameHz == 30 && mixed.originalFrameHzByLevel.size() == 2);
+    CHECK(mixed.ForLevel("level0b") && mixed.originalFrameHz == 60 && mixed.frameTicks == 1);
+    CHECK(mixed.ForLevel("level1b") && mixed.originalFrameHz == 20 && mixed.frameTicks == 3);
+    CHECK(mixed.ForLevel("level2b") && mixed.originalFrameHz == 30 && mixed.frameTicks == 2);
+    // An empty table is no table, and the key is optional.
+    ScriptClock::Rules none;
+    CHECK_MSG(Load(text("60", "{}"), none, error), error);
+    CHECK(none.originalFrameHzByLevel.empty());
+    ScriptClock::Rules noKey;
+    CHECK_MSG(Load(PaceText("30"), noKey, error), error);
+    CHECK(noKey.originalFrameHzByLevel.empty() && noKey.baseOriginalFrameHz == 30);
+
+    // Refused, naming the key: a pace that is not a divisor of 60 (45, 7), nothing (0), above it (61, 120), a fraction, not a number; a level
+    // of nothing or a comment where a level belongs; a table that is not an object. And what was refused leaves what the caller held.
+    for (const char* table : {"{\"level21b\": 45}", "{\"level21b\": 7}", "{\"level21b\": 0}", "{\"level21b\": 61}", "{\"level21b\": 120}",
+                              "{\"level21b\": 30.5}", "{\"level21b\": \"30\"}", "{\"level21b\": null}", "{\"\": 30}", "{\"_note\": 30}", "[]", "30", "null"}) {
+        ScriptClock::Rules out;
+        out.frameMs = 7;
+        out.frameTicks = 5;
+        CHECK_MSG(!Load(text("60", table), out, error), std::string("original_frame_hz_by_level ") + table + " is refused");
+        CHECK_MSG(error.find("original_frame_hz_by_level") != std::string::npos, "the refusal names the key: " + error);
+        CHECK_MSG(out.frameMs == 7u && out.frameTicks == 5 && out.originalFrameHzByLevel.empty(), "and leaves the caller's Rules alone");
+    }
+}
+
 void ThirtyHertzHalvesTheStepSoTheSimRatioIsExactlyOneAndSixtyIsTwo() {
     ScriptClock::Rules rules30;
     std::string error;
@@ -650,6 +708,7 @@ void runTests() {
     TheAntiportalsPeriodIsThirtySevenAndAHalfTicks();
     TheRocketsShakeReArmsEverySeventhTick();
     ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate();
+    ALevelCanPlayAtItsOwnPaceAndOnlyAtOneTheKeyTakes();
     ThirtyHertzHalvesTheStepSoTheSimRatioIsExactlyOneAndSixtyIsTwo();
     TheOriginalStepIsTheEnginesTickTimesTheTicksAFrame();
 }

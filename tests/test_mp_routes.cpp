@@ -1196,7 +1196,7 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
             std::ifstream in(portCopy / "minions.json", std::ios::binary);
             text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
         }
-        const std::string named = "\"levels\": [\"level20b\"]";
+        const std::string named = "\"levels\": [\"level20b\", \"level22b\", \"level18b\", \"level27c\"]";
         const std::size_t at = text.find(named);
         CHECK_MSG(at != std::string::npos, "minions.json names level20b in body.capsule.levels (the control empties the list)");
         if (at != std::string::npos) text.replace(at, named.size(), "\"levels\": []");

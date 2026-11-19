@@ -141,6 +141,15 @@ verdict**: a port-wide change would move every route's timing, every pinned tick
 capture (the owner's files) and the controls census's reading of the recorded plays, and is a step
 of its own with the owner's word.
 
+**Step 262 (2026-11-19), applied to 3-22 alone.** The owner's report of 2026-11-19, on the release he had on his phone ("the ramp at 3-22 is
+moving too fast, so I cannot pick up the top diamond") is this section's arm. `clock.json`
+`original_frame_hz_by_level` `{"level21b": 30}` plays that one level at the pace of his videos: the arm
+turns (first tilt to 95 % of the turn) in 27 ticks, 0.45 s, where it took 14 ticks, 0.233 s (his footage:
+25 to 27 frames, 0.42-0.45 s). With his own order of play replayed there, the knight is thrown up, takes
+the key, lands on the floor to the right and falls into the pit only after the key is spent (tick 1136),
+as in the footage, and the player passes within 11 units of the crystal at (490, 146) and 20 of the one
+at (490, 182). The play is in `tests/routes/level21b.json`. Every other level is as it was.
+
 ## 5. Open
 
 * The other 125 dungeons: the footage of each gold play is there to be transcribed (the portal

@@ -82,6 +82,22 @@
     "of 26), and the physics runs in real time (docs/parity-video-findings.md, section 2). DECIDED by the owner on 2026-11-17: the whole",
     "game is to play at that pace, nominal 30. The value stays 60 until the commit that flips the pace; this file only carries the key."
   ],
+  "original_frame_hz_by_level": {
+    "level21b": 30
+  },
+  "_original_frame_hz_by_level": [
+    "A LEVEL'S OWN PACE (planning step 262): a level's name (its file stem) to the original_frame_hz its world is played at, in place of the file's own above.",
+    "Optional; every level it does not name plays at original_frame_hz. Each value is held to the same rule as the key above (a whole number of hertz from 1 to",
+    "matched_hz that divides it) and a level of nothing, a comment where a level belongs or a pace that is not one is refused naming the key.",
+    "WHY 3-22 (level21b), and only it: the owner, 2026-11-19, on the release he had on his phone - 'the ramp at 3-22 is moving too fast, so I cannot pick up the top diamond, only the",
+    "bottom one'. His third report of the same ramp (2026-11-15: 'the ramp rotates way faster in mine, the original rotated slower'; the knight that falls into the pit).",
+    "MEASURED, not guessed: the arm turns 0.69 radian in 25 to 27 frames of his gold-run footage (0.42-0.45 s) and the port's turns it in 12 to 13 ticks (0.2 s): the same",
+    "per update, twice as fast in real time (docs/parity-video-findings.md section 2, PACE-1). At 30 the arm of this port turns in 28 to 30 ticks, and a player who",
+    "walks on at 123 to 144 u/s from the arm's pivot to the crystal at (490, 146) has the time the footage's player had. This is the owner's own decision of 2026-11-17 ('the",
+    "whole game plays at the pace of my gold-run videos') applied to the one level he has reported three times; the rest of the game is flipped by the plan's own steps",
+    "(docs/planning/2026-11-17-pace-1-implementation-plan.md) and this line goes when they do. NOT DONE FOR THIS LEVEL, and said here rather than found: the plan's ground-flag",
+    "lag, the retimed gold plays of the other levels and the owner's hand-play of the candidates (its gates OG-1 to OG-3). To put 3-22 back at the file's pace, delete the line."
+  ],
   "matched_hz": 60,
   "snap_ms": 0.001,
   "_matched_hz": "the original's own target, a 60 Hz display, and the rate the port ticks at (MagicPortalsLayer::kTick); the CK step's spec builds the floor at that rate. The owner ruled nothing on the rate: it is the PORT-WIDE row's open question, answered here in favour of what the original does",

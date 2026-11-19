@@ -981,11 +981,19 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     CHECK_MSG(Minions::LoadRules(minionsJson, shipped, why), why);
     CHECK_EQ(shipped.capsule.radiusPx, 9.1);
     CHECK_EQ(shipped.capsule.heightPx, 36.2);
-    // Exactly one level, and reading the table turns nothing on: ForLevel does, per level, and back.
-    CHECK_EQ(shipped.capsule.levels.size(), static_cast<std::size_t>(1));
-    CHECK_MSG(!shipped.capsule.levels.empty() && shipped.capsule.levels.front() == "level20b", "3-21 (level20b) is the level the table names");
+    // Exactly four levels - 3-21 (level20b), the owner's report of 2026-11-17, and the three with a fire agent and knights, 3-23 (level22b: the owner's report of
+    // 2026-11-19, a fireball that passes over a knight), 3-19 (level18b) and 4-28 (level27c) - and reading the table turns nothing on: ForLevel does, per level, and back.
+    CHECK_EQ(shipped.capsule.levels.size(), static_cast<std::size_t>(4));
+    const std::vector<std::string> named = {"level20b", "level22b", "level18b", "level27c"};
+    CHECK_MSG(shipped.capsule.levels == named, "the table names 3-21, 3-23, 3-19 and 4-28");
     CHECK(!shipped.capsuleOn);
     Minions::Rules own = shipped;
+    for (const std::string& level : named) {
+        Minions::ForLevel(own, "level0b");
+        CHECK(!own.capsuleOn);
+        Minions::ForLevel(own, level);
+        CHECK_MSG(own.capsuleOn, level + " has the capsule");
+    }
     Minions::ForLevel(own, "level20b");
     CHECK(own.capsuleOn);
     for (const char* other : {"level0b", "level20", "level20a", "level20bb", "LEVEL20B", ""}) {
@@ -1084,8 +1092,9 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     refused("no_radius.json", "\"radius_px\": 9.1,", "\"radius_px\": 0,", "body.capsule.radius_px");
     refused("short.json", "\"height_px\": 36.2,", "\"height_px\": 30,", "body.capsule.height_px");      // its half is not what the entity stands over its feet
     refused("round.json", "\"radius_px\": 9.1,", "\"radius_px\": 20,", "body.capsule.height_px");       // 36.2 is under twice 20
-    refused("no_levels.json", "\"levels\": [\"level20b\"],", "\"levels\": \"level20b\",", "body.capsule.levels");
-    refused("empty_name.json", "\"levels\": [\"level20b\"],", "\"levels\": [\"\"],", "body.capsule.levels");
+    const std::string listed = "\"levels\": [\"level20b\", \"level22b\", \"level18b\", \"level27c\"],";
+    refused("no_levels.json", listed, "\"levels\": \"level20b\",", "body.capsule.levels");
+    refused("empty_name.json", listed, "\"levels\": [\"\"],", "body.capsule.levels");
     std::filesystem::remove_all(dir, ec);
 }
 
@@ -1106,7 +1115,8 @@ void onlyTheNamedLevelsPlayTheirOwnRateAndBody() {
         const bool airOwn = entry.name == "level16a" || entry.name == "level20b";
         CHECK_MSG((data.tuning.airRateHz == 42.0) == airOwn && (airOwn || data.tuning.airRateHz == 120.0),
                   entry.name + " plays at " + std::to_string(data.tuning.airRateHz) + " Hz");
-        CHECK_MSG(data.minions.capsuleOn == (entry.name == "level20b"), entry.name + ": the knight's capsule is on only for 3-21");
+        const bool capsuleOwn = entry.name == "level20b" || entry.name == "level22b" || entry.name == "level18b" || entry.name == "level27c";
+        CHECK_MSG(data.minions.capsuleOn == capsuleOwn, entry.name + ": the knight's capsule is on only for 3-21, 3-23, 3-19 and 4-28");
     }
     CHECK_EQ(seen, 128);
 }

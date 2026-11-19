@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <string>
 
 namespace MagicPortals::ScriptClock {
@@ -62,6 +63,17 @@ struct Rules {
     // How many ticks one original frame is: matchedHz / originalFrameHz, a whole number by
     // construction (SetOriginalFrameHz is the only thing that writes the pair). 1 is today's pace.
     int frameTicks = 1;
+    // The file's own original_frame_hz, which every level without a line of its own in originalFrameHzByLevel plays at: what
+    // ForLevel puts back. SetOriginalFrameHz does not write it (it is the pace the Rules was MADE at; only LoadRules sets it).
+    int baseOriginalFrameHz = 60;
+    // clock.json original_frame_hz_by_level (planning step 262): a level's name to the frame rate of the original its world is played at,
+    // read by ForLevel. A level named here plays at its own pace and the rest at the file's; empty, as in the suites' bare Rules, is
+    // one pace for every level.
+    std::map<std::string, int> originalFrameHzByLevel;
+    // Puts the pace of `level` (its file stem, as Game::LoadData reads it) into originalFrameHz and frameTicks: its own line of the table
+    // or, with none, the file's own. False, changing nothing, for a pace that does not divide matchedHz (LoadRules refuses those, so a
+    // loaded table never gives one).
+    bool ForLevel(const std::string& level);
     // Sets originalFrameHz and frameTicks TOGETHER, so a Rules built in code cannot hold one
     // without the other. Valid is a whole number of hertz from 1 to matchedHz that divides it
     // (45, 0, 61 and 120 are not valid at 60: a frame must be a whole number of ticks, and

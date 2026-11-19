@@ -1327,6 +1327,13 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     m_plaqueAlpha = 0.0;
     const Chapters::Level& entry = m_chapters.levels[static_cast<std::size_t>(index)];
 
+    // THE LEVEL'S OWN PACE (clock.json original_frame_hz_by_level, planning step 262): a level named there plays its world at that frame
+    // rate of the original (3-22 at the 30 of the owner's gold-run videos, where the arm that carries the key turns in half the real
+    // time) and every other at the file's own. The tick that loads this level goes on to its first step with the Step built from the
+    // OLD level's rules (see m_levelStepCount above), so the Step is made again from the new ones, at the first frame's phase.
+    m_clockRules.ForLevel(entry.name);
+    m_step = ScriptClock::TickStep(m_clockRules, m_step.physicsS, 0u);
+
     // A refused level says why on the HUD, which a player reads, and in the log,
     // which is all a run leaves behind afterwards. Without the second, a chapter
     // that stops at its fourteenth level leaves nothing to say which one that
@@ -7989,6 +7996,17 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         m_sprites.push_back(std::move(made));
     }
     for (DrawnSprite& drawn : m_sprites) {
+        // A FIRE DIAMOND 3-32'S GHOST PUT BACK. A gone diamond's picture is destroyed below, for good: a
+        // crystal taken or a shock diamond spent never returns. This one does - Game's put-back turns the same
+        // Diamond's `gone` off at fire_diamond_spawn, where the original's addEntityAtSpawnPoint adds a NEW
+        // fire_diamond.ent - so the picture is made again, as the knights' is when one stands again, and its
+        // systems (which wait on the picture's quad) go on with it. Until step 262 it stayed destroyed: the
+        // owner could take the new diamond but saw only the effects of its coming (his report of 2026-11-19).
+        if (drawn.quad == entt::null && drawn.diamond >= 0 &&
+            drawn.diamond < static_cast<int>(m_level.diamonds.diamonds.size()) &&
+            !m_level.diamonds.diamonds[static_cast<std::size_t>(drawn.diamond)].gone) {
+            drawn.quad = makeSprite(registry, "Magic Portals Sprite", drawn.sprite.texture, drawn.sprite.additive);
+        }
         if (drawn.quad == entt::null) continue;
         const Sprites::Sprite& sprite = drawn.sprite;
         glm::dvec2 centrePx = Sprites::CentrePx(sprite);

@@ -69,8 +69,36 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
         error = path + paceError;
         return false;
     }
+    read.baseOriginalFrameHz = originalHz;
+    // original_frame_hz_by_level (planning step 262): optional, a level's name to the pace its world is played at. A name of nothing, a
+    // comment where a level belongs (a leading underscore) or a pace that is not a whole number of hertz from 1 to matched_hz dividing
+    // it is refused naming the key, as the pace itself is: a level that silently kept the file's pace is the thing it exists to prevent.
+    if (root.Has("original_frame_hz_by_level")) {
+        const Json::Value& byLevel = root["original_frame_hz_by_level"];
+        const std::string levelError = ": original_frame_hz_by_level names a level and a whole number of hertz from 1 to matched_hz that divides it";
+        if (!byLevel.IsObject()) {
+            error = path + levelError;
+            return false;
+        }
+        for (const std::string& level : byLevel.OrderedKeys()) {
+            const Json::Value& value = byLevel[level];
+            const double wanted = value.IsNumber() ? value.AsNumber() : 0.0;
+            Rules probe = read;
+            if (level.empty() || level.front() == '_' || !value.IsNumber() || !(wanted >= 1.0) || !(wanted <= hz) ||
+                wanted != std::floor(wanted) || !probe.SetOriginalFrameHz(static_cast<int>(wanted))) {
+                error = path + levelError;
+                return false;
+            }
+            read.originalFrameHzByLevel[level] = static_cast<int>(wanted);
+        }
+    }
     out = read;
     return true;
+}
+
+bool Rules::ForLevel(const std::string& level) {
+    const auto found = originalFrameHzByLevel.find(level);
+    return SetOriginalFrameHz(found != originalFrameHzByLevel.end() ? found->second : baseOriginalFrameHz);
 }
 
 bool Rules::SetOriginalFrameHz(int hz) {
