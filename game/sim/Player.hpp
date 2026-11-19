@@ -70,12 +70,24 @@ namespace MagicPortals::Player {
 
 inline constexpr float kFriction = 0.0f;
 
+// How the air brake's share, which the original applies ONCE A FRAME, becomes the share the port applies EACH TICK when a frame is
+// more than one tick (ScriptClock::Step::frameTicks; player.json movement.air_brake_form). With one tick a frame all three are the
+// share itself, bit for bit.
+//   Tick    the share as the formula gives it, applied every tick: what the port did before a frame could be more than one tick, and
+//           the reading the two measured level entries of air_decay_rate_hz_by_level were found at.
+//   Travel  ScriptClock::FrameTravel: the per-tick share whose glide after a released key is the original's glide per frame (the
+//           distance a walk off a ledge carries).
+//   Root    ScriptClock::FrameRoot: the n-th root of the share, so that n ticks multiply to the original's share at each frame boundary.
+enum class AirBrakeForm { Tick, Travel, Root };
+
 struct Tuning {
     double speed = 0.0;         // movement.speed: SideScrollerCharacter.speed, scale() metres a second
     double elapsedCapMs = 0.0;  // movement.elapsed_cap_ms: applyForces' min(66, the script's frame)
     double airDecay = 0.0;      // movement.air_decay: the x velocity kept a frame off the floor...
     double airDecayFps = 0.0;   // movement.air_decay_fps: ...at this GetFPSRate (the 60 of fps / 60)
-    double airRateHz = 0.0;     // movement.air_decay_rate_hz: the GetFPSRate the port EVALUATES the formula at (the owner's ruling, planning step 213)
+    // movement.air_decay_rate_hz (optional: absent is 0): the GetFPSRate the port EVALUATES the formula at (the owner's ruling, planning
+    // step 213). 0 means no override: the formula is then evaluated at the clock's own frame rate, ScriptClock::Step::fps.
+    double airRateHz = 0.0;
     // movement.air_decay_rate_hz_by_level: a level's own rate, by its name as the converter writes it ("level16a" for 2-17), which ForLevel puts
     // in airRateHz. Empty for a level the file does not name. The levels are the owner's reports of two levels' drops (planning steps 252 and 253), a guess.
     std::map<std::string, double> airRateByLevel;
@@ -108,6 +120,12 @@ struct Tuning {
     double holdProbeOffsetPx = 0.0;
     double holdProbeReachPx = 0.0;
     double holdProbeLineTolPx = 0.0;
+    // movement.air_brake_form (optional: absent is Tick): how the air brake's share is spread over the ticks of a frame (AirBrakeForm).
+    AirBrakeForm airBrakeForm = AirBrakeForm::Tick;
+    // movement.ground_lag_frames (optional: absent is 0; from 0 to 8): how many frames of the ORIGINAL old the ground flag the steering
+    // reads is. The decode says two (docs/ethanon-formats.md, 'The ground flag is two frames late'); 0, the shipped value, is the flag as it
+    // stands now. The ticks it comes to are ScriptClock::FrameDelayTicks of it. Read by nothing yet: the file only carries it.
+    double groundLagFrames = 0.0;
 };
 
 // From player.json. False, with `error`, when a number is missing: player.gd falls
@@ -167,9 +185,13 @@ double WalkCarried(const Tuning& tuning, const ScriptClock::Step& step);
 // min(1, fps / 60 x 0.86) - 0.86 at 60, 0.43 at 30, 1 from 70 frames a second.
 double AirShareAt(const Tuning& tuning, double fps);
 
-// The share the port uses a tick: the formula at movement.air_decay_rate_hz (or the level's own, movement.air_decay_rate_hz_by_level: 2-17 and 3-21), NOT at the tick's own rate. The original's brake
+// The share the port uses a tick. The rate the formula is evaluated at is movement.air_decay_rate_hz (or the level's own,
+// movement.air_decay_rate_hz_by_level: 2-17 and 3-21) where the file has one, NOT the tick's own rate: the original's brake
 // depends on the phone's frame rate and the port plays the same on every phone, so one rate has to be chosen; the owner chose
-// 120 Hz (his phone's, planning step 213), where it is 1 and a body off the floor keeps all its x velocity. `step` is not read.
+// 120 Hz (his phone's, planning step 213), where it is 1 and a body off the floor keeps all its x velocity. A file with no such rate
+// evaluates it at the clock's frame rate of the original, `step.fps`. That is the share PER ORIGINAL FRAME; when a frame is more than
+// one tick (`step.frameTicks`) it is turned into the share per tick by the file's movement.air_brake_form (AirBrakeForm). With one tick
+// a frame, whatever the form, it is the formula's value as it stands.
 double AirShare(const Tuning& tuning, const ScriptClock::Step& step);
 
 // The velocity a tick of the player's gravity adds going down, as the port carries it, in metres a
@@ -194,13 +216,16 @@ glm::dvec2 PushAim(entt::registry& registry, entt::entity player, const Tuning& 
 bool Pushing(entt::registry& registry, entt::entity player, const glm::dvec2& aimPx, double reachPx,
              const glm::dvec2& offsetPx);
 
-// b2_maxTranslation in the port's metres a tick: 2 Box2D metres are 100 SCREEN pixels, so the limit in units is
+// b2_maxTranslation in the port's metres of ONE STEP OF THE ORIGINAL's physics (which is a tick while a frame is one tick, and
+// ScriptClock::Step::frameTicks of them otherwise): 2 Box2D metres are 100 SCREEN pixels, so the limit in units is
 // 100 x 256 / the screen's height - 35.6 at 720 lines, 23.7 at 1080 (G10-6; planning step 153). Read off
 // `tuning.screenPxPerUnit`, which the layer keeps at the viewport's own and everything else leaves at the 720 reference.
 double ClampLimitM(const Tuning& tuning);
 
 // Box2D's clamp of a step's translation (b2Island::Solve, b2_maxTranslation), on ANY dynamic body: the
-// whole velocity is scaled down so the step carries it no further than ClampLimitM. `addedByTheEngine` is the velocity the engine's own integration will add
+// whole velocity is scaled down so the step carries it no further than ClampLimitM. The step is the ORIGINAL's, so the translation is
+// judged over ScriptClock::OriginalStepCarriedS(step): one tick while a frame is one tick (the number it always was), frameTicks
+// ticks otherwise. `addedByTheEngine` is the velocity the engine's own integration will add
 // before it moves the body (a body that uses the world's gravity: gravity times the physics step), which
 // the clamp judges the translation on and leaves in place. The player's is applied by Steer, after its
 // own gravity; Game::BeforeStep applies it to every other body.

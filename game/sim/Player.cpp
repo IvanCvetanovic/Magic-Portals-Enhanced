@@ -22,6 +22,25 @@ using Supersonic::RigidBodyComponent;
 using Supersonic::TagComponent;
 using Supersonic::TransformComponent;
 
+namespace {
+
+// The spellings of movement.air_brake_form: the one table the loader reads and its refusal quotes.
+struct AirBrakeFormName {
+    const char* name;
+    AirBrakeForm form;
+};
+constexpr AirBrakeFormName kAirBrakeForms[] = {
+    {"tick", AirBrakeForm::Tick},
+    {"travel", AirBrakeForm::Travel},
+    {"root", AirBrakeForm::Root},
+};
+
+// movement.ground_lag_frames is refused above this many frames: the original's own lag is two, and a flag older than eight frames is
+// not a reading the steering could be playing with.
+constexpr double kMaxGroundLagFrames = 8.0;
+
+} // namespace
+
 bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
     namespace Json = Supersonic::Json;
     std::ifstream file(path, std::ios::binary);
@@ -49,7 +68,6 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         {"movement", "elapsed_cap_ms", &Tuning::elapsedCapMs},
         {"movement", "air_decay", &Tuning::airDecay},
         {"movement", "air_decay_fps", &Tuning::airDecayFps},
-        {"movement", "air_decay_rate_hz", &Tuning::airRateHz},
         {"gravity", "world_m_s2", &Tuning::worldGravity},
         {"gravity", "scale", &Tuning::gravityScale},
         {"gravity", "max_translation_m", &Tuning::maxTranslationM},
@@ -86,6 +104,17 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         }
         read.*(field.field) = value.AsNumber();
     }
+    // movement.air_decay_rate_hz (planning step 213): optional since the pace knob. A file with it evaluates the air brake's formula at that
+    // rate; a file without it leaves the rate to the clock (AirShare reads Step::fps), which is what lets the shipped data drop the key.
+    // One that is there but is a rate of nothing, or not a number, is refused rather than read as "none given".
+    if (root["movement"].Has("air_decay_rate_hz")) {
+        const Json::Value& rateHz = root["movement"]["air_decay_rate_hz"];
+        if (!rateHz.IsNumber() || !(rateHz.AsNumber() > 0.0)) {
+            error = path + ": movement.air_decay_rate_hz is not a number above zero";
+            return false;
+        }
+        read.airRateHz = rateHz.AsNumber();
+    }
     // movement.air_decay_rate_hz_by_level (planning step 252): optional, a level's name to the rate its air brake is evaluated at. A
     // file without it plays every level at air_decay_rate_hz; one that names a level a rate of nothing, or a name of nothing, is
     // refused rather than read as "no brake" or as a level that cannot be found.
@@ -107,6 +136,34 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
             }
             read.airRateByLevel[level] = rate.AsNumber();
         }
+    }
+    // movement.air_brake_form: optional, how the air brake's share is spread over the ticks of a frame (AirBrakeForm). Absent is Tick, the
+    // share as it stands; a spelling that is not in kAirBrakeForms, or a value that is not a string, is refused naming the key.
+    if (root["movement"].Has("air_brake_form")) {
+        const std::string given = root["movement"]["air_brake_form"].AsString();
+        bool known = false;
+        for (const AirBrakeFormName& entry : kAirBrakeForms) {
+            if (given == entry.name) {
+                read.airBrakeForm = entry.form;
+                known = true;
+            }
+        }
+        if (!known) {
+            std::string names;
+            for (const AirBrakeFormName& entry : kAirBrakeForms) names += std::string(names.empty() ? "" : ", ") + entry.name;
+            error = path + ": movement.air_brake_form is not one of " + names;
+            return false;
+        }
+    }
+    // movement.ground_lag_frames: optional, read outside the table above because that table refuses a zero and a lag of nothing is the
+    // flag as it stands, the shipped value. From 0 to kMaxGroundLagFrames, a fraction allowed (FrameDelayTicks rounds it to whole ticks).
+    if (root["movement"].Has("ground_lag_frames")) {
+        const Json::Value& lagFrames = root["movement"]["ground_lag_frames"];
+        if (!lagFrames.IsNumber() || !(lagFrames.AsNumber() >= 0.0) || !(lagFrames.AsNumber() <= kMaxGroundLagFrames)) {
+            error = path + ": movement.ground_lag_frames is not a number from 0 to " + std::to_string(static_cast<int>(kMaxGroundLagFrames));
+            return false;
+        }
+        read.groundLagFrames = lagFrames.AsNumber();
     }
     // The capsule is the hull of dark_mage.ent's two circles, and the two numbers a reader sees are what they come to: a
     // circle's radius is its share of half the box's width, its centre its share of half the box's height (ETHCompoundShape.cpp:
@@ -153,8 +210,21 @@ double AirShareAt(const Tuning& tuning, double fps) {
 }
 
 double AirShare(const Tuning& tuning, const ScriptClock::Step& step) {
-    (void)step; // the rate is the file's ruling, not the tick's: player.json movement._air_decay_rate_hz
-    return AirShareAt(tuning, tuning.airRateHz);
+    // The rate is the file's ruling (player.json movement._air_decay_rate_hz) or a level's own, not the tick's; a file with none leaves it to
+    // the clock's frame rate of the original, which is what the formula's GetFPSRate is.
+    const double rateHz = tuning.airRateHz > 0.0 ? tuning.airRateHz : step.fps;
+    // The share PER ORIGINAL FRAME. Where a frame is one tick it is the share a tick as it stands, in every form (the helpers return their
+    // input at one tick a frame); where it is more, the form says how the ticks of a frame share it out.
+    const double share = AirShareAt(tuning, rateHz);
+    switch (tuning.airBrakeForm) {
+    case AirBrakeForm::Travel:
+        return ScriptClock::FrameTravel(share, step.frameTicks);
+    case AirBrakeForm::Root:
+        return ScriptClock::FrameRoot(share, step.frameTicks);
+    case AirBrakeForm::Tick:
+        break;
+    }
+    return share;
 }
 
 double FallPerTick(const Tuning& tuning, const ScriptClock::Step& step) {
@@ -309,10 +379,12 @@ void ClampTranslation(Supersonic::RigidBodyComponent& rigid, const Tuning& tunin
     // units at the 720-line reference (23.7 at 1080: G10-6): a fall of about 590 units (586.7) reaches the
     // reference's, so only a body that goes on falling does - the hidden body of a dead player. The engine adds a body's gravity AFTER the tick's writes, so the velocity the
     // translation is judged on (and the clamp scales) is the one it will integrate: written + added.
+    // The limit is per STEP OF THE ORIGINAL's physics, and the translation is what the body covers in one: a tick while a frame is one tick
+    // (the number this always read), frameTicks of them otherwise, where judging a single tick would let a body go twice as fast as the original's.
     const double limitM = ClampLimitM(tuning);
     const glm::vec3 integrated = rigid.velocity + addedByTheEngine;
     const double translationM = std::hypot(static_cast<double>(integrated.x), static_cast<double>(integrated.y)) *
-                                static_cast<double>(step.physicsS);
+                                ScriptClock::OriginalStepCarriedS(step);
     if (translationM > limitM) rigid.velocity = integrated * static_cast<float>(limitM / translationM) - addedByTheEngine;
 }
 

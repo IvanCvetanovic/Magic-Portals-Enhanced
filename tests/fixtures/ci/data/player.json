@@ -70,11 +70,27 @@
       "3-21 (level20b) is the second name (planning step 253), in answer to the owner's report of the same day: pushed off the top platform's left end, knight B lands in the strip between the pit and the door, and he wants to walk off the same end and land on its right, between the knight and the door. At 120 Hz the walk off flies on at 2.4 units a tick and over the knight into the pit; at 42 Hz he drops by the end and lands at x 92 to 94.6, alive (every rate tried from 30 to 48, walks of 76 to 90 ticks; 50 and above lose some walks, 60 and the ruling lose most), with 9 to 12 units of floor between him and the door's face. It needs the knight's capsule too (minions.json body.capsule): with the circle B ends at x 93 to 99 and he lands on its other side (tried at 30 and 42 Hz). Same guess, same rate. The whole level flies at that rate, not only the drop: portal exits and thrown crates too; only the recorded routes were run.",
       "To give another level its own rate, name it here; a level not named plays at air_decay_rate_hz."
     ],
+    "air_brake_form": "tick",
+    "_air_brake_form": [
+      "HOW THE AIR BRAKE'S SHARE IS SPREAD OVER THE TICKS OF AN ORIGINAL FRAME (Player::AirShare; clock.json original_frame_hz is the pace knob). The decoded formula above is a share the original applies ONCE A FRAME.",
+      "While a frame is one tick (original_frame_hz equal to matched_hz, the pace the port has always had) all three forms are that share itself and this key changes nothing. Where a frame is more than one tick: \"tick\" applies the share as it stands every",
+      "tick (what the owner's 120 Hz and the two measured entries of air_decay_rate_hz_by_level are, per tick); \"travel\" applies n s / (1 + (n - 1) s) a tick, the share whose glide after a released key is the original's glide per frame",
+      "(0.43 at two ticks a frame is 0.601399: a walk released in the air glides 3.62 units, against the original's 3.73 a frame of 4.95 units; the 3 % is the walk's 144 against 148.5 units a second, not this form); \"root\" applies the n-th root, so",
+      "that n ticks multiply to the original's share at each frame boundary (0.43 at two ticks is 0.655744: 4.57 units). The form is the port's MODELLING CHOICE, not a number of the listing, to be decided by replay and by the owner's hands, so",
+      "the file says \"tick\", the reading the port has always had. Absent is \"tick\"; any other spelling is refused."
+    ],
+    "ground_lag_frames": 0,
+    "_ground_lag_frames": [
+      "HOW MANY FRAMES OF THE ORIGINAL OLD THE GROUND FLAG THE STEERING READS IS. DECODED: two (docs/ethanon-formats.md, 'The ground flag is two frames late'; planning step 213): the flag applyForces reads in one frame is the feet sensor's test at the",
+      "body's place two frames before, for a walk off a ledge and for a landing alike. The port reads the flag at once and 0 is the shipped value: NOTHING READS THIS KEY YET (the lag is built in a later step, behind this 0, and",
+      "switched on only by the owner's word). The ticks a lag comes to are its frames times the ticks a frame is, rounded to a whole tick (ScriptClock::FrameDelayTicks). From 0 to 8, a fraction allowed; absent is 0."
+    ],
     "_air_decay": [
       "DECODED FORMULA (applyForces ins 75-79): min(1, GetFPSRate() / 60 x 0.86). The port evaluates it at `air_decay_rate_hz` above (the owner's ruling, planning step 213), where it is 1; at the",
       "matched 60 Hz it was 0.86 (the spec's ruling, step CK's clock) from step 148 to step 213. GetFPSRate is the video's frames counted over a window just over a second long, times that window (GLES2Video.cpp",
       "ComputeFPSRate, :878-889: frameCount x interval, an initial 30 for the first second), so a real 60 Hz device reads about 60-63 and the",
-      "factor 0.86-0.90; an emulator at 17 fps reads 17 and the factor 0.24: the air brake depends on the frame rate, as the original's physics step does."
+      "factor 0.86-0.90; an emulator at 17 fps reads 17 and the factor 0.24: the air brake depends on the frame rate, as the original's physics step does.",
+      "air_decay_rate_hz is optional since the pace knob: a file without it evaluates the formula at the clock's frame rate of the original (clock.json original_frame_hz), and air_brake_form above says how a frame of more than one tick shares the result out."
     ]
   },
   "gravity": {

@@ -24,6 +24,11 @@
 //                 floor for 420 ticks, as the original's does on 1-24's ramp, where the same body
 //                 without the hold creeps 0.278 units a tick, and the walk is the same with the
 //                 hold as without it.
+//   the pace      the air brake's share is a share PER ORIGINAL FRAME: where a frame is more than one tick (clock.json
+//                 original_frame_hz below the tick's rate) player.json's movement.air_brake_form spreads it over the
+//                 ticks (tick, travel, root), the rate key is optional (the clock's own frame rate then), the ground-flag
+//                 lag key is read (0 to 8 frames; nothing uses it yet), and the translation clamp judges a step of the
+//                 ORIGINAL's physics, frameTicks ticks. Each is the number it always was at one tick a frame.
 //   the body      dark_mage.ent's two circles of radius 9.1 at +-9, which the engine holds as their hull, a
 //                 capsule 18.2 wide and 36.2 tall (planning step 153, CAP, G10-4): read back from the .ent,
 //                 the mass the .ent's density gives it, the ground sensor standing 18 below the entity (not at
@@ -108,6 +113,9 @@ const std::string kBody =
     "{\"box_width_px\": 14, \"box_height_px\": 36, \"circle_radius_share\": 1.3, \"circle_pos_share\": 0.5, "
     "\"width_px\": 18.2, \"height_px\": 36.2}";
 
+// The hold of an idle player on a slope as player.json says it: TuningText's own default, which a caller that passes a later argument has to repeat.
+const std::string kHold = "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, \"probe_line_tol_px\": 0.05}";
+
 // A player.json to be refused or taken, written to a scratch file.
 bool Load(const std::string& text, Player::Tuning& out, std::string& error) {
     const std::filesystem::path path = std::filesystem::temp_directory_path() / "supersonic-test-mp-player.json";
@@ -131,6 +139,20 @@ std::string TuningText(const std::string& speed = "3", const std::string& scale 
            ", \"max_translation_m\": 2, \"reference_px_per_unit\": 2.8125}, \"body\": " + body + ", "
            "\"feet\": {\"width_px\": 14, \"height_px\": 10, \"chamfer\": 0.6, \"offset_box_share\": 0.5, \"touch_px\": 0.5}, "
            "\"hold\": " + hold + "}";
+}
+
+// TuningText with `movementExtra` (a comma and keys) after the movement block's last: the loader's own cases for the keys the pace knob added.
+std::string MovementTuningText(const std::string& movementExtra) {
+    return TuningText("3", "2", "10", kHold, kBody, movementExtra);
+}
+
+// TuningText's text with the air brake's rate spelled as a comment key, so that it is NOT there and the JSON stays valid.
+std::string WithoutTheRate(std::string text) {
+    const std::string key = "\"air_decay_rate_hz\": 120";
+    const std::size_t at = text.find(key);
+    CHECK_MSG(at != std::string::npos, "the test's own file names the key");
+    if (at != std::string::npos) text.replace(at, key.size(), "\"_air_decay_rate_hz\": 120");
+    return text;
 }
 
 // A solid floor whose top is at y = 0 (the port's pixels, +y down), and a world with no gravity of
@@ -200,12 +222,14 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     Player::Tuning out;
     std::string error;
     CHECK_MSG(Load(TuningText(), out, error), error);
-    // A file without the air brake's rate, or with a rate of nothing, describes another game: refused, naming the key.
+    // A file with a rate of nothing, or of the wrong kind, for the air brake describes another game: refused, naming the key. (A file WITHOUT
+    // the key is not one of them: the rate is optional since the pace knob and the loader takes the file, pinned in
+    // TheAirBrakesRateIsOptionalAndItsFormAndTheGroundLagAreRead below.)
     {
         const std::string text = TuningText();
         const std::string key = "\"air_decay_rate_hz\": 120";
         CHECK_MSG(text.find(key) != std::string::npos, "the test's own file names the key");
-        for (const char* bad : {"\"air_decay_rate_hz\": 0", "\"air_decay_rate_hz\": -60", "\"air_decay_rate_hz_\": 120", "\"air_decay_rate_hz\": \"x\""}) {
+        for (const char* bad : {"\"air_decay_rate_hz\": 0", "\"air_decay_rate_hz\": -60", "\"air_decay_rate_hz\": \"x\""}) {
             std::string broken = text;
             broken.replace(broken.find(key), key.size(), bad);
             CHECK_MSG(!Load(broken, out, error) && error.find("air_decay_rate_hz") != std::string::npos,
@@ -1215,12 +1239,285 @@ void ALevelMayHaveItsOwnAirBrakeAndNoOtherLevelDoes() {
     }
 }
 
+// ---- the pace knob: the air brake's rate, its form and the ground-flag lag, in the file ------------------------------------------------
+
+void TheAirBrakesRateIsOptionalAndItsFormAndTheGroundLagAreRead() {
+    // The shipped file: the ruling's rate, the form that changes nothing, and no lag.
+    const Player::Tuning shipped = ReadTuning();
+    CHECK_EQ(shipped.airRateHz, 120.0);
+    CHECK_MSG(shipped.airBrakeForm == Player::AirBrakeForm::Tick, "the shipped form is tick");
+    CHECK_EQ(shipped.groundLagFrames, 0.0);
+
+    Player::Tuning out;
+    std::string error;
+    // TuningText names neither new key: the reading is the default, form tick and lag 0, and the rate it does name.
+    CHECK_MSG(Load(TuningText(), out, error), error);
+    CHECK_MSG(out.airBrakeForm == Player::AirBrakeForm::Tick, "an absent form is tick");
+    CHECK_EQ(out.groundLagFrames, 0.0);
+    CHECK_EQ(out.airRateHz, 120.0);
+
+    // A file WITHOUT the rate loads - the rate is optional since the pace knob - with no override (0), and the share is then the formula at
+    // the clock's own frame rate of the original, whatever rate a step carries.
+    const ScriptClock::Rules rules = ReadRules();
+    const ScriptClock::Step step = ScriptClock::TickStep(rules, kTick);
+    CHECK_MSG(Load(WithoutTheRate(TuningText()), out, error), error);
+    CHECK_EQ(out.airRateHz, 0.0);
+    CHECK_EQ(step.fps, 60.0);
+    CHECK(Player::AirShare(out, step) == Player::AirShareAt(out, step.fps));
+    CHECK_WITHIN(Player::AirShare(out, step), 0.86, 1e-12);
+    for (const double framesPerSecond : {30.0, 17.0, 90.0}) {
+        const ScriptClock::Step other(0.016, kTick, rules.physicsStepS, framesPerSecond);
+        CHECK(Player::AirShare(out, other) == Player::AirShareAt(out, framesPerSecond));
+    }
+    const ScriptClock::Step bare = kTick;
+    CHECK(Player::AirShare(out, bare) == Player::AirShareAt(out, bare.fps));
+    // ... and a level's own rate still overrides it (ForLevel only overwrites, and a file with no rate has none to keep).
+    CHECK_MSG(Load(WithoutTheRate(MovementTuningText(", \"air_decay_rate_hz_by_level\": {\"a\": 30}")), out, error), error);
+    CHECK_EQ(out.airRateHz, 0.0);
+    Player::ForLevel(out, "a");
+    CHECK_EQ(out.airRateHz, 30.0);
+    CHECK_WITHIN(Player::AirShare(out, step), 0.43, 1e-12);
+
+    // A rate that is there but is of nothing, or not a number, is refused, naming the key: it is not read as "none given".
+    const std::string rateKey = "\"air_decay_rate_hz\": 120";
+    for (const char* bad : {"\"air_decay_rate_hz\": 0", "\"air_decay_rate_hz\": -60", "\"air_decay_rate_hz\": \"x\"",
+                            "\"air_decay_rate_hz\": null", "\"air_decay_rate_hz\": [120]"}) {
+        std::string broken = TuningText();
+        broken.replace(broken.find(rateKey), rateKey.size(), bad);
+        CHECK_MSG(!Load(broken, out, error) && error.find("movement.air_decay_rate_hz") != std::string::npos,
+                  std::string("refused, naming the key: ") + bad + " -> " + error);
+    }
+
+    // The form: its three spellings, each to its own value.
+    const std::pair<const char*, Player::AirBrakeForm> forms[] = {
+        {"tick", Player::AirBrakeForm::Tick}, {"travel", Player::AirBrakeForm::Travel}, {"root", Player::AirBrakeForm::Root}};
+    for (const auto& [spelling, form] : forms) {
+        CHECK_MSG(Load(MovementTuningText(std::string(", \"air_brake_form\": \"") + spelling + "\""), out, error), error);
+        CHECK_MSG(out.airBrakeForm == form, std::string("the form ") + spelling + " is read as itself");
+    }
+    // Anything else is refused, naming the key: a misspelling, another case, an empty string, and a value that is not a string at all.
+    for (const char* bad : {"\"travels\"", "\"Travel\"", "\"\"", "3", "null", "true", "[\"tick\"]"}) {
+        CHECK_MSG(!Load(MovementTuningText(std::string(", \"air_brake_form\": ") + bad), out, error) &&
+                      error.find("movement.air_brake_form") != std::string::npos,
+                  std::string("refused, naming the key: ") + bad + " -> " + error);
+    }
+
+    // The lag: 0 loads (a table that refuses a zero would refuse the shipped value), so do a fraction and the top of the range; below 0 and
+    // above 8 are refused, naming the key, and so is a value that is not a number.
+    const std::pair<const char*, double> lags[] = {{"0", 0.0}, {"2", 2.0}, {"2.25", 2.25}, {"2.5", 2.5}, {"8", 8.0}};
+    for (const auto& [spelled, frames] : lags) {
+        CHECK_MSG(Load(MovementTuningText(std::string(", \"ground_lag_frames\": ") + spelled), out, error), error);
+        CHECK_EQ(out.groundLagFrames, frames);
+    }
+    for (const char* bad : {"-1", "9", "8.5", "-0.5", "\"2\"", "null", "true"}) {
+        CHECK_MSG(!Load(MovementTuningText(std::string(", \"ground_lag_frames\": ") + bad), out, error) &&
+                      error.find("movement.ground_lag_frames") != std::string::npos,
+                  std::string("refused, naming the key: ") + bad + " -> " + error);
+    }
+    // All the keys together, with the by-level table beside them.
+    CHECK_MSG(Load(MovementTuningText(", \"air_brake_form\": \"root\", \"ground_lag_frames\": 2, \"air_decay_rate_hz_by_level\": {\"a\": 30}"), out, error), error);
+    CHECK_MSG(out.airBrakeForm == Player::AirBrakeForm::Root, "root, read beside the other keys");
+    CHECK_EQ(out.groundLagFrames, 2.0);
+    CHECK_EQ(out.airRateByLevel.size(), static_cast<std::size_t>(1));
+    CHECK_EQ(out.airRateHz, 120.0);
+    // A refusal leaves the caller's tuning as it was.
+    out = shipped;
+    CHECK(!Load(MovementTuningText(", \"ground_lag_frames\": 9"), out, error));
+    CHECK_EQ(out.airRateHz, 120.0);
+    CHECK_EQ(out.groundLagFrames, 0.0);
+    CHECK_MSG(out.airBrakeForm == Player::AirBrakeForm::Tick, "a refused file changed nothing");
+}
+
+void TheAirShareIsPerOriginalFrameAndTheFormSpreadsItOverTheTicks() {
+    const ScriptClock::Rules shippedRules = ReadRules();
+    ScriptClock::Rules flippedRules = shippedRules;
+    CHECK(flippedRules.SetOriginalFrameHz(30));
+    const ScriptClock::Step oneTick = ScriptClock::TickStep(shippedRules, kTick);
+    const ScriptClock::Step twoTicks = ScriptClock::TickStep(flippedRules, kTick);
+    CHECK_EQ(oneTick.frameTicks, 1);
+    CHECK_EQ(twoTicks.frameTicks, 2);
+    CHECK_EQ(twoTicks.fps, 30.0);
+
+    const Player::Tuning shipped = ReadTuning();
+    Player::Tuning noRate = shipped; // the rate left to the clock: the formula at the step's frame rate of the original
+    noRate.airRateHz = 0.0;
+    Player::Tuning ownRate = shipped; // a level's own rate, as ForLevel puts it: 42 Hz, a share of 0.602
+    Player::ForLevel(ownRate, "level16a");
+    CHECK_EQ(ownRate.airRateHz, 42.0);
+    const auto shareIn = [](Player::Tuning tuned, Player::AirBrakeForm form, const ScriptClock::Step& stepped) {
+        tuned.airBrakeForm = form;
+        return Player::AirShare(tuned, stepped);
+    };
+    using Form = Player::AirBrakeForm;
+
+    // Two ticks a frame, the rate left to the clock (30 frames a second: 0.43 a frame).
+    // TICK is the share as it stands, every tick: Step 213's reading, and the two measured level entries' (0.602 a tick).
+    CHECK(shareIn(noRate, Form::Tick, twoTicks) == Player::AirShareAt(noRate, 30.0));
+    CHECK_WITHIN(shareIn(noRate, Form::Tick, twoTicks), 0.43, 1e-12);
+    // TRAVEL is n s / (1 + (n - 1) s) = 0.86 / 1.43, the share whose glide is the original's per frame.
+    CHECK_WITHIN(shareIn(noRate, Form::Travel, twoTicks), 0.86 / 1.43, 1e-12);
+    CHECK_WITHIN(shareIn(noRate, Form::Travel, twoTicks), 0.601399, 1e-6);
+    // ROOT is the square root, so two ticks make the frame's 0.43.
+    CHECK_WITHIN(shareIn(noRate, Form::Root, twoTicks), std::sqrt(0.43), 1e-12);
+    CHECK_WITHIN(shareIn(noRate, Form::Root, twoTicks), 0.655744, 1e-6);
+    CHECK_WITHIN(shareIn(noRate, Form::Root, twoTicks) * shareIn(noRate, Form::Root, twoTicks), 0.43, 1e-12);
+    // The file's override at 120 Hz is a share of 1, and 1 is 1 in every form: nothing brakes whatever the frame is.
+    for (const Form form : {Form::Tick, Form::Travel, Form::Root}) {
+        CHECK_WITHIN(shareIn(shipped, form, twoTicks), 1.0, 1e-12);
+        CHECK_WITHIN(shareIn(shipped, form, oneTick), 1.0, 1e-12);
+    }
+    // A level's own 42 Hz is a share of 0.602 a frame: as it stands in tick, 1.204 / 1.602 in travel.
+    CHECK_WITHIN(shareIn(ownRate, Form::Tick, twoTicks), 0.86 * 42.0 / 60.0, 1e-12);
+    CHECK_WITHIN(shareIn(ownRate, Form::Travel, twoTicks), 2.0 * 0.602 / 1.602, 1e-12);
+    CHECK_WITHIN(shareIn(ownRate, Form::Root, twoTicks), std::sqrt(0.602), 1e-12);
+
+    // One tick a frame, the pace the port has always had: every form is the share itself, to the bit, whatever the rate comes from.
+    const ScriptClock::Step bare = kTick;
+    for (const Form form : {Form::Tick, Form::Travel, Form::Root}) {
+        CHECK(shareIn(noRate, form, oneTick) == Player::AirShareAt(noRate, 60.0));
+        CHECK(shareIn(shipped, form, oneTick) == Player::AirShareAt(shipped, 120.0));
+        CHECK(shareIn(ownRate, form, oneTick) == Player::AirShareAt(ownRate, 42.0));
+        CHECK(shareIn(noRate, form, bare) == Player::AirShareAt(noRate, bare.fps));
+    }
+    CHECK_WITHIN(shareIn(noRate, Form::Root, oneTick), 0.86, 1e-12);
+}
+
+void AWalkReleasedInTheAirGlidesTheOriginalsDistanceInTheTravelForm() {
+    ScriptClock::Rules flippedRules = ReadRules();
+    CHECK(flippedRules.SetOriginalFrameHz(30));
+    const ScriptClock::Step twoTicks = ScriptClock::TickStep(flippedRules, kTick);
+    // A key released at the walk's 2.4 units a tick (2.88 m/s), 300 units over nothing, the rate left to the clock (30 frames a second:
+    // 0.43 a frame). The first braked tick moves 2.4 x the share, so the tail is 2.4 r / (1 - r). `summed` is the sum of the velocities the
+    // steering leaves, the distance without the engine's integration; the return value is the engine's own, read off the body's place.
+    const auto glide = [&](Player::AirBrakeForm form, double& summed) {
+        Scene scene(false, -300.0);
+        scene.step = twoTicks;
+        scene.tuning.airRateHz = 0.0;
+        scene.tuning.airBrakeForm = form;
+        scene.Rigid().velocity.x = 2.88f;
+        const double fromX = scene.AtPx().x;
+        summed = 0.0;
+        for (int tick = 0; tick < 40; ++tick) {
+            Player::Steer(scene.registry, scene.player, scene.tuning, 0.0f, scene.step);
+            summed += static_cast<double>(scene.Rigid().velocity.x) * Units::kPixelsPerMetre * static_cast<double>(kTick);
+            Supersonic::PhysicsSystem::Update(scene.registry, kTick);
+        }
+        return scene.AtPx().x - fromX;
+    };
+    const auto tail = [](double share) { return 2.4 * share / (1.0 - share); };
+    double travelSummed = 0.0;
+    double tickSummed = 0.0;
+    double rootSummed = 0.0;
+    const double travelAt = glide(Player::AirBrakeForm::Travel, travelSummed);
+    const double tickAt = glide(Player::AirBrakeForm::Tick, tickSummed);
+    const double rootAt = glide(Player::AirBrakeForm::Root, rootSummed);
+
+    // TRAVEL: 2.4 x 0.601399 / 0.398601 = 3.621 units, the original's 4.95 units a frame braked 0.43 a frame (3.734) less the walk's 3 %.
+    CHECK_WITHIN(travelSummed, tail(0.86 / 1.43), 1e-4);
+    CHECK_WITHIN(travelSummed, 3.621, 1e-3);
+    CHECK_WITHIN(travelAt, travelSummed, 0.01);
+    CHECK_WITHIN(travelAt, 3.62, 0.05);
+    CHECK_WITHIN(travelAt, 4.95 * 0.43 / 0.57, 0.15);
+    // TICK is the share a tick as it stands: 0.43 a tick glides 1.81 units, half of it. ROOT keeps the frame's decay and glides 4.57.
+    CHECK_WITHIN(tickSummed, tail(0.43), 1e-4);
+    CHECK_WITHIN(tickAt, tickSummed, 0.01);
+    CHECK_WITHIN(rootSummed, tail(std::sqrt(0.43)), 1e-4);
+    CHECK_WITHIN(rootAt, rootSummed, 0.01);
+    CHECK_MSG(tickAt < travelAt && travelAt < rootAt, "tick " + std::to_string(tickAt) + " < travel " + std::to_string(travelAt) +
+                                                          " < root " + std::to_string(rootAt));
+}
+
+// The clamp's limit is per step of the ORIGINAL's physics: the translation is what the body covers in frameTicks ticks, not in one.
+void TheClampJudgesATranslationPerStepOfTheOriginal() {
+    ScriptClock::Rules flippedRules = ReadRules();
+    CHECK(flippedRules.SetOriginalFrameHz(30));
+    const ScriptClock::Step oneTick = ScriptClock::TickStep(ReadRules(), kTick);
+    const ScriptClock::Step twoTicks = ScriptClock::TickStep(flippedRules, kTick);
+    const Player::Tuning reference = ReadTuning();
+    // The speed in units a second a body written at `unitsPerSecond` moves at once the clamp has judged it, at a screen of `lines`.
+    const auto speedAfter = [&](double unitsPerSecond, const ScriptClock::Step& judged, double lines) {
+        Player::Tuning onScreen = reference;
+        onScreen.screenPxPerUnit = lines / 256.0;
+        RigidBodyComponent body;
+        body.velocity = glm::vec3(static_cast<float>(unitsPerSecond / Units::kPixelsPerMetre), 0.0f, 0.0f);
+        Player::ClampTranslation(body, onScreen, judged);
+        return static_cast<double>(body.velocity.x) * Units::kPixelsPerMetre;
+    };
+
+    // Two ticks a frame, 720 lines: 100 x 256 / 720 = 35.6 units a step of the original, 1066.7 units a second of real time. 1068 is over it
+    // and scaled down to it; 1066 and 1000 are under and untouched.
+    CHECK_WITHIN(speedAfter(1068.0, twoTicks, 720.0), 1066.6667, 0.01);
+    CHECK_WITHIN(speedAfter(1066.0, twoTicks, 720.0), 1066.0, 1e-3);
+    CHECK_WITHIN(speedAfter(1000.0, twoTicks, 720.0), 1000.0, 1e-9);
+    // At 1080 lines the limit is 23.7 units a step, 711.1 a second: 712 is clamped, 700 is not.
+    CHECK_WITHIN(speedAfter(712.0, twoTicks, 1080.0), 711.1111, 0.01);
+    CHECK_WITHIN(speedAfter(700.0, twoTicks, 1080.0), 700.0, 1e-3);
+    // One tick a frame (the pace before the knob): a step is a tick, the limit is twice the real-time speed - 2133.3 and 1422.2 a second -
+    // and 1068 and 712 are nowhere near it.
+    CHECK_WITHIN(speedAfter(1068.0, oneTick, 720.0), 1068.0, 1e-3);
+    CHECK_WITHIN(speedAfter(2200.0, oneTick, 720.0), 2133.3333, 0.01);
+    CHECK_WITHIN(speedAfter(2000.0, oneTick, 720.0), 2000.0, 1e-9);
+    CHECK_WITHIN(speedAfter(712.0, oneTick, 1080.0), 712.0, 1e-3);
+    CHECK_WITHIN(speedAfter(1500.0, oneTick, 1080.0), 1422.2222, 0.01);
+
+    // Whatever the frame, the velocity the engine will integrate (what was written plus what it adds) is left exactly at the limit over the
+    // original's step, with its direction kept.
+    for (const ScriptClock::Step* judged : {&oneTick, &twoTicks}) {
+        for (const glm::vec3 added : {glm::vec3(0.0f), glm::vec3(0.0f, -0.0222f, 0.0f)}) {
+            RigidBodyComponent body;
+            body.velocity = glm::vec3(60.0f, -80.0f, 0.0f);
+            Player::ClampTranslation(body, reference, *judged, added);
+            const glm::vec3 integrated = body.velocity + added;
+            CHECK_WITHIN(std::hypot(static_cast<double>(integrated.x), static_cast<double>(integrated.y)) *
+                             ScriptClock::OriginalStepCarriedS(*judged),
+                         Player::ClampLimitM(reference), 1e-5);
+            CHECK_WITHIN(static_cast<double>(integrated.y) / static_cast<double>(integrated.x),
+                         (-80.0 + static_cast<double>(added.y)) / 60.0, 1e-5);
+        }
+    }
+
+    // BIT FOR BIT at one tick a frame (a bare Step, the layer's, a hand-built one with a ratio just under 2): the translation is judged on the
+    // number it always was, double(physicsS), so a written velocity comes out the same float as the expression before the helper gave.
+    const ScriptClock::Step bare = kTick;
+    const ScriptClock::Step byHand(1.0 / 60.0, 1.0f / 60.0f, 1.0 / 30.0, 60.0);
+    for (const ScriptClock::Step* judged : {&bare, &oneTick, &byHand}) {
+        RigidBodyComponent body;
+        body.velocity = glm::vec3(60.0f, -80.0f, 0.0f);
+        const double beforeM = std::hypot(60.0, -80.0) * static_cast<double>(judged->physicsS);
+        const glm::vec3 wanted = glm::vec3(60.0f, -80.0f, 0.0f) * static_cast<float>(Player::ClampLimitM(reference) / beforeM);
+        Player::ClampTranslation(body, reference, *judged);
+        CHECK_MSG(body.velocity.x == wanted.x && body.velocity.y == wanted.y,
+                  "the clamp's result moved at one tick a frame: " + std::to_string(body.velocity.x) + ", " + std::to_string(body.velocity.y) +
+                      " against " + std::to_string(wanted.x) + ", " + std::to_string(wanted.y));
+    }
+
+    // Through the solver: a fall at two ticks a frame tops out at HALF the distance a tick that the one-tick pace reaches (35.6 units a tick
+    // at 720 lines, 23.7 at 1080: pinned above) - the same 1067 and 711 units a second of real time.
+    const auto fastestFall = [&](double lines) {
+        Scene scene(false, -2500.0);
+        scene.step = twoTicks;
+        scene.tuning.screenPxPerUnit = lines / 256.0;
+        double fastest = 0.0;
+        for (int tick = 1; tick <= 200; ++tick) {
+            scene.Tick(0.0f);
+            fastest = std::max(fastest, -static_cast<double>(scene.Rigid().velocity.y) * Units::kPixelsPerMetre *
+                                            static_cast<double>(kTick));
+        }
+        return fastest;
+    };
+    CHECK_WITHIN(fastestFall(720.0), 100.0 * 256.0 / 720.0 / 2.0, 1e-3);
+    CHECK_WITHIN(fastestFall(1080.0), 100.0 * 256.0 / 1080.0 / 2.0, 1e-3);
+}
+
 void runTests() {
     TheNumbersAreTheListingsAndAFileWithoutThemIsRefused();
     TheWalkIsTwoPointFourUnitsATick();
     TheWalkIsSetOutrightAndStopsDead();
     InTheAirThePadIsIgnoredAndTheXVelocityKeepsTheAirShare();
     ALevelMayHaveItsOwnAirBrakeAndNoOtherLevelDoes();
+    TheAirBrakesRateIsOptionalAndItsFormAndTheGroundLagAreRead();
+    TheAirShareIsPerOriginalFrameAndTheFormSpreadsItOverTheTicks();
+    AWalkReleasedInTheAirGlidesTheOriginalsDistanceInTheTravelForm();
     TheBodyIsDarkMagesTwoCirclesAndTheCapsuleIsTheirHull();
     TheFeetAreAnOctagonFourteenWideAndAWalkerLeavesTheGroundSevenClear();
     AMinionsBodyIsGroundAsACrateAndAPlatformAre();
@@ -1228,6 +1525,7 @@ void runTests() {
     TheFallIsFourThousandUnitsASecondSquared();
     ABodyThatFallsOnIsClampedToBox2DsMaxTranslation();
     TheClampIsJudgedAtTheScreensOwnHundredPixels();
+    TheClampJudgesATranslationPerStepOfTheOriginal();
     TheLandingSpeedIsReadAsTheOriginalsCallbackReadsIt();
     TheRecoilIsSeventyUnitsAPhysicsSecond();
     TheGroundSlopeIsReadFromTwoProbesUnderTheCentreLine();

@@ -86,15 +86,16 @@ unsigned FloorMs(double frameMs);
 // layer, which owns the engine's tick, builds the two apart.
 //
 // `simS` is what the original's physics world advances in the frame this tick stands for, and
-// `fps` what GetFPSRate answers (the player's air share no longer reads it: since planning step 213 the one rate the
-// air brake is evaluated at is player.json's movement.air_decay_rate_hz, or the level's own in air_decay_rate_hz_by_level). A bare float, and the two-length form, are a tick whose
+// `fps` what GetFPSRate answers (the player's air share reads it only when player.json has no movement.air_decay_rate_hz: since
+// planning step 213 the one rate the air brake is evaluated at is that key, or the level's own in air_decay_rate_hz_by_level, and the shipped
+// file has the key). A bare float, and the two-length form, are a tick whose
 // physics is one length with the tick's (simS = physicsS: SimRatio 1) at the frame rate the
 // tick implies: the pure suites' reading, which TickStep replaces with the decode's.
 //
 // `frameTicks` is how many ticks one frame of the original is (Rules::frameTicks) and `framePhase` which
 // of them this tick is: 0 for the first tick of a frame, up to frameTicks - 1. A bare float and the
 // two- and four-length forms are one tick a frame, phase 0 - exactly what the pure suites have always
-// meant - so nothing that builds a Step by hand changes. Nothing reads either field yet; the helpers
+// meant - so nothing that builds a Step by hand changes. Only the air brake (Player::AirShare, through frameTicks) and the translation clamp read them so far; the helpers
 // below say how a once-a-frame quantity reads them.
 struct Step {
     double scriptS = 1.0 / 60.0; // exact whole ms / 1000, never 0.016f
@@ -147,7 +148,7 @@ inline double SimRatio(const Step& step) {
 // while frameTicks is 1, the same number a tick, and is not scaled by either. It stays so for every
 // caller of this file today: the helpers after WallMs (FrameTravel, FrameRoot, FrameDelayTicks,
 // OriginalStepCarriedS) are the named rules for a frame of more than one tick, each the identity at
-// one, and nothing calls them yet.
+// one; so far only the air brake (FrameTravel, FrameRoot) and the translation clamp (OriginalStepCarriedS) call them.
 //
 // The velocity the original's physics holds for a body that moves `originalMps` metres of ITS second a
 // second, as the port's solver carries it (metres of the engine's second a second).
