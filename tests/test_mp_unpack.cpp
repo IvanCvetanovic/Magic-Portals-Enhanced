@@ -23,6 +23,23 @@
 //   - D2: the list the PACKAGER makes for four invented files (tools/package/test_android_package.py regenerates it) is parsed and unpacked;
 //   - D3: the flags file taken (read once, consumed, unreadable, unparsable, a rename that fails), the dialog rule, the exit after the unpack, the argument
 //     list, and PORT5-10 (a), the log written by a start that stopped in the unpack.
+// ENHANCEMENT E49 (planning step 260, the sibling game's fix for a first start that the phone's system stops, again and again, before it finishes) added the
+// RESUME MARKER, pinned over MarkerSink (a sink that keeps one) and FsSink (a real folder), while MemSink stays a sink that knows none, so that every check
+// above and below that is made over MemSink is also a check that such a sink gets what Run did before: all or nothing.
+//   - a start stopped at EVERY file (the source dies, the pump says finish), and with the stamp that cannot be written, is continued: the files whole are kept
+//     (counted from the disk, not from the run), only the rest are copied, the tree equals an uninterrupted unpack's byte for byte, the stamp is there and
+//     the marker is not;
+//   - the process KILLED before every mutating call of a start (a sink that throws, so that nothing in Run tidies up: a half file stays under its name), over
+//     an empty disk and over a finished tree of another build with files of the same sizes, then the next start (and the one after a second kill) ends in the
+//     right tree, and a start of the other build ends in its own;
+//   - a marker of another stamp is a clean start (a file of the right size from the other build is never kept), a file short, long, empty or missing under the
+//     right marker is copied again, a sink without a marker starts from the top, the free-space check serves a resume, and a marker left beside a finished copy
+//     is removed without failing anything;
+//   - FsSink on a real folder: the marker is a file beside the stamp and outside the owned folders, it is there exactly while the unpack is unfinished, and a
+//     second sink over the same folder (a second process) continues what the first left.
+//   The "mutation:" lines of this E49 part were written by reasoning; ten of them were then applied one at a time to sim/Unpack.cpp and the suite was
+//   run (step 260's record has the list): nine were caught on the first run, and the one that was not (a kept file not counting as in place for the pump)
+//   is pinned now by AContinuationAsksThePumpAndTheProgressForKeptFilesToo. The others were not run.
 // Each pin says in "mutation:" the change of sim/Unpack.cpp that turns it red; the Step records that they were run.
 //
 // NOT TESTED, and why: AAssetManager and the dialog and the real pump (game/android/AndroidMain.cpp is the thin glue over them; step 204 ran them on an
@@ -38,9 +55,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <map>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -83,6 +102,7 @@ public:
     std::size_t chunksGiven = 0; // chunks handed to the reader, over all assets
     std::size_t endlessChunks = 0; // of them, the ones of the endless asset
     static constexpr std::size_t kMostChunks = 100000;
+    std::function<void(const std::string&)> onRead; // called with the path at the start of every asset read: a test looks at the disk while the unpack runs
 
     bool ReadList(std::string& text, std::string& why) override {
         if (!listReadable) {
@@ -94,6 +114,7 @@ public:
     }
     bool ReadAsset(const std::string& path, const Unpack::ChunkFn& give, std::string& why) override {
         ++reads;
+        if (onRead) onRead(path);
         const auto found = assets.find(path);
         if (found == assets.end()) {
             why = "no such asset";
@@ -241,6 +262,96 @@ public:
     }
 };
 
+// What the phone's system does to a first start, and a power cut does to any: the process is gone BETWEEN two calls, with no cleanup. A test throws it from a
+// sink and catches it outside Run, which catches nothing, so nothing in Run gets to tidy up: a file half written stays under its own name, as on a phone.
+struct Killed {};
+
+// An in-memory disk that keeps the RESUME MARKER as FsSink does (E49), and records how Run uses it. MemSink is left without one on purpose: its three marker
+// calls are the base class's defaults, so a check over MemSink is a check of a sink that does not know the marker.
+class MarkerSink : public MemSink {
+public:
+    static constexpr std::size_t kNever = ~std::size_t{0};
+
+    std::optional<std::string> marker;
+    bool markerWriteFails = false;
+    bool markerRemovalFails = false;     // a marker that STANDS cannot be removed (removing none is nothing, as on a real disk)
+    bool markerReadBack = true;          // false: the marker is written and cannot be read again
+    std::size_t killAt = kNever;         // the mutating call, counted in `mutations`, that never happens: the process is gone before it
+    std::size_t mutations = 0;           // mutating calls made so far: RemoveStamp, RemoveMarker, RemoveTree, WriteMarker, Begin, every Write, End, WriteStamp
+    std::set<std::string> markersAtABegin;   // the marker that stood at each Begin ("<none>" for no marker)
+    bool treeRemovedWhileStamped = false;    // an owned folder was removed while a stamp stood
+    bool treeRemovedWhileMarked = false;     // an owned folder was removed while a marker stood
+
+    bool ReadMarker(std::string& m) override {
+        if (!marker || !markerReadBack) return false;
+        m = *marker;
+        return true;
+    }
+    bool WriteMarker(const std::string& m, std::string& why) override {
+        Mutating();
+        ops.push_back("WriteMarker");
+        if (markerWriteFails) {
+            why = "the marker's file is read-only";
+            return false;
+        }
+        marker = m;
+        return true;
+    }
+    bool RemoveMarker(std::string& why) override {
+        Mutating();
+        ops.push_back("RemoveMarker");
+        if (markerRemovalFails && marker) {
+            why = "the marker's file is held by another process";
+            return false;
+        }
+        marker.reset();
+        return true;
+    }
+    bool RemoveStamp(std::string& why) override {
+        Mutating();
+        return MemSink::RemoveStamp(why);
+    }
+    bool WriteStamp(const std::string& s, std::string& why) override {
+        Mutating();
+        return MemSink::WriteStamp(s, why);
+    }
+    bool RemoveTree(const std::string& root, std::string& why) override {
+        Mutating();
+        if (stamp) treeRemovedWhileStamped = true;
+        if (marker) treeRemovedWhileMarked = true;
+        return MemSink::RemoveTree(root, why);
+    }
+    bool Begin(const std::string& path, std::string& why) override {
+        Mutating();
+        markersAtABegin.insert(marker ? *marker : std::string("<none>"));
+        return MemSink::Begin(path, why);
+    }
+    bool Write(const char* data, std::size_t size, std::string& why) override {
+        Mutating();
+        return MemSink::Write(data, size, why);
+    }
+    bool End(bool keep, std::string& why) override {
+        Mutating();
+        return MemSink::End(keep, why);
+    }
+
+    // The next start, with nothing killed: the same disk, the counters of this life cleared.
+    void NextLife() {
+        killAt = kNever;
+        mutations = 0;
+        ops.clear();
+        stampPresentAtABegin = false;
+        markersAtABegin.clear();
+        treeRemovedWhileStamped = false;
+        treeRemovedWhileMarked = false;
+    }
+
+private:
+    void Mutating() {
+        if (mutations++ == killAt) throw Killed{};
+    }
+};
+
 // A tidy invented set: `n` files under the two owned folders, each a few bytes of its own.
 std::vector<Mem> Invented(int n) {
     std::vector<Mem> files;
@@ -262,6 +373,85 @@ Unpack::Options Plain() {
     Unpack::Options options;
     options.ownedRoots = kOwned;
     return options;
+}
+
+// ---- What the resume marker's suites compare against (E49) ------------------------------------------------------------------------------------
+// The oracle is never the run under test: it is the invented files themselves, and what a finished unpack leaves.
+
+// Empty when `sink` holds exactly `files` (every listed path with its bytes, and nothing else), the stamp `stamp` and no marker; else what is wrong.
+std::string TreeProblem(const MarkerSink& sink, const std::vector<Mem>& files, const std::string& stamp) {
+    if (sink.files.size() != files.size()) return "the disk holds " + std::to_string(sink.files.size()) + " files, the list has " + std::to_string(files.size());
+    for (const Mem& file : files) {
+        const auto found = sink.files.find(file.path);
+        if (found == sink.files.end()) return file.path + " is missing";
+        if (found->second != file.bytes) return file.path + " has other bytes than the list's";
+    }
+    if (!sink.stamp || *sink.stamp != stamp) return "the stamp is not " + stamp;
+    if (sink.marker) return "the marker is still there";
+    return {};
+}
+
+// The files of `files` that are on the disk with exactly their bytes: what a continued unpack may keep, counted from the disk and not from the run.
+std::size_t WholeCount(const MemSink& sink, const std::vector<Mem>& files) {
+    std::size_t whole = 0;
+    for (const Mem& file : files) {
+        const auto found = sink.files.find(file.path);
+        if (found != sink.files.end() && found->second == file.bytes) ++whole;
+    }
+    return whole;
+}
+
+// The paths the run began, in order: the files it copied.
+std::vector<std::string> Begun(const MemSink& sink) {
+    std::vector<std::string> begun;
+    for (const std::string& op : sink.ops)
+        if (op.compare(0, 6, "Begin:") == 0) begun.push_back(op.substr(6));
+    return begun;
+}
+
+// The same paths and sizes, other bytes: another build of the game with files of the sizes of this one's. A kept file of the first build would show.
+std::vector<Mem> OtherBuild(const std::vector<Mem>& files) {
+    std::vector<Mem> other = files;
+    for (Mem& file : other) file.bytes = std::string(file.bytes.size(), 'B');
+    return other;
+}
+
+// A disk on which an uninterrupted unpack of `files` under `stamp` was made.
+MarkerSink Finished(const std::vector<Mem>& files, const std::string& stamp) {
+    MemSource source = SourceFor(stamp, files);
+    MarkerSink sink;
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    CHECK_MSG(result.outcome == Unpack::Outcome::Done, result.error);
+    sink.NextLife();
+    return sink;
+}
+
+// THE NEXT START, with nothing wrong with it, over whatever the disk holds. Whatever was done to the disk before, it must end in the tree an uninterrupted
+// unpack makes. A disk that already holds the finished copy of this stamp is UpToDate (and loses a marker left beside it); any other is Done, and continues
+// exactly when the marker is the list's stamp, then keeping exactly the files that are whole (counted here, from the disk before the run); a fresh source is
+// asked for no more assets than the files copied.
+Unpack::Result TheNextStartFinishes(MarkerSink& sink, const std::vector<Mem>& files, const std::string& stamp, const std::string& at) {
+    const bool markedWithThisStamp = sink.marker && *sink.marker == stamp;
+    const bool finishedAlready = sink.stamp && *sink.stamp == stamp && WholeCount(sink, files) == files.size();
+    const std::size_t wholeBefore = markedWithThisStamp ? WholeCount(sink, files) : std::size_t{0};
+    sink.NextLife();
+    MemSource source = SourceFor(stamp, files);
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    if (finishedAlready) {
+        CHECK_MSG(result.outcome == Unpack::Outcome::UpToDate && result.copied == 0 && result.kept == 0 && !result.resumed, at + ": a finished copy is up to date");
+    } else {
+        CHECK_MSG(result.outcome == Unpack::Outcome::Done, at + ": " + result.error);
+        CHECK_MSG(result.resumed == markedWithThisStamp, at + ": it continues exactly when the marker is the list's stamp");
+        CHECK_MSG(result.kept == wholeBefore && result.copied == files.size() - wholeBefore,
+                  at + ": kept " + std::to_string(result.kept) + " and copied " + std::to_string(result.copied) + " of " + std::to_string(files.size()) +
+                      ", the disk held " + std::to_string(wholeBefore) + " whole");
+    }
+    CHECK_MSG(TreeProblem(sink, files, stamp).empty(), at + ": " + TreeProblem(sink, files, stamp));
+    CHECK_MSG(source.reads == static_cast<int>(result.copied), at + ": the APK was asked for exactly the files copied");
+    CHECK_MSG(!sink.stampPresentAtABegin && !sink.treeRemovedWhileStamped && !sink.treeRemovedWhileMarked, at + ": no stamp over a copy in progress, no wipe under a marker");
+    const std::set<std::string> only = {stamp};
+    CHECK_MSG(sink.markersAtABegin.empty() || sink.markersAtABegin == only, at + ": the marker, when a file was begun, was the list's stamp");
+    return result;
 }
 
 // ---- The list ---------------------------------------------------------------------------------------------------------------------------
@@ -388,6 +578,7 @@ void EveryRefusalOfAPathStandsOnItsOwn() {
     // mutation: no check of the first segment (any relative path passes).
     refused("Magic Portals/scores.json", "owns", "the player's saves");
     refused("magicportals_gamedata.stamp", "owns", "the stamp's own name");
+    refused("magicportals_gamedata.stamp.partial", "owns", "the resume marker's own name (E49): no list can name it, so no copy can write over it");
     refused("magicportals_args.txt", "owns", "the developer's flags file");
     refused("gamedata/a", "owns", "an owned folder's name in another case");
     refused("GameDataX/a", "owns", "a name that merely begins like an owned folder");
@@ -517,6 +708,9 @@ void AStampWithAFileMissingOrShortIsNotTheWordOfAWholeCopy() {
     CHECK_MSG(sink.stamp && *sink.stamp == "new", "and the stamp is the new one");
 }
 
+// OVER A SINK THAT KEEPS NO MARKER (MemSink): the all-or-nothing unpack as it was, every file copied again by the second call. Nothing in this test moved when
+// the resume marker was added (E49): that is the point of it. The same stop over a sink that keeps the marker, which KEEPS the first k files, is
+// AStartThatDiesAtEveryFileIsContinuedAndKeepsWhatWasDone, in the resume marker's section below.
 void AnUnpackThatDiesAtFileKLeavesNoStampAndASecondCallCompletes() {
     const std::vector<Mem> files = Invented(20);
     for (const std::size_t k : {std::size_t{0}, std::size_t{9}, std::size_t{19}}) {
@@ -539,6 +733,9 @@ void AnUnpackThatDiesAtFileKLeavesNoStampAndASecondCallCompletes() {
         CHECK_MSG(second.outcome == Unpack::Outcome::Done, "a second call completes: " + second.error);
         CHECK_EQ(second.copied, std::size_t{20});
         CHECK_MSG(sink.stamp && *sink.stamp == "one", "and then there is a stamp");
+        // E49. This sink has no marker to find, so the second call is a clean start and says nothing of a start that was cut short.
+        // mutation: take a stop for a marker without asking the sink (resume on any partial tree).
+        CHECK_MSG(!second.resumed && second.kept == 0 && !second.resumable, "a sink without a marker starts again from the top");
     }
 }
 
@@ -781,6 +978,574 @@ void TheSameInputsGiveTheSameOperationsEveryTime() {
     }
 }
 
+// ---- The resume marker (ENHANCEMENT E49) ----------------------------------------------------------------------------------------------------
+
+// The order of a clean start over a sink that keeps the marker: the stamp goes, then the marker (of another build, if any), then the owned folders, THEN the
+// marker is written, and only then the first file; the stamp is written last and the marker removed after it.
+void ACleanStartWritesTheMarkerAfterTheWipeAndRemovesItAfterTheStamp() {
+    const std::vector<Mem> files = Invented(23);
+    MemSource source = SourceFor("m-one", files);
+    MarkerSink sink;
+    const Unpack::Result result = Unpack::Run(source, sink, Plain());
+    CHECK_MSG(result.outcome == Unpack::Outcome::Done, result.error);
+    CHECK_MSG(!result.resumed && result.kept == 0, "nothing was found to continue");
+    CHECK_MSG(result.resumable, "the marker was written and reads back: a stop from here on is continued by the next start");
+    CHECK_EQ(result.copied, std::size_t{23});
+    CHECK_MSG(TreeProblem(sink, files, "m-one").empty(), TreeProblem(sink, files, "m-one"));
+    const std::ptrdiff_t freeAsked = sink.IndexOf("FreeBytes");
+    const std::ptrdiff_t removeStamp = sink.IndexOf("RemoveStamp");
+    const std::ptrdiff_t removeMarker = sink.IndexOf("RemoveMarker");
+    const std::ptrdiff_t removeGameData = sink.IndexOf("RemoveTree:GameData");
+    const std::ptrdiff_t removeEngine = sink.IndexOf("RemoveTree:engine");
+    const std::ptrdiff_t writeMarker = sink.IndexOf("WriteMarker");
+    const std::ptrdiff_t firstBegin = sink.IndexOf("Begin:" + files[0].path);
+    // mutation: check the space after the removals (PORT5-10 (b) again, now with the marker's calls among them).
+    CHECK_MSG(freeAsked >= 0 && freeAsked < removeStamp && freeAsked < writeMarker, "space is checked before anything is removed or written");
+    // mutation: write the marker before the wipe (a marker over files of another build); remove an old marker after the wipe (a wipe cut short under it).
+    CHECK_MSG(removeStamp >= 0 && removeMarker > removeStamp && removeGameData > removeMarker && removeEngine > removeGameData, "the stamp goes, then the marker, then the folders");
+    CHECK_MSG(writeMarker > removeEngine && firstBegin > writeMarker, "the marker is written after the wipe and before the first file");
+    CHECK_EQ(sink.Count("WriteMarker"), std::size_t{1});
+    // mutation: remove the marker before the stamp is written (a stamp that cannot be written would leave nothing to continue), or write the stamp before the files.
+    CHECK_MSG(sink.ops.size() >= 2 && sink.ops[sink.ops.size() - 2] == "WriteStamp" && sink.ops.back() == "RemoveMarker", "the stamp is written last, and THEN the marker goes");
+    CHECK_EQ(sink.Count("RemoveMarker"), std::size_t{2}); // the clean start's, which found none, and the end's
+    const std::set<std::string> only = {"m-one"};
+    CHECK_MSG(sink.markersAtABegin == only, "the marker stood at every file begun, and it was the list's stamp");
+    CHECK_MSG(!sink.stampPresentAtABegin && !sink.treeRemovedWhileStamped && !sink.treeRemovedWhileMarked, "no stamp over a copy in progress, no folder removed under a stamp or a marker");
+}
+
+// A sink that keeps no marker is what Run was before: a stop leaves nothing to continue, and the next start begins from the top.
+void ASinkThatKeepsNoMarkerStartsAgainFromTheTopAfterAStop() {
+    const std::vector<Mem> files = Invented(20);
+    for (const std::size_t k : {std::size_t{0}, std::size_t{9}, std::size_t{19}}) {
+        MemSource dying = SourceFor("plain", files);
+        dying.failAt = files[k].path;
+        MemSink sink;
+        const Unpack::Result first = Unpack::Run(dying, sink, Plain());
+        CHECK_MSG(first.outcome == Unpack::Outcome::Failed && !first.resumable, "the source died at file " + std::to_string(k) + ", and the sink cannot be continued");
+        sink.ops.clear();
+        MemSource fixed = SourceFor("plain", files);
+        const Unpack::Result second = Unpack::Run(fixed, sink, Plain());
+        // mutation: take any partial tree of the list's stamp for a continuation, without asking the sink.
+        CHECK_MSG(second.outcome == Unpack::Outcome::Done, second.error);
+        CHECK_MSG(!second.resumed && second.kept == 0 && second.copied == files.size(), "every file is copied again");
+        CHECK_MSG(sink.Did("RemoveTree:GameData") && sink.Did("RemoveTree:engine") && sink.Count("Begin:") == files.size(), "the folders are wiped and every file begun again");
+        CHECK_MSG(!Has(Unpack::Summary(second), "kept"), "and the line says nothing of a start that was cut short: " + Unpack::Summary(second));
+    }
+}
+
+// THE CORE. The source dies at file k, for every k; the next start, with a source that works, finishes. Over a sink that keeps the marker.
+void AStartThatDiesAtEveryFileIsContinuedAndKeepsWhatWasDone() {
+    const std::vector<Mem> files = Invented(20);
+    const MarkerSink reference = Finished(files, "one");
+    for (std::size_t k = 0; k < files.size(); ++k) {
+        const std::string at = "the source died at file " + std::to_string(k);
+        MemSource dying = SourceFor("one", files);
+        dying.failAt = files[k].path;
+        MarkerSink sink;
+        const Unpack::Result first = Unpack::Run(dying, sink, Plain());
+        CHECK_MSG(first.outcome == Unpack::Outcome::Failed, at);
+        CHECK_MSG(!sink.stamp.has_value(), at + ": no stamp, a copy that did not finish says nothing");
+        // mutation: write the marker after the first file, or remove it when a copy fails.
+        CHECK_MSG(sink.marker && *sink.marker == "one", at + ": the marker stands, with the list's stamp");
+        CHECK_MSG(sink.files.count(files[k].path) == 0, at + ": the half-written file is removed, as before");
+        CHECK_EQ(first.copied, k);
+        CHECK_MSG(!first.resumed && first.resumable, at + ": a first start is no continuation, and the next one can continue it");
+        CHECK_EQ(WholeCount(sink, files), k);
+
+        sink.NextLife();
+        MemSource fixed = SourceFor("one", files);
+        const Unpack::Result second = Unpack::Run(fixed, sink, Plain());
+        CHECK_MSG(second.outcome == Unpack::Outcome::Done, at + ": " + second.error);
+        // mutation: wipe the owned folders on a resume (nothing kept); keep a file without looking at its size; copy a kept file again.
+        CHECK_MSG(second.resumed && second.kept == k && second.copied == files.size() - k,
+                  at + ": kept " + std::to_string(second.kept) + ", copied " + std::to_string(second.copied));
+        std::vector<std::string> rest;
+        std::uint64_t restBytes = 0;
+        for (std::size_t i = k; i < files.size(); ++i) {
+            rest.push_back(files[i].path);
+            restBytes += files[i].bytes.size();
+        }
+        CHECK_MSG(Begun(sink) == rest, at + ": only the files that were not whole are begun again, in the list's order");
+        CHECK_EQ(fixed.reads, static_cast<int>(files.size() - k));
+        CHECK_EQ(second.copiedBytes, restBytes);
+        CHECK_MSG(sink.files == reference.files, at + ": the tree is an uninterrupted unpack's, byte for byte");
+        CHECK_MSG(TreeProblem(sink, files, "one").empty(), at + ": " + TreeProblem(sink, files, "one"));
+        // mutation: remove the marker before the stamp, write another marker, or wipe on a resume.
+        CHECK_MSG(sink.Count("RemoveTree:") == 0 && sink.Count("WriteMarker") == 0 && sink.Count("RemoveMarker") == 1, at + ": a continuation wipes nothing and writes no marker");
+        CHECK_MSG(sink.ops.size() >= 2 && sink.ops[sink.ops.size() - 2] == "WriteStamp" && sink.ops.back() == "RemoveMarker", at + ": the stamp, then the marker's removal, last");
+        // mutation: leave the old stamp standing on a resume, or begin a file with another marker standing.
+        const std::set<std::string> only = {"one"};
+        CHECK_MSG(!sink.stampPresentAtABegin && sink.markersAtABegin == only, at + ": no stamp over a copy in progress, the list's marker at every file");
+        CHECK_MSG(Has(Unpack::Summary(second), std::to_string(k) + " more were kept from a start that was cut short"), at + ": " + Unpack::Summary(second));
+    }
+}
+
+// The same, with the app finishing instead of the source failing: the pump says "finish" after the asked-th file in place. asked == the number of files is the
+// state in which every file is in place and only the stamp is missing (the pump is asked after the last file too).
+void AStartTheAppFinishesAtEveryFileIsContinuedToo() {
+    const std::vector<Mem> files = Invented(20);
+    for (std::size_t asked = 1; asked <= files.size(); ++asked) {
+        const std::string at = "the app finished after " + std::to_string(asked) + " files";
+        MemSource source = SourceFor("pump", files);
+        MarkerSink sink;
+        Unpack::Options options = Plain();
+        options.pumpEvery = 1;
+        std::size_t calls = 0;
+        options.pump = [&] { return ++calls < asked; };
+        const Unpack::Result first = Unpack::Run(source, sink, options);
+        // mutation: take a cancel for a failure, or remove the marker when the app finishes.
+        CHECK_MSG(first.outcome == Unpack::Outcome::Cancelled && first.error.empty(), at);
+        CHECK_EQ(first.copied, asked);
+        CHECK_EQ(first.pumps, asked);
+        CHECK_MSG(!sink.stamp.has_value() && sink.marker && *sink.marker == "pump", at + ": no stamp, and the marker stands");
+        CHECK_MSG(first.resumable && Has(Unpack::Summary(first), "next start goes on from there"), at + ": " + Unpack::Summary(first));
+        const Unpack::Result second = TheNextStartFinishes(sink, files, "pump", at);
+        CHECK_EQ(second.kept, asked);
+        CHECK_EQ(second.copied, files.size() - asked);
+    }
+}
+
+// The pump and the progress count FILES IN PLACE, the kept ones too: a continuation that finds most of its files whole must still ask the platform's event
+// pump now and then, or a phone that stops a first start a second time, in a long run of kept files, would call the app "not responding". 40 files; the
+// first start died at file 33, so the next one keeps 33 and copies 7, and both of the cadence's two asks (after the 16th and the 32nd) fall on KEPT files.
+void AContinuationAsksThePumpAndTheProgressForKeptFilesToo() {
+    const std::vector<Mem> files = Invented(40);
+    MemSource dying = SourceFor("kept", files);
+    dying.failAt = files[33].path;
+    MarkerSink sink;
+    CHECK_MSG(Unpack::Run(dying, sink, Plain()).outcome == Unpack::Outcome::Failed, "the first start dies at file 33");
+    CHECK_EQ(WholeCount(sink, files), std::size_t{33});
+    const MarkerSink afterTheFirstStart = sink;
+
+    // The shipped cadence (16): two asks, then progress at each ask and once at the end, all counting the kept files.
+    {
+        sink.NextLife();
+        MemSource source = SourceFor("kept", files);
+        Unpack::Options options = Plain();
+        std::size_t pumps = 0;
+        std::vector<std::size_t> told;
+        std::vector<std::size_t> totals;
+        options.pump = [&] {
+            ++pumps;
+            return true;
+        };
+        options.progress = [&](std::size_t done, std::size_t total, std::uint64_t) {
+            told.push_back(done);
+            totals.push_back(total);
+        };
+        const Unpack::Result result = Unpack::Run(source, sink, options);
+        // mutation: a kept file does not count as in place (the asks would come after the 7 copied files only: none).
+        CHECK_MSG(result.outcome == Unpack::Outcome::Done, result.error);
+        CHECK_MSG(result.resumed && result.kept == 33 && result.copied == 7, "33 kept, 7 copied");
+        CHECK_EQ(pumps, std::size_t{2});
+        CHECK_EQ(result.pumps, std::size_t{2});
+        const std::vector<std::size_t> expectedTold = {16, 32, 40};
+        CHECK_MSG(told == expectedTold, "progress is told 16, 32 (the kept files count) and 40 at the end");
+        CHECK_MSG(totals == std::vector<std::size_t>(3, files.size()), "progress always names the 40 files of the list");
+        CHECK_MSG(TreeProblem(sink, files, "kept").empty(), TreeProblem(sink, files, "kept"));
+    }
+    // The pump says "finish" at its first ask, which falls on the 16th file in place, a kept one: the unpack stops with nothing copied, the marker and the
+    // files stay, and the start after that still finishes with the same 33 kept.
+    {
+        sink = afterTheFirstStart;
+        sink.NextLife();
+        MemSource source = SourceFor("kept", files);
+        Unpack::Options options = Plain();
+        options.pump = [] { return false; };
+        const Unpack::Result stopped = Unpack::Run(source, sink, options);
+        CHECK_MSG(stopped.outcome == Unpack::Outcome::Cancelled && stopped.error.empty(), "the app finishing is a quiet stop");
+        CHECK_MSG(stopped.resumed && stopped.kept == 16 && stopped.copied == 0, "stopped on the 16th kept file: 16 kept, nothing copied");
+        CHECK_EQ(stopped.pumps, std::size_t{1});
+        CHECK_MSG(!sink.stamp.has_value() && sink.marker && *sink.marker == "kept", "no stamp, and the marker stands");
+        CHECK_EQ(source.reads, 0);
+        CHECK_MSG(stopped.resumable && Has(Unpack::Summary(stopped), "next start goes on from there"), Unpack::Summary(stopped));
+        const Unpack::Result third = TheNextStartFinishes(sink, files, "kept", "after a stop on a kept file");
+        CHECK_MSG(third.kept == 33 && third.copied == 7, "the files that were whole are still whole: 33 kept, 7 copied");
+    }
+}
+
+// A start that is stopped again and again: every life ends after copying three files, and each adds to the last. Every file is copied exactly once over all of them.
+void EachShortLifeAddsToTheLastAndEveryFileIsCopiedOnce() {
+    const std::vector<Mem> files = Invented(20);
+    MarkerSink sink;
+    std::size_t copiedInAll = 0;
+    std::size_t lives = 0;
+    Unpack::Result last;
+    do {
+        ++lives;
+        MemSource source = SourceFor("lives", files);
+        Unpack::Options options = Plain();
+        options.pumpEvery = 1;
+        const std::size_t before = sink.Count("Begin:");
+        options.pump = [&] { return sink.Count("Begin:") - before < std::size_t{3}; };
+        last = Unpack::Run(source, sink, options);
+        copiedInAll += last.copied;
+        // mutation: wipe on a resume (the lives would copy the first three files again and again, and never finish).
+        CHECK_MSG(last.copied <= 3, "life " + std::to_string(lives) + " copied at most its three");
+        CHECK_MSG(last.kept == copiedInAll - last.copied, "life " + std::to_string(lives) + " kept what the lives before it copied");
+    } while (last.outcome == Unpack::Outcome::Cancelled && lives < std::size_t{40});
+    CHECK_MSG(last.outcome == Unpack::Outcome::Done, last.error);
+    CHECK_EQ(lives, std::size_t{7}); // 20 files, three a life: six lives of three, the seventh copies the last two and is not stopped
+    CHECK_EQ(copiedInAll, files.size());
+    CHECK_MSG(TreeProblem(sink, files, "lives").empty(), TreeProblem(sink, files, "lives"));
+}
+
+// A stamp that cannot be written, when every file is in place: the marker stays, and the next start only writes the stamp.
+void AStampThatCannotBeWrittenLeavesEveryFileAndTheMarkerForAOnePassFinish() {
+    const std::vector<Mem> files = Invented(20);
+    MemSource source = SourceFor("ws", files);
+    MarkerSink sink;
+    sink.writeStampFails = true;
+    const Unpack::Result first = Unpack::Run(source, sink, Plain());
+    CHECK_MSG(first.outcome == Unpack::Outcome::Failed && Has(first.error, "could not be recorded") && Has(first.error, "the stamp's file is read-only"), first.error);
+    CHECK_EQ(first.copied, files.size());
+    // mutation: remove the marker before the stamp is written, or when the stamp cannot be.
+    CHECK_MSG(!sink.stamp.has_value() && sink.marker && *sink.marker == "ws", "no stamp, and the marker stands");
+    CHECK_EQ(WholeCount(sink, files), files.size());
+    sink.writeStampFails = false;
+    sink.NextLife();
+    MemSource fixed = SourceFor("ws", files);
+    const Unpack::Result second = Unpack::Run(fixed, sink, Plain());
+    CHECK_MSG(second.outcome == Unpack::Outcome::Done && second.resumed && second.kept == files.size() && second.copied == 0, second.error);
+    CHECK_MSG(fixed.reads == 0 && sink.Count("Begin:") == 0 && sink.Count("RemoveTree:") == 0, "the next start only writes the stamp: no asset read, no file begun, no folder wiped");
+    CHECK_MSG(sink.IndexOf("WriteStamp") >= 0 && sink.IndexOf("RemoveMarker") > sink.IndexOf("WriteStamp"), "the stamp, then the marker's removal");
+    CHECK_MSG(TreeProblem(sink, files, "ws").empty(), TreeProblem(sink, files, "ws"));
+}
+
+// THE KILL. The process is gone before the m-th mutating call of a start, for every m: nothing in Run tidies up, so a file half written stays under its name.
+// Whatever the call, the next start must end in the right tree, continuing exactly when the marker is the list's stamp; a start of the build before ends in
+// ITS tree. Over an empty disk, and over the finished tree of another build with files of the same sizes and other bytes (which a kept file would show).
+void AProcessKilledBeforeAnyCallOfAStartLeavesAStartTheNextOneFinishes() {
+    const std::vector<Mem> a = Invented(9);
+    const std::vector<Mem> b = OtherBuild(a);
+    // What a clean start makes of mutating calls, counted from the list and the chunk size, not from the run: RemoveStamp, RemoveMarker, two RemoveTree,
+    // WriteMarker; for each file Begin, one Write a chunk of five, End; WriteStamp, RemoveMarker.
+    std::size_t expected = 5 + 2;
+    for (const Mem& file : a) expected += 2 + (file.bytes.size() + 4) / 5;
+    for (int scenario = 0; scenario < 2; ++scenario) {
+        const bool overAnotherBuild = scenario == 1;
+        const MarkerSink start = overAnotherBuild ? Finished(b, "B") : MarkerSink();
+        MarkerSink probe = start;
+        probe.NextLife();
+        MemSource counted = SourceFor("A", a);
+        CHECK(Unpack::Run(counted, probe, Plain()).outcome == Unpack::Outcome::Done);
+        const std::size_t calls = probe.mutations;
+        CHECK_EQ(calls, expected);
+        for (std::size_t m = 0; m < calls; ++m) {
+            const std::string at = std::string(overAnotherBuild ? "over build B" : "over an empty disk") + ", killed before call " + std::to_string(m) + " of " + std::to_string(calls);
+            MarkerSink sink = start;
+            sink.NextLife();
+            sink.killAt = m;
+            MemSource dying = SourceFor("A", a);
+            bool killed = false;
+            try {
+                Unpack::Run(dying, sink, Plain());
+            } catch (const Killed&) {
+                killed = true;
+            }
+            CHECK_MSG(killed, at + ": the start reached that call");
+
+            // The player puts the build before back (it was never finished here, or was, and the new one only began): its own tree, or still up to date.
+            MarkerSink back = sink;
+            back.NextLife();
+            MemSource old = SourceFor("B", b);
+            const Unpack::Result again = Unpack::Run(old, back, Plain());
+            const bool bStillStands = sink.stamp && *sink.stamp == "B";
+            // mutation: take the other build's tree for continuable (a marker written before the wipe, or kept through it).
+            CHECK_MSG(again.outcome == (bStillStands ? Unpack::Outcome::UpToDate : Unpack::Outcome::Done), at + ": going back to B: " + again.error);
+            CHECK_MSG(TreeProblem(back, b, "B").empty(), at + ": going back to B: " + TreeProblem(back, b, "B"));
+
+            TheNextStartFinishes(sink, a, "A", at);
+        }
+    }
+}
+
+// Killed twice: a start killed before call m1, the one after it killed before call m2, a third finishes.
+void AProcessKilledTwiceIsStillContinuedAndFinishes() {
+    const std::vector<Mem> a = Invented(6);
+    MarkerSink empty;
+    MarkerSink probe1 = empty;
+    MemSource counted1 = SourceFor("A", a);
+    CHECK(Unpack::Run(counted1, probe1, Plain()).outcome == Unpack::Outcome::Done);
+    const std::size_t calls1 = probe1.mutations;
+    CHECK_MSG(calls1 > 20, "the count of calls is a real one: " + std::to_string(calls1));
+    for (std::size_t m1 = 0; m1 < calls1; ++m1) {
+        MarkerSink life1 = empty;
+        life1.killAt = m1;
+        MemSource dying1 = SourceFor("A", a);
+        bool killed1 = false;
+        try {
+            Unpack::Run(dying1, life1, Plain());
+        } catch (const Killed&) {
+            killed1 = true;
+        }
+        CHECK_MSG(killed1, "life 1 was killed before call " + std::to_string(m1));
+        MarkerSink probe2 = life1;
+        probe2.NextLife();
+        MemSource counted2 = SourceFor("A", a);
+        const Unpack::Result whole2 = Unpack::Run(counted2, probe2, Plain());
+        CHECK_MSG(whole2.outcome == Unpack::Outcome::Done || whole2.outcome == Unpack::Outcome::UpToDate, "life 2, left alone, ends well");
+        const std::size_t calls2 = probe2.mutations;
+        for (std::size_t m2 = 0; m2 < calls2; ++m2) {
+            const std::string at = "killed before call " + std::to_string(m1) + ", then before call " + std::to_string(m2) + " of the next start's " + std::to_string(calls2);
+            MarkerSink sink = life1;
+            sink.NextLife();
+            sink.killAt = m2;
+            MemSource dying2 = SourceFor("A", a);
+            bool killed2 = false;
+            try {
+                Unpack::Run(dying2, sink, Plain());
+            } catch (const Killed&) {
+                killed2 = true;
+            }
+            CHECK_MSG(killed2, at + ": the second start reached that call");
+            TheNextStartFinishes(sink, a, "A", at);
+        }
+    }
+}
+
+// A marker of another stamp is a clean start: another build's files, even of the sizes this build's have, are never kept, and nothing of that build stays.
+void AMarkerOfAnotherStampIsACleanStartAndNothingOfThatBuildSurvives() {
+    const std::vector<Mem> a = Invented(14);
+    std::vector<Mem> b = OtherBuild(a);
+    b.erase(b.begin() + 3); // a file build A has and build B has not
+    MemSource dying = SourceFor("build-a", a);
+    dying.failAt = a[9].path;
+    MarkerSink sink;
+    CHECK(Unpack::Run(dying, sink, Plain()).outcome == Unpack::Outcome::Failed);
+    CHECK_MSG(sink.marker && *sink.marker == "build-a" && sink.files.count(a[3].path) == 1 && WholeCount(sink, a) == 9, "build A's start stands: its marker and nine of its files");
+    sink.NextLife();
+    MemSource fresh = SourceFor("build-b", b);
+    const Unpack::Result result = Unpack::Run(fresh, sink, Plain());
+    CHECK_MSG(result.outcome == Unpack::Outcome::Done, result.error);
+    // mutation: continue on any marker, not only the list's stamp (eight of A's files have the sizes of B's: they would be kept, and be A's bytes).
+    CHECK_MSG(!result.resumed && result.kept == 0 && result.copied == b.size(), "another build's marker is not continued: nothing of its files is kept");
+    CHECK_MSG(TreeProblem(sink, b, "build-b").empty(), TreeProblem(sink, b, "build-b"));
+    CHECK_MSG(sink.files.count(a[3].path) == 0, "the file build B lacks is gone");
+    // mutation: write the new marker before the wipe, remove the old one after it, or leave it standing through the wipe.
+    const std::ptrdiff_t removeMarker = sink.IndexOf("RemoveMarker");
+    CHECK_MSG(removeMarker >= 0 && removeMarker < sink.IndexOf("RemoveTree:GameData") && sink.IndexOf("RemoveTree:engine") < sink.IndexOf("WriteMarker"),
+              "the old marker goes before the folders, the new one is written after them");
+    const std::set<std::string> only = {"build-b"};
+    CHECK_MSG(sink.markersAtABegin == only && !sink.treeRemovedWhileMarked && !sink.stampPresentAtABegin, "every file of B was begun under B's marker, and no folder was wiped under a marker");
+    CHECK_MSG(Unpack::Summary(result) == "Unpacked " + std::to_string(b.size()) + " files, " + std::to_string(result.copiedBytes) + " bytes (stamp build-b).",
+              "and the line says nothing of a continuation: " + Unpack::Summary(result));
+}
+
+// Under the right marker a file that is not whole is copied again, whatever is wrong with it, and one that is whole is not.
+void AFileThatIsShortLongEmptyHalfOrMissingUnderTheRightMarkerIsCopiedAgain() {
+    const std::vector<Mem> files = Invented(20);
+    MemSource dying = SourceFor("dam", files);
+    dying.failAt = files[12].path;
+    MarkerSink sink;
+    CHECK(Unpack::Run(dying, sink, Plain()).outcome == Unpack::Outcome::Failed);
+    // What a stopped copy and a damaged disk leave under a name.
+    sink.files[files[2].path].pop_back();                                                          // one byte short
+    sink.files[files[5].path].clear();                                                             // the empty file a copy stopped between its open and its first write leaves
+    sink.files[files[7].path] += "X";                                                              // one byte long
+    sink.files.erase(files[9].path);                                                               // gone
+    sink.files[files[10].path] = files[10].bytes.substr(0, files[10].bytes.size() / 2);            // half
+    // mutation: keep a file that is there at any size, or at least as long as the list says (the long one), or that is not empty (the empty one).
+    const Unpack::Result second = TheNextStartFinishes(sink, files, "dam", "five files damaged under the right marker");
+    CHECK_MSG(second.resumed && second.kept == 7 && second.copied == 13, "twelve were copied, five of them are damaged now: seven kept, 5 + 8 copied");
+    std::vector<std::string> rest;
+    for (const std::size_t i : {std::size_t{2}, std::size_t{5}, std::size_t{7}, std::size_t{9}, std::size_t{10}}) rest.push_back(files[i].path);
+    for (std::size_t i = 12; i < files.size(); ++i) rest.push_back(files[i].path);
+    CHECK_MSG(Begun(sink) == rest, "exactly those are begun again, in the list's order");
+}
+
+// The free-space check serves a resume with the arithmetic it has for an old copy, and a refusal removes nothing, so the work already done is not lost.
+void TheFreeSpaceCheckServesAResumeAndARefusalLosesNothing() {
+    const std::vector<Mem> files = Invented(20);
+    MemSource dying = SourceFor("sp", files);
+    dying.failAt = files[12].path;
+    MarkerSink sink;
+    CHECK(Unpack::Run(dying, sink, Plain()).outcome == Unpack::Outcome::Failed);
+    std::uint64_t held = 0;
+    std::uint64_t needed = 0;
+    for (std::size_t i = 0; i < files.size(); ++i) {
+        const std::uint64_t blocks = Unpack::RoundUpToBlocks(files[i].bytes.size());
+        needed += blocks;
+        if (i < 12) held += blocks;
+    }
+    CHECK_MSG(needed > held && held > 0, "twelve of the twenty files are on the disk");
+    const auto filesBefore = sink.files;
+
+    // One byte short even with what is on the disk counted: refused, with its own words.
+    sink.NextLife();
+    sink.free = needed - held - 1;
+    MemSource again = SourceFor("sp", files);
+    const Unpack::Result refused = Unpack::Run(again, sink, Plain());
+    // mutation: leave what is on the disk out of the sum (the refusal then comes sooner), or count it twice (later).
+    CHECK_MSG(refused.outcome == Unpack::Outcome::Failed && Has(refused.error, "not enough free space"), refused.error);
+    CHECK_MSG(Has(refused.error, "more than the part already copied takes") && !Has(refused.error, "old copy"), "in words that name what is counted: " + refused.error);
+    CHECK_MSG(refused.resumed, "it was a continuation that was refused");
+    CHECK_EQ(refused.reclaimable, held);
+    CHECK_EQ(refused.needed, needed);
+    // mutation: check after the stamp's removal, or after the marker's.
+    CHECK_MSG(!sink.Did("RemoveStamp") && !sink.Did("RemoveMarker") && !sink.Did("WriteMarker") && sink.Count("RemoveTree:") == 0 && sink.Count("Begin:") == 0, "nothing was removed or written");
+    CHECK_MSG(sink.files == filesBefore && !sink.stamp.has_value() && sink.marker && *sink.marker == "sp", "the files and the marker are as they were: the work done is not lost");
+    CHECK_EQ(again.reads, 0);
+
+    // Exactly enough with what is on the disk counted: the continuation goes through.
+    sink.free = needed - held;
+    const Unpack::Result done = TheNextStartFinishes(sink, files, "sp", "exactly enough free space");
+    CHECK_EQ(done.kept, std::size_t{12});
+    CHECK_EQ(done.copied, std::size_t{8});
+}
+
+// A marker left beside a finished copy never fails a start and is removed when it can be; a start with nothing left over writes and removes nothing.
+void AMarkerBesideAFinishedCopyIsRemovedAndNeverFailsAStart() {
+    const std::vector<Mem> files = Invented(12);
+    // (a) The fast path, over a sink that keeps the marker, touches nothing when nothing is left over.
+    {
+        MarkerSink sink = Finished(files, "stale");
+        MemSource source = SourceFor("stale", files);
+        const Unpack::Result again = Unpack::Run(source, sink, Plain());
+        // mutation: remove the marker without asking whether there is one (an unlink on every start).
+        CHECK_MSG(again.outcome == Unpack::Outcome::UpToDate && sink.ops.empty() && source.reads == 0, "an up-to-date start with no marker left over does nothing");
+    }
+    // (b) The marker that cannot be removed after the stamp is written: the unpack is still done; the next start is up to date and tries again, best effort.
+    MarkerSink stuck;
+    stuck.markerRemovalFails = true;
+    {
+        MemSource source = SourceFor("stale", files);
+        const Unpack::Result first = Unpack::Run(source, stuck, Plain());
+        // mutation: fail the unpack when the marker cannot be removed.
+        CHECK_MSG(first.outcome == Unpack::Outcome::Done, first.error);
+        CHECK_MSG(stuck.stamp && *stuck.stamp == "stale" && stuck.marker && *stuck.marker == "stale", "the stamp is written, and the marker the failed removal left stands");
+    }
+    {
+        stuck.NextLife();
+        MemSource source = SourceFor("stale", files);
+        const Unpack::Result again = Unpack::Run(source, stuck, Plain());
+        CHECK_MSG(again.outcome == Unpack::Outcome::UpToDate && again.copied == 0 && source.reads == 0, "the copy is whole and its stamp stands: up to date, whatever the marker");
+        CHECK_MSG(stuck.Count("RemoveMarker") == 1 && stuck.marker.has_value(), "it tried to remove the marker, and a failure changed nothing");
+        CHECK_MSG(!stuck.Did("RemoveStamp") && stuck.Count("RemoveTree:") == 0 && stuck.Count("Begin:") == 0 && stuck.Count("WriteMarker") == 0, "and touched nothing else");
+    }
+    {
+        stuck.markerRemovalFails = false;
+        stuck.NextLife();
+        MemSource source = SourceFor("stale", files);
+        CHECK(Unpack::Run(source, stuck, Plain()).outcome == Unpack::Outcome::UpToDate);
+        // mutation: leave the marker standing on the fast path.
+        CHECK_MSG(!stuck.marker.has_value() && TreeProblem(stuck, files, "stale").empty(), "a start that can remove the stale marker does");
+        stuck.NextLife();
+        MemSource quiet = SourceFor("stale", files);
+        CHECK_MSG(Unpack::Run(quiet, stuck, Plain()).outcome == Unpack::Outcome::UpToDate && stuck.ops.empty(), "and the start after it has nothing left to do");
+    }
+    // (c) A marker of the list's stamp beside a stamp whose copy was damaged since (a start stopped between the stamp and the marker's removal, then a cleaner):
+    //     the marker says the tree is this build's, so the damage is mended by a continuation. The stamp is removed first, as on any continuation.
+    {
+        MarkerSink damaged = Finished(files, "stale");
+        damaged.marker = "stale";
+        damaged.files.erase(files[4].path);
+        damaged.files[files[8].path].pop_back();
+        // mutation: leave the stamp standing on a continuation (a stamp over a copy in progress), or wipe the tree.
+        const Unpack::Result mended = TheNextStartFinishes(damaged, files, "stale", "a stamp, a marker of it, and two damaged files");
+        CHECK_MSG(mended.resumed && mended.kept == files.size() - 2 && mended.copied == 2, "ten files kept, two copied again");
+    }
+}
+
+// Each call of the marker that can fail: what it ends, and what it does not.
+void EveryFailingCallOfTheMarkerSaysWhichAndStopsWhereItShould() {
+    const std::vector<Mem> files = Invented(12);
+    // The marker cannot be written: after the wipe and before the first file, so no file is begun without it.
+    {
+        MemSource source = SourceFor("new", files);
+        MarkerSink sink;
+        sink.markerWriteFails = true;
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        // mutation: carry on without the marker (all or nothing, said nowhere), or write it after the first file.
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, "could not be marked") && Has(r.error, "the marker's file is read-only"), r.error);
+        CHECK_MSG(sink.Count("Begin:") == 0 && source.reads == 0 && !sink.stamp.has_value() && !sink.marker.has_value(), "no file is begun, no asset read, no stamp, no marker");
+        CHECK_EQ(sink.Count("RemoveTree:"), std::size_t{2});
+    }
+    // An old marker that cannot be removed: the start stops before a folder is touched, and the old build's marker and files stand.
+    {
+        MarkerSink sink;
+        sink.marker = "old";
+        sink.files["GameData/part0/leftover.dat"] = "of the old build";
+        sink.markerRemovalFails = true;
+        MemSource source = SourceFor("new", files);
+        const Unpack::Result r = Unpack::Run(source, sink, Plain());
+        // mutation: wipe first and remove the marker after.
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, "could not be cleared") && Has(r.error, "held by another process"), r.error);
+        CHECK_MSG(sink.Count("RemoveTree:") == 0 && sink.Count("Begin:") == 0, "no folder is removed, no file begun");
+        CHECK_MSG(sink.marker && *sink.marker == "old" && sink.files.count("GameData/part0/leftover.dat") == 1, "the old marker and the old files stand");
+    }
+    // A marker that is written and cannot be read back: the unpack goes on as all or nothing, and does not say a stop is continuable.
+    {
+        MarkerSink sink;
+        sink.markerReadBack = false;
+        MemSource dying = SourceFor("new", files);
+        dying.failAt = files[7].path;
+        const Unpack::Result first = Unpack::Run(dying, sink, Plain());
+        // mutation: take the write for the read (resumable without asking the sink).
+        CHECK_MSG(first.outcome == Unpack::Outcome::Failed && !first.resumable, "a sink that cannot read its marker back is not continuable: " + first.error);
+        MemSource fixed = SourceFor("new", files);
+        const Unpack::Result second = Unpack::Run(fixed, sink, Plain());
+        CHECK_MSG(second.outcome == Unpack::Outcome::Done && !second.resumed && second.kept == 0 && second.copied == files.size(), "and the next start copies everything: " + second.error);
+    }
+    // The stamp that cannot be removed on a continuation: the start stops before anything else is done, and the marker and the files stand.
+    {
+        MarkerSink sink;
+        MemSource dying = SourceFor("new", files);
+        dying.failAt = files[7].path;
+        CHECK(Unpack::Run(dying, sink, Plain()).outcome == Unpack::Outcome::Failed);
+        const auto filesBefore = sink.files;
+        sink.NextLife();
+        sink.stampRemovalFails = true;
+        MemSource fixed = SourceFor("new", files);
+        const Unpack::Result r = Unpack::Run(fixed, sink, Plain());
+        CHECK_MSG(r.outcome == Unpack::Outcome::Failed && Has(r.error, "could not be cleared") && Has(r.error, "read-only"), r.error);
+        CHECK_MSG(sink.Count("Begin:") == 0 && sink.files == filesBefore && sink.marker && *sink.marker == "new", "nothing was copied or removed, and the marker stands");
+    }
+}
+
+// What the log line says of a continuation, and of a stop: counts that add up, and whether the next start goes on or begins again.
+void TheSummaryTellsWhatWasKeptAndWhatTheNextStartWillDo() {
+    Unpack::Result r;
+    r.stamp = "abc";
+    r.files = 900;
+    r.copied = 31;
+    r.copiedBytes = 4096;
+    r.outcome = Unpack::Outcome::Done;
+    CHECK_MSG(Unpack::Summary(r) == "Unpacked 31 files, 4096 bytes (stamp abc).", "an unpack that continued nothing is worded as it was: " + Unpack::Summary(r));
+    r.resumed = true;
+    r.kept = 8;
+    // mutation: leave the kept files out of the line, or say it of a start that continued nothing.
+    CHECK_MSG(Unpack::Summary(r) == "Unpacked 31 files, 4096 bytes (stamp abc); 8 more were kept from a start that was cut short.", Unpack::Summary(r));
+    r.outcome = Unpack::Outcome::Cancelled;
+    r.resumed = false;
+    r.kept = 0;
+    CHECK_MSG(Unpack::Summary(r) == "The app was closed during the unpack after 31 files; the next start unpacks again.", Unpack::Summary(r));
+    r.resumable = true;
+    CHECK_MSG(Unpack::Summary(r) == "The app was closed during the unpack after 31 files; the next start goes on from there.", Unpack::Summary(r));
+    r.resumed = true;
+    r.kept = 8;
+    CHECK_MSG(Unpack::Summary(r) == "The app was closed during the unpack after 39 files (8 of them kept from a start that was cut short); the next start goes on from there.",
+              Unpack::Summary(r));
+    // Through a run: the same stop over a sink that keeps no marker and one that does.
+    const std::vector<Mem> files = Invented(40);
+    for (int keeps = 0; keeps < 2; ++keeps) {
+        MemSource source = SourceFor("sum", files);
+        Unpack::Options options = Plain();
+        int calls = 0;
+        options.pump = [&] { return ++calls < 2; };
+        Unpack::Result stopped;
+        if (keeps == 1) {
+            MarkerSink sink;
+            stopped = Unpack::Run(source, sink, options);
+        } else {
+            MemSink sink;
+            stopped = Unpack::Run(source, sink, options);
+        }
+        CHECK_MSG(stopped.outcome == Unpack::Outcome::Cancelled, "the app finished");
+        CHECK_MSG(Has(Unpack::Summary(stopped), "after 32 files") && Has(Unpack::Summary(stopped), keeps == 1 ? "goes on from there" : "unpacks again"), Unpack::Summary(stopped));
+    }
+}
+
 // ---- A real folder ----------------------------------------------------------------------------------------------------------------------
 
 struct Folder {
@@ -822,6 +1587,8 @@ void TheFolderSinkWritesBytesAndSurvivesTheOwnersNeighbours() {
         // mutation: write the files in text mode, or one byte short.
         CHECK_MSG(every, "every file is on the real disk with exactly its bytes");
         CHECK_MSG(Slurp(scratch.dir / stampName) == "real-1", "the stamp file holds the stamp and nothing else");
+        // E49: the marker is there while the files are copied and gone once the stamp stands, so a finished unpack leaves none behind.
+        CHECK_MSG(!fs::exists(scratch.dir / (stampName + Unpack::kMarkerSuffix)), "a finished unpack leaves no marker");
         // What the old copy holds, as the space check counts it: each file in whole blocks, a folder that is not there as nothing (PORT5-10 (b)).
         std::uint64_t heldGame = 0;
         std::uint64_t heldEngine = 0;
@@ -842,6 +1609,7 @@ void TheFolderSinkWritesBytesAndSurvivesTheOwnersNeighbours() {
         CHECK_EQ(source.reads, 0);
     }
     // A file the cleaner took, and one cut short: made again. A stray file in an owned folder goes with the re-copy; the player's files do not.
+    // (E49 did not move this: a stamp over a damaged copy has NO marker beside it, so this is a clean start, which wipes the stray file and copies every file.)
     fs::remove(scratch.dir / files[3].path);
     {
         std::ofstream cut(scratch.dir / files[6].path, std::ios::binary | std::ios::trunc);
@@ -854,6 +1622,8 @@ void TheFolderSinkWritesBytesAndSurvivesTheOwnersNeighbours() {
         const Unpack::Result result = Unpack::Run(source, sink, Plain());
         CHECK_MSG(result.outcome == Unpack::Outcome::Done, "a damaged copy is made again: " + result.error);
         CHECK_MSG(Slurp(scratch.dir / files[3].path) == files[3].bytes && Slurp(scratch.dir / files[6].path) == files[6].bytes, "whole again");
+        // mutation (E49): continue on a stamp's say-so, without a marker (the 28 whole files would be kept and the stray file left).
+        CHECK_MSG(!result.resumed && result.kept == 0 && result.copied == files.size(), "no marker stood, so every file was copied: a clean start");
     }
     CHECK_MSG(!fs::exists(scratch.dir / "GameData" / "stray.dat"), "a stray file in an owned folder is gone");
     // mutation: remove the whole destination, or anything that is not an owned folder.
@@ -875,16 +1645,25 @@ void AFolderSinkThatLosesItsSourceLeavesNoStampAndNoHalfFile() {
     CHECK_MSG(!fs::exists(scratch.dir / stampName), "no stamp file");
     CHECK_MSG(!fs::exists(scratch.dir / files[11].path), "no half file");
     CHECK_MSG(fs::exists(scratch.dir / files[10].path), "the files before it are there");
+    // E49: and the marker the failed start leaves, with the list's stamp, which is what the next start goes on from.
+    CHECK_MSG(Slurp(scratch.dir / (stampName + Unpack::kMarkerSuffix)) == "real-2", "the failed start's marker holds its stamp");
     // A stamp left by the earlier, good copy is gone after a re-copy that failed.
     {
         MemSource good = SourceFor("real-2", files);
         Unpack::FsSink sink(scratch.dir.string(), stampName);
-        CHECK(Unpack::Run(good, sink, Plain()).outcome == Unpack::Outcome::Done);
+        // CHANGED BY E49, deliberately: this run used to be a clean start that copied all 18 files over the 11 the failed start had left. It is now a CONTINUATION of
+        // that start (the marker of the same stamp stands), keeps the 11 and copies the 7, and the outcome this test needed (Done, then a stamp) is the same.
+        const Unpack::Result mended = Unpack::Run(good, sink, Plain());
+        CHECK(mended.outcome == Unpack::Outcome::Done);
+        CHECK_MSG(mended.resumed && mended.kept == 11 && mended.copied == 7, "continues the failed start: 11 kept, 7 copied");
+        CHECK_MSG(!fs::exists(scratch.dir / (stampName + Unpack::kMarkerSuffix)), "and leaves no marker once the stamp stands");
         CHECK(fs::exists(scratch.dir / stampName));
         MemSource next = SourceFor("real-3", files);
         next.failAt = files[2].path;
         CHECK(Unpack::Run(next, sink, Plain()).outcome == Unpack::Outcome::Failed);
         CHECK_MSG(!fs::exists(scratch.dir / stampName), "the old stamp does not outlive a failed re-copy");
+        // A build of another stamp over a finished tree is a clean start, so its failed start leaves ITS marker, not the old one.
+        CHECK_MSG(Slurp(scratch.dir / (stampName + Unpack::kMarkerSuffix)) == "real-3", "the marker is the new build's");
     }
     // The sink alone: an empty stamp file reads as no match, a free-space figure is a figure, a missing file has no size.
     Unpack::FsSink sink(scratch.dir.string(), stampName);
@@ -892,6 +1671,167 @@ void AFolderSinkThatLosesItsSourceLeavesNoStampAndNoHalfFile() {
     CHECK_MSG(!sink.SizeOf("GameData/does/not/exist", size), "a file that is not there has no size");
     const std::optional<std::uint64_t> free = sink.FreeBytes();
     CHECK_MSG(free.has_value() && *free > 0, "the scratch disk says how much is free");
+}
+
+// ---- The resume marker on a real folder (E49) -------------------------------------------------------------------------------------------------
+
+// The names directly inside `dir`.
+std::set<std::string> NamesIn(const fs::path& dir) {
+    std::set<std::string> names;
+    std::error_code ec;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) names.insert(it->path().filename().string());
+    return names;
+}
+
+// The sink alone: the marker is a file beside the stamp, named from the stamp's own name, read, written and removed as the stamp is, and never in an owned folder.
+void TheFolderSinkKeepsItsMarkerBesideTheStampAndOutsideTheOwnedFolders() {
+    Folder scratch;
+    const std::string stampName = "magicportals_gamedata.stamp";
+    const fs::path markerPath = scratch.dir / (stampName + ".partial");
+    CHECK_MSG(std::string(Unpack::kMarkerSuffix) == ".partial", "the suffix");
+    Unpack::FsSink sink(scratch.dir.string(), stampName);
+    std::string read = "unchanged";
+    std::string why;
+    CHECK_MSG(!sink.ReadMarker(read), "no marker, no answer");
+    // mutation: a marker that is not there is an error to remove.
+    CHECK_MSG(sink.RemoveMarker(why), "removing none is nothing: " + why);
+    CHECK_MSG(sink.WriteMarker("m-1", why), why);
+    CHECK_MSG(fs::is_regular_file(markerPath) && markerPath.parent_path() == scratch.dir, "a file beside the stamp's place, in the files folder itself");
+    // mutation: end the marker's line, or append to what is there.
+    CHECK_MSG(Slurp(markerPath) == "m-1", "it holds the stamp and nothing else");
+    CHECK_MSG(sink.ReadMarker(read) && read == "m-1", "and reads back");
+    CHECK_MSG(sink.WriteMarker("m-2", why) && Slurp(markerPath) == "m-2", "a second write replaces it");
+    // Outside the owned folders: removing them takes files in them and not the marker; the stamp's own writes and removals leave it alone too.
+    fs::create_directories(scratch.dir / "GameData" / "x");
+    std::ofstream(scratch.dir / "GameData" / "x" / "f.dat", std::ios::binary) << "f";
+    CHECK_MSG(sink.RemoveTree("GameData", why) && sink.RemoveTree("engine", why), why);
+    // mutation: keep the marker inside an owned folder.
+    CHECK_MSG(fs::exists(markerPath) && !fs::exists(scratch.dir / "GameData"), "the owned folder goes and the marker, which is not in it, stays");
+    CHECK_MSG(sink.WriteStamp("s", why) && sink.RemoveStamp(why) && fs::exists(markerPath), "the stamp's write and removal leave the marker");
+    // An empty marker file reads as the empty text, which is no list's stamp.
+    {
+        std::ofstream emptied(markerPath, std::ios::binary | std::ios::trunc);
+    }
+    CHECK_MSG(sink.ReadMarker(read) && read.empty(), "an empty marker is the empty text");
+    CHECK_MSG(sink.RemoveMarker(why) && !fs::exists(markerPath), "removed");
+    CHECK_MSG(sink.RemoveMarker(why), "and removing it again is nothing");
+    // Something that is not a file at the marker's name: it is no marker, and a removal that cannot be done says why.
+    fs::create_directories(markerPath / "occupied");
+    CHECK_MSG(!sink.ReadMarker(read), "a folder of that name is not a marker");
+    why.clear();
+    CHECK_MSG(!sink.RemoveMarker(why) && Has(why, ".partial"), "a removal that cannot be done is a false that names the file: " + why);
+    // A first start's files folder does not exist yet: writing the marker makes it.
+    const fs::path deeper = scratch.dir / "new" / "deeper";
+    Unpack::FsSink fresh(deeper.string(), stampName);
+    CHECK_MSG(fresh.WriteMarker("m-3", why), why);
+    CHECK_MSG(Slurp(deeper / (stampName + ".partial")) == "m-3", "the folder was made");
+}
+
+// An unpack on a real folder: the marker stands while the copy is unfinished and not otherwise, and a second sink over the same folder, as a second process
+// would be, continues what the first left, including a file half written under its own name.
+void AnUnpackOnARealFolderHoldsTheMarkerWhileItIsUnfinishedAndAnotherProcessContinuesIt() {
+    Folder scratch;
+    const std::vector<Mem> files = Invented(18);
+    const std::string stampName = "magicportals_gamedata.stamp";
+    const fs::path markerPath = scratch.dir / (stampName + ".partial");
+    const fs::path stampPath = scratch.dir / stampName;
+    fs::create_directories(scratch.dir / "Magic Portals");
+    std::ofstream(scratch.dir / "Magic Portals" / "scores.json", std::ios::binary) << "the medals";
+    std::ofstream(scratch.dir / "magicportals_args.txt", std::ios::binary) << "--level level0";
+    // Looked at from inside the unpack, at every asset it reads: the marker stands with the list's stamp, and no stamp stands over the copy.
+    const auto whileCopying = [&](const std::string&) {
+        CHECK_MSG(fs::exists(markerPath) && Slurp(markerPath) == "fs-1", "the marker stands, with the list's stamp, while the files are copied");
+        CHECK_MSG(!fs::exists(stampPath), "and no stamp stands over a copy in progress");
+    };
+    // 1. A first start is stopped at file 11 (the source dies).
+    {
+        MemSource dying = SourceFor("fs-1", files);
+        dying.failAt = files[11].path;
+        dying.onRead = whileCopying;
+        Unpack::FsSink sink(scratch.dir.string(), stampName);
+        const Unpack::Result first = Unpack::Run(dying, sink, Plain());
+        CHECK_MSG(first.outcome == Unpack::Outcome::Failed && first.resumable && !first.resumed, first.error);
+    }
+    CHECK_MSG(Slurp(markerPath) == "fs-1" && !fs::exists(stampPath), "what stands: the marker, no stamp");
+    CHECK_MSG(markerPath.parent_path() == scratch.dir, "the marker is beside the stamp, in the files folder");
+    CHECK_MSG(fs::exists(scratch.dir / files[10].path) && !fs::exists(scratch.dir / files[11].path), "eleven files, no half one");
+    // What a killed process leaves that a failed copy does not: a file half written under its own name.
+    std::ofstream(scratch.dir / files[11].path, std::ios::binary) << files[11].bytes.substr(0, 2);
+    // 2. Another process: the unpack goes on from where it was.
+    {
+        MemSource fixed = SourceFor("fs-1", files);
+        fixed.onRead = whileCopying;
+        Unpack::FsSink sink(scratch.dir.string(), stampName);
+        const Unpack::Result second = Unpack::Run(fixed, sink, Plain());
+        // mutation: wipe on a continuation, keep the half file, or copy every file again.
+        CHECK_MSG(second.outcome == Unpack::Outcome::Done && second.resumed && second.kept == 11 && second.copied == 7, "eleven kept, the half file and the six after it copied: " + second.error);
+        CHECK_EQ(fixed.reads, 7);
+        bool every = true;
+        for (const Mem& file : files) every = every && Slurp(scratch.dir / file.path) == file.bytes;
+        CHECK_MSG(every, "every file is on the real disk with exactly its bytes");
+        CHECK_MSG(Slurp(stampPath) == "fs-1" && !fs::exists(markerPath), "the stamp stands and the marker is gone");
+        const std::set<std::string> expected = {"GameData", "engine", "Magic Portals", "magicportals_args.txt", stampName};
+        CHECK_MSG(NamesIn(scratch.dir) == expected, "and nothing else is in the files folder: no temporary, no marker");
+    }
+    // 3. A marker left beside the finished copy (a start stopped between the stamp and the marker's removal) is removed by the next start, which does nothing else.
+    std::ofstream(markerPath, std::ios::binary) << "fs-1";
+    {
+        MemSource again = SourceFor("fs-1", files);
+        Unpack::FsSink sink(scratch.dir.string(), stampName);
+        const Unpack::Result up = Unpack::Run(again, sink, Plain());
+        CHECK_MSG(up.outcome == Unpack::Outcome::UpToDate && again.reads == 0 && !fs::exists(markerPath), "up to date, and the stale marker is gone");
+    }
+    // 4. The same marker beside a copy a cleaner has damaged since: it is the list's stamp, so the damage is mended by a continuation.
+    std::ofstream(markerPath, std::ios::binary) << "fs-1";
+    {
+        std::ofstream cut(scratch.dir / files[3].path, std::ios::binary | std::ios::trunc);
+        cut << "c";
+    }
+    fs::remove(scratch.dir / files[5].path);
+    {
+        MemSource mend = SourceFor("fs-1", files);
+        Unpack::FsSink sink(scratch.dir.string(), stampName);
+        const Unpack::Result mended = Unpack::Run(mend, sink, Plain());
+        CHECK_MSG(mended.outcome == Unpack::Outcome::Done && mended.resumed && mended.kept == 16 && mended.copied == 2 && mend.reads == 2, mended.error);
+        CHECK_MSG(Slurp(scratch.dir / files[3].path) == files[3].bytes && Slurp(scratch.dir / files[5].path) == files[5].bytes, "both whole again");
+        CHECK_MSG(Slurp(stampPath) == "fs-1" && !fs::exists(markerPath), "stamp, no marker");
+    }
+    CHECK_MSG(Slurp(scratch.dir / "Magic Portals" / "scores.json") == "the medals" && Slurp(scratch.dir / "magicportals_args.txt") == "--level level0",
+              "the player's files, beside the owned folders, were never touched");
+}
+
+// Another build over a start that was cut short: a clean start on a real folder. A file of the right size from the other build is not kept, a file the new build
+// lacks is gone, and the player's files stand.
+void AnotherBuildOverACutShortStartOnARealFolderIsACleanStart() {
+    Folder scratch;
+    const std::vector<Mem> a = Invented(18);
+    std::vector<Mem> b = OtherBuild(a);
+    b.erase(b.begin() + 3);
+    const std::string stampName = "magicportals_gamedata.stamp";
+    const fs::path markerPath = scratch.dir / (stampName + ".partial");
+    fs::create_directories(scratch.dir / "Magic Portals");
+    std::ofstream(scratch.dir / "Magic Portals" / "scores.json", std::ios::binary) << "the medals";
+    {
+        MemSource dying = SourceFor("fs-a", a);
+        dying.failAt = a[11].path;
+        Unpack::FsSink sink(scratch.dir.string(), stampName);
+        CHECK(Unpack::Run(dying, sink, Plain()).outcome == Unpack::Outcome::Failed);
+    }
+    CHECK_MSG(Slurp(markerPath) == "fs-a" && fs::exists(scratch.dir / a[3].path), "build A's start stands, with a file build B lacks");
+    std::ofstream(scratch.dir / "GameData" / "stray.dat", std::ios::binary) << "left over";
+    {
+        MemSource fresh = SourceFor("fs-b", b);
+        Unpack::FsSink sink(scratch.dir.string(), stampName);
+        const Unpack::Result result = Unpack::Run(fresh, sink, Plain());
+        // mutation: continue on any marker; wipe after writing the new marker; keep files by size alone.
+        CHECK_MSG(result.outcome == Unpack::Outcome::Done && !result.resumed && result.kept == 0 && result.copied == b.size(), result.error);
+        bool every = true;
+        for (const Mem& file : b) every = every && Slurp(scratch.dir / file.path) == file.bytes;
+        CHECK_MSG(every, "every file is build B's, bytes and all: none of build A's was kept");
+        CHECK_MSG(!fs::exists(scratch.dir / a[3].path) && !fs::exists(scratch.dir / "GameData" / "stray.dat"), "the file B lacks and the stray file are gone");
+        CHECK_MSG(Slurp(scratch.dir / stampName) == "fs-b" && !fs::exists(markerPath), "B's stamp stands and no marker");
+    }
+    CHECK_MSG(Slurp(scratch.dir / "Magic Portals" / "scores.json") == "the medals", "the player's medals stand");
 }
 
 // ---- The developer's flags file ---------------------------------------------------------------------------------------------------------
@@ -1353,6 +2293,25 @@ void runTests() {
     TheFlagsFileIsReadOnceAndConsumedWhateverItHeld();
     TheEntrysDecisionsAreRulesThatCanBeRun();
     AStartThatStoppedInTheUnpackLeavesItsWordsInTheLogAndKeepsTheLastLog();
+    // Enhancement E49 (planning step 260): the resume marker.
+    ACleanStartWritesTheMarkerAfterTheWipeAndRemovesItAfterTheStamp();
+    ASinkThatKeepsNoMarkerStartsAgainFromTheTopAfterAStop();
+    AStartThatDiesAtEveryFileIsContinuedAndKeepsWhatWasDone();
+    AStartTheAppFinishesAtEveryFileIsContinuedToo();
+    AContinuationAsksThePumpAndTheProgressForKeptFilesToo();
+    EachShortLifeAddsToTheLastAndEveryFileIsCopiedOnce();
+    AStampThatCannotBeWrittenLeavesEveryFileAndTheMarkerForAOnePassFinish();
+    AProcessKilledBeforeAnyCallOfAStartLeavesAStartTheNextOneFinishes();
+    AProcessKilledTwiceIsStillContinuedAndFinishes();
+    AMarkerOfAnotherStampIsACleanStartAndNothingOfThatBuildSurvives();
+    AFileThatIsShortLongEmptyHalfOrMissingUnderTheRightMarkerIsCopiedAgain();
+    TheFreeSpaceCheckServesAResumeAndARefusalLosesNothing();
+    AMarkerBesideAFinishedCopyIsRemovedAndNeverFailsAStart();
+    EveryFailingCallOfTheMarkerSaysWhichAndStopsWhereItShould();
+    TheSummaryTellsWhatWasKeptAndWhatTheNextStartWillDo();
+    TheFolderSinkKeepsItsMarkerBesideTheStampAndOutsideTheOwnedFolders();
+    AnUnpackOnARealFolderHoldsTheMarkerWhileItIsUnfinishedAndAnotherProcessContinuesIt();
+    AnotherBuildOverACutShortStartOnARealFolderIsACleanStart();
 }
 
 } // namespace

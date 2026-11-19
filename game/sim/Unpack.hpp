@@ -18,21 +18,41 @@
 //   It is data from an APK, and a corrupt or hostile one must not write outside the folders the unpack owns, so every path is held to SafePath.
 //
 // THE ORDER IS THE POINT.
-//   1. the stored stamp equals the list's AND every listed file is there at the listed size  -> nothing is done (UpToDate).
-//      A stamp with a file missing or short means somebody (the system's cleaner, a full disk, a user) damaged the copy: it is made again.
+//   1. the stored stamp equals the list's AND every listed file is there at the listed size  -> nothing is done (UpToDate), except that a RESUME
+//      MARKER still standing beside such a copy (a start was stopped between writing the stamp and removing the marker) is removed, best effort.
+//      A stamp with a file missing or short means somebody (the system's cleaner, a full disk, a user) damaged the copy: it is made again (2).
 //   2. otherwise FREE SPACE IS CHECKED FIRST, while the old copy is still whole: the new copy needs its bytes, of which the old copy's own are
 //      free to be taken (they are about to be removed), and a disk that cannot hold the difference fails the start with the old copy and its stamp
-//      untouched (planning step 204, PORT5-10 (b): the check used to come after the old copy was gone). Then the stored stamp is REMOVED, then the
-//      folders the unpack owns, then every file is copied, and the stamp is written LAST. A process killed at any point from the first removal on
-//      leaves no stamp, so the next start unpacks again from the top; a stamp that exists is therefore the word of a copy that finished.
+//      untouched (planning step 204, PORT5-10 (b): the check used to come after the old copy was gone). Then, by the marker (ENHANCEMENT E49, below):
+//        - a marker EQUAL TO THE LIST'S STAMP: an earlier start of this very build was cut short, and the unpack CONTINUES. The stored stamp is removed
+//          (a stamp never stands over a copy in progress) and nothing else is: each file already on the disk at its listed size is KEPT, the rest are
+//          copied. The bytes the owned folders hold count as given back in the space check, as an old copy's do (they are not needed twice).
+//        - anything else (no marker, a marker of another stamp, a wipe that was cut short before the marker was written): a CLEAN START, as before E49.
+//          The stored stamp is REMOVED, then the marker, then the folders the unpack owns, then the marker is WRITTEN with the list's stamp, then every
+//          file is copied. Only a tree of the very stamp is ever trusted: two builds can hold files of one size and other bytes, so a file of another
+//          build is never kept, and nothing of it stays behind.
+//      A process killed at any point from the first removal on leaves no stamp, and either no marker (the next start is clean again) or a marker over
+//      a tree that holds files of that stamp only (the next start continues); a stamp that exists is therefore the word of a copy that finished.
 //   3. the copy is checked against the list file by file: a source that gives more or fewer bytes than the list says is a failure, and the
 //      half-written file is removed. The check for MORE does not wait for the end: the chunk that would pass the listed size is refused, and the
 //      source is told to stop (planning step 204: an asset of any length used to be read to its end first).
-//   4. the event pump is called after every `pumpEvery` files (the platform holds its UI thread until the game thread reads its events, and a
-//      thread that does not for about five seconds is "not responding"). If the pump says the app was asked to finish, the unpack STOPS: no
-//      further file, no stamp, and the outcome is Cancelled, which is not a failure and must not be told to the player as one.
+//   4. the event pump is called after every `pumpEvery` files in place (copied or kept; the platform holds its UI thread until the game thread reads
+//      its events, and a thread that does not for about five seconds is "not responding"). If the pump says the app was asked to finish, the unpack
+//      STOPS: no further file, no stamp, and the outcome is Cancelled, which is not a failure and must not be told to the player as one. What is in
+//      place, and the marker, stay for the next start.
+//   5. the stamp is written LAST, and THEN the marker is removed, in that order: a stamp that cannot be written leaves every file and the marker where
+//      they are, so the next start only writes it; a marker that cannot be removed is harmless (1 removes it at the next start).
 //
-// WHAT IT WILL NOT DO: write a file outside the owned folders (the player's saves, the log, the developer's flags file and the stamp itself are
+// THE RESUME MARKER (ENHANCEMENT E49, the sibling game's: a first start that the phone's system stops, as a tester's tablet did several times, must not
+// begin again every time). A Sink may keep a file beside the stamp that holds the stamp of the unpack IN PROGRESS: it is written after the wipe, before the
+// first file, and removed after the stamp. A file is written under its own name (no temporary, no rename): a copy that was stopped is shorter than its
+// asset, so the size check copies it again, and one that was not stopped is whole. Nothing is synced (a stopped process loses none of what it wrote). One
+// case is NOT repaired and was before: a power loss DURING an unpack that leaves a file of the right size with the wrong bytes is now kept by the next
+// start (without a marker the next start copied everything again); a boot id in the marker would close it and is not done. After the stamp, as before,
+// the fast path trusts sizes too.
+// A Sink that does not know the marker (its three calls keep their defaults) gets what this code did before: all or nothing.
+//
+// WHAT IT WILL NOT DO: write a file outside the owned folders (the player's saves, the log, the developer's flags file, the stamp and the marker are
 // all beside them, not in them), follow a name that climbs, or take a list with two lines for one path.
 
 #include <cstddef>
@@ -64,6 +84,9 @@ inline constexpr std::size_t kPumpEveryFiles = 16;
 // The allocation unit the free-space estimate rounds each file up to: the page and block size of Android's file systems. An estimate, and stated as
 // one in the message the player reads.
 inline constexpr std::uint64_t kBlockBytes = 4096;
+// FsSink's resume marker is the stamp's own file name followed by this. The packager does not spell it (the marker is the app's, made at run time), and a list
+// cannot name it: it is beside the owned folders, and SafePath refuses every name outside them.
+inline constexpr const char* kMarkerSuffix = ".partial";
 
 struct Entry {
     std::string path;       // relative to the destination folder, '/'-separated, one of the owned folders first
@@ -144,6 +167,13 @@ public:
     virtual bool Begin(const std::string& path, std::string& why) = 0;      // makes the folders, opens the file for writing from nothing
     virtual bool Write(const char* data, std::size_t size, std::string& why) = 0;
     virtual bool End(bool keep, std::string& why) = 0;                      // closes; with keep false the half-written file is removed
+
+    // THE RESUME MARKER (E49; the order of its use is in the comment at the top). The stamp of the unpack in progress, kept beside the stamp and OUTSIDE the
+    // owned folders (RemoveTree must never take it). The defaults are those of a sink that knows no marker: none is ever found, writing and removing one
+    // do nothing and succeed, so Run does all or nothing as it did before the marker existed. A sink that keeps one overrides all three.
+    virtual bool ReadMarker(std::string& stamp) { stamp.clear(); return false; }  // false: there is none (also when it cannot be read)
+    virtual bool WriteMarker(const std::string& /*stamp*/, std::string& /*why*/) { return true; }
+    virtual bool RemoveMarker(std::string& /*why*/) { return true; }              // true also when there was none
 };
 
 // ---- The run ---------------------------------------------------------------------------------------------------------------------------
@@ -159,7 +189,8 @@ struct Options {
     std::vector<std::string> ownedRoots;     // the folders the unpack owns: removed before a copy, and the first segment of every path
     std::size_t pumpEvery = kPumpEveryFiles; // 0: never pump
     std::function<bool()> pump;              // false: the app is to finish
-    // Called at each pump point and at the end: files copied so far of the whole, bytes so far. For a log line; the platform has no window to show it in.
+    // Called at each pump point and at the end: files in place so far (copied by this call, or kept from an earlier start that was cut short) of the whole, and
+    // the bytes this call has copied so far. For a log line; the platform has no window to show it in.
     std::function<void(std::size_t done, std::size_t total, std::uint64_t bytes)> progress;
 };
 
@@ -173,7 +204,11 @@ struct Result {
     std::uint64_t copiedBytes = 0;
     std::size_t pumps = 0;       // times the pump was called
     std::uint64_t needed = 0;    // the free-space estimate (NeededBytes)
-    std::uint64_t reclaimable = 0; // what the old copy holds and its removal gives back (Sink::HeldBytes), counted before the check
+    std::uint64_t reclaimable = 0; // what the old copy holds and its removal gives back (Sink::HeldBytes), counted before the check; on a resume, what is already copied
+    // E49. A start that finds the marker of the list's stamp continues the unpack an earlier start cut short.
+    bool resumed = false;        // this call continued such an unpack (it found the marker equal to the list's stamp)
+    std::size_t kept = 0;        // of the listed files, the ones found whole from that start and not copied again; always 0 unless `resumed`
+    bool resumable = false;      // the sink holds this unpack's marker (found, or written and read back), so a stop leaves a start the next one continues
 };
 
 Result Run(Source& source, Sink& sink, const Options& options);
@@ -182,7 +217,8 @@ Result Run(Source& source, Sink& sink, const Options& options);
 
 // A Sink over std::filesystem, portable: the app's files folder on a phone, a temporary folder in a suite. The stamp is a file of its own beside the
 // owned folders (never inside one: the unpack removes those), written through Files::WriteAtomic, so a kill during its write cannot leave a stamp
-// that is a different, complete-looking word.
+// that is a different, complete-looking word. The resume marker (E49) is a second such file, named from the stamp's own name plus kMarkerSuffix, in
+// the same folder and written the same way.
 class FsSink : public Sink {
 public:
     FsSink(std::string root, std::string stampName);
@@ -190,6 +226,9 @@ public:
     bool ReadStamp(std::string& stamp) override;
     bool WriteStamp(const std::string& stamp, std::string& why) override;
     bool RemoveStamp(std::string& why) override;
+    bool ReadMarker(std::string& stamp) override;
+    bool WriteMarker(const std::string& stamp, std::string& why) override;
+    bool RemoveMarker(std::string& why) override;
     bool RemoveTree(const std::string& root, std::string& why) override;
     bool SizeOf(const std::string& path, std::uint64_t& size) override;
     std::optional<std::uint64_t> FreeBytes() override;
@@ -201,6 +240,7 @@ public:
 private:
     std::string root_;
     std::string stampName_;
+    std::string markerName_; // stampName_ + kMarkerSuffix; declared after stampName_, which its initialiser reads
     std::string openPath_;
     std::ofstream out_;
 };
@@ -246,7 +286,9 @@ bool ShowsFailureDialog(bool scripted);
 enum class Next { Continue, ExitSuccess, ExitFailure };
 Next NextAfter(Outcome outcome);
 
-// The line for the log that says how an unpack that did not fail went (counts and the stamp), and what a cancel was.
+// The line for the log that says how an unpack that did not fail went (counts and the stamp), and what a cancel was. An unpack that continued one an earlier
+// start cut short (`resumed`) says how many files it found whole and kept; a cancel says whether the next start goes on from the files in place
+// (`resumable`) or unpacks again.
 std::string Summary(const Result& result);
 
 // The argument list the game's main is called with: the program's name, `--root` and the folder the unpacked data is in, then the developer's flags.

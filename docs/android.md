@@ -152,7 +152,7 @@ the machine's Python zlib, so two machines may differ and one machine does not.
 ## 4. The first run: the unpack
 
 The engine cannot read an APK (`grep AAssetManager engine/src` finds nothing: every open is by path). So the app copies its data out of the APK into its
-private files folder once. All the decisions are `game/sim/Unpack.{hpp,cpp}`, pure code with a suite (`test_mp_unpack`, 509 checks); `game/android/AndroidMain.cpp`
+private files folder once. All the decisions are `game/sim/Unpack.{hpp,cpp}`, pure code with a suite (`test_mp_unpack`, 6,077 checks); `game/android/AndroidMain.cpp`
 is the thin glue (`AAssetManager` as the source, `Unpack::FsSink` as the folder, the dialog, the pump): since step 204 the rules for the flags file, the dialog, the
 exit after the unpack, the argument list and the log of a failed start are in `Unpack` too, where a host compiler builds them and the suite runs them.
 
@@ -162,13 +162,29 @@ exit after the unpack, the argument list and the log of a failed start are in `U
   test ties them: it reads the constants out of `Unpack.hpp`, and the list the packager makes for four invented files is parsed (and unpacked) by the C++ suite.
   The list's text is at most 4 MiB, read as the bytes arrive; the sizes, rounded up to 4 KB blocks, must add up to less than 64 bits (a list that adds to
   exactly 2^64 - 1, which step 203's check let through, is refused).
-* **The rule.** The stored stamp (`files/magicportals_gamedata.stamp`) equal to the list's *and* every listed file there at its size: nothing is done. Otherwise
-  **free space is checked first**, from the list's sizes in 4 KB blocks, counting what the old copy holds as given back (so an update that would fit once the old
-  copy is gone is not refused), and a copy that cannot fit fails the start **with the old copy and its stamp untouched**; then the stamp is removed, then the
-  two folders the unpack owns (`GameData`, `engine`), then every file is copied and checked against the list (a chunk that would pass a file's listed size is
-  refused as it arrives, not at the end of the file), and the stamp is written **last**. A process killed from the first removal on leaves no stamp, so the next
-  start unpacks again from the top. The player's saves, the log, the flags file and the stamp are *beside* the owned folders and are never touched.
-  The words of a refusal round the need up and the free figure down ("needs about 26 MB and 15 MB are free"; **run**).
+* **The rule.** The stored stamp (`files/magicportals_gamedata.stamp`) equal to the list's *and* every listed file there at its size: nothing is done (a resume
+  marker still standing beside such a copy, below, is removed, best effort). Otherwise **free space is checked first**, from the list's sizes in 4 KB blocks,
+  counting what the old copy holds as given back (so an update that would fit once the old copy is gone is not refused), and a copy that cannot fit fails the
+  start **with the old copy and its stamp untouched**. Then the **resume marker** decides (Enhancement E49, step 260; `files/magicportals_gamedata.stamp.partial`,
+  a file beside the stamp that holds the stamp of the unpack in progress):
+  * **a marker equal to the list's stamp:** an earlier start of this very build was cut short, so the unpack **continues**. The stored stamp is removed, nothing
+    else is, and each file already on disk at its listed size is **kept**; every other one is copied (a copy that was stopped is shorter than its asset, so it
+    is copied again). Each short life adds to the last. The space check counts what the folders already hold the way it counts an old copy, so a refusal
+    removes nothing and the work done is not lost.
+  * **anything else** (no marker, another build's stamp, a wipe cut short before the marker was written): a **clean start**, as before. The stamp is removed,
+    then any marker, then the two folders the unpack owns (`GameData`, `engine`), then the marker is written with the list's stamp, then every file is copied and
+    checked against the list (a chunk that would pass a file's listed size is refused as it arrives, not at the end of the file). A tree is trusted only if it
+    is of the very stamp, so a file of another build is never kept, not even one of the right size, and nothing of that build stays.
+
+  A game file is written under its own name (no temporary, no rename, no sync), and the stamp is written **last**, atomically, and only **then** is the marker removed.
+  A stamp that cannot be written leaves every file and the marker where they are, so the next start only writes it. A process killed at any point from the
+  first removal on leaves no stamp, and either no marker (the next start is a clean one) or a marker over a tree of that stamp only (the next start continues).
+  Before step 260 the marker did not exist and the next start always unpacked again from the top. The player's saves, the log, the flags file, the stamp and the
+  marker are *beside* the owned folders and are never touched by their removal. The words of a refusal round the need up and the free figure down ("needs
+  about 26 MB and 15 MB are free"; **run**). **Covered** by cases in `test_mp_unpack` over invented lists, an in-memory disk (a start stopped at every file, killed before
+  every call, stopped twice) and a real folder (step 260's record says how they ran); **not run on a phone or an emulator**. One case it does not repair, and the marker makes it new for the time before the stamp: a power loss
+  during the unpack that leaves a file of the right size with the wrong bytes is kept by the next start (before step 260 that start copied everything again); a boot id in
+  the marker would close it and is not done. After the stamp the fast path has always trusted sizes.
 * **A hostile or damaged list** must not write outside the folders: every path must be relative, free of `..`, `.`, empty segments, backslashes, colons,
   control characters and NUL, not end in `/`, be unique, and begin with `GameData` or `engine`. A bad list is refused before anything on the disk is touched.
 * **Sub-folders under the port's data (Step 239).** Until the interface languages every file of the content package sat one folder under `GameData/` (`GameData/port-data/ui.json`).
@@ -177,8 +193,9 @@ exit after the unpack, the argument list and the log of a failed start are in `U
   (`test_mp_unpack`) and the packager's (`test_android_package.py`) each list the same ten names and hold both to the same answer. The language picker needs a writable scratch folder
   for the fonts it bakes (the same folder the game's other generated pictures go in); **a phone has not run it** (a language other than English has been drawn on a PC only).
 * **The event pump.** The engine's activity waits for the game thread to read its lifecycle commands, and a thread that does not for about five seconds is
-  "not responding". The unpack calls `Android::PumpEvents()` after every 16th file. If the app is asked to finish meanwhile the unpack **stops without an
-  error** (no further file, no stamp, no dialog).
+  "not responding". The unpack calls `Android::PumpEvents()` after every 16th file in place (copied, or kept from a start that was cut short). If the app is asked
+  to finish meanwhile the unpack **stops without an error** (no further file, no stamp, no dialog); the files in place and the marker stay, and the next start
+  continues from them.
 * **No progress picture.** The engine's window does not exist before the game starts, and drawing on the native window first would clash with the Vulkan
   surface made later (read, not tried). **Run:** the whole unpack took 1.3 to 1.65 s on the emulator, so the black screen of a first run was not noticeable there; on a
   phone with slow storage it is **not known**.

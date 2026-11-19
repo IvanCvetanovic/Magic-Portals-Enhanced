@@ -172,7 +172,7 @@ int SupersonicMain(int argc, char** argv) {
             SUPERSONIC_LOG_INFO(kLogTag) << Unpack::Summary(unpacked);
             break;
         case Unpack::Next::ExitSuccess:
-            // The app was asked to finish while it unpacked: not a failure, and nothing to tell. The next start unpacks again from the top.
+            // The app was asked to finish while it unpacked: not a failure, and nothing to tell. The next start goes on from the files in place (Summary says which).
             SUPERSONIC_LOG_INFO(kLogTag) << Unpack::Summary(unpacked);
             return EXIT_SUCCESS;
         case Unpack::Next::ExitFailure:

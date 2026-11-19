@@ -217,6 +217,10 @@ Result Run(Source& source, Sink& sink, const Options& options) {
     result.bytes = list.bytes;
     result.needed = NeededBytes(list);
 
+    // The marker of an unpack that an earlier start began and did not finish (E49), or none: a sink that keeps no marker never finds one.
+    std::string marked;
+    const bool hasMarker = sink.ReadMarker(marked);
+
     // 1. Already done: the word of a finished copy, and the copy still whole.
     std::string stored;
     if (sink.ReadStamp(stored) && stored == list.stamp) {
@@ -229,34 +233,82 @@ Result Run(Source& source, Sink& sink, const Options& options) {
             }
         }
         if (whole) {
+            // A marker beside a finished copy is what a start stopped between writing the stamp and removing the marker (or one that could not remove it)
+            // leaves. Harmless, and not left to stand: best effort, and only when there is one, so that a start with nothing to say writes nothing.
+            if (hasMarker) {
+                std::string ignored;
+                sink.RemoveMarker(ignored);
+            }
             result.outcome = Outcome::UpToDate;
             return result;
         }
     }
 
-    // 2. A copy is to be made. SPACE IS CHECKED FIRST, while the old copy is whole and its stamp stands: a disk that cannot hold the new copy fails the start
+    // 2. A copy is to be made, or the one an earlier start cut short is to be continued: only a marker of THIS list's stamp says the tree beside it is of this
+    //    very build and may be built on. Any other state (no marker, another build's, a wipe cut short before the marker was written) is a clean start.
+    const bool resume = hasMarker && marked == list.stamp;
+    result.resumed = resume;
+
+    //    SPACE IS CHECKED FIRST, while the old copy is whole and its stamp stands: a disk that cannot hold the new copy fails the start
     //    with nothing removed (planning step 204, PORT5-10 (b); the check used to follow the removal, so an update on a nearly full phone cost the
     //    working copy and then said to free space). What the old copy holds is given back by its own removal, so it counts: the new copy needs its bytes
-    //    less those. A disk that cannot say how much is free is not refused for it.
+    //    less those. A disk that cannot say how much is free is not refused for it. On a resume the same arithmetic serves, for the same reason seen from
+    //    the other side: what is already on the disk is not needed twice, and a refusal removes nothing, so the work already done is not lost.
     for (const std::string& root : options.ownedRoots) {
         if (const std::optional<std::uint64_t> held = sink.HeldBytes(root)) result.reclaimable = SaturatingAdd(result.reclaimable, *held);
     }
     const std::uint64_t mustBeFree = result.needed > result.reclaimable ? result.needed - result.reclaimable : 0;
     if (const std::optional<std::uint64_t> free = sink.FreeBytes(); free && *free < mustBeFree) {
+        const char* alreadyThere = resume ? " more than the part already copied takes," : " more than the old copy of the game already takes,";
         return Failed(result, "There is not enough free space on this device to unpack the game: it needs about " + MegabytesNeeded(mustBeFree) +
-                                  (result.reclaimable > 0 ? " more than the old copy of the game already takes," : "") + " and " + MegabytesFree(*free) +
-                                  " are free. Free some space and open the game again.");
+                                  (result.reclaimable > 0 ? alreadyThere : "") + " and " + MegabytesFree(*free) + " are free. Free some space and open the game again.");
     }
 
-    //    Then the stamp goes, so that a process killed from here on leaves none, and the folders this owns.
+    //    Then the stamp goes, so that a process killed from here on leaves none (a resume removes it too: nothing vouches for a copy in progress).
     if (!sink.RemoveStamp(why)) return Failed(result, "The game's old files could not be cleared (" + Reason(why) + ").");
-    for (const std::string& root : options.ownedRoots) {
-        if (!sink.RemoveTree(root, why)) return Failed(result, "The game's old files could not be cleared (" + Reason(why) + ").");
+    if (resume) {
+        result.resumable = true; // the marker was read, and stays where it is until the stamp is written
+    } else {
+        //    A clean start: the marker (of another stamp, if any) goes before the folders, so that a wipe cut short leaves none, and the new one is written
+        //    after them, so that a marker never stands over files of another build.
+        if (!sink.RemoveMarker(why)) return Failed(result, "The game's old files could not be cleared (" + Reason(why) + ").");
+        for (const std::string& root : options.ownedRoots) {
+            if (!sink.RemoveTree(root, why)) return Failed(result, "The game's old files could not be cleared (" + Reason(why) + ").");
+        }
+        if (!sink.WriteMarker(list.stamp, why)) {
+            return Failed(result, "The game's files could not be unpacked: the unpack could not be marked as begun (" + Reason(why) + ").");
+        }
+        // Read back: whether a stop from here on is continued by the next start is known, not assumed (a sink without a marker answers no).
+        std::string back;
+        result.resumable = sink.ReadMarker(back) && back == list.stamp;
     }
 
-    // 3. The copy, file by file.
-    std::size_t done = 0;
+    // 3. The copy, file by file. A file is KEPT, not copied, when this is a resume and it is on the disk at its listed size: a copy that was stopped is
+    //    shorter than its asset, so it is copied again (Begin opens it from nothing), and a file of the right stamp that is as long as it should be is whole.
+    std::size_t done = 0; // files in place: copied by this call or kept
+    const auto filed = [&]() {
+        ++done;
+        if (options.pumpEvery > 0 && done % options.pumpEvery == 0) {
+            if (options.progress) options.progress(done, list.entries.size(), result.copiedBytes);
+            if (options.pump) {
+                ++result.pumps;
+                if (!options.pump()) {
+                    result.outcome = Outcome::Cancelled;
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
     for (const Entry& entry : list.entries) {
+        if (resume) {
+            std::uint64_t have = 0;
+            if (sink.SizeOf(entry.path, have) && have == entry.size) {
+                ++result.kept;
+                if (!filed()) return result;
+                continue;
+            }
+        }
         if (!sink.Begin(entry.path, why)) return Failed(result, "The game file " + entry.path + " could not be unpacked (" + Reason(why) + ").");
         std::uint64_t got = 0;
         std::string writeWhy;
@@ -298,21 +350,14 @@ Result Run(Source& source, Sink& sink, const Options& options) {
         if (!sink.End(true, endWhy)) return Failed(result, "The game file " + entry.path + " could not be unpacked (" + Reason(endWhy) + ").");
         ++result.copied;
         result.copiedBytes += got;
-        ++done;
-        if (options.pumpEvery > 0 && done % options.pumpEvery == 0) {
-            if (options.progress) options.progress(done, list.entries.size(), result.copiedBytes);
-            if (options.pump) {
-                ++result.pumps;
-                if (!options.pump()) {
-                    result.outcome = Outcome::Cancelled;
-                    return result;
-                }
-            }
-        }
+        if (!filed()) return result; // Cancelled: the files in place and the marker stay for the next start
     }
 
-    // 4. The stamp, LAST.
+    // 4. The stamp, LAST, and only THEN is the marker removed: a stamp that cannot be written leaves every file and the marker in place, so the next start
+    //    finds the tree whole in one pass and only writes it. A marker that cannot be removed does no harm (a start that finds the finished copy removes it).
     if (!sink.WriteStamp(list.stamp, why)) return Failed(result, "The game's files were unpacked but the unpack could not be recorded (" + Reason(why) + ").");
+    std::string markerWhy;
+    sink.RemoveMarker(markerWhy);
     if (options.progress) options.progress(done, list.entries.size(), result.copiedBytes);
     result.outcome = Outcome::Done;
     return result;
@@ -320,7 +365,8 @@ Result Run(Source& source, Sink& sink, const Options& options) {
 
 // ---- FsSink --------------------------------------------------------------------------------------------------------------------------
 
-FsSink::FsSink(std::string root, std::string stampName) : root_(std::move(root)), stampName_(std::move(stampName)) {}
+FsSink::FsSink(std::string root, std::string stampName)
+    : root_(std::move(root)), stampName_(std::move(stampName)), markerName_(stampName_ + kMarkerSuffix) {}
 
 FsSink::~FsSink() {
     // A sink dropped with a file open (an exception through the caller) leaves no half file behind.
@@ -346,6 +392,25 @@ bool FsSink::RemoveStamp(std::string& why) {
     std::error_code ec;
     std::filesystem::remove(std::filesystem::path(root_) / stampName_, ec);
     if (ec) why = ec.message();
+    return !ec;
+}
+
+// The marker is a file beside the stamp, never inside an owned folder (RemoveTree below takes those), and is read, written and removed as the stamp is.
+bool FsSink::ReadMarker(std::string& stamp) {
+    std::string text;
+    if (Files::ReadWhole((std::filesystem::path(root_) / markerName_).string(), text) != Files::ReadResult::Read) return false;
+    stamp = std::move(text);
+    return true;
+}
+
+bool FsSink::WriteMarker(const std::string& stamp, std::string& why) {
+    return Files::WriteAtomic((std::filesystem::path(root_) / markerName_).string(), stamp, Files::WriteOptions{}, why);
+}
+
+bool FsSink::RemoveMarker(std::string& why) {
+    std::error_code ec;
+    std::filesystem::remove(std::filesystem::path(root_) / markerName_, ec);
+    if (ec) why = markerName_ + ": " + ec.message();
     return !ec;
 }
 
@@ -535,10 +600,19 @@ std::string Summary(const Result& result) {
     switch (result.outcome) {
     case Outcome::UpToDate:
         return "The game's files are already unpacked (" + std::to_string(result.files) + " files, stamp " + result.stamp + ").";
-    case Outcome::Done:
-        return "Unpacked " + std::to_string(result.copied) + " files, " + std::to_string(result.copiedBytes) + " bytes (stamp " + result.stamp + ").";
-    case Outcome::Cancelled:
-        return "The app was closed during the unpack after " + std::to_string(result.copied) + " files; the next start unpacks again.";
+    case Outcome::Done: {
+        // `copied` and `copiedBytes` are this call's own; the files of an earlier start that was cut short, found whole, are said apart so the line adds up.
+        std::string line = "Unpacked " + std::to_string(result.copied) + " files, " + std::to_string(result.copiedBytes) + " bytes (stamp " + result.stamp + ")";
+        if (result.resumed) line += "; " + std::to_string(result.kept) + " more were kept from a start that was cut short";
+        return line + ".";
+    }
+    case Outcome::Cancelled: {
+        // The files in place are the ones copied and the ones kept. Whether the next start goes on from them is what the sink said (`resumable`): a sink that keeps
+        // no marker unpacks again, and the line says so.
+        std::string line = "The app was closed during the unpack after " + std::to_string(result.copied + result.kept) + " files";
+        if (result.resumed) line += " (" + std::to_string(result.kept) + " of them kept from a start that was cut short)";
+        return line + (result.resumable ? "; the next start goes on from there." : "; the next start unpacks again.");
+    }
     case Outcome::Failed:
         break;
     }
