@@ -34,6 +34,7 @@
 //            kill, the choosers' blink). Not here.
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 namespace MagicPortals::ScriptClock {
@@ -42,7 +43,7 @@ namespace MagicPortals::ScriptClock {
 // pure suites' `ScriptClock::Rules{}`) is the 60 Hz floor without a file; LoadRules
 // replaces every one of them, and the layer never runs on the defaults.
 struct Rules {
-    int matchedHz = 60;      // the frame rate the original is matched at
+    int matchedHz = 60;      // the frame rate the original is matched at: the rate of the port's TICK
     double snapMs = 0.001;   // a frame this close to the tick's length is the tick
     // floor(1000 / matchedHz): the whole milliseconds a frame at that rate gives.
     unsigned frameMs = 16;
@@ -52,10 +53,27 @@ struct Rules {
     // length: AverageFPSRateManager's m_timeStep, the float 0.0333333 (1023969417), handed to
     // SetFixedTimeStepValue every update. The same number clock.json carries.
     double physicsStepS = 0.03333333507180214;
+    // THE PACE KNOB (clock.json original_frame_hz): the frame rate of the original that the world
+    // stands for, in whole hertz. matchedHz stays the rate of the TICK (the script's floor and every
+    // engine-facing contract read it); this is how many of the original's frames a second the
+    // world is played at. At matchedHz it is the pace the port always had (one tick an original
+    // frame); below it, an original frame is frameTicks ticks long.
+    int originalFrameHz = 60;
+    // How many ticks one original frame is: matchedHz / originalFrameHz, a whole number by
+    // construction (SetOriginalFrameHz is the only thing that writes the pair). 1 is today's pace.
+    int frameTicks = 1;
+    // Sets originalFrameHz and frameTicks TOGETHER, so a Rules built in code cannot hold one
+    // without the other. Valid is a whole number of hertz from 1 to matchedHz that divides it
+    // (45, 0, 61 and 120 are not valid at 60: a frame must be a whole number of ticks, and
+    // rounding 45 to 1 would be a pace nobody asked for). Returns false and changes nothing
+    // otherwise. Call it after matchedHz is final: it reads it.
+    bool SetOriginalFrameHz(int hz);
 };
 
 // Reads clock.json. A rate that rounds to under one millisecond a frame is refused:
-// the script would never advance.
+// the script would never advance. original_frame_hz is optional: absent, it is matched_hz
+// itself (frameTicks 1); present, it must be a whole number of hertz from 1 to matched_hz
+// that divides it, or the file is refused, naming the key.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
 
 // The uint STimeManager's reads return for a frame of `frameMs`: the truncation
@@ -72,11 +90,19 @@ unsigned FloorMs(double frameMs);
 // air brake is evaluated at is player.json's movement.air_decay_rate_hz, or the level's own in air_decay_rate_hz_by_level). A bare float, and the two-length form, are a tick whose
 // physics is one length with the tick's (simS = physicsS: SimRatio 1) at the frame rate the
 // tick implies: the pure suites' reading, which TickStep replaces with the decode's.
+//
+// `frameTicks` is how many ticks one frame of the original is (Rules::frameTicks) and `framePhase` which
+// of them this tick is: 0 for the first tick of a frame, up to frameTicks - 1. A bare float and the
+// two- and four-length forms are one tick a frame, phase 0 - exactly what the pure suites have always
+// meant - so nothing that builds a Step by hand changes. Nothing reads either field yet; the helpers
+// below say how a once-a-frame quantity reads them.
 struct Step {
     double scriptS = 1.0 / 60.0; // exact whole ms / 1000, never 0.016f
     float physicsS = 1.0f / 60.0f;
     double simS = 1.0 / 60.0;
     double fps = 60.0;
+    int frameTicks = 1;
+    int framePhase = 0;
 
     Step() = default;
     // NOLINTNEXTLINE(google-explicit-constructor): see above.
@@ -86,12 +112,20 @@ struct Step {
     Step(double script, float physics)
         : scriptS(script), physicsS(physics), simS(static_cast<double>(physics)),
           fps(1.0 / static_cast<double>(physics)) {}
-    Step(double script, float physics, double sim, double framesPerSecond)
-        : scriptS(script), physicsS(physics), simS(sim), fps(framesPerSecond) {}
+    // The two trailing parameters are defaulted, so every existing brace or positional call of four stays valid.
+    Step(double script, float physics, double sim, double framesPerSecond, int ticksPerFrame = 1, int phaseInFrame = 0)
+        : scriptS(script), physicsS(physics), simS(sim), fps(framesPerSecond), frameTicks(ticksPerFrame),
+          framePhase(phaseInFrame) {}
 };
 
-// The step a tick of the engine's `physicsS` gives the sim under `rules`.
-Step TickStep(const Rules& rules, float physicsS);
+// The step a tick of the engine's `physicsS` gives the sim under `rules`. `levelStep` is how many
+// steps of the level the layer has made so far (MagicPortalsLayer::LevelStepCount: 0 for the level's
+// first), which fixes the frame phase: levelStep % frameTicks. With frameTicks 1 (the pace before
+// original_frame_hz existed) the phase is 0 and `simS`, `fps` and every other field are what they were.
+// Under frameTicks 2 the tick advances half the original's physics step: simS = physicsStepS / frameTicks, an
+// exact halving (it only moves the exponent), which for the float 1/30 clock.json carries is the float 1/60 the
+// engine ticks at - a SimRatio of exactly 1.
+Step TickStep(const Rules& rules, float physicsS, unsigned levelStep = 0);
 
 // The script's milliseconds of a step, exact (a whole number for a layer step).
 inline double Ms(const Step& step) { return step.scriptS * 1000.0; }
@@ -102,14 +136,18 @@ inline double Ms(const Step& step) { return step.scriptS * 1000.0; }
 inline double SimRatio(const Step& step) {
     return step.physicsS > 0.0f ? step.simS / static_cast<double>(step.physicsS) : 1.0;
 }
-// THE CARRIED FRAME (planning step 152, WT). One tick of the port is one frame of the original, and
+// THE CARRIED FRAME (planning step 152, WT). While frameTicks is 1 - clock.json's pace until its
+// original_frame_hz says otherwise - one tick of the port is one frame of the original, and
 // the original's physics world advances simS in each, where the engine's solver advances physicsS. So
 // EVERY dynamic body is carried at SimRatio times the original's velocity and SimRatio squared times its
 // acceleration, and these three are the only places the factor is named: the world's gravity
 // (Game::UseWorldGravity), every velocity the sim writes (a walk, a pull, a recoil) and every velocity
 // it reads back into the original's own units (a hit's intensity, a trail, a push's aim). A quantity the
-// original applies once a FRAME - a pull's velocity, a brake's multiplier, a gravity well's lap - is
-// the same number a tick, and is not scaled by either.
+// original applies once a FRAME - a pull's velocity, a brake's multiplier, a gravity well's lap - is,
+// while frameTicks is 1, the same number a tick, and is not scaled by either. It stays so for every
+// caller of this file today: the helpers after WallMs (FrameTravel, FrameRoot, FrameDelayTicks,
+// OriginalStepCarriedS) are the named rules for a frame of more than one tick, each the identity at
+// one, and nothing calls them yet.
 //
 // The velocity the original's physics holds for a body that moves `originalMps` metres of ITS second a
 // second, as the port's solver carries it (metres of the engine's second a second).
@@ -136,6 +174,58 @@ inline double ScriptSpeed(double scaleMetres, double capMs, const Step& step) {
 // What the engine's tick is in wall milliseconds: the layer clock's step, and what the
 // wall-clock readers (sys:GetTime, sys:GetTimeF) see pass.
 inline double WallMs(const Step& step) { return static_cast<double>(step.physicsS) * 1000.0; }
+
+// ---- what the original does ONCE A FRAME, when a frame is more than one tick ---------------------
+//
+// Each helper takes the number of ticks a frame is (a Step's frameTicks) and is the identity at one
+// tick a frame: FrameTravel and FrameRoot return their own input (an early return, no pow, no
+// rounding), FrameDelayTicks the frames themselves rounded to whole ticks, OriginalStepCarriedS the
+// engine's own tick - so the pace the port has always had reads bit for bit what it read. A tick
+// count below one is read as one.
+//
+// FrameTravel (class V, distance-preserving): the share `share` of a free velocity the original
+// multiplies in ONCE a frame, as a share applied EACH TICK so that the distance travelled after the
+// key is released is the original's. Released at v units a frame and braked by s each frame, a body
+// travels v s / (1 - s) in all (a geometric series); at v / n units a tick, braked by r each tick, it
+// travels (v / n) r / (1 - r). The two are equal when r / (1 - r) = n s / (1 - s), that is
+// r = n s / (1 + (n - 1) s). 0.43 at two ticks a frame is 0.601399: a release at 2.4 units a tick then
+// glides 3.621 units, against the 3.734 the original's 4.95 units a frame gives (the 3 % is the walk's
+// speed, 144 against 148.5 units a second, not this rule).
+inline double FrameTravel(double share, int ticksPerFrame) {
+    if (ticksPerFrame <= 1) return share;
+    const double n = static_cast<double>(ticksPerFrame);
+    return n * share / (1.0 + (n - 1.0) * share);
+}
+// FrameRoot (class R, decay-preserving): the n-th root of a share the original applies once a
+// frame, so that n ticks of it multiply to the original's share at each frame boundary. For what has
+// no travel at stake (a cosmetic fade).
+inline double FrameRoot(double share, int ticksPerFrame) {
+    if (ticksPerFrame <= 1) return share;
+    return std::pow(share, 1.0 / static_cast<double>(ticksPerFrame));
+}
+// FrameDelayTicks (class D, a delay): the whole ticks `frames` original frames are, for a state the
+// original reads that many frames old (the ground flag's lag). std::lround, half away from zero, so
+// 2.25 frames at two ticks a frame (4.5 ticks) is 5 and 2.5 frames (5 ticks) is 5; Python's round()
+// would say 4 for the first, and the suite pins the C++ one. Nothing for a frame count that is not
+// above zero (0 frames is no delay, and a negative or NaN count is no delay either).
+inline int FrameDelayTicks(double frames, const Step& step) {
+    if (!(frames > 0.0)) return 0;
+    const int ticks = step.frameTicks > 1 ? step.frameTicks : 1;
+    return static_cast<int>(std::lround(frames * static_cast<double>(ticks)));
+}
+// OriginalStepCarriedS (class O, original step): the seconds of the engine's clock ONE STEP OF THE
+// ORIGINAL's physics takes, in the unit the port's carried velocities are measured in: frameTicks
+// times the engine's tick. What a rule that judges per ORIGINAL step reads (Box2D's translation
+// clamp, the impact reader's replay of the solver). An integer times a double, so exact at every
+// frameTicks; at one it is `static_cast<double>(step.physicsS)` bit for bit, whatever `simS` a
+// hand-built Step carries (a Step(1.0 / 60.0, 1.0f / 60.0f, 1.0 / 30.0, 60.0) has a SimRatio just
+// under 2 and still returns the float tick). For a Step TickStep built it also equals physicsStepS
+// divided by SimRatio, to a relative 1e-12 (the division form is not bit-exact for a hand-built
+// ratio, which is why this one is the product).
+inline double OriginalStepCarriedS(const Step& step) {
+    const int ticks = step.frameTicks > 1 ? step.frameTicks : 1;
+    return static_cast<double>(ticks) * static_cast<double>(step.physicsS);
+}
 
 // The script's milliseconds of one RENDERED frame of `frameMs` of wall time, for the
 // per-frame paths (the effects the tick queued and the frame adds). A frame the

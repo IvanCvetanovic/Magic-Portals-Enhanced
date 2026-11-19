@@ -1516,6 +1516,14 @@ public:
     // engine integrated (sim/ScriptClock.hpp, planning step 147).
     const ScriptClock::Step& TickStep() const { return m_step; }
     const ScriptClock::Rules& ClockRules() const { return m_clockRules; }
+    // How many ticks one frame of the original is, and the original's frame rate the world stands for (clock.json
+    // original_frame_hz): 1 and the matched 60 Hz at the pace the port had before that key existed.
+    int FrameTicks() const { return m_clockRules.frameTicks; }
+    int OriginalFrameHz() const { return m_clockRules.originalFrameHz; }
+    // How many steps of the level the layer has made since the level loaded: stepLevel calls, so a tick under a pause, a popup, a
+    // menu or a level start's cover is not counted, and a retry or a skip starts it again at 0. The last tick's TickStep().framePhase is
+    // this, as it stood before that tick's step, modulo FrameTicks().
+    unsigned LevelStepCount() const { return m_levelStepCount; }
     // Whether the engine's interpolation is kept for the frames being drawn: a real-time
     // run whose display outruns the tick (pictures.json). False in a --fixed-step run and at
     // the matched 60 Hz, where every picture - the camera too - is drawn at its tick's own
@@ -3832,6 +3840,10 @@ private:
                           double unitsPerFontPx) const;
 
     double m_levelAgeMs{0.0};
+    // The steps of this level made so far: incremented at the top of stepLevel, which a pause's, a popup's and a menu's ticks do not reach,
+    // and set to 0 where the level's age is. TickStep's levelStep, so a step's framePhase is this modulo the ticks a frame of the original
+    // is. NOT paired with m_levelAgeMs (a tick that ages the level and then opens a pause makes no step) and not with m_ticks (never reset).
+    unsigned m_levelStepCount{0};
     // The frame time the level's age last gained (the script's, ScriptClock::Ms): what a wall's colour
     // call reads its doubled clock one add behind (art.json breakable_wall). Held through a pause.
     double m_levelStepMs{0.0};

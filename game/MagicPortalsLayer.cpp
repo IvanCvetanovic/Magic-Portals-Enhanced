@@ -1313,6 +1313,12 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
     // (GameLayer::update, bytes 100358..100663) - so it is zero here too.
     m_levelAgeMs = 0.0;
     m_levelStepMs = 0.0;
+    // And the count of its steps, which fixes the frame phase of each (ScriptClock::Step::framePhase). A retry or a skip loads in the middle
+    // of a tick whose Step OnFixedUpdate built from the OLD level's count, and that same tick goes on to this level's first step with it
+    // (fixedTick, below the load): the phase is put back to the new level's own, 0, or the first step of a restart would carry whichever
+    // phase the level it replaced had stopped on. `step` in fixedTick and stepLevel is m_step.
+    m_levelStepCount = 0;
+    m_step.framePhase = 0;
     // And the time a pause or a popup stood it still, which the new level has had
     // none of, and the plaque's dismissal, which it has not reached.
     m_stoppedMs = 0.0;
@@ -14206,7 +14212,7 @@ void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta
     // `fixedDelta` is the engine's tick, which the physics integrates and the layer
     // does not touch. What the SCRIPTS see of it is the original's floor: the whole
     // milliseconds of a frame, 16 of the tick's 16.667 (sim/ScriptClock.hpp).
-    m_step = ScriptClock::TickStep(m_clockRules, fixedDelta);
+    m_step = ScriptClock::TickStep(m_clockRules, fixedDelta, m_levelStepCount);
     const ScriptClock::Step& step = m_step;
     // What the last frame shook off the camera first, so the tick reads it at
     // rest: a tap is mapped before the generator moves anything, as the original's
@@ -14562,6 +14568,10 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
 }
 
 void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, const ScriptClock::Step& step) {
+    // The level makes one more step: counted HERE and nowhere nearer the age, because the pause's and the popup's resume ticks reach this
+    // function without passing the line that ages the level (fixedTick), and a count that followed the age would repeat a phase across a resume.
+    // TickStep reads it at the START of the next tick, so the first step of a level is made at count 0.
+    ++m_levelStepCount;
     m_direction = direction; // for the picture: which way the player walks this tick
     m_aspect = viewportAspect(registry);
     // G10-6: b2_maxTranslation is 100 SCREEN pixels, so the original's clamp on a step's travel goes with the screen

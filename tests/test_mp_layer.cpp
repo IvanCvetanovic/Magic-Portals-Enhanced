@@ -30,6 +30,8 @@
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
 
+#include "DataDirs.hpp"
+
 #include "MagicPortalsLayer.hpp"
 
 #include "core/Application.hpp"
@@ -1767,6 +1769,153 @@ void TheScriptClockIsTheFloorOfEachTicksMilliseconds() {
     // The period in ticks: 600 ms of script clock is 37.5 ticks, 625 ms of wall clock.
     CHECK_MSG(art.antiportal.strideMs == 300.0, "the blink's legs are 300 ms");
     CHECK_MSG(2.0 * art.antiportal.strideMs / 16.0 == 37.5, "the blink's period is 37.5 ticks of 16 ms");
+    layer.OnDetach(registry);
+}
+
+// THE LEVEL'S STEP COUNT AND THE FRAME PHASE (clock.json original_frame_hz). stepLevel counts the steps a level makes, and each tick's
+// ScriptClock::Step carries the phase of that count: at two ticks an original frame a level's steps run 0, 1, 0, 1 - across a pause, whose ticks
+// make no step, without a repeat or a skip, and again from 0 after a retry, whichever phase the level it replaced stopped on. Nothing reads the
+// phase yet (the counter is plumbing), and at the shipped pace, one tick a frame, every phase is 0.
+
+// `ticks` ticks of the level, one after the other, each judged against the count as it stood before it: a tick makes at most one step, and a step
+// made carries the phase of the count it was made at. The phase of every step made is appended to `phases`. Returns the steps made.
+int TicksAndTheirSteps(MagicPortalsLayer& layer, entt::registry& registry, int ticks, std::vector<int>& phases, const std::string& what) {
+    int made = 0;
+    for (int tick = 0; tick < ticks; ++tick) {
+        const unsigned before = layer.LevelStepCount();
+        tickWith(layer, registry, kRest, {}, {});
+        const unsigned after = layer.LevelStepCount();
+        CHECK_MSG(after == before || after == before + 1u,
+                  what + ": a tick makes at most one step (the count went " + std::to_string(before) + " to " + std::to_string(after) + ")");
+        if (after != before + 1u) continue;
+        ++made;
+        phases.push_back(layer.TickStep().framePhase);
+        CHECK_MSG(layer.TickStep().framePhase == static_cast<int>(before % static_cast<unsigned>(layer.FrameTicks())),
+                  what + ": the step made at count " + std::to_string(before) + " has phase " + std::to_string(layer.TickStep().framePhase));
+    }
+    return made;
+}
+
+// The phases of a level's steps, one after the other from its first, are 0, 1, 0, 1... (with `ticksAFrame` of them, 0 .. ticksAFrame - 1, a frame): the
+// step after a step of phase p is p + 1, and the step after the last of a frame is 0. `startsAt` is the phase the first of them must have.
+void ThePhasesRunInOrder(const std::vector<int>& phases, int ticksAFrame, int startsAt, const std::string& what) {
+    for (std::size_t i = 0; i < phases.size(); ++i) {
+        const int want = (startsAt + static_cast<int>(i)) % ticksAFrame;
+        CHECK_MSG(phases[i] == want, what + ": step " + std::to_string(i) + " has phase " + std::to_string(phases[i]) + ", not " + std::to_string(want));
+    }
+}
+
+// Ticks until the count is of the parity asked for (at most two: a tick makes a step when nothing is pausing the level).
+void TickUntilTheCountIs(MagicPortalsLayer& layer, entt::registry& registry, unsigned parity) {
+    for (int tick = 0; tick < 3 && layer.LevelStepCount() % 2u != parity; ++tick) tickWith(layer, registry, kRest, {}, {});
+}
+
+// A retry, and the steps after it: the count starts again, the first step the new level makes has phase 0 whatever the replaced level's was (the
+// retry tick builds its Step from the OLD count and goes on to make the new level's first step with it), and the phases go on 0, 1, 0, 1.
+void ARetryStartsTheFramePhaseAgainAtZero(MagicPortalsLayer& layer, entt::registry& registry, const std::string& what) {
+    const unsigned stale = layer.LevelStepCount();
+    std::vector<int> phases;
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    const unsigned count = layer.LevelStepCount();
+    CHECK_MSG(count <= 1u, what + ": the retry restarted the count (it stood at " + std::to_string(stale) + ", now " + std::to_string(count) + ")");
+    // The retry tick itself makes the new level's first step unless the level raised a popup as it loaded.
+    const bool madeFirst = count == 1u;
+    if (madeFirst) phases.push_back(layer.TickStep().framePhase);
+    CHECK_MSG(phases.empty() || phases.front() == 0, what + ": the first step after a retry made at count " + std::to_string(stale) + " has phase " +
+                                                         std::to_string(phases.empty() ? -1 : phases.front()));
+    CloseTheLevelStartPopup(layer, registry);
+    const unsigned atClose = layer.LevelStepCount();
+    TicksAndTheirSteps(layer, registry, 7, phases, what);
+    CHECK_MSG(!phases.empty(), what + ": the level made steps after the retry");
+    // From the retry's own first step when it was made (then no popup was open and nothing was missed), else from the count the popup left.
+    ThePhasesRunInOrder(phases, layer.FrameTicks(), madeFirst ? 0 : static_cast<int>(atClose % 2u), what + " after a retry");
+}
+
+void TheLevelsStepCountFixesTheFramePhaseAcrossAPauseAndARetry() {
+    // A world whose original frame is two ticks: a copy of the port's data whose clock.json says 30 frames a second.
+    const DataDirs::ScratchData thirty = DataDirs::PortDataWithClock(30, TestPaths().portData);
+    CHECK_MSG(thirty.Ok(), "a scratch copy of the port's data at 30 frames a second is made");
+    if (!thirty.Ok()) return;
+    MagicPortalsLayer::Paths paths = TestPaths();
+    paths.portData = thirty.Path();
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(paths, "level11");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    // The clock the layer read, and the step it holds before its first tick: half the decoded physics step, a ratio of exactly 1, and the count at 0.
+    CHECK_EQ(layer.FrameTicks(), 2);
+    CHECK_EQ(layer.OriginalFrameHz(), 30);
+    CHECK_EQ(layer.ClockRules().matchedHz, 60);
+    CHECK(layer.TickStep().simS == static_cast<double>(MagicPortalsLayer::kTick));
+    CHECK(ScriptClock::SimRatio(layer.TickStep()) == 1.0);
+    CHECK_EQ(layer.LevelStepCount(), 0u);
+    CloseTheLevelStartPopup(layer, registry);
+
+    // THE LEVEL'S FIRST TICKS: every tick makes a step, and the phases of the steps are 0, 1, 0, 1 ... from the count's own start.
+    std::vector<int> phases;
+    const unsigned startCount = layer.LevelStepCount();
+    const int first = TicksAndTheirSteps(layer, registry, 12, phases, "the level's first ticks");
+    CHECK_EQ(first, 12);
+    ThePhasesRunInOrder(phases, 2, static_cast<int>(startCount % 2u), "the level's first ticks");
+
+    // A PAUSE. The tick that opens it ages the level and makes no step; the paused ticks make none; the tick that resumes makes one, and the
+    // phase goes on from where it stood: no repeat and no skip.
+    const unsigned beforePause = layer.LevelStepCount();
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(layer.Paused(), "Escape pauses the level");
+    if (!layer.Paused()) {
+        layer.OnDetach(registry);
+        return;
+    }
+    CHECK_EQ(layer.LevelStepCount(), beforePause);
+    CHECK_EQ(TicksAndTheirSteps(layer, registry, 10, phases, "ticks under the pause"), 0);
+    CHECK_EQ(layer.LevelStepCount(), beforePause);
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK_MSG(!layer.Paused(), "and Escape again resumes it");
+    const unsigned afterResume = layer.LevelStepCount();
+    CHECK_MSG(afterResume == beforePause || afterResume == beforePause + 1u,
+              "the resume tick makes at most one step: " + std::to_string(beforePause) + " to " + std::to_string(afterResume));
+    if (afterResume == beforePause + 1u) {
+        phases.push_back(layer.TickStep().framePhase);
+        CHECK_EQ(layer.TickStep().framePhase, static_cast<int>(beforePause % 2u));
+    }
+    TicksAndTheirSteps(layer, registry, 6, phases, "the ticks after the pause");
+    // The whole run, pause in the middle, is one unbroken 0, 1, 0, 1.
+    ThePhasesRunInOrder(phases, 2, static_cast<int>(startCount % 2u), "the steps across the pause");
+
+    // A RETRY at an odd count and at an even one: the phase the replaced level stopped on must not reach the new level's first step.
+    TickUntilTheCountIs(layer, registry, 1u);
+    ARetryStartsTheFramePhaseAgainAtZero(layer, registry, "a retry at an odd count");
+    TickUntilTheCountIs(layer, registry, 0u);
+    ARetryStartsTheFramePhaseAgainAtZero(layer, registry, "a retry at an even count");
+    layer.OnDetach(registry);
+}
+
+void TheShippedPaceIsOneTickAFrameAndEveryPhaseIsZero() {
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level11");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+    if (layer.SimLevel() == nullptr) return;
+    CHECK_EQ(layer.FrameTicks(), 1);
+    CHECK_EQ(layer.OriginalFrameHz(), 60);
+    CHECK_EQ(layer.TickStep().frameTicks, 1);
+    CHECK_EQ(layer.LevelStepCount(), 0u);
+    // The decoded step, a ratio of 2: what the layer has always run at.
+    CHECK(layer.TickStep().simS == layer.ClockRules().physicsStepS);
+    CHECK(ScriptClock::SimRatio(layer.TickStep()) == 2.0);
+    CloseTheLevelStartPopup(layer, registry);
+    std::vector<int> phases;
+    const int made = TicksAndTheirSteps(layer, registry, 10, phases, "the shipped pace");
+    CHECK_EQ(made, 10);
+    for (const int phase : phases) CHECK_EQ(phase, 0);
+    // A retry restarts the count here too.
+    press(layer, registry, MagicPortalsLayer::kRetry);
+    CHECK_MSG(layer.LevelStepCount() <= 1u, "the retry restarted the count: " + std::to_string(layer.LevelStepCount()));
+    CHECK_EQ(layer.TickStep().framePhase, 0);
     layer.OnDetach(registry);
 }
 
@@ -35223,6 +35372,8 @@ void runTests() {
     AGravityWellWearsAGreenRing();
     AnAntiportalBlinksRedAndTurnsAndAPauseHoldsBoth();
     TheScriptClockIsTheFloorOfEachTicksMilliseconds();
+    TheShippedPaceIsOneTickAFrameAndEveryPhaseIsZero();
+    TheLevelsStepCountFixesTheFramePhaseAcrossAPauseAndARetry();
     AFireAgentWearsItsOwnFace();
     BlueAndRedKeysKeyholesAndDoorsAreTheirColours();
     ACrateNoPortalCarriesBlinksRed();

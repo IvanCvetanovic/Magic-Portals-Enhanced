@@ -168,8 +168,16 @@ add_mp_test(test_mp_levelstart)
 add_mp_test(test_mp_startflow SKIPS_WITH_77)
 
 # The original's script clock: the whole milliseconds a frame gives the scripts, as a floor, and
-# what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic.
+# what stays on the physics step and on the wall clock (planning step 147). Pure arithmetic. Since the
+# pace knob (clock.json original_frame_hz) it also pins the ticks an original frame is, the step a tick
+# advances and OriginalStepCarriedS.
 add_mp_test(test_mp_clock)
+
+# What the original does once a frame, when a frame is more than one tick: sim/ScriptClock's helpers
+# (FrameTravel, FrameRoot, FrameDelayTicks), the pace Rules::SetOriginalFrameHz sets, the frame phase
+# TickStep hands a tick, and tests/DataDirs.hpp's scratch copy of the port's data with one clock key
+# set. Pure arithmetic and the port's own committed data (game/data), no converted level, so no skip.
+add_mp_test(test_mp_frameclock)
 
 # The player's movement as the original's applyForces and its Box2D body decode: the walk set
 # outright, the air's brake, the fall and the zero-g recoil, in the port's tick through the

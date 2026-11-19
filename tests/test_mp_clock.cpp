@@ -25,6 +25,16 @@
 //                the engine's tick for the physics - which TickStep never touches.
 //   per frame    the effects the tick queues and the frame adds: a frame the length of
 //                the tick is the floor exactly, any other is scaled by floor / tick.
+//   the pace     clock.json's original_frame_hz, the frame rate of the original the world stands
+//                for (60 = one tick an original frame, the pace the port had before the key;
+//                30 = two): an absent key is matched_hz, a whole divisor of it is taken, and 45,
+//                7, 0, 61, 120, a fraction or a non-number is refused naming the key; at 30
+//                a tick's simS is half the decoded step, exactly the float 1/60, so SimRatio is
+//                exactly 1 (2 at 60), the script's 16 ms and the wall clock stand, and the
+//                Step's framePhase runs 0,1,0,1 from the level's first step (the helpers a
+//                once-a-frame quantity is written with are test_mp_frameclock's); the
+//                original's step OriginalStepCarriedS is the engine's tick times the ticks a
+//                frame, bit for bit at one.
 //   the readers  a platform, a lift's door and a timed crystal stepped by a script
 //                tick (16 ms) and a body carried by the physics step (1/60 s): the
 //                door's interpolator, the platform's swing, a crystal's dial (a
@@ -92,6 +102,12 @@ bool Load(const std::string& text, ScriptClock::Rules& out, std::string& error) 
 std::string RulesText(const std::string& hz, const std::string& snap = "0.001",
                       const std::string& physics = "0.03333333507180214") {
     return "{\"matched_hz\": " + hz + ", \"snap_ms\": " + snap + ", \"physics_step_s\": " + physics + "}";
+}
+
+// The same file with the pace knob written: `frameHz` is the JSON text of original_frame_hz's value (a number, or what is not one).
+std::string PaceText(const std::string& frameHz, const std::string& matchedHz = "60") {
+    return "{\"matched_hz\": " + matchedHz + ", \"snap_ms\": 0.001, \"physics_step_s\": 0.03333333507180214, \"original_frame_hz\": " +
+           frameHz + "}";
 }
 
 void TheRulesAreClockJsons() {
@@ -464,6 +480,162 @@ void TheRocketsShakeReArmsEverySeventhTick() {
     CHECK_EQ(count, 53);
 }
 
+// ---- the pace knob: original_frame_hz, the frame's ticks and the original's step ----------------------------------
+
+void ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate() {
+    // The shipped file is at the matched pace: one tick an original frame, the pace the port had before the key existed.
+    const ScriptClock::Rules shipped = ReadRules();
+    CHECK_EQ(shipped.originalFrameHz, 60);
+    CHECK_EQ(shipped.frameTicks, 1);
+    // And a Rules built in code is the same floor without a file.
+    const ScriptClock::Rules bare{};
+    CHECK_EQ(bare.originalFrameHz, 60);
+    CHECK_EQ(bare.frameTicks, 1);
+
+    struct Pace {
+        const char* hz;
+        int frameHz;
+        int ticks;
+    };
+    for (const Pace& p : {Pace{"60", 60, 1}, Pace{"30", 30, 2}, Pace{"30.0", 30, 2}, Pace{"20", 20, 3}, Pace{"15", 15, 4},
+                          Pace{"10", 10, 6}, Pace{"1", 1, 60}}) {
+        ScriptClock::Rules read;
+        std::string error;
+        CHECK_MSG(Load(PaceText(p.hz), read, error), std::string(p.hz) + " Hz: " + error);
+        CHECK_MSG(read.originalFrameHz == p.frameHz && read.frameTicks == p.ticks,
+                  std::string(p.hz) + " Hz is " + std::to_string(read.frameTicks) + " ticks a frame, not " + std::to_string(p.ticks));
+        // The tick's rate, the script's floor and the original's physics step are the matched file's, whatever the pace.
+        CHECK_EQ(read.matchedHz, 60);
+        CHECK_EQ(read.frameMs, 16u);
+        CHECK(read.physicsStepS == shipped.physicsStepS);
+    }
+
+    // An absent key is the matched rate itself: every matched_hz the loader takes reads as it always did, one tick a frame.
+    for (const char* hz : {"1", "30", "59", "60", "120", "144", "500", "1000"}) {
+        ScriptClock::Rules read;
+        std::string error;
+        CHECK_MSG(Load(RulesText(hz), read, error), std::string(hz) + " Hz: " + error);
+        CHECK_MSG(read.originalFrameHz == read.matchedHz && read.frameTicks == 1,
+                  std::string(hz) + " Hz without the key is its own pace, one tick a frame");
+    }
+    // The ticks follow the matched rate of the file: 15 a second is two ticks at 30, 500 two at 1000.
+    ScriptClock::Rules at30;
+    std::string at30Error;
+    CHECK_MSG(Load(PaceText("15", "30"), at30, at30Error), at30Error);
+    CHECK(at30.matchedHz == 30 && at30.originalFrameHz == 15 && at30.frameTicks == 2 && at30.frameMs == 33u);
+    ScriptClock::Rules at1000;
+    CHECK_MSG(Load(PaceText("500", "1000"), at1000, at30Error), at30Error);
+    CHECK(at1000.matchedHz == 1000 && at1000.frameTicks == 2 && at1000.frameMs == 1u);
+
+    // Refused, naming the key: not a divisor (45, 7), nothing or less (0, -30), above the matched rate (61, 120, 1e9), a fraction
+    // (30.5, 0.5), and what is not a number (a string, null, true, an array, an object). And what was refused leaves what the caller held.
+    for (const char* value : {"45", "7", "0", "-30", "61", "120", "1e9", "30.5", "0.5", "\"30\"", "null", "true", "[]", "{}"}) {
+        ScriptClock::Rules out;
+        out.frameMs = 7;
+        out.frameTicks = 5;
+        std::string error;
+        CHECK_MSG(!Load(PaceText(value), out, error), std::string("original_frame_hz ") + value + " is refused");
+        CHECK_MSG(error.find("original_frame_hz") != std::string::npos, "the refusal names the key: " + error);
+        CHECK_MSG(out.frameMs == 7u && out.frameTicks == 5, "and leaves the caller's Rules alone");
+    }
+    // Above or not dividing the file's own matched rate, whatever the 60 of the shipped one says.
+    ScriptClock::Rules refusedOut;
+    std::string refusedError;
+    CHECK(!Load(PaceText("60", "30"), refusedOut, refusedError));
+    CHECK_MSG(refusedError.find("original_frame_hz") != std::string::npos, refusedError);
+    CHECK(!Load(PaceText("300", "1000"), refusedOut, refusedError));
+    CHECK(!Load(PaceText("40", "30"), refusedOut, refusedError));
+}
+
+void ThirtyHertzHalvesTheStepSoTheSimRatioIsExactlyOneAndSixtyIsTwo() {
+    ScriptClock::Rules rules30;
+    std::string error;
+    CHECK_MSG(Load(PaceText("30"), rules30, error), error);
+    const ScriptClock::Step step = ScriptClock::TickStep(rules30, kPhysicsStep);
+    // simS is half the decoded step: the float 1/30 halved is the float 1/60 the engine ticks at, EXACTLY, so the ratio is
+    // exactly 1 and a body is carried at the original's own velocity.
+    CHECK(step.simS == static_cast<double>(kPhysicsStep));
+    CHECK(step.simS == rules30.physicsStepS / 2.0);
+    CHECK(ScriptClock::SimRatio(step) == 1.0);
+    // What the pace leaves alone: the script's floor, the engine's tick and the wall clock.
+    CHECK(step.scriptS * 1000.0 == 16.0);
+    CHECK(ScriptClock::Ms(step) == 16.0);
+    CHECK(step.physicsS == kPhysicsStep);
+    CHECK(ScriptClock::WallMs(step) == static_cast<double>(kPhysicsStep) * 1000.0);
+    // What GetFPSRate answers is the pace's rate, and the frame is two ticks, starting on its first.
+    CHECK(step.fps == 30.0);
+    CHECK_EQ(step.frameTicks, 2);
+    CHECK_EQ(step.framePhase, 0);
+    for (unsigned levelStep = 0; levelStep < 6; ++levelStep) {
+        CHECK_EQ(ScriptClock::TickStep(rules30, kPhysicsStep, levelStep).framePhase, static_cast<int>(levelStep % 2u));
+    }
+
+    // At 60 the shipped file's step is what it was: the full decoded step, a ratio of exactly 2, one tick a frame, phase 0 always.
+    const ScriptClock::Rules rules60 = ReadRules();
+    const ScriptClock::Step matched = ScriptClock::TickStep(rules60, kPhysicsStep);
+    CHECK(matched.simS == rules60.physicsStepS);
+    CHECK(ScriptClock::SimRatio(matched) == 2.0);
+    CHECK(matched.fps == 60.0);
+    CHECK_EQ(matched.frameTicks, 1);
+    CHECK_EQ(matched.framePhase, 0);
+    for (unsigned levelStep = 0; levelStep < 6; ++levelStep) {
+        CHECK_EQ(ScriptClock::TickStep(rules60, kPhysicsStep, levelStep).framePhase, 0);
+    }
+    // And a Step built by hand is one tick a frame and phase 0, as it always meant.
+    const ScriptClock::Step bare(kPhysicsStep);
+    CHECK_EQ(bare.frameTicks, 1);
+    CHECK_EQ(bare.framePhase, 0);
+
+    // THE NEUTRAL FLOOR: with no key every matched rate's TickStep is the three numbers it was before the pace existed - the
+    // script's whole milliseconds, the decoded physics step and the matched rate as the frame rate - at any level step.
+    for (const char* hz : {"1", "30", "60", "120", "144", "1000"}) {
+        ScriptClock::Rules read;
+        std::string readError;
+        CHECK_MSG(Load(RulesText(hz), read, readError), readError);
+        const ScriptClock::Step made = ScriptClock::TickStep(read, kPhysicsStep, 7u);
+        CHECK_MSG(made.scriptS == static_cast<double>(read.frameMs) / 1000.0, std::string(hz) + " Hz: the script's step");
+        CHECK_MSG(made.simS == read.physicsStepS, std::string(hz) + " Hz: the decoded physics step");
+        CHECK_MSG(made.fps == static_cast<double>(read.matchedHz), std::string(hz) + " Hz: the frame rate");
+        CHECK_MSG(made.frameTicks == 1 && made.framePhase == 0, std::string(hz) + " Hz: one tick a frame, phase 0");
+    }
+}
+
+void TheOriginalStepIsTheEnginesTickTimesTheTicksAFrame() {
+    const double tick = static_cast<double>(kPhysicsStep);
+    // A step built by hand is one tick a frame, and the original's step is then the engine's tick bit for bit - whatever simS it carries.
+    const ScriptClock::Step none;
+    const ScriptClock::Step bare(kPhysicsStep);
+    const ScriptClock::Step lengths(0.016, kPhysicsStep);
+    const ScriptClock::Step doubled(1.0 / 60.0, 1.0f / 60.0f, 1.0 / 30.0, 60.0);
+    CHECK(ScriptClock::OriginalStepCarriedS(none) == tick);
+    CHECK(ScriptClock::OriginalStepCarriedS(bare) == tick);
+    CHECK(ScriptClock::OriginalStepCarriedS(lengths) == tick);
+    CHECK(ScriptClock::OriginalStepCarriedS(doubled) == tick);
+    // That hand-built ratio is just under 2 (the float 1/60 against the double 1/30), which is why the step is a product and not
+    // the division physicsStepS / SimRatio: the division would not be bit-exact here.
+    CHECK(ScriptClock::SimRatio(doubled) < 2.0 && ScriptClock::SimRatio(doubled) > 1.99999);
+    // Two ticks a frame: exactly twice the tick.
+    const ScriptClock::Step two(0.016, kPhysicsStep, 1.0 / 60.0, 30.0, 2, 1);
+    CHECK(ScriptClock::OriginalStepCarriedS(two) == 2.0 * tick);
+    // A Step whose count was poked below one is read as one tick a frame.
+    ScriptClock::Step poked;
+    poked.frameTicks = 0;
+    CHECK(ScriptClock::OriginalStepCarriedS(poked) == tick);
+
+    // For a Step TickStep built, the product is also the division the old reading would have made, to a relative 1e-12.
+    for (const char* frameHz : {"60", "30", "20", "10"}) {
+        ScriptClock::Rules rules;
+        std::string error;
+        CHECK_MSG(Load(PaceText(frameHz), rules, error), error);
+        const ScriptClock::Step step = ScriptClock::TickStep(rules, kPhysicsStep);
+        const double carried = ScriptClock::OriginalStepCarriedS(step);
+        const double byDivision = rules.physicsStepS / ScriptClock::SimRatio(step);
+        CHECK_MSG(carried == static_cast<double>(step.frameTicks) * tick, std::string(frameHz) + " Hz: ticks a frame times the tick");
+        CHECK_MSG(std::fabs(carried - byDivision) <= 1e-12 * carried,
+                  std::string(frameHz) + " Hz: " + std::to_string(carried) + " against the division's " + std::to_string(byDivision));
+    }
+}
+
 void runTests() {
     TheRulesAreClockJsons();
     AFileThatWouldStopOrBlurTheClockIsRefused();
@@ -477,6 +649,9 @@ void runTests() {
     AMotionStepsItsAngleBySpeedTimesTheScriptsMilliseconds();
     TheAntiportalsPeriodIsThirtySevenAndAHalfTicks();
     TheRocketsShakeReArmsEverySeventhTick();
+    ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate();
+    ThirtyHertzHalvesTheStepSoTheSimRatioIsExactlyOneAndSixtyIsTwo();
+    TheOriginalStepIsTheEnginesTickTimesTheTicksAFrame();
 }
 
 } // namespace
