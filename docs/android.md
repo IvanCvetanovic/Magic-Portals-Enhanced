@@ -182,7 +182,10 @@ exit after the unpack, the argument list and the log of a failed start are in `U
   Before step 260 the marker did not exist and the next start always unpacked again from the top. The player's saves, the log, the flags file, the stamp and the
   marker are *beside* the owned folders and are never touched by their removal. The words of a refusal round the need up and the free figure down ("needs
   about 26 MB and 15 MB are free"; **run**). **Covered** by cases in `test_mp_unpack` over invented lists, an in-memory disk (a start stopped at every file, killed before
-  every call, stopped twice) and a real folder (step 260's record says how they ran); **not run on a phone or an emulator**. One case it does not repair, and the marker makes it new for the time before the stamp: a power loss
+  every call, stopped twice) and a real folder (step 260's record says how they ran); **run on an x86_64 emulator by step 261 (2026-11-19), not on a phone**: the debuggable
+  build's first start was force-stopped at 250, 500, 750, 1000 and 1300 ms, twice (400 and 700 ms) and three times (300, 500 and 900 ms), and in each case the next start kept the whole files,
+  copied the rest, left no marker and ended on a file tree equal, by size and SHA-256, to an uninterrupted first start (a command ends the app; a phone's own system ending it
+  under memory pressure, and a power cut, are not tried). One case it does not repair, and the marker makes it new for the time before the stamp: a power loss
   during the unpack that leaves a file of the right size with the wrong bytes is kept by the next start (before step 260 that start copied everything again); a boot id in
   the marker would close it and is not done. After the stamp the fast path has always trusted sizes.
 * **A hostile or damaged list** must not write outside the folders: every path must be relative, free of `..`, `.`, empty segments, backslashes, colons,
