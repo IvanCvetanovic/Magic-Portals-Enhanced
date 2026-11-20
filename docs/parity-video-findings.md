@@ -131,10 +131,10 @@ in the footage it does not move until he is off it (SEESAW-2).
 
 Read after the owner's report of 2026-11-20 ("I cannot copy the playthrough in the original, because I am not jumping as high as in the original and I am going down too fast, so I do not even
 have time to destroy the red cog"). The video's level starts at about 7.2 s; the footage's order, in the video's own seconds: a portal on the left face of the 2x2 block cluster (8.6 s, shot to about (316, 147));
-the player walks about 12 units right to the platform's edge; a shot to the pit under the first diamond (10.5 s, a portal at about (258, 235), the shot passes the platform's right corner); he steps off, falls
+the player walks a few units right, to near the platform's edge (about 12 units by a scale that was estimated by eye); a shot to the pit under the first diamond (10.5 s, a portal at about (258, 235), the shot passes the platform's right corner); he steps off, falls
 into it (12.2 s) and **comes out of the first portal going up** (12.28 s), takes the diamond over the block on the way (12.45 s), is near the ceiling from 12.5 to 12.75 s, **shoots the red cog (an anti_portal_agent
 at (418, 108)) from the air at 12.72 s** and lands at 13.0 s; the cog dies at 13.05 s and the red field with it. Then a portal over the block and one in front of its face (14.0 and 14.5 s), out onto the
-block's other side, the third diamond and the rocket. **Flight from the exit to the landing: 0.72 s.** The port at the file's 60 (an original frame one tick) flies the same play 22 ticks (0.37 s); at 30 it flies
+block's other side, the third diamond and the rocket. **Flight from the exit to the landing: about 0.7 s (read by eye from sheets of 10 to 20 frames a second).** The port at the file's 60 (an original frame one tick) flies the same play 22 ticks (0.37 s); at 30 it flies
 41 ticks (0.68 s); the apex is the same either way (y 89 and 87 for a portal at (258, 235)); the window in which a shot from the air reaches the cog is 13 ticks (0.22 s) at 60 and 25 ticks (0.42 s) at 30
 (`tests/routes_gold/level0c.json`, scanned with the shot's tick from 205 to 280). The same cause as 3-22 and 2-17 and 3-21 (PACE-1). A second thing the replay found: from the start spot (x 216) the shot to the
 pit is stopped by the platform's corner and from its edge (x 235) it is not, so a player who shoots at the diamond from where he starts gets no portal there and one who taps beside it puts it higher (a portal at

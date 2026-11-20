@@ -101,9 +101,9 @@
     "WHY 4-01 (level0c; planning step 266): the owner, 2026-11-20, on the release he had on his phone - 'in the first dungeon of chapter 4 I cannot copy the playthrough in the original, because I am not jumping as high as in the original and",
     "I am going down too fast, so I do not even have time to destroy the red cog'. The gold run of his video 7 falls into a portal in the pit under the first diamond and comes out of a portal on the block going UP, and shoots",
     "the red cog from the air. MEASURED in the port on the same play, tests/routes_gold/level0c.json: the flight from the exit to the landing is 22 ticks at the file's 60 (0.37 s) and 41 at 30 (0.68 s; the footage:",
-    "0.72 s), the apex is the same (y 89 and 87), and the window in which a shot from the air reaches the cog is 13 ticks (0.22 s) at 60 and 25 ticks (0.42 s) at 30: the same cause as 3-22's ramp, the world running twice as fast in",
+    "about 0.7 s, read by eye), the apex is the same (y 89 and 87), and the window in which a shot from the air reaches the cog is 13 ticks (0.22 s) at 60 and 25 ticks (0.42 s) at 30: the same cause as 3-22's ramp, the world running twice as fast in",
     "real time as the original's (PACE-1). The apex is not lower; what the owner meets is a flight half as long, and he may also put the pit's portal too high: in the port the shot to the pit is stopped by the platform's corner from the start spot (x 216)",
-    "and is not from the platform's edge (x 235), where the footage's player stands (a portal at y 212 gives an apex of 34 units, one at y 232 gives 54, one at y 240 gives 65). Same status as 3-22: the rest of the game is flipped by the plan's own steps and this line goes with them."
+    "and is not from the platform's edge (x 235), near where the footage's player stands, as far as the footage can be read (a portal at y 212 gives an apex of 34 units, one at y 232 gives 54, one at y 240 gives 65). Same status as 3-22: the rest of the game is flipped by the plan's own steps and this line goes with them."
   ],
   "matched_hz": 60,
   "snap_ms": 0.001,
