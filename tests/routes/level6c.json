@@ -50,17 +50,18 @@
     "won on tick 446 with 8 shots."
   ],
   "level": "level6c",
-  "win_by": 460,
+  "win_by": 710,
   "holds": [
   ],
   "taps": [
-    {"tick": 29, "at": [210, 128]},
-    {"tick": 149, "at": [110, 160]},
-    {"tick": 182, "at": [286, 175]},
-    {"tick": 246, "at": [74, 240]},
-    {"tick": 279, "at": [74, 20]},
-    {"tick": 312, "at": [5, 80]},
-    {"tick": 348, "at": [454, 172]},
-    {"tick": 443, "at": [148, 98]}
-  ]
+    {"tick": 55, "at": [210, 128]},
+    {"tick": 209, "at": [110, 160]},
+    {"tick": 239, "at": [286, 175]},
+    {"tick": 354, "at": [74, 240]},
+    {"tick": 420, "at": [74, 20]},
+    {"tick": 461, "at": [5, 80]},
+    {"tick": 521, "at": [454, 172]},
+    {"tick": 663, "at": [148, 98]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-07: 8 tap(s), 8 tick(s) moved (29 -> 55, 149 -> 209, 182 -> 239, 246 -> 354, 279 -> 420, 312 -> 461, 348 -> 521, 443 -> 663); every tap point is the earlier play's; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 666, medal 2."
 }

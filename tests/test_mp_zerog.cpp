@@ -381,6 +381,47 @@ void AndNoTapShovesAnyoneInANormalLevel() {
     CHECK(::test::nearly(after.y, before.y));
 }
 
+// THE PLAYER COMES OUT OF A PORTAL AT REST IN THERE (planning step 268). invertLinearVelocity (Portal.angelscript, bytes 360172..360571) reads the
+// character's `no_gravity` datum, which MainCharacter's constructor sets from the level's flag, and sets his velocity to V2_ZERO when it is
+// set; where it is clear his velocity is turned in y. So the recoil that carried him into the entry does not come out of the exit: he hangs
+// where the exit is. (The owner, 2026-11-21: "when I come out of the portal I am moving in some weird direction instead of staying at the same
+// place"; the original's footage of 4-05 shows him still at the exit.)
+void ThePlayerComesOutOfAPortalAtRestInThere() {
+    Game::Data data;
+    entt::registry registry;
+    Game::Level level;
+    if (!Open(kStill, data, registry, level)) return;
+    for (int tick = 0; tick < 60; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
+
+    // Two portals in the open air to his left, along his own height: the entry 40 units off and the exit 120.
+    const glm::dvec2 start = WhereIs(registry, level.player);
+    const glm::dvec2 entry = start + glm::dvec2(-40.0, 0.0);
+    const glm::dvec2 exitAt = start + glm::dvec2(-120.0, 0.0);
+    CHECK(level.portals.TryPlace(entry));
+    CHECK(level.portals.TryPlace(exitAt));
+    CHECK_MSG(level.portals.placed.size() == 2u, "the pair opens");
+    if (level.portals.placed.size() != 2u) return;
+    const glm::dvec2 exitPx = level.portals.placed.back().atPx;
+
+    // He drifts left, as a recoil of a tap to his right would send him, with some y in it so that a velocity turned in y
+    // could not pass for a stopped one.
+    registry.get<RigidBodyComponent>(level.player).velocity = glm::vec3(-1.4f, 0.4f, 0.0f);
+    int wentOn = -1;
+    for (int tick = 1; tick <= 120 && wentOn < 0; ++tick) {
+        Game::Tick(data, registry, level, 0.0f, kStep);
+        if (level.portals.traversals == 1) wentOn = tick;
+    }
+    CHECK_MSG(wentOn > 0, "he drifted into the entry and went through");
+    if (wentOn < 0) return;
+    const glm::vec3 velocity = registry.get<RigidBodyComponent>(level.player).velocity;
+    CHECK_MSG(::test::nearly(velocity.x, 0.0f) && ::test::nearly(velocity.y, 0.0f),
+              "he comes out at rest: (" + std::to_string(velocity.x) + ", " + std::to_string(velocity.y) + ")");
+    const glm::dvec2 out = WhereIs(registry, level.player);
+    CHECK_MSG(glm::distance(out, exitPx) < 3.0, "at the exit itself");
+    for (int tick = 0; tick < 30; ++tick) Game::Tick(data, registry, level, 0.0f, kStep);
+    CHECK_MSG(glm::distance(WhereIs(registry, level.player), out) < 0.5, "and stays there: nothing carries him on");
+}
+
 // Honesty, not a mechanic: what these levels hold that the port still does not
 // play. gravity_well is the next step and this counts what it will be worth.
 void ThreeOfThemHoldAGravityWell() {
@@ -450,6 +491,7 @@ void runTests() {
     ATapShovesThePlayerAwayFromIt();
     TheShoveIsAddedToWhatYouAlreadyHad();
     AndNoTapShovesAnyoneInANormalLevel();
+    ThePlayerComesOutOfAPortalAtRestInThere();
     ThreeOfThemHoldAGravityWell();
     TheSuitIsWornWhereGravityIsOffAndNowhereElse();
 }

@@ -1902,7 +1902,7 @@ void ALevelTheClockTableNamesIsPlayedAtItsOwnPace() {
         int hz;
         double ratio;
     };
-    for (const Case& one : {Case{"level21b", 2, 30, 1.0}, Case{"level0c", 2, 30, 1.0}, Case{"level11", 1, 60, 2.0}, Case{"level20b", 1, 60, 2.0}}) {
+    for (const Case& one : {Case{"level21b", 2, 30, 1.0}, Case{"level0c", 2, 30, 1.0}, Case{"level4c", 2, 30, 1.0}, Case{"level19c", 1, 60, 2.0}, Case{"level11", 1, 60, 2.0}, Case{"level20b", 1, 60, 2.0}}) {
         entt::registry registry;
         publishViewport(registry);
         MagicPortalsLayer layer(TestPaths(), one.level);
@@ -17495,12 +17495,13 @@ void APlayerTurnsToTheTapItTakes() {
     layer.OnDetach(registry);
 }
 
-// A tap in a zero-gravity level shoves the player at the original's physics, which the port carries at twice
-// the velocity (Player.hpp, planning step 148): scale(1.4) is 70 units a second of a physics that steps 1/30 s
-// a frame, so 2.8 m/s of the port's 1/60 s tick - 140 units a second at 60 Hz, where F10 measured 40-44 on an
-// emulator at 17-19 frames a second.
-void ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity() {
-    if (!OriginalArtIsThere("ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity")) return;
+// A tap in a zero-gravity level shoves the player at the original's physics: scale(1.4) is 70 units a second of a physics that
+// steps 1/30 s a frame. At the file's own pace (an original frame one tick of the port's 1/60 s, SimRatio 2: Player.hpp,
+// planning step 148) that was 2.8 m/s, 140 units a second of real time; since step 268 the zero-gravity levels play at the
+// 30 of the owner's videos (clock.json original_frame_hz_by_level; SimRatio 1), so it is 1.4 m/s, 70 units a second, which is what
+// the footage shows (4-02: about 31 units between two crystals in about 0.5 s) and F10's 40-44 at 17-19 frames a second.
+void ATapShovesAWeightlessPlayerAtTheOriginalsVelocity() {
+    if (!OriginalArtIsThere("ATapShovesAWeightlessPlayerAtTheOriginalsVelocity")) return;
     entt::registry registry;
     publishViewport(registry);
     MagicPortalsLayer layer(TestPaths(), "level1c");
@@ -17516,13 +17517,13 @@ void ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity() {
     lift(layer, registry, point);
     CHECK_MSG(layer.SimLevel()->portals.flight.has_value(), "the tap was taken: " + lastFailure(layer));
     const glm::vec3 after = registry.get<RigidBodyComponent>(player).velocity;
-    // Aimed to the right, pushed to the left: 1.4 x 2 m/s, which is 2.333 units a tick.
-    CHECK_MSG(std::fabs((after.x - before.x) + 2.8) < 0.01,
-              "pushed left by 2.8 m/s: " + std::to_string(after.x - before.x));
+    // Aimed to the right, pushed to the left: 1.4 m/s at this level's pace, which is 1.1667 units a tick.
+    CHECK_MSG(std::fabs((after.x - before.x) + 1.4) < 0.01,
+              "pushed left by 1.4 m/s: " + std::to_string(after.x - before.x));
     CHECK_MSG(std::fabs(after.y - before.y) < 0.01, "and not up or down: " + std::to_string(after.y - before.y));
-    CHECK_MSG(std::fabs(-(after.x - before.x) * MagicPortals::Units::kPixelsPerMetre * MagicPortalsLayer::kTick - 7.0 / 3.0) <
+    CHECK_MSG(std::fabs(-(after.x - before.x) * MagicPortals::Units::kPixelsPerMetre * MagicPortalsLayer::kTick - 7.0 / 6.0) <
                   0.001,
-              "2.333 units a tick");
+              "1.167 units a tick");
     layer.OnDetach(registry);
 }
 
@@ -35482,7 +35483,7 @@ void runTests() {
     ThePlayerIsTheDarkMage();
     TheWalkKeepsItsColumnAndItsTime();
     APlayerTurnsToTheTapItTakes();
-    ATapShovesAWeightlessPlayerAtTwiceTheOriginalsVelocity();
+    ATapShovesAWeightlessPlayerAtTheOriginalsVelocity();
     APlayerWalkedIntoAWallPushesIt();
     APlayerPushesATriggerItHasNotEntered();
     AWeightlessPlayerNeverPushes();

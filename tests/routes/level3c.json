@@ -34,13 +34,15 @@
     "achievement (none belongs to 4-04); all five crystals taken, medal 3 (4 portals)."
   ],
   "level": "level3c",
-  "win_by": 250,
-  "holds": [],
+  "win_by": 520,
+  "holds": [
+  ],
   "taps": [
-    {"tick": 29, "at": [300, 64]},
-    {"tick": 100, "at": [110, 162]},
-    {"tick": 132, "at": [96, 64]},
-    {"tick": 162, "at": [300, 163.7]},
-    {"tick": 226, "at": [36, 164.1]}
-  ]
+    {"tick": 41, "at": [337.2, 135.2]},
+    {"tick": 236, "at": [132.3, 173.1]},
+    {"tick": 322, "at": [86.8, 43.9]},
+    {"tick": 376, "at": [332.6, 143.8]},
+    {"tick": 477, "at": [57.8, 159.6]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-04: 5 tap(s), 5 tick(s) moved (29 -> 41, 100 -> 236, 132 -> 322, 162 -> 376, 226 -> 477); 5 tap POINT(s) moved ((300, 64) -> (337.2, 135.2); (110, 162) -> (132.3, 173.1); (96, 64) -> (86.8, 43.9); (300, 163.7) -> (332.6, 143.8); (36, 164.1) -> (57.8, 159.6)); the controls census still passes; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 480, medal 3."
 }

@@ -14,11 +14,13 @@
     "second portal. Won on tick 162."
   ],
   "level": "level16c",
-  "win_by": 185,
-  "holds": [],
+  "win_by": 250,
+  "holds": [
+  ],
   "taps": [
-    {"tick": 29, "at": [400, 128]},
-    {"tick": 112, "at": [180, 128]},
-    {"tick": 142, "at": [60, 128]}
-  ]
+    {"tick": 32, "at": [421.0, 125.5]},
+    {"tick": 128, "at": [198.7, 130.8]},
+    {"tick": 165, "at": [57.4, 129.6]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-17: 3 tap(s), 3 tick(s) moved (29 -> 32, 112 -> 128, 142 -> 165); 3 tap POINT(s) moved ((400, 128) -> (421, 125.5); (180, 128) -> (198.7, 130.8); (60, 128) -> (57.4, 129.6)); the controls census still passes; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 210, medal 1."
 }

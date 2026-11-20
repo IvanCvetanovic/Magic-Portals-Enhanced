@@ -27,7 +27,9 @@
 // constructor value). So 1.4 is 70 UNITS a second of the original's physics, on every screen. That
 // physics steps a FIXED 1/30 s a frame (clock.json), so the shove carries a body 2.33 units a
 // frame: 140 units a second of wall time at 60 Hz, and the 40-44 F10 measured at 17-19 frames a
-// second (70 x fps / 30). The metres_per_second below is the decoded 1.4; Portals::State::Shoot
+// second (70 x fps / 30). SINCE PLANNING STEP 268 the zero-gravity levels play at the original's pace (clock.json
+// original_frame_hz_by_level: SimRatio 1), so there the shove is 70 units a second of real time, as the owner's footage shows, and the
+// player leaves a portal at rest (Portals.cpp Teleport). The metres_per_second below is the decoded 1.4; Portals::State::Shoot
 // gives the shooter it at ScriptClock::SimRatio times over, as the player's whole velocity is
 // carried (Player.hpp). zerog.json says it at length.
 

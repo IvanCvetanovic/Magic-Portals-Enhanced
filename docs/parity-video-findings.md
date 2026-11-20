@@ -25,7 +25,7 @@ reference there is: the original running, a gold play of every dungeon, in its r
 | 8 | `lJW1m7R6nvo` | chapter 4, dungeons 17-32, golden medal, the final | 7:10 |
 
 (`https://www.youtube.com/watch?v=<id>`.) **Only videos 4, 6 and 7 have been read, and only for 2-17,
-3-21, 3-22 and 4-01.** The other 124 dungeons have not been looked at.
+3-21, 3-22, 4-01, 4-02 and 4-05.** The other 122 dungeons have not been looked at.
 
 **How they were read.** `yt-dlp` to a local file (outside the repository), `ffmpeg` to frames, a
 60 fps decode of one dungeon's segment, the view's scale (256 units = 720 pixels at full size, the
@@ -139,6 +139,14 @@ block's other side, the third diamond and the rocket. **Flight from the exit to 
 (`tests/routes_gold/level0c.json`, scanned with the shot's tick from 205 to 280). The same cause as 3-22 and 2-17 and 3-21 (PACE-1). A second thing the replay found: from the start spot (x 216) the shot to the
 pit is stopped by the platform's corner and from its edge (x 235) it is not, so a player who shoots at the diamond from where he starts gets no portal there and one who taps beside it puts it higher (a portal at
 y 212 gives an apex of 34 units, 232 gives 54, 240 gives 65). `clock.json` now names `level0c: 30`.
+
+### 4-02 and 4-05 (`level1c`, `level4c`), video 7, the weightless dungeons (planning step 268)
+
+Read after the owner's report of 2026-11-21 (the floating too fast; coming out of a portal moving). **4-02**: the gold run's one shot, aimed left from the block, carries him right through the three crystals into the door: about 31 units between two crystals in
+about 0.5 s, the door about 2.4 s after the shot (the recoil starts about 0.3 s after the tap): **60 to 80 units a second**, where the port's drift was 140 (the nominal 70 of the original's physics at 30 frames a second, 61 at the footage's mean of 26).
+**4-05**: he stands still for several seconds (zero gravity, no walking), shoots straight down at the floor crystal (a portal A at the floor), is carried UP at about 60 to 78 units a second, takes the two crystals over him, and about 1.8 s after the shot
+taps ON HIMSELF near the top (a portal B at his own place); the next frames have him at the floor where A is, **standing still for at least 0.6 s** (no sideways drift, no fall: the level has no floor there), then a shot to the right. That is `invertLinearVelocity`'s `no_gravity`
+branch (V2_ZERO). The port with the same taps (`tests/routes_gold/level4c.json`, the pace of step 268): the same sequence, out of the floor portal at rest, and the floor crystal taken on the tick he arrives.
 
 ## 4. The one-number lever, and what it did once
 

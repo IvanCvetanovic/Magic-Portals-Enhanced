@@ -27,19 +27,21 @@
     "tap 10 on 470 to 479; tap 11 on 554 to 570 (at least)."
   ],
   "level": "level15c",
-  "win_by": 710,
-  "holds": [],
+  "win_by": 1440,
+  "holds": [
+  ],
   "taps": [
     {"tick": 26, "at": [226, 128]},
-    {"tick": 53, "at": [344, 100]},
-    {"tick": 79, "at": [388.7, 24.7]},
-    {"tick": 230, "at": [226, 130]},
-    {"tick": 262, "at": [170, 206]},
-    {"tick": 290, "at": [347, 206]},
-    {"tick": 318, "at": [344.7, 229.3]},
-    {"tick": 346, "at": [284.0, 159.7]},
-    {"tick": 395, "at": [10.3, 180.2]},
-    {"tick": 478, "at": [266.4, 207.5]},
-    {"tick": 562, "at": [359.0, 50.7]}
-  ]
+    {"tick": 77, "at": [344, 100]},
+    {"tick": 127, "at": [388.7, 24.7]},
+    {"tick": 414, "at": [226, 130]},
+    {"tick": 474, "at": [170, 206]},
+    {"tick": 528, "at": [347, 206]},
+    {"tick": 581, "at": [344.7, 229.3]},
+    {"tick": 634, "at": [284.0, 159.7]},
+    {"tick": 760, "at": [10.3, 180.2]},
+    {"tick": 928, "at": [266.4, 207.5]},
+    {"tick": 1103, "at": [359.0, 50.7]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-16: 11 tap(s), 10 tick(s) moved (53 -> 77, 79 -> 127, 230 -> 414, 262 -> 474, 290 -> 528, 318 -> 581, 346 -> 634, 395 -> 760, 478 -> 928, 562 -> 1103); every tap point is the earlier play's; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 1395, medal 2."
 }

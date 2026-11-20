@@ -122,15 +122,23 @@ glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const
 // portal_system.gd:230-261, in the Godot project's space: pixels, +y down. Placed
 // portals are never turned, so rotate_to_exit would turn through nothing here.
 // The port plays the original's invert (transit.json): the traveller comes out
-// at the exit itself, turned back, and the player in y only.
+// at the exit itself, turned back, and the player in y only - AND, in a zero-gravity level, the player
+// comes out AT REST. invertLinearVelocity (Portal.angelscript, bytes 360172..360571) ins 12-15 asks
+// `isCharacter`; for a character ins 32-43 read the entity's `no_gravity` datum, which MainCharacter's
+// constructor sets from the level's flag (bytes 126650..127790 ins 244-255): set (non-zero), ins 64-75
+// SetLinearVelocity(V2_ZERO); clear, ins 44-62 the velocity times (1, -1). So the recoil that carried
+// the player into a portal does not come out of it: he hangs where the exit is (planning step 268; the
+// owner, 2026-11-21: "when I come out of the portal I am moving in some weird direction instead of
+// staying at the same place"; the original's footage of 4-05 shows him still at the exit).
 void Teleport(entt::registry& registry, entt::entity body, const glm::dvec2& exitPx, const Portal::Transit& transit,
-              bool character) {
+              bool character, bool noGravity) {
     auto& transform = registry.get<TransformComponent>(body);
     auto& rigid = registry.get<RigidBodyComponent>(body);
     // What lies on or against the traveller wakes before it goes (sim/Resting): a sleeper whose support leaves would hang in the air.
     Resting::WakeAround(registry, body);
     const glm::dvec2 velocityPx(rigid.velocity.x * Units::kPixelsPerMetre, -rigid.velocity.y * Units::kPixelsPerMetre);
-    const glm::dvec2 exitVelocityPx = Portal::ExitVelocity(velocityPx, 0.0, 0.0, transit, character);
+    glm::dvec2 exitVelocityPx = Portal::ExitVelocity(velocityPx, 0.0, 0.0, transit, character);
+    if (character && noGravity) exitVelocityPx = glm::dvec2(0.0);
     // Put down where the exit says, but not with his axis through the underside of a platform over it (LowerOutOfOverhead).
     const glm::dvec2 destinationPx =
         LowerOutOfOverhead(registry, body, Portal::ExitPosition(exitPx, exitVelocityPx, transit));
@@ -1170,7 +1178,7 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                 const glm::dvec2 secondPx = secondEnd.atPx;
                 const auto carry = [&](entt::entity body, const glm::dvec2& fromPx, const glm::dvec2& toPx) {
                     const glm::dvec2 travellerPx = Units::ToPixels(registry.get<TransformComponent>(body).position);
-                    Teleport(registry, body, toPx, rules.transit, body == shooter);
+                    Teleport(registry, body, toPx, rules.transit, body == shooter, noGravity);
                     transits.push_back(Traversal{travellerPx, fromPx, toPx});
                 };
                 if (inSecond != entt::null) carry(inSecond, secondPx, firstPx);
@@ -1265,7 +1273,7 @@ void State::Tick(entt::registry& registry, const ScriptClock::Step& step) {
                                        ? statics[static_cast<std::size_t>(entry.end.key)].atPx
                                        : placedWithId(entry.end.key)->atPx;
         const glm::dvec2 travellerPx = Units::ToPixels(registry.get<TransformComponent>(entry.body).position);
-        Teleport(registry, entry.body, exitPx, rules.transit, entry.body == shooter);
+        Teleport(registry, entry.body, exitPx, rules.transit, entry.body == shooter, noGravity);
         transits.push_back(Traversal{travellerPx, entryPx, exitPx});
         ++traversals;
         // A placed pair carried something, so neither end is refunded if it is

@@ -550,13 +550,17 @@ void ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate() {
 // ---- a level's own pace: original_frame_hz_by_level (planning step 262) -----------------------------------------------
 
 void ALevelCanPlayAtItsOwnPaceAndOnlyAtOneTheKeyTakes() {
-    // The shipped file: 3-22 (level21b, step 262) and 4-01 (level0c, step 266) at the 30 of the owner's videos, every other level at the file's own 60.
+    // The shipped file: 3-22 (level21b, step 262), 4-01 (level0c, step 266) and the eighteen zero-gravity levels (level1c to level18c, step 268) at the 30 of
+    // the owner's videos, every other level at the file's own 60.
     const ScriptClock::Rules shipped = ReadRules();
     CHECK_EQ(shipped.baseOriginalFrameHz, 60);
-    CHECK_MSG(shipped.originalFrameHzByLevel.size() == 2 && shipped.originalFrameHzByLevel.count("level21b") == 1 &&
-                  shipped.originalFrameHzByLevel.at("level21b") == 30 && shipped.originalFrameHzByLevel.count("level0c") == 1 &&
-                  shipped.originalFrameHzByLevel.at("level0c") == 30,
-              "3-22 (level21b) and 4-01 (level0c) are the two levels the shipped table names, at 30");
+    bool allAtThirty = shipped.originalFrameHzByLevel.count("level21b") == 1 && shipped.originalFrameHzByLevel.at("level21b") == 30;
+    for (int n = 0; n <= 18; ++n) {
+        const std::string name = "level" + std::to_string(n) + "c";
+        allAtThirty = allAtThirty && shipped.originalFrameHzByLevel.count(name) == 1 && shipped.originalFrameHzByLevel.at(name) == 30;
+    }
+    CHECK_MSG(shipped.originalFrameHzByLevel.size() == 20 && allAtThirty,
+              "3-22 (level21b), 4-01 (level0c) and 4-02 to 4-19 (level1c to level18c) are the twenty levels the shipped table names, at 30");
     ScriptClock::Rules rules = shipped;
     CHECK(rules.ForLevel("level21b"));
     CHECK_MSG(rules.originalFrameHz == 30 && rules.frameTicks == 2, "level21b plays an original frame in two ticks");

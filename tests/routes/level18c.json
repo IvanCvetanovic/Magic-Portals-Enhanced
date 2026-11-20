@@ -7,17 +7,18 @@
     "Tap 6 (186) is shot under the risen door from (266.4, 152.6) to (440, 148), beside key_2701, and lands on 233. Tap 7 (235) is on the player, 5 px left of its centre so that the recoil takes the drift off: the player comes out beside the key and takes it (tick 238), drifts down to the chamber's floor and rests at (470.9, 169.8) while red_key_state_ent_2754 fades the light for 6000 ms and breaks breakable_wall_2756 (tick 613). Tap 8 (614) pushes the player on to the rocket: won on tick 662. The recoil-only taps are the route's own, not the original's (its footage route, F17 r5, opened a portal inside the crate, which the port's shot cannot: it fails on the crate)."
   ],
   "level": "level18c",
-  "win_by": 710,
+  "win_by": 960,
   "holds": [
   ],
   "taps": [
     {"tick": 25, "at": [245.8, 208.9]},
-    {"tick": 51, "at": [214.8, 25.0]},
-    {"tick": 87, "at": [62.0, 185.0]},
-    {"tick": 123, "at": [267.4, 25.5]},
-    {"tick": 159, "at": [235.0, 215.0]},
-    {"tick": 185, "at": [440.0, 148.0]},
-    {"tick": 235, "at": [191.38, 117.73]},
-    {"tick": 614, "at": [433, 183]}
-  ]
+    {"tick": 77, "at": [214.8, 25.0]},
+    {"tick": 149, "at": [62.0, 185.0]},
+    {"tick": 221, "at": [267.4, 25.5]},
+    {"tick": 293, "at": [235.0, 215.0]},
+    {"tick": 319, "at": [440.0, 148.0]},
+    {"tick": 419, "at": [191.38, 117.73]},
+    {"tick": 800, "at": [400.0, 157.0]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-19: 8 tap(s), 7 tick(s) moved (51 -> 77, 87 -> 149, 123 -> 221, 159 -> 293, 185 -> 319, 235 -> 419, 614 -> 800); 1 tap POINT(s) moved ((433, 183) -> (400, 157)); the controls census still passes; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 919, medal 2."
 }

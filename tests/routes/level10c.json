@@ -8,10 +8,12 @@
     "right at 144 u/s along y 171-182 under the hanging wall, past antiportal_ent_2250's ring (no shot is aimed into it), to the door. Both shots fail by design (the recoil is all a weightless player moves by; no portal is wanted here). Won on tick 512."
   ],
   "level": "level10c",
-  "win_by": 550,
-  "holds": [],
+  "win_by": 950,
+  "holds": [
+  ],
   "taps": [
-    {"tick": 29, "at": [200, 5]},
-    {"tick": 460, "at": [150, 171]}
-  ]
+    {"tick": 52, "at": [200, 5]},
+    {"tick": 753, "at": [150, 171]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-11: 2 tap(s), 2 tick(s) moved (29 -> 52, 460 -> 753); every tap point is the earlier play's; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 908, medal 1."
 }

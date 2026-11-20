@@ -8,11 +8,12 @@
     "NOT MEASURED ON THE ORIGINAL: (1) the recoil's speed at 60 Hz: F10 measured a shot at 40 to 44 u/s on an emulator running 17 to 19 frames a second, and the decode (a fixed 1/30 s Box2D step) says 70 u/s of physics time = 140 u/s at a 60 Hz frame; nothing here depends on the speed but the time to the door. (2) A body gliding along the TOP of a static block under zero gravity: the port's player has friction 0 (Player kFriction), the original's dark_mage.ent 0.9 (backlog R4a-2). With an exactly horizontal aim nothing presses him into the block, so friction cannot act; a tap ABOVE his height presses him down, and there the original would lose speed to the block (about vx = 140 (cos a - 0.9 sin a), model not measurement) where the port loses none: the route keeps to a horizontal aim. (3) The crystal pick: the port takes a crystal when the player's body overlaps its 28 x 24 box; the original's `MainCharacter::crystalPicker` takes it when his POINT is within squaredRange of the crystal's point (backlog Order 10.2, open; the range is not decoded here). This glide passes each crystal's point at 2 units, so any range above about 3 units takes all three. (4) That the original opens a portal in empty space at the tap point and counts it as one (decoded: computePortalFinalPos with no hit is the aim itself); a failed shot would count 0 and still be gold."
   ],
   "level": "level1c",
-  "win_by": 200,
+  "win_by": 250,
   "medal": 3,
   "holds": [
   ],
   "taps": [
     {"tick": 40, "at": [40, 152]}
-  ]
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-02: 1 tap(s), 0 tick(s) moved; every tap point is the earlier play's; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 207, medal 3."
 }

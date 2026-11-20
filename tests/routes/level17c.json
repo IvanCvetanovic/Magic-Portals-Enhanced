@@ -22,12 +22,14 @@
     "leaves the other at (540.3, 122) and passes through the door on tick 206 (that shot's tick can be any from 183 to 193 and still win by 215)."
   ],
   "level": "level17c",
-  "win_by": 215,
-  "holds": [],
+  "win_by": 310,
+  "holds": [
+  ],
   "taps": [
     {"tick": 29, "at": [320, 200]},
     {"tick": 91, "at": [146.7, 54.4]},
     {"tick": 118, "at": [540, 120]},
     {"tick": 188, "at": [225.8, 190]}
-  ]
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-18: 4 tap(s), 0 tick(s) moved; every tap point is the earlier play's; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 267, medal 2."
 }

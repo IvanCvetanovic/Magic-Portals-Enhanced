@@ -72,7 +72,12 @@
       "166 sits AFTER the hasFailed join at 157 - the vibrate block at 149-156 is the only",
       "thing on the failed side - so EVERY ACCEPTED TAP SHOVES, whether or not the shot goes",
       "on to open a portal. The port applies it in Portals::State::Shoot, which is the same",
-      "seam: the tap, before the shot has resolved."
+      "seam: the tap, before the shot has resolved.",
+      "",
+      "SINCE PLANNING STEP 268 these 18 levels play at the original's pace (clock.json original_frame_hz_by_level: 30), so the shove is 70 units a second of REAL time, which the",
+      "owner's footage of the original shows (4-02: about 31 units between two crystals in about 0.5 s); at the file's 60 it was 140. And the player comes out of a portal AT REST:",
+      "invertLinearVelocity (Portal.angelscript, bytes 360172..360571) sets a character that carries the `no_gravity` datum (MainCharacter's constructor sets it from this flag) to V2_ZERO,",
+      "where a gravity level turns his y (docs/ethanon-formats.md, the exit)."
     ],
     "metres_per_second": 1.4
   },

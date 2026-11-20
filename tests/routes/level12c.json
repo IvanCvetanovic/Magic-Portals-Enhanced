@@ -22,13 +22,15 @@
     "end), G10's recoil, G4's 3.2 u/tick shot and the capsule."
   ],
   "level": "level12c",
-  "win_by": 255,
-  "holds": [],
+  "win_by": 430,
+  "holds": [
+  ],
   "taps": [
     {"tick": 29, "at": [200, 102]},
-    {"tick": 72, "at": [400, 40]},
-    {"tick": 100, "at": [90, 165]},
-    {"tick": 206, "at": [430, 166]},
-    {"tick": 235, "at": [90, 230]}
-  ]
+    {"tick": 102, "at": [400, 40]},
+    {"tick": 150, "at": [90, 165]},
+    {"tick": 330, "at": [430, 166]},
+    {"tick": 379, "at": [90, 230]}
+  ],
+  "_step268": "RE-TIMED in planning step 268, when the 19 zero-gravity levels (level0c to level18c) were put at the original's pace (clock.json original_frame_hz_by_level: the recoil is 70 units a second of real time, where it was 140) and the player came out of a portal at rest (invertLinearVelocity's no_gravity branch): the ticks below are of the play on that build and the notes above describe an older one. 4-13: 5 tap(s), 4 tick(s) moved (72 -> 102, 100 -> 150, 206 -> 330, 235 -> 379); every tap point is the earlier play's; walks: 0 hold(s). Found by an event-following search over replays. Won on tick 390, medal 3."
 }

@@ -21,7 +21,8 @@
 // - A level may also ship static portals (portal_static), which pair by index.
 // - Whatever comes into a portal goes out of its partner, as the original sends
 //   it (transit.json, decoded): at the partner itself, its velocity turned back,
-//   a body's whole and the player's in y only (Portal::ExitVelocity). Placed
+//   a body's whole and the player's in y only (Portal::ExitVelocity), and in a zero-gravity level the
+//   player's zero (Teleport: invertLinearVelocity's no_gravity branch). Placed
 //   ends are then spent; static ends stay. For a while after each traversal,
 //   entries are ignored.
 // - Only the player travels, and bodies whose entity says `teleportable` 1. The
