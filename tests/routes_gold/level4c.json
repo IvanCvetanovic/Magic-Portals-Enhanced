@@ -2,7 +2,7 @@
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_about": [
     "4-05 (level4c) GOLD route: the owner's own gold run of the original (video 7 of the playlist, docs/parity-video-findings.md) done in the port at the zero-gravity levels' pace (planning step 268): 4 portals, 5 of 5 crystals, medal 3, won on tick 243.",
-    "Built by hand from the footage after the owner's report of 2026-11-21 (the floating too fast and 'when I come out of the portal I am moving in some weird direction instead of staying at the same place').",
+    "Built by hand from the footage after the owner's report of 2026-11-20 (the floating too fast and 'when I come out of the portal I am moving in some weird direction instead of staying at the same place').",
     "Tap 1 (tick 44, (198,225)): a shot straight down at the floor crystal opens portal A at the floor under him; its recoil carries him UP at 70 units a second (the footage's rise: about 60 to 78), taking the two crystals over him (ticks 82 and 100).",
     "Tap 2 (tick 150, (198,40)): a tap ON himself near the top (a few units above him) opens portal B at his own place; he goes through and comes out of A at the floor AT REST, as the footage shows him (still at the floor for 0.6 s), and takes the floor crystal (tick 153).",
     "That is invertLinearVelocity's no_gravity branch (Portals.cpp Teleport; before step 268 he came out moving, with his y turned). Tap 3 (tick 180, (372,205)): a portal in the door, whose recoil glides him left along the floor at 70 units a second over the other two floor crystals (ticks 193 and 220).",

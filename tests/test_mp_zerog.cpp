@@ -384,7 +384,7 @@ void AndNoTapShovesAnyoneInANormalLevel() {
 // THE PLAYER COMES OUT OF A PORTAL AT REST IN THERE (planning step 268). invertLinearVelocity (Portal.angelscript, bytes 360172..360571) reads the
 // character's `no_gravity` datum, which MainCharacter's constructor sets from the level's flag, and sets his velocity to V2_ZERO when it is
 // set; where it is clear his velocity is turned in y. So the recoil that carried him into the entry does not come out of the exit: he hangs
-// where the exit is. (The owner, 2026-11-21: "when I come out of the portal I am moving in some weird direction instead of staying at the same
+// where the exit is. (The owner, 2026-11-20: "when I come out of the portal I am moving in some weird direction instead of staying at the same
 // place"; the original's footage of 4-05 shows him still at the exit.)
 void ThePlayerComesOutOfAPortalAtRestInThere() {
     Game::Data data;

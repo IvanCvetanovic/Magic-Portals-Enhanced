@@ -142,7 +142,7 @@ y 212 gives an apex of 34 units, 232 gives 54, 240 gives 65). `clock.json` now n
 
 ### 4-02 and 4-05 (`level1c`, `level4c`), video 7, the weightless dungeons (planning step 268)
 
-Read after the owner's report of 2026-11-21 (the floating too fast; coming out of a portal moving). **4-02**: the gold run's one shot, aimed left from the block, carries him right through the three crystals into the door: about 31 units between two crystals in
+Read after the owner's report of 2026-11-20 (the floating too fast; coming out of a portal moving). **4-02**: the gold run's one shot, aimed left from the block, carries him right through the three crystals into the door: about 31 units between two crystals in
 about 0.5 s, the door about 2.4 s after the shot (the recoil starts about 0.3 s after the tap): **60 to 80 units a second**, where the port's drift was 140 (the nominal 70 of the original's physics at 30 frames a second, 61 at the footage's mean of 26).
 **4-05**: he stands still for several seconds (zero gravity, no walking), shoots straight down at the floor crystal (a portal A at the floor), is carried UP at about 60 to 78 units a second, takes the two crystals over him, and about 1.8 s after the shot
 taps ON HIMSELF near the top (a portal B at his own place); the next frames have him at the floor where A is, **standing still for at least 0.6 s** (no sideways drift, no fall: the level has no floor there), then a shot to the right. That is `invertLinearVelocity`'s `no_gravity`

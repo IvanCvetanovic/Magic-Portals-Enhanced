@@ -13,7 +13,9 @@
       "portal's own position, SetPositionXY(other.GetPositionXY()), with no offset, and then",
       "calls invertLinearVelocity (Portal.angelscript, bytes 360172..360571). That multiplies",
       "a body's velocity by -1, and a character's by (1, -1): the character keeps its x and",
-      "turns its y back. There is no speed scale."
+      "turns its y back. There is no speed scale. And, since planning step 268, the THIRD branch: a character that carries the `no_gravity` datum (the main character in a weightless",
+      "level: MainCharacter's constructor, bytes 126650..127790 ins 244-255) has its velocity set to V2_ZERO (invertLinearVelocity ins 64-75), so it comes out at rest;",
+      "Portals.cpp Teleport plays it (docs/ethanon-formats.md)."
     ],
     "momentum_mode": "invert",
     "exit_speed_scale": 1.0,

@@ -128,7 +128,7 @@ glm::dvec2 LowerOutOfOverhead(entt::registry& registry, entt::entity body, const
 // constructor sets from the level's flag (bytes 126650..127790 ins 244-255): set (non-zero), ins 64-75
 // SetLinearVelocity(V2_ZERO); clear, ins 44-62 the velocity times (1, -1). So the recoil that carried
 // the player into a portal does not come out of it: he hangs where the exit is (planning step 268; the
-// owner, 2026-11-21: "when I come out of the portal I am moving in some weird direction instead of
+// owner, 2026-11-20: "when I come out of the portal I am moving in some weird direction instead of
 // staying at the same place"; the original's footage of 4-05 shows him still at the exit).
 void Teleport(entt::registry& registry, entt::entity body, const glm::dvec2& exitPx, const Portal::Transit& transit,
               bool character, bool noGravity) {
