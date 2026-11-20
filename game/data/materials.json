@@ -98,7 +98,7 @@
         "crate_low_emissive is the crate of 3-13's slot (level12b; also level2b, level4b and level8c, where it is a plain crate). The level is won by pushing it off its",
         "platform's edge into a 64 px slot between the platform (x 160) and block00_1528 (x 96), where it must lie flat as a bridge (a 58 px crate in 64 px, a 2 px",
         "clearance under wall04). MEASURED, with the recorded play's walk left ending on every tick from 190 to 330 (step 10), on the engine as it is since the friction solve was",
-        "fixed, a stack sleeps and a body bounces at the touch (planning step 264): at the decoded 0.96, at 0.45 to 0.9 and at 0.2 to 0.38 and 0.42 no end of the walk wins;",
+        "fixed, a stack sleeps and a body bounces at the touch (planning step 264): at 0.96, 0.9, 0.47, 0.44, 0.42, 0.38, 0.35, 0.3, 0.25 and 0.15 no end of the walk wins (on ONE timing only, at 0.8 to 0.45 and at 0.2 and 0.1 the recorded play does not win either, and 3,000 replays of search at 0.96 on this engine found no winning play: planning step 265);",
         "at 0.4 every end from 250 on does (9 of 15), and on the recorded play as it stands 0.394 to 0.406 win (steps of 0.002; 0.392 and 0.408 do not), so 0.4 is the middle of a window 0.012 wide. Before step 264's engine it was 0.5 and 0.52 that won, and 0.2: the crate is a CHAOTIC thing of its friction (a neighbour of a",
         "winning value does not win), as it was at the old 0.08, and the value is a guess that this build happens to play. A combined 0.283 against the platform's 0.2, where the",
         "decoded pair is 0.438. The original's Box2D puts the crate flat at 0.96; this engine's contact does not, and the cause is not looked into. To be dropped when the slot's",
