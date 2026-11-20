@@ -384,10 +384,13 @@ void TheMaterialTableIsRead() {
         CHECK_WITHIN(materials.Of(name).restitution, LevelBuilder::kBodyRestitution, 0.0);
         CHECK_WITHIN(materials.Of(name).decodedRestitution, LevelBuilder::kBodyRestitution, 0.0);
     }
-    // The decoded restitution is held but not applied (materials.json says why): what a body is built with is the 0.
-    CHECK(!materials.restitutionApplied);
-    CHECK_WITHIN(materials.Of("crate").restitution, 0.0, 0.0);
-    CHECK_WITHIN(materials.Of("rolling_stone").restitution, 0.0, 0.0);
+    // The decoded restitution is APPLIED (restitution_applied, since planning step 264: the engine bounces a body at the touch): what a body is
+    // built with is the .ent's.
+    CHECK(materials.restitutionApplied);
+    CHECK_WITHIN(materials.Of("crate").restitution, 0.2, 1e-6);
+    CHECK_WITHIN(materials.Of("rolling_stone").decodedRestitution, 0.15, 1e-6);
+    CHECK_WITHIN(materials.Of("rolling_stone").restitution, 0.0, 0.0); // built with its own 0 (restitution_override): the 2-29 clip measures its roll without a bounce
+    CHECK_WITHIN(materials.Of("platform").restitution, 0.0, 0.0);
     // The decoded friction is APPLIED (friction_applied, since planning step 263); the held 1 is the Godot project's, the constants a rig
     // with no table is built on, and is what a body is built with only where the table says nothing.
     CHECK(materials.frictionApplied);
@@ -396,15 +399,15 @@ void TheMaterialTableIsRead() {
     for (const char* name : {"crate", "barrel_bomb", "rolling_stone", "platform", "block00", "dragon_knight", "ramp_right", "lift"}) {
         CHECK_WITHIN(materials.Of(name).friction, materials.Of(name).decodedFriction, 0.0);
     }
-    // The crate of 3-13's slot is the one entity built with a friction of its own (friction_override 0.5, a guess marked in the file: planning
-    // step 263; it was a held 0.08 from step 152). Its decoded friction, restitution and weight are the crate's own; only what it is built
+    // The crate of 3-13's slot is the one entity built with a friction of its own (friction_override 0.4, a guess marked in the file: planning
+    // step 263, 0.5 until step 264; it was a held 0.08 from step 152). Its decoded friction, restitution and weight are the crate's own; only what it is built
     // with differs.
     for (const char* name : {"crate_low_emissive"}) {
         CHECK_MSG(materials.Holds(name), std::string(name) + " is in the table");
         CHECK_WITHIN(materials.Of(name).decodedFriction, 0.96, 1e-6);
         CHECK_WITHIN(materials.Of(name).decodedRestitution, 0.2, 1e-6);
         CHECK_WITHIN(materials.Of(name).density, 0.4, 1e-6);
-        CHECK_WITHIN(materials.Of(name).friction, 0.5, 1e-6);
+        CHECK_WITHIN(materials.Of(name).friction, 0.4, 1e-6);
     }
     for (const char* name : {"crate_no_emissive", "crate_small", "crate_small_no_emissive"}) {
         CHECK_WITHIN(materials.Of(name).friction, 0.96, 1e-6);
@@ -540,7 +543,7 @@ void ABuiltBodyCarriesItsEntitysMaterialAndNoDamping() {
     if (crate == entt::null || block == entt::null) return;
     const auto& rigid = run.registry.get<RigidBodyComponent>(crate);
     CHECK_WITHIN(rigid.friction, 0.96, 1e-6);  // decoded 0.96, applied: materials.json friction_applied
-    CHECK_WITHIN(rigid.restitution, 0.0, 0.0); // decoded 0.2, not applied: materials.json restitution_applied
+    CHECK_WITHIN(rigid.restitution, 0.2, 1e-6); // decoded 0.2, applied: materials.json restitution_applied
     CHECK_WITHIN(rigid.linearDamping, 0.0, 0.0);
     CHECK_WITHIN(rigid.angularDamping, 0.0, 0.0);
     const auto& surface = run.registry.get<PhysicsMaterialComponent>(block);
@@ -549,7 +552,7 @@ void ABuiltBodyCarriesItsEntitysMaterialAndNoDamping() {
     // The table's mix is Box2D's: the square root of the product, and the larger restitution; the crate on the block is 0.62.
     CHECK_WITHIN(PhysicsSystem::CombineFriction(rigid.friction, surface.friction), std::sqrt(0.96 * 0.4), 1e-5);
     CHECK_WITHIN(PhysicsSystem::CombineFriction(0.96f, 0.4f), std::sqrt(0.96 * 0.4), 1e-5);
-    CHECK_WITHIN(PhysicsSystem::CombineRestitution(rigid.restitution, surface.restitution), 0.0, 1e-6);
+    CHECK_WITHIN(PhysicsSystem::CombineRestitution(rigid.restitution, surface.restitution), 0.2, 1e-6);
 }
 
 void AMinionIsFrictionless() {
@@ -607,11 +610,11 @@ void EveryDynamicBodyIsHeldToBox2DsMaxTranslation() {
 
 // ---- restitution -----------------------------------------------------------------------------------------
 
-// Why materials.json holds the .ent's restitution and does not apply it (restitution_applied): the engine applies a body's
-// restitution to a SPECULATIVE contact, a pair still apart and closing within a step's travel (PhysicsSystem.cpp:1574-1631), so a
-// stone of the original's 0.15 turns round before it touches, where Box2D turns it round at the touch. Measured on a rig: a
-// stone dropped 100 units onto a floor at the layer's carried gravity, the gap between its surface and the floor on the tick
-// its velocity first turns up, with and without the restitution.
+// What materials.json's restitution_applied rests on. The engine used to apply a body's restitution to a SPECULATIVE contact, a pair still
+// apart and closing within a step's travel, so a stone of the original's 0.15 turned round before it touched, where Box2D turns it round at the
+// touch; the engine now leaves such a pair alone for the step that closes it and bounces from the real overlap of the next (planning step 264).
+// Measured on a rig: a stone dropped 100 units onto a floor at the layer's carried gravity, the gap between its surface and the floor on the
+// tick its velocity first turns up, with and without the restitution.
 double GapAtTheFirstBounce(float restitution, double* fallingAt) {
     entt::registry registry;
     registry.ctx().insert_or_assign<LevelBuilder::Materials>(ReadMaterials());
@@ -637,16 +640,16 @@ double GapAtTheFirstBounce(float restitution, double* fallingAt) {
     return -1.0;
 }
 
-void TheEngineBouncesAStoneBeforeItTouches() {
+void TheEngineBouncesAStoneAtTheTouch() {
     double falling = 0.0;
     const double with = GapAtTheFirstBounce(0.15f, &falling);
     const double without = GapAtTheFirstBounce(0.0f, nullptr);
-    std::printf("  a stone of 0.15 dropped 100 units turns round %.2f units over the floor (falling at %.0f px/s); of 0, "
+    std::printf("  a stone of 0.15 dropped 100 units turns round %.2f units over the floor (falling at %.0f px/s; negative is into it); of 0, "
                 "%s\n",
                 with, falling, without < 0.0 ? "never turns" : "it turns round at all");
-    // THE TRIPWIRE: if this fails the engine bounces a body at the touch, as Box2D does - turn restitution_applied on in
-    // materials.json, and rerun the suites that ask whether two bodies touch (demolish, boss, impacts, diamonds).
-    CHECK_MSG(with > 0.5, "the engine's bounce is a speculative one: the gap at the first turn is " + std::to_string(with));
+    // THE PIN (it was the tripwire for restitution_applied, which fired when the engine's bounce was moved to the touch): the first turn is at the
+    // floor and not above it (it was 5.00 units over it), and at most the engine's burial of one step deep (kBounceBurial, 0.15 m, 7.5 units).
+    CHECK_MSG(with < 0.5 && with > -8.0, "the engine bounces the stone at the touch: the gap at the first turn is " + std::to_string(with));
     CHECK_MSG(without < 0.0, "and a stone with no restitution does not bounce at all");
 }
 
@@ -1021,7 +1024,7 @@ void ABoxBuiltFromTheTableRestsAndSleeps() {
                 "a barrel %.3f, %.0f\n",
                 crate.driftUnits, crate.asleepFromTick, bigCrate.driftUnits,
                 bigCrate.asleepFromTick, barrel.driftUnits, barrel.asleepFromTick);
-    // The crate of 3-13's slot, at its own 0.5 against the platform's 0.2 (a combined 0.316, which the engine's solve holds): it rests as the rest do.
+    // The crate of 3-13's slot, at its own 0.4 against the platform's 0.2 (a combined 0.283, which the engine's solve holds): it rests as the rest do.
     const RestingBox slotCrate = LetGoOnAFlatFloor(materials.Of("crate_low_emissive").friction, platform, 29.0, 29.0, 0.538f);
     std::printf("  the slot's crate (friction %.2f, mass 0.538): %.3f along, asleep from tick %.0f\n",
                 static_cast<double>(materials.Of("crate_low_emissive").friction), slotCrate.driftUnits, slotCrate.asleepFromTick);
@@ -1106,13 +1109,16 @@ const StillMoving kStillMoving[] = {
     // table steps this stone in Box2D's order, it meets the barrel by tick 195 and is asleep from 235, so on the shipped table the entry is
     // not met (109 bodies asleep at tick 420 and 4 still moving, were 108 and 5) and it stays for the table that names nothing.
     {"level28a", "rolling_stone_892", "2-29's stone is rolling at 61 units a second, 165 units in the last 120 ticks"},
-    // PLANNING STEP 263, when the engine's friction solve was fixed and the decoded frictions applied; two bodies the creep no longer explains.
-    // 2-16's barrel stacked on the other: it rocks in place at 3 units a second and goes nowhere (0.00 units in the last 120 ticks, 0.3 degrees
-    // turned, spinning 3.7 degrees a second): the engine does not put a stack of two boxes to sleep with either friction solve (measured on a
-    // pair of boxes at 0.2 to 1 against 1, the old solve too, with a speed under its sleep speed for seconds), so it is awake and still.
-    {"level15a", "barrel_bomb_ent_1195", "2-16's barrel on a barrel rocks in place and goes nowhere: a stack, which the engine does not sleep"},
-    // OBSERVED, cause not diagnosed: 2-10's crate (it toppled, 90.9 degrees) slides 1 unit in the last 120 ticks at 0.25 units a second.
-    {"level9a", "crate_no_emissive_938", "2-10's toppled crate slides 0.25 units a second at the decoded friction (observed, cause not diagnosed)"},
+    // PLANNING STEP 263 and 264, when the engine's friction solve was fixed, a stack began to sleep and a body to bounce at the touch: 132 of the 138 loose
+    // bodies are asleep at tick 420 (it was 111 of 138 with 13 creeping at the decoded friction on the old engine). 2-16's barrel stacked on the other still
+    // rocks in place at 3 units a second and goes nowhere (0.00 units in the last 120 ticks, 0.3 degrees turned, spinning 3.7 degrees a second) although a
+    // stack of two boxes sleeps in the engine (test_physics, AStackOfBoxesSleeps): OBSERVED, cause not diagnosed.
+    {"level15a", "barrel_bomb_ent_1195", "2-16's barrel on a barrel rocks in place and goes nowhere (observed, cause not diagnosed)"},
+    // PLANNING STEP 264, restitution applied (the engine bounces at the touch) and a stack that sleeps: 130 of the 138 loose bodies are asleep at
+    // tick 420. 1-22's two stones are still rolling slowly (4.2 units a second, 8.4 units in the last 120 ticks, 60 degrees turned in all):
+    // OBSERVED, cause not diagnosed (a stone of friction 0.025 and restitution 0.15 on the slope they stand on).
+    {"level21", "rolling_stone_727", "1-22's stone is still rolling slowly at tick 420 (observed, cause not diagnosed)"},
+    {"level21", "rolling_stone_753", "1-22's other stone, the same"},
     // 3-12's stone and crate were named here until resting.json put them to sleep where the original's stills show them (R3b fix 1):
     // the reading that a walking minion pushed them against the wall was an inference and the trace did not bear it out.
 };
@@ -1378,7 +1384,7 @@ void runTests() {
     ABuiltBodyCarriesItsEntitysMaterialAndNoDamping();
     AMinionIsFrictionless();
     EveryDynamicBodyIsHeldToBox2DsMaxTranslation();
-    TheEngineBouncesAStoneBeforeItTouches();
+    TheEngineBouncesAStoneAtTheTouch();
     TheMassesAreTheEntsDensityOverTheShape();
     AScaleDatumScalesTheBodyAndItsMassAsScaleEntityDoes();
     ADecodedPlayerPushesACrateAtTheMassRatio();

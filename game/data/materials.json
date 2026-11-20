@@ -1,9 +1,9 @@
 {
   "_about": [
     "What each entity's bodies are made of: the friction and restitution of its .ent, which the original hands the fixture it",
-    "builds (planning step 152, WT). DECODED, not guessed. The FRICTION is APPLIED since planning step 263 (the engine's friction solve was fixed; friction_applied below",
-    "says what it was and what fixed it); the RESTITUTION is still HELD, not applied, because the engine's solver does not do what Box2D does with it (restitution_applied below). What the port's bodies are built with",
-    "is the .ent's friction, the Godot project's 0 restitution and the .ent's density as mass; the .ent's own restitution is kept here, read back by test_mp_timebase against the original's files, for the engine step that makes it true.",
+    "builds (planning step 152, WT). DECODED, not guessed. The FRICTION is APPLIED since planning step 263 and the RESTITUTION since step 264 (the engine's",
+    "friction solve and its bounce were fixed: friction_applied and restitution_applied below say what they were and what fixed them). What the port's bodies are",
+    "built with is the .ent's friction and restitution and the .ent's density as mass, read back by test_mp_timebase against the original's files.",
     "ETHPhysicsSimulator::CreateBody (reference/ethanon/toolkit/Source/src/",
     "engine/Physics/ETHPhysicsSimulator.cpp:102-109) sets fixtureDef.friction = entity->GetFriction(idx) and",
     "fixtureDef.restitution = entity->GetRestitution(idx) from the <Entity friction=... restitution=...> attributes of the .ent",
@@ -63,19 +63,19 @@
     "slides, nothing creeps (the rig above sleeps after 30 ticks). Not a decoded number: a held one, with the decoded numbers beside it."
   ],
 
-  "restitution_applied": false,
+  "restitution_applied": true,
   "_restitution_applied": [
-    "WHETHER A BODY IS BUILT WITH ITS ENTITY'S RESTITUTION. Today it is not: every restitution below is DECODED and read back from its .ent",
-    "(test_mp_timebase), but the bodies are built with the Godot project's 0 (LevelBuilder::kBodyRestitution), and friction alone is applied.",
-    "WHY: the engine's solver applies restitution to a SPECULATIVE contact - a pair that is apart but closing within one step's travel",
-    "(PhysicsSystem.cpp:1574-1631: targetVelocity = max(-restitution x approach, -allowedApproach) for a pair with a gap) - so a body",
-    "with a restitution turns round BEFORE it touches, where Box2D turns it round AT the touch (a manifold has points only when the shapes",
-    "meet). MEASURED (test_mp_timebase, TheEngineBouncesAStoneBeforeItTouches): a stone of 0.15 dropped 100 units onto a floor turns round",
-    "5.00 units over it, falling at 567 px/s; the same stone with no restitution never turns round. With the decoded values applied,",
-    "test_mp_demolish's stone broke no wall (3 checks: it turned round short of the breakable it was thrown at) and one of test_mp_pictures'",
-    "walks changed; and any code of the port that asks whether two bodies TOUCH reads that gap. The engine is not this step's to change, so the flag",
-    "stays false and the bounce is a row of its own (LEFT FOR LATER: an engine step that applies restitution at the contact). Turn it on",
-    "there, and the suites that read a touch say what else has to follow."
+    "WHETHER A BODY IS BUILT WITH ITS ENTITY'S RESTITUTION: TRUE since planning step 264. Every restitution below is DECODED and read back from its .ent",
+    "(test_mp_timebase), and a body is built with it, as Box2D does: a crate 0.2, a stone 0.15, a lift 0.2, a gravity agent 0.1, the rest 0, and a pair",
+    "bounces by the LARGER of the two (CombineRestitution), so a crate bounces on any platform.",
+    "WHY IT WAS HELD (planning steps 152 to 263), MEASURED. The engine applied a body's restitution to a SPECULATIVE contact - a pair that is apart but",
+    "closing within one step's travel - so a body with a restitution turned round BEFORE it touched, where Box2D turns it round AT the touch (a manifold has",
+    "points only when the shapes meet): a stone of 0.15 dropped 100 units onto a floor turned round 5.00 units over it, falling at 567 px/s, and with the",
+    "decoded values applied test_mp_demolish's stone broke no wall (it turned round short of the breakable it was thrown at).",
+    "FIXED IN THE ENGINE (the same branch as the friction solve): a bouncing pair that will meet inside the step is left alone for the step that closes it, the",
+    "next step finds a real overlap and bounces from the velocity the body arrived with (at most 0.15 m deep; not for a body moved after the solve). The rig",
+    "above now turns the stone round at the floor (test_mp_timebase, TheEngineBouncesAStoneAtTheTouch).",
+    "UNCHANGED ON PURPOSE: the Godot project's 0 (LevelBuilder::kBodyRestitution) is what a body is built with where this table says nothing."
   ],
 
   "groups": [
@@ -91,18 +91,18 @@
       "friction": 0.96,
       "restitution": 0.2,
       "density": 0.4,
-      "friction_override": 0.5,
+      "friction_override": 0.4,
       "_guess": true,
       "_friction_override": [
-        "A GUESS (_guess true), not a decoded number: the friction this entity is BUILT with in place of its decoded 0.96 (friction_override, planning step 263).",
+        "A GUESS (_guess true), not a decoded number: the friction this entity is BUILT with in place of its decoded 0.96 (friction_override, planning step 263; 0.5 until step 264).",
         "crate_low_emissive is the crate of 3-13's slot (level12b; also level2b, level4b and level8c, where it is a plain crate). The level is won by pushing it off its",
         "platform's edge into a 64 px slot between the platform (x 160) and block00_1528 (x 96), where it must lie flat as a bridge (a 58 px crate in 64 px, a 2 px",
-        "clearance under wall04). On the engine as it is since the friction solve was fixed (planning step 263), MEASURED with the recorded play's walk left ending on every",
-        "tick from 190 to 330 (step 10): at the decoded 0.96 and at 0.55 to 0.95 the crate does not go into the slot at all (the walk is stopped on it) and no tick wins; at",
-        "0.5 and 0.52 every end from 260 on wins (8 of 15), at 0.2 every end from 250 on, and at 0.48, 0.45, 0.42, 0.3, 0.15, 0.1 and 0.08 none does. So the crate is a",
-        "knife-edge in its friction (as it was at the old 0.08, a plateau of 0.079 to 0.082 on the old engine) and 0.5 is the value nearest the decoded one that has a",
-        "wide window of its own. A combined 0.316 against the platform's 0.2, where the decoded pair is 0.438. The original's Box2D puts the crate flat at 0.96; this",
-        "engine's contact does not, and the cause is not looked into. To be dropped when the slot's crate plays at the decoded friction."
+        "clearance under wall04). MEASURED, with the recorded play's walk left ending on every tick from 190 to 330 (step 10), on the engine as it is since the friction solve was",
+        "fixed, a stack sleeps and a body bounces at the touch (planning step 264): at the decoded 0.96, at 0.45 to 0.9 and at 0.2 to 0.38 and 0.42 no end of the walk wins;",
+        "at 0.4 every end from 250 on does (9 of 15). Before step 264's engine it was 0.5 and 0.52 that won, and 0.2: the crate is a CHAOTIC thing of its friction (a neighbour of a",
+        "winning value does not win), as it was at the old 0.08, and the value is a guess that this build happens to play. A combined 0.283 against the platform's 0.2, where the",
+        "decoded pair is 0.438. The original's Box2D puts the crate flat at 0.96; this engine's contact does not, and the cause is not looked into. To be dropped when the slot's",
+        "crate plays at the decoded friction, and to be looked at again by any change of the engine."
       ],
       "_source": "crate_low_emissive.ent: <Entity friction=\"0.960000\" density=\"0.400000\" restitution=\"0.200000\"> - the same pair as the crate group above; the group is its own only for the held_friction below"
     },
@@ -118,6 +118,14 @@
       "friction": 0.025,
       "restitution": 0.15,
       "density": 1.0,
+      "restitution_override": 0.0,
+      "_restitution_override": [
+        "BUILT WITH 0, NOT THE DECODED 0.15 (restitution_override, planning step 264), because the original's own footage says so: the rig clip of 2-29 (test_mp_contact_order,",
+        "The2_29StoneRollsAsTheOriginalsDoesAndOnlyBecauseOfTheTable) reads the stone's free roll on the floor at 2.025 units a frame, its landing at f123 and its meeting with the",
+        "barrel at f183.5, and the port's stone is at 2.10, f131.1 and f186.0 with no restitution (+3.8, +6.6 and +1.4 percent) and at 1.82, f135.7 and f193.5 with the decoded",
+        "0.15 (-10.3, +10.3 and +5.5 percent: out of the clip's +-10 percent bands). The engine's bounce at the touch takes more of a rolling stone's speed than Box2D's does, for a reason",
+        "not looked into; the measurement beats the decoded number until it is. A crate's 0.2 and every other entity's decoded restitution are applied."
+      ],
       "_source": "rolling_stone.ent, rolling_stone_no_emissive.ent: <Entity friction=\"0.025000\" density=\"1.000000\" restitution=\"0.150000\"> - a stone that skids more than it grips (a launcher's, a placed one and the beholder's rock are all this entity)"
     },
     {

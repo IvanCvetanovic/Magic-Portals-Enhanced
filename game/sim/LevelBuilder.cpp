@@ -312,6 +312,16 @@ bool LoadMaterials(const std::string& path, Materials& out, std::string& error) 
         }
         material.decodedRestitution = group["restitution"].AsFloat();
         material.restitution = read.restitutionApplied ? material.decodedRestitution : kBodyRestitution;
+        // A restitution of the group's own (planning step 264): what the group is BUILT with wherever a measurement of the original says the decoded one makes it
+        // worse (the 2-29 stone, whose roll the rig clip measures). The decoded one stays read back.
+        if (group.Has("restitution_override")) {
+            if (!group["restitution_override"].IsNumber() || !(group["restitution_override"].AsFloat() >= 0.0f) ||
+                !(group["restitution_override"].AsFloat() <= 1.0f)) {
+                error = path + ": a group's restitution_override is a number from 0 to 1";
+                return false;
+            }
+            material.restitution = group["restitution_override"].AsFloat();
+        }
         // A friction below zero or a restitution outside [0, 1] describes no Box2D fixture.
         if (!(material.decodedFriction >= 0.0f) || !(material.decodedRestitution >= 0.0f) ||
             !(material.decodedRestitution <= 1.0f)) {
