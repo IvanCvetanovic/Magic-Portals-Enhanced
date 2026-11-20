@@ -2758,9 +2758,9 @@ md5 `48fe65ce`).
   `b2FixtureDef` per shape with `density = entity->IsStatic() ? 0 : GetDensity(idx)`, `friction = GetFriction(idx)`, `isSensor` and `restitution = GetRestitution(idx)` (`:106-110`),
   which `ETHEntityProperties` reads off the `.ent`'s `<Entity friction= density= restitution= gravityScale=>` (`engine/Entity/ETHEntityProperties.cpp:261`; `gravityScale`
   defaults to 1, `:105`). So a pair's friction is Box2D's `sqrt(f_a x f_b)` and its restitution `max(r_a, r_b)` of the two entities' own numbers: a crate 0.96 / 0.2 on a platform
-  0.2 / 0 slides at 0.44, a rolling stone 0.025 / 0.15 skids, a minion 0 never grips. **The port holds the frictions at 1 and applies only the zeros**: the Supersonic engine's
-  friction solve (`PhysicsSystem.cpp`, the friction block of the velocity solve) walks a resting box sideways at a combined friction of 0.4 to 0.6, which is the crate-on-platform pair
-  (planning step 152, `materials.json` `friction_applied`). The port's table is `game/data/materials.json` (52 entities + `dark_mage`, each read back from
+  0.2 / 0 slides at 0.44, a rolling stone 0.025 / 0.15 skids, a minion 0 never grips. **The port applies the decoded frictions** (since planning step 263; from step 152 it held them at 1 and applied only the zeros, because the Supersonic engine's
+  friction solve (`PhysicsSystem.cpp`, the friction block of the velocity solve) walked a resting box sideways at a combined friction of 0.4 to 0.6, which is the crate-on-platform pair;
+  the solve now fixes two tangent axes per contact for the step, as Box2D does; `materials.json` `friction_applied`), except one crate built with a friction of its own (a guess, `friction_override`). The port's table is `game/data/materials.json` (52 entities + `dark_mage`, each read back from
   its `.ent` by `test_mp_timebase`); 12 of the 128 levels' entity names have no `.ent` among the extracted assets (`moving_platform`, `moving_platform_single`, `enemy_killer`, `lava`,
   `bounce`, `no_restitution`, `collision_128_sqr`, `single_block`, `double_block`, `square_platform_22`, `rocket_bridge`, `motor_seesaw`) and keep the old constants.
 - **Mass.** Box2D's mass is the sum of density x area over a body's fixtures (`b2Body::ResetMassData`). A compound shape's circle has radius `radius x (scale.x x 0.5)` and

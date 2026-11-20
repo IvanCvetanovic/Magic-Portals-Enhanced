@@ -1,37 +1,25 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
-  "_about": [
-    "2-15 (R1 fix 1): button_1137, which raises door_lift_1136 in front of the door, lies inside antiportal_ent_1082 (scale 2, 64 px",
-    "at 32 x scale), and carranca_right_1075 sweeps the floor lane to the lift every 125 ticks (2 s: spat on 127, 253, 379, 505, ...,",
-    "each bursting on the shut lift at x 348.6); every portal here is 110 px or more from the ring's centre. Right along the top",
-    "ledge, pushing barrel_bomb_ent_1072 off before carranca_1071's first fireball (tick 95) blows it up (96): the player walks off",
-    "after it (right held to tick 75, which the wave 3b-1 walk needs: it stops at x 158.6 after 60) and lands on the middle ledge on tick 94,",
-    "behind the barrel's explosion. Left along the middle ledge to its left end and off it: the walk-off lands on the lone block",
-    "at (32, 224) on tick 152 (left held to 143), no portal pair needed; right to x 54 (the flat top ends at 57.6, and a shot let go before",
-    "tick 165, with the player at x < 53, clips the block's chamfer). A portal in the floor lane at (110, 295) (tap 164, placed 195;",
-    "the camera shows y 295 only from tick 160) and one against barrel_bomb_ent_1079 at (366, 168) (tap 199; the flight is 91 ticks, placed 291):",
-    "the barrel drops into the lane at x 110 and takes the fireball spat on 379. A portal at (150, 310) (tap 292, after the barrel's is",
-    "placed: a tap before 290 is refused) and one on the player (tap 336): into the lane just behind the fireball spat on 253.",
-    "Right to the button (the lift opens on tick ~400) and wait there while door_lift_1136 rises; at 450 right under it, ahead of the",
-    "fireball spat on 505, into the door. Re-authored on the wave 3a timing build (R3 round 1): won on tick 532, and on the wave 3b-1 build",
-    "(R3b round 1: the world in the original's time base, the player's capsule): won on tick 499 (to win_by 520, the third tap may go on 290 to 295, the fourth on 333 to 340,",
-    "last walk start 445 to 454). Leans on the port's traversal by body overlap for the barrel",
-    "(its centre is 22.5 px from that portal), on G4 (shot speed), G10 (the walk and fall) and the carrancas' timing (startStride 1500 / 0, stride 3000 / 2000)."
-  ],
+  "_about": ["2-15 (R1 fix 1): button_1137, which raises door_lift_1136 in front of the door, lies inside antiportal_ent_1082 (scale 2, 64 px", "at 32 x scale), and carranca_right_1075 sweeps the floor lane to the lift every 125 ticks (2 s: spat on 127, 253, 379, 505, ...,", "each bursting on the shut lift at x 348.6); every portal here is 110 px or more from the ring's centre. Right along the top", "ledge, pushing barrel_bomb_ent_1072 off before carranca_1071's first fireball (tick 95) blows it up (96): the player walks off", "after it (right held to tick 75, which the wave 3b-1 walk needs: it stops at x 158.6 after 60) and lands on the middle ledge on tick 94,", "behind the barrel's explosion. Left along the middle ledge to its left end and off it: the walk-off lands on the lone block", "at (32, 224) on tick 152 (left held to 143), no portal pair needed; right to x 54 (the flat top ends at 57.6, and a shot let go before", "tick 165, with the player at x < 53, clips the block's chamfer). A portal in the floor lane at (110, 295) (tap 164, placed 195;", "the camera shows y 295 only from tick 160) and one against barrel_bomb_ent_1079 at (366, 168) (tap 199; the flight is 91 ticks, placed 291):", "the barrel drops into the lane at x 110 and takes the fireball spat on 379. A portal at (150, 310) (tap 292, after the barrel's is", "placed: a tap before 290 is refused) and one on the player (tap 336): into the lane just behind the fireball spat on 253.", "Right to the button (the lift opens on tick ~400) and wait there while door_lift_1136 rises; at 450 right under it, ahead of the", "fireball spat on 505, into the door. Re-authored on the wave 3a timing build (R3 round 1): won on tick 532, and on the wave 3b-1 build", "(R3b round 1: the world in the original's time base, the player's capsule): won on tick 499 (to win_by 520, the third tap may go on 290 to 295, the fourth on 333 to 340,", "last walk start 445 to 454). Leans on the port's traversal by body overlap for the barrel", "(its centre is 22.5 px from that portal), on G4 (shot speed), G10 (the walk and fall) and the carrancas' timing (startStride 1500 / 0, stride 3000 / 2000)."],
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[1].to 143 -> 163, holds[2].from 160 -> 159, holds[2].to 163 -> 172, holds[3].from 336 -> 331, holds[4].from 450 -> 464, taps[0].tick 164 -> 166 (largest move 20 ticks) and it wins on tick 513 with win_by 560. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. A shot now lands inside a walk, so a player needs the walk finger and the aim finger at once: taps[0] (tick 166) now falls inside holds[2]. SINGLE-TICK WINNER: taps[0].tick = 166 wins at that tick only, not at its neighbours +-1 or +-2 - the first key to look at if a build on another compiler or a 32-bit build differs. The search had left holds[1] (left to 163) and holds[2] (right from 159) overlapping on ticks 159-163, where the layer sums opposite walks to nothing: written without the overlap (holds[1].to 158, holds[2].from 164) the player stands still for the same 5 ticks.",
+  "_step263": "RE-TIMED in planning step 263, when the engine's friction solve was fixed (two tangent axes fixed for the step, a signed accumulator each) and the tables' decoded frictions were applied (materials.json friction_applied): a crate, a barrel and a stone no longer drag at the held 1, so every tick below is of the play on the new build and the notes above describe the old one. The tap POINTS and their number are the old play's, unchanged (the controls census pins them); only the ticks of the taps and of the walks moved (an event-following hill climb over replays, 2-15: 4 tap(s), 9 walk(s), won on tick 603).",
   "level": "level14a",
-  "win_by": 560,
+  "win_by": 650,
   "holds": [
-    {"walk": "right", "from": 1, "to": 75},
-    {"walk": "left", "from": 90, "to": 158},
-    {"walk": "right", "from": 164, "to": 172},
-    {"walk": "right", "from": 331, "to": 412},
-    {"walk": "right", "from": 464, "to": 560}
+    {"walk": "right", "from": 3, "to": 50},
+    {"walk": "right", "from": 52, "to": 64},
+    {"walk": "left", "from": 74, "to": 110},
+    {"walk": "left", "from": 112, "to": 139},
+    {"walk": "right", "from": 133, "to": 149},
+    {"walk": "right", "from": 365, "to": 465},
+    {"walk": "right", "from": 515, "to": 541},
+    {"walk": "right", "from": 541, "to": 602},
+    {"walk": "right", "from": 542, "to": 549}
   ],
   "taps": [
-    {"tick": 166, "at": [110, 295]},
-    {"tick": 199, "at": [366, 168]},
-    {"tick": 292, "at": [150, 310]},
-    {"tick": 336, "at": [53, 188]}
+    {"tick": 171, "at": [110, 295]},
+    {"tick": 201, "at": [366, 168]},
+    {"tick": 309, "at": [150, 310]},
+    {"tick": 396, "at": [53, 188]}
   ]
 }

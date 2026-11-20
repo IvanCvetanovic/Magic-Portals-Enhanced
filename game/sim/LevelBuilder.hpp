@@ -68,11 +68,12 @@ inline constexpr float kStaticRestitution = 0.0f;
 // while materials.json says `restitution_applied` (it does not, today: the engine bounces a pair a step's
 // travel BEFORE it touches, which stops a stone short of the wall it breaks - Materials::restitutionApplied).
 //
-// `friction` is likewise what a body is BUILT with and `decodedFriction` the .ent's own: the same while
-// materials.json says `friction_applied` (it does not, today: the engine's friction solve walks a resting box
-// sideways at a combined friction of 0.4 to 0.6, which is every crate or barrel on a platform - the
+// `friction` is likewise what a body is BUILT with and `decodedFriction` the .ent's own: the same
+// while materials.json says `friction_applied` (it does, since planning step 263, when the engine's friction solve was fixed; before
+// that it walked a resting box sideways at a combined friction of 0.4 to 0.6, which is every crate or barrel on a platform - the
 // Materials::frictionApplied note), and otherwise the table's `held_friction`, except for a group that says
-// `apply_decoded_friction` (a friction of 0 is 0 against any surface, and no friction impulse is solved).
+// `apply_decoded_friction` (a friction of 0 is 0 against any surface, and no friction impulse is solved) and a group with a
+// `friction_override` of its own (a guess, marked in the file: the crate of 3-13's slot), which is what that group is built with either way.
 //
 // `density` is the .ent's, which Box2D multiplies by the shape's area for the body's MASS (b2Body::ResetMassData):
 // 0 is an entity with none (a static, or one the table does not hold), whose body keeps the engine's mass of 1.

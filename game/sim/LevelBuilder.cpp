@@ -295,6 +295,15 @@ bool LoadMaterials(const std::string& path, Materials& out, std::string& error) 
         // The .ent's friction where the table applies it, and where this group says it is safe to while the rest is held.
         material.friction = (read.frictionApplied || group["apply_decoded_friction"].AsBool(false)) ? material.decodedFriction
                                                                                                    : held;
+        // A friction of the group's own (planning step 263), for the one entity whose decoded friction the engine's contact solve cannot play: a GUESS,
+        // marked in the file (the crate of 3-13's slot). It is what the group is BUILT with, whatever friction_applied says; the decoded one stays read back.
+        if (group.Has("friction_override")) {
+            if (!group["friction_override"].IsNumber() || !(group["friction_override"].AsFloat() >= 0.0f)) {
+                error = path + ": a group's friction_override is a number of at least 0";
+                return false;
+            }
+            material.friction = group["friction_override"].AsFloat();
+        }
         material.density = group["density"].AsFloat(0.0f);
         material.areaM2 = group["area_m2"].AsFloat(0.0f);
         if (!(material.density >= 0.0f) || !(material.areaM2 >= 0.0f)) {
