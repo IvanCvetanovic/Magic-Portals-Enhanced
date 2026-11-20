@@ -125,8 +125,9 @@
     "WHY THE ZERO-GRAVITY LEVELS (level1c to level18c, 4-02 to 4-19; planning step 268): the owner, 2026-11-21, on 4-02 to 4-05 - 'the floating speed is too high and not the same as the original' and, in 4-05, 'the floating is too fast'.",
     "In those levels the player's only motion is the recoil of a tap (Zerog.hpp: 1.4 of the original's physics, 70 units a second at its 30 updates a second) and the port gave it at the 60 Hz pace, 140 units a second of real time:",
     "twice as fast as the owner's gold-run footage of the original (4-02: about 31 units between two crystals in about 0.5 s, so about 60 to 80 units a second; the nominal 70 and the footage's mean frame rate of 26 give 61).",
-    "At 30 the recoil is 70 units a second of real time. A drifting body has no drag and the shot flies at 200 units a second of real time whatever the pace, so only the speed of the drift changes: the 18 recorded plays were re-timed",
-    "(the same taps at the same places and new moments; step 268). Nothing else in those levels depends on the pace: no walking, no air brake (they do not run applyForces), no falling."
+    "At 30 the recoil is 70 units a second of real time. WHAT WAS MEASURED, on the footage and in the port, is the player's drift (4-02, 4-05) and his exit from a portal (4-05). A drifting body has no drag and the shot flies at 200 units a second of real time whatever the pace;",
+    "the timings of the gravity wells, fireballs, lifts and barrels of these levels follow the clock's pace and were NOT measured on the footage (4-19's door lift opens for a real-time window, and its recorded play had to be re-timed for it). The 18 recorded plays were",
+    "re-timed (the same taps at the same places, new moments; step 268 says which moved). A recorded play that earned gold may earn silver now: 4-06's third crystal is timed (3900 ms) and one tap at 70 units a second arrives after it, so its gold is one tap more (tests/routes_gold/level5c.json)."
   ],
   "matched_hz": 60,
   "snap_ms": 0.001,

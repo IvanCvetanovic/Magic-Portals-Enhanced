@@ -1,0 +1,17 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "_about": [
+    "4-06 (level5c) GOLD route at the weightless levels' pace (planning step 268): 0 portals, 3 of 3 crystals, medal 3, won on tick 195 (3.1 s).",
+    "The recorded play of 4-06 (tests/routes/level5c.json) is one tap behind the player at (60,144): its recoil carries him right along the corridor at 70 units a second, which at the original's pace takes 5.3 s to the door and misses the third crystal,",
+    "(428,144), which is timed (`time` 3900 ms: it is gone after 3.9 s) - the recorded play earns medal 2 there, and gold is one tap more: a second tap behind him on tick 58 (the 400 ms after the first is 26 ticks) adds 70 units a second, he flies at 140 and takes",
+    "all three crystals, the third before tick 180 (3.0 s, inside its 3.9 s). Written in step 268 so that gold stays reachable at the new pace (the first record of that step said nothing of the medal); a replay, not a hand."
+  ],
+  "level": "level5c",
+  "medal": 3,
+  "win_by": 240,
+  "holds": [],
+  "taps": [
+    {"tick": 29, "at": [60, 144]},
+    {"tick": 58, "at": [60, 144]}
+  ]
+}
