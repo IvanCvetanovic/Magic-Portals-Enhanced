@@ -550,18 +550,19 @@ void ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate() {
 // ---- a level's own pace: original_frame_hz_by_level (planning step 262) -----------------------------------------------
 
 void ALevelCanPlayAtItsOwnPaceAndOnlyAtOneTheKeyTakes() {
-    // The shipped file: 3-22 (level21b) at the 30 of the owner's videos, every other level at the file's own 60.
+    // The shipped file: 3-22 (level21b, step 262) and 4-01 (level0c, step 266) at the 30 of the owner's videos, every other level at the file's own 60.
     const ScriptClock::Rules shipped = ReadRules();
     CHECK_EQ(shipped.baseOriginalFrameHz, 60);
-    CHECK_MSG(shipped.originalFrameHzByLevel.size() == 1 && shipped.originalFrameHzByLevel.count("level21b") == 1 &&
-                  shipped.originalFrameHzByLevel.at("level21b") == 30,
-              "3-22 (level21b) is the one level the shipped table names, at 30");
+    CHECK_MSG(shipped.originalFrameHzByLevel.size() == 2 && shipped.originalFrameHzByLevel.count("level21b") == 1 &&
+                  shipped.originalFrameHzByLevel.at("level21b") == 30 && shipped.originalFrameHzByLevel.count("level0c") == 1 &&
+                  shipped.originalFrameHzByLevel.at("level0c") == 30,
+              "3-22 (level21b) and 4-01 (level0c) are the two levels the shipped table names, at 30");
     ScriptClock::Rules rules = shipped;
     CHECK(rules.ForLevel("level21b"));
     CHECK_MSG(rules.originalFrameHz == 30 && rules.frameTicks == 2, "level21b plays an original frame in two ticks");
     CHECK(ScriptClock::SimRatio(ScriptClock::TickStep(rules, kPhysicsStep)) == 1.0);
     // Back to the file's own for every level the table does not name, and for what is no level at all.
-    for (const char* other : {"level0b", "level21a", "level21bb", "LEVEL21B", ""}) {
+    for (const char* other : {"level0b", "level21a", "level21bb", "LEVEL21B", "level0cc", ""}) {
         CHECK(rules.ForLevel("level21b"));
         CHECK(rules.ForLevel(other));
         CHECK_MSG(rules.originalFrameHz == 60 && rules.frameTicks == 1, std::string("'") + other + "' plays at the file's own 60");

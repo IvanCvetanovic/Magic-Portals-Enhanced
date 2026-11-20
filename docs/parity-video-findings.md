@@ -24,8 +24,8 @@ reference there is: the original running, a gold play of every dungeon, in its r
 | 7 | `y6rqjVHrN8g` | chapter 4, dungeons 1-16, golden medal | 4:54 |
 | 8 | `lJW1m7R6nvo` | chapter 4, dungeons 17-32, golden medal, the final | 7:10 |
 
-(`https://www.youtube.com/watch?v=<id>`.) **Only videos 4 and 6 have been read, and only for 2-17,
-3-21 and 3-22.** The other 125 dungeons have not been looked at.
+(`https://www.youtube.com/watch?v=<id>`.) **Only videos 4, 6 and 7 have been read, and only for 2-17,
+3-21, 3-22 and 4-01.** The other 124 dungeons have not been looked at.
 
 **How they were read.** `yt-dlp` to a local file (outside the repository), `ffmpeg` to frames, a
 60 fps decode of one dungeon's segment, the view's scale (256 units = 720 pixels at full size, the
@@ -126,6 +126,19 @@ knight friction of 0.05 makes it land on the flat and stand, and the route wins 
 a knife-edge, recorded as a candidate, **not applied**. A second difference: in the port the arm
 tips under the player's weight at x 446-475 and he misses the crystal at (490, 146) (4 of 5);
 in the footage it does not move until he is off it (SEESAW-2).
+
+### 4-01 (`level0c`), video 7 (the first dungeon of chapter 4), gold, 3 of 3 crystals (planning step 266)
+
+Read after the owner's report of 2026-11-20 ("I cannot copy the playthrough in the original, because I am not jumping as high as in the original and I am going down too fast, so I do not even
+have time to destroy the red cog"). The video's level starts at about 7.2 s; the footage's order, in the video's own seconds: a portal on the left face of the 2x2 block cluster (8.6 s, shot to about (316, 147));
+the player walks about 12 units right to the platform's edge; a shot to the pit under the first diamond (10.5 s, a portal at about (258, 235), the shot passes the platform's right corner); he steps off, falls
+into it (12.2 s) and **comes out of the first portal going up** (12.28 s), takes the diamond over the block on the way (12.45 s), is near the ceiling from 12.5 to 12.75 s, **shoots the red cog (an anti_portal_agent
+at (418, 108)) from the air at 12.72 s** and lands at 13.0 s; the cog dies at 13.05 s and the red field with it. Then a portal over the block and one in front of its face (14.0 and 14.5 s), out onto the
+block's other side, the third diamond and the rocket. **Flight from the exit to the landing: 0.72 s.** The port at the file's 60 (an original frame one tick) flies the same play 22 ticks (0.37 s); at 30 it flies
+41 ticks (0.68 s); the apex is the same either way (y 89 and 87 for a portal at (258, 235)); the window in which a shot from the air reaches the cog is 13 ticks (0.22 s) at 60 and 25 ticks (0.42 s) at 30
+(`tests/routes_gold/level0c.json`, scanned with the shot's tick from 205 to 280). The same cause as 3-22 and 2-17 and 3-21 (PACE-1). A second thing the replay found: from the start spot (x 216) the shot to the
+pit is stopped by the platform's corner and from its edge (x 235) it is not, so a player who shoots at the diamond from where he starts gets no portal there and one who taps beside it puts it higher (a portal at
+y 212 gives an apex of 34 units, 232 gives 54, 240 gives 65). `clock.json` now names `level0c: 30`.
 
 ## 4. The one-number lever, and what it did once
 

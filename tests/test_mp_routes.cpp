@@ -1227,7 +1227,9 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
 
 // GOLD ROUTES (planning step 254). tests/routes holds one recorded play per level, and the controls census (tests/golden) counts the taps of exactly those, so a
 // play that earns the gold badge where the recorded one does not lives beside them, in tests/routes_gold: 3-21 (level20b: its recorded play takes 1 of 5 crystals
-// with 12 portals, and gold there is 14 portals and every crystal). The play was found by a search over replays on this build; nobody has done it by hand.
+// with 12 portals, and gold there is 14 portals and every crystal; and 4-01 (level0c, step 266), the owner's own gold run of the original from his video 7 made by hand
+// in the port at that level's pace: it flies out of a portal and shoots the red cog from the air, a window that is half as long at the file's own 60 Hz pace).
+// The play of 3-21 was found by a search over replays on this build; nobody has done either by hand on a phone.
 // Each is replayed and must win, earn the medal it pins (3) and end with no problem.
 void TheGoldRoutesEarnGold() {
     const std::filesystem::path dir = std::filesystem::path(kRoutes).parent_path() / "routes_gold";

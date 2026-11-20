@@ -83,20 +83,27 @@
     "game is to play at that pace, nominal 30. The value stays 60 until the commit that flips the pace; this file only carries the key."
   ],
   "original_frame_hz_by_level": {
+    "level0c": 30,
     "level21b": 30
   },
   "_original_frame_hz_by_level": [
     "A LEVEL'S OWN PACE (planning step 262): a level's name (its file stem) to the original_frame_hz its world is played at, in place of the file's own above.",
     "Optional; every level it does not name plays at original_frame_hz. Each value is held to the same rule as the key above (a whole number of hertz from 1 to",
     "matched_hz that divides it) and a level of nothing, a comment where a level belongs or a pace that is not one is refused naming the key.",
-    "WHY 3-22 (level21b), and only it: the owner, 2026-11-19, on the release he had on his phone - 'the ramp at 3-22 is moving too fast, so I cannot pick up the top diamond, only the",
+    "WHY 3-22 (level21b): the owner, 2026-11-19, on the release he had on his phone - 'the ramp at 3-22 is moving too fast, so I cannot pick up the top diamond, only the",
     "bottom one'. His third report of the same ramp (2026-11-15: 'the ramp rotates way faster in mine, the original rotated slower'; the knight that falls into the pit).",
     "MEASURED, not guessed: the arm turns 0.69 radian in 25 to 27 frames of his gold-run footage (0.42-0.45 s) and the port's turns it in 12 to 13 ticks (0.2 s): the same",
     "per update, twice as fast in real time (docs/parity-video-findings.md section 2, PACE-1). At 30 the arm of this port turns in 28 to 30 ticks, and a player who",
     "walks on at 123 to 144 u/s from the arm's pivot to the crystal at (490, 146) has the time the footage's player had. This is the owner's own decision of 2026-11-17 ('the",
     "whole game plays at the pace of my gold-run videos') applied to the one level he has reported three times; the rest of the game is flipped by the plan's own steps",
     "(docs/planning/2026-11-17-pace-1-implementation-plan.md) and this line goes when they do. NOT DONE FOR THIS LEVEL, and said here rather than found: the plan's ground-flag",
-    "lag, the retimed gold plays of the other levels and the owner's hand-play of the candidates (its gates OG-1 to OG-3). To put 3-22 back at the file's pace, delete the line."
+    "lag, the retimed gold plays of the other levels and the owner's hand-play of the candidates (its gates OG-1 to OG-3). To put a level back at the file's pace, delete its line.",
+    "WHY 4-01 (level0c; planning step 266): the owner, 2026-11-20, on the release he had on his phone - 'in the first dungeon of chapter 4 I cannot copy the playthrough in the original, because I am not jumping as high as in the original and",
+    "I am going down too fast, so I do not even have time to destroy the red cog'. The gold run of his video 7 falls into a portal in the pit under the first diamond and comes out of a portal on the block going UP, and shoots",
+    "the red cog from the air. MEASURED in the port on the same play, tests/routes_gold/level0c.json: the flight from the exit to the landing is 22 ticks at the file's 60 (0.37 s) and 41 at 30 (0.68 s; the footage:",
+    "0.72 s), the apex is the same (y 89 and 87), and the window in which a shot from the air reaches the cog is 13 ticks (0.22 s) at 60 and 25 ticks (0.42 s) at 30: the same cause as 3-22's ramp, the world running twice as fast in",
+    "real time as the original's (PACE-1). The apex is not lower; what the owner meets is a flight half as long, and he may also put the pit's portal too high: in the port the shot to the pit is stopped by the platform's corner from the start spot (x 216)",
+    "and is not from the platform's edge (x 235), where the footage's player stands (a portal at y 212 gives an apex of 34 units, one at y 232 gives 54, one at y 240 gives 65). Same status as 3-22: the rest of the game is flipped by the plan's own steps and this line goes with them."
   ],
   "matched_hz": 60,
   "snap_ms": 0.001,

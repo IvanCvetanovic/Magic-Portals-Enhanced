@@ -1893,7 +1893,7 @@ void TheLevelsStepCountFixesTheFramePhaseAcrossAPauseAndARetry() {
     layer.OnDetach(registry);
 }
 
-// A LEVEL THE CLOCK TABLE NAMES IS PLAYED AT ITS OWN PACE (planning step 262; clock.json original_frame_hz_by_level). 3-22 (level21b) is at the 30 of the owner's videos - an
+// A LEVEL THE CLOCK TABLE NAMES IS PLAYED AT ITS OWN PACE (planning step 262; clock.json original_frame_hz_by_level). 3-22 (level21b) and 4-01 (level0c, step 266) are at the 30 of the owner's videos - an
 // original frame is two ticks, the ratio exactly 1 - and a level the table does not name is at the file's own 60, the ratio 2, from its first step on.
 void ALevelTheClockTableNamesIsPlayedAtItsOwnPace() {
     struct Case {
@@ -1902,7 +1902,7 @@ void ALevelTheClockTableNamesIsPlayedAtItsOwnPace() {
         int hz;
         double ratio;
     };
-    for (const Case& one : {Case{"level21b", 2, 30, 1.0}, Case{"level11", 1, 60, 2.0}, Case{"level20b", 1, 60, 2.0}}) {
+    for (const Case& one : {Case{"level21b", 2, 30, 1.0}, Case{"level0c", 2, 30, 1.0}, Case{"level11", 1, 60, 2.0}, Case{"level20b", 1, 60, 2.0}}) {
         entt::registry registry;
         publishViewport(registry);
         MagicPortalsLayer layer(TestPaths(), one.level);
