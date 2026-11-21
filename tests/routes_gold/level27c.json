@@ -1,0 +1,20 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "level": "level27c",
+  "medal": 3,
+  "win_by": 850,
+  "holds": [
+    {"walk": "left", "from": 40, "to": 69},
+    {"walk": "left", "from": 438, "to": 444},
+    {"walk": "right", "from": 466, "to": 480},
+    {"walk": "right", "from": 600, "to": 1200}
+  ],
+  "taps": [
+    {"tick": 75, "at": [234, 15]},
+    {"tick": 130, "at": [34, 201]},
+    {"tick": 345, "at": [255.4, 40.2]},
+    {"tick": 421, "at": [234, 13.7]},
+    {"tick": 500, "at": [42, 196]}
+  ],
+  "_about": "4-28 (level27c) GOLD route (step 270), the owner's own gold run of the original (his video 8, read frame by frame) made in the port at the original's pace: the recorded play in tests/routes (7 taps) cannot win any more: its well portal is at (240, 22), 4 units from the disc's left side, and the player comes out of it into a bound orbit under the well. The owner's run puts it at (234, 15), where he comes out at about 275 units a second at the disc, glances off it and falls out of the ring in about 1.2 s (the footage: 1.0 s). 4 portals, 3 of 3 crystals, medal 3. Differences from the footage: he stands at x 54 for the shots (the knight shot from x 93 or even x 58 hits the platform's top in the port), the third portal's tap is at y 13.7 for the footage's 15 (the traced portal is at (234, 15.5)), the self tap is at (42, 196), no fifth shot is made (he lands beside the crystal himself), and the port's path swings under the disc where the footage's drops left of it. Narrow keys: the portal's y (14.8 to 16.1 traced at x 234; 1.8 units lower lands 0.3 unit inside the shock agent's radius and kills him), the first walk's end (x 50 to 57). Wins on tick 806 (win_by 850) with 5 taps (4 portals and the burn shot) and 4 walks."
+}

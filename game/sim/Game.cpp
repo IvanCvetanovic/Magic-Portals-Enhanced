@@ -526,7 +526,7 @@ void AfterStep(const Data& data, entt::registry& registry, Level& level, const S
     // begin-contact callback inside the step itself, so a wall a stone breaks still stands here. The same skin and the same
     // free-flight judgments (earthquake.json) the layer's watch looks at a pair by, so one contact reads one speed.
     const Impacts::FreeFlightRules flight{Earthquake::ToUnits(data.earthquake, data.earthquake.circleTouchPx),
-                                          data.earthquake.brakeReachSlackUnits, data.earthquake.brakeFrictionCone};
+                                          data.earthquake.brakeReachSlackUnits, data.earthquake.brakeFrictionCone, step.frameTicks};
     const std::vector<Impacts::Begin> stoneBegins = level.stoneWatch.AfterStep(
         registry, Earthquake::ToUnits(data.earthquake, data.earthquake.touchPx), static_cast<double>(step.physicsS), flight);
     level.goals.Tick(registry, level.player, step.scriptS);

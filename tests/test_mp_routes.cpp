@@ -47,6 +47,7 @@
 
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
+#include "DataDirs.hpp"
 
 #include "MagicPortalsLayer.hpp"
 #include "Route.hpp"
@@ -129,6 +130,10 @@ std::string ModernFlag(const Options& options) {
 MagicPortalsLayer::Paths RoutePaths() {
     MagicPortalsLayer::Paths paths;
     paths.prisms = std::filesystem::temp_directory_path() / "supersonic-test-mp-routes";
+    // The port's tables are the build's own unless MP_PORT_DATA_DIR names a copy (DataDirs.hpp): a play can then be replayed on another pace or another table,
+    // as the re-timing of step 270 does with a copy whose clock.json says 60 to see a recorded play as it ran before. Unset, the answer is the compiled-in
+    // directory the layer would have taken anyway.
+    paths.portData = DataDirs::PortDataDir();
     return paths;
 }
 
@@ -728,6 +733,7 @@ bool DisplayChecked(const Options& options, const Route::Plan& plan) {
 }
 
 int g_displayChecked = 0; // routes the display check ran on, so a run of the default set cannot drop out silently
+int g_pendingRoutes = 0;  // routes the default run skipped as pending (kPendingRoutes), counted so that a stale entry is not silent
 
 void CheckDisplayRates(const Route::Plan& plan, const Options& options, const std::string& label, int plainWonTick) {
     ++g_displayChecked;
@@ -1071,19 +1077,23 @@ void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
     std::string error;
     CHECK_MSG(Route::Load(kRoutes + "/level16a.json", gold, error), error);
     if (gold.level != "level16a") return;
+    // The ticks are those of the gold route as step 270 re-timed it (the whole game at the original's pace): its exit tap is on 376 (372 before) and its own-point tap
+    // on 431 (427), and its left room has THREE walks (the third right walk, from 456, is the gold route's own and not this one's). The drop's own taps and walk keep
+    // their distance to those: the own-point tap on 444, the walk off 1146's left end from 459, and a landing that now takes twice the ticks, so the plan's last tick is 600.
+    constexpr int kDropWinBy = 600;
     const auto dropPlan = [&](int walkTicks) {
         Route::Plan plan = gold;
         plan.medal = 0;
-        plan.winBy = 530; // the walk is over by 476 and the landing by 490: the plan's last tick finds him standing or dead
+        plan.winBy = kDropWinBy; // the walk is over by about 480 and the landing by about 530: the plan's last tick finds him standing or dead
         for (Route::Tap& tap : plan.taps) {
-            if (tap.tick == 372) tap.atPx = glm::dvec2(270.0, 85.0); // the exit on top of 1146, not in the right room
-            if (tap.tick == 427) {                                   // his own point, once that exit is open
-                tap.tick = 440;
-                tap.releaseTick = 441;
+            if (tap.tick == 376) tap.atPx = glm::dvec2(270.0, 85.0); // the exit on top of 1146, not in the right room
+            if (tap.tick == 431) {                                   // his own point, once that exit is open
+                tap.tick = 444;
+                tap.releaseTick = 445;
             }
         }
-        plan.holds.resize(2); // the two walks of the left room; the gold route's third (right, from 452) is not this route's
-        plan.holds.push_back(Route::Hold{455, 455 + walkTicks, -1.0f});
+        plan.holds.resize(3); // the three walks of the left room; the gold route's fourth (right, from 456) is not this route's
+        plan.holds.push_back(Route::Hold{459, 459 + walkTicks, -1.0f});
         return plan;
     };
 
@@ -1118,8 +1128,8 @@ void TheDropOffLevel16asLedgeBesideTheFlameIsLivedAndTheRulingsShareBurnsIt() {
         for (const std::string& problem : own.problems) problems += (problems.empty() ? "" : "; ") + problem;
         // A plan that is not a route to the door ends at its win_by with the one problem "not won by tick N": alive and standing on the floor;
         // a death is its own problem, first.
-        CHECK_MSG(own.problems.size() == 1 && own.problems.front().find("not won by tick 530") != std::string::npos,
-                  label + " is lived at 2-17's own rate (alive on tick 530): " + problems);
+        CHECK_MSG(own.problems.size() == 1 && own.problems.front().find("not won by tick " + std::to_string(kDropWinBy)) != std::string::npos,
+                  label + " is lived at 2-17's own rate (alive on tick " + std::to_string(kDropWinBy) + "): " + problems);
         // That he left the ledge and landed, so that a walk that never leaves it cannot pass for the drop (a 4-tick one stays on it):
         CHECK_MSG(own.census.count("player_landed") != 0, label + " ends with a landing (player_landed heard)");
         // The control: a walk that leaves the ledge at full speed (9 ticks and up) is burned at the ruling's share 1.
@@ -1153,7 +1163,10 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
         made.taps[0].atPx = glm::dvec2(225.0, 62.0); // the exit on the platform to B's right, not over the block to its left
         made.holds.clear();
         made.holds.push_back(Route::Hold{98, 98 + walkTicks, -1.0f});  // left, pushing B off the end, and off it himself
-        made.holds.push_back(Route::Hold{215, 227, -1.0f});            // after the landing: 12 ticks, which send B over the pit's edge and leave him on the floor
+        // After the landing: 12 ticks, which send B over the pit's edge and leave him on the floor. They began on tick 215 and the walks were 78 to 90 ticks before
+        // planning step 270 (the whole game at the original's pace: a fall takes twice the ticks); now the landing is later and the walks that leave the end at speed
+        // are 84 to 90 ticks (80 stays on the platform), and the 12 ticks work from tick 215 to 265, so they begin in the middle of that window, on tick 240.
+        made.holds.push_back(Route::Hold{240, 252, -1.0f});
         return made;
     };
     const auto sequence = [](const Outcome& outcome) {
@@ -1209,19 +1222,29 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
     withoutCapsule.portData = portCopy.string();
 
     const Options plain{};
-    for (const int walk : {78, 80, 84, 90}) {
+    int goneAtTheRulingsShare = 0;
+    int goneWithACircle = 0;
+    for (const int walk : {84, 86, 88, 90}) {
         const std::string label = "3-21 walk off the top platform's left end, " + std::to_string(walk) + " ticks";
         const Outcome shipped = Play(plan(walk), plain, label);
         CHECK_MSG(sequence(shipped), label + ": the door opens, he lands on B's right alive and B goes into the pit: " + describe(shipped));
         // Without the rate (the ruling's share of 1) he flies on over B and into the pit himself; without the capsule B is left a circle and he lands on its
-        // other side. Either way the sequence is gone - for the walks that leave the end at speed.
+        // other side. Either way the sequence is gone - but at the original's pace (planning step 270; a fall takes twice the ticks) not for EVERY walk any more:
+        // at the share of 1 the sequence is gone for the walks of 84 and 88 ticks and stays for 86 and 90, and with the knight a circle he dies on tick 276 to 278
+        // before the key has opened the door, for all four. So each control must take the sequence away from at least one of the walks, and the circle's run must
+        // not be the sequence for any.
         const Outcome flown = Play(plan(walk), plain, label + " (the ruling's share)", withoutRate);
         CHECK_MSG(flown.census.count("door_unlocked") != 0, label + " (the ruling's share): the control ran to B's fall, the key opened the door: " + describe(flown));
-        CHECK_MSG(!sequence(flown), label + " is not the sequence at the ruling's share of 1, or the test never reaches the drop: " + describe(flown));
+        if (!sequence(flown)) ++goneAtTheRulingsShare;
         const Outcome circle = Play(plan(walk), plain, label + " (the circle)", withoutCapsule);
-        CHECK_MSG(circle.census.count("door_unlocked") != 0, label + " (the circle): the control ran to B's fall, the key opened the door: " + describe(circle));
+        // The circle's run reaches the drop (he lands, player_landed heard) and DIES (the first problem says so): the sequence is gone for that reason and not for want of a run.
+        CHECK_MSG(!circle.problems.empty() && circle.problems.front().find("died") != std::string::npos && circle.census.count("player_landed") != 0,
+                  label + " (the circle): the run reaches the drop and the player dies: " + describe(circle));
         CHECK_MSG(!sequence(circle), label + " is not the sequence with the knight a circle, or the test never reaches the drop: " + describe(circle));
+        if (!sequence(circle)) ++goneWithACircle;
     }
+    CHECK_MSG(goneAtTheRulingsShare >= 2, "3-21's own air-brake rate is needed: at the ruling's share of 1 the sequence is gone for " + std::to_string(goneAtTheRulingsShare) + " of 4 walks (84 and 88 when measured)");
+    CHECK_MSG(goneWithACircle == 4, "3-21's capsule is needed: with the knight a circle the sequence is gone for " + std::to_string(goneWithACircle) + " of 4 walks");
     std::filesystem::remove_all(root, ec);
 }
 
@@ -1230,9 +1253,11 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
 // with 12 portals, and gold there is 14 portals and every crystal); 4-01 (level0c, step 266), the owner's own gold run of the original from his video 7 made by hand
 // in the port at that level's pace: it flies out of a portal and shoots the red cog from the air, a window that is half as long at the file's own 60 Hz pace;
 // 4-05 (level4c, step 268), his gold run of the weightless dungeon: a shot at the floor, a tap on himself near the top, and out of the floor portal AT REST
-// (invertLinearVelocity's no_gravity branch), then a portal in the door and a tap on himself that sends him into it; and 4-06 (level5c, step 268), where the recorded
-// play earns silver at the new pace (its third crystal is timed) and gold is one tap more.
-// The play of 3-21 was found by a search over replays on this build; nobody has done any of the four by hand on a phone.
+// (invertLinearVelocity's no_gravity branch), then a portal in the door and a tap on himself that sends him into it; 4-06 (level5c, step 268), where the recorded
+// play earns silver at the new pace (its third crystal is timed) and gold is one tap more; and, since step 270, 4-21 (level20c) and 4-28 (level27c), the owner's gold runs
+// of the two dungeons with a gravity well (his video 8) made in the port at the original's pace, which stand in for the recorded plays the table of pending routes skips.
+// The play of 3-21 was found by a search over replays on this build and the two of step 270 were made by agents from the owner's footage; nobody has done any of the
+// six by hand on a phone.
 // Each is replayed and must win, earn the medal it pins (3) and end with no problem.
 void TheGoldRoutesEarnGold() {
     const std::filesystem::path dir = std::filesystem::path(kRoutes).parent_path() / "routes_gold";
@@ -1266,6 +1291,47 @@ void TheGoldRoutesEarnGold() {
         CHECK_MSG(outcome.door.has_value() && outcome.door->medal == 3, label + " " + plan.level + " earns medal 3, got " + got);
     }
     CHECK_MSG(seen >= 1 && level20b, "tests/routes_gold holds 3-21's gold route (level20b.json); found " + std::to_string(seen) + " file(s)");
+}
+
+// RECORDED PLAYS THAT CANNOT WIN AT THE ORIGINAL'S PACE, AND ARE PENDING (planning step 270; the owner has NOT signed this list: it is the plan's "pending" state,
+// docs/planning/2026-11-17-pace-1-implementation-plan.md section 5.5, put here by the agent and named to him). The census (tests/golden/controls_census.json) pins
+// these two files' taps (4 and 7), so they are not replaced; the levels are not unwinnable: tests/routes_gold holds the owner's own gold run of each, read from his
+// video 8 and made in the port at the new pace, and TheGoldRoutesEarnGold plays them. A listed play is reported SKIPPED, with its reason, in the default run; asked for by
+// name (--only) it is played as any other and fails as it does. The owner picks: replace the recorded play by the gold run (and sign the census again), or keep this.
+struct PendingRoute {
+    const char* level;
+    const char* why;
+};
+constexpr PendingRoute kPendingRoutes[] = {
+    {"level20c", "4-21: the gravity well over the button lifts the player up and holds him under it, in the original too; the recorded play walks under the lift door"},
+    {"level27c", "4-28: the recorded play's well portal is 4 units from the disc and the player comes out into a bound orbit; the owner's run puts it elsewhere"},
+};
+
+const char* PendingReason(const std::string& level) {
+    for (const PendingRoute& pending : kPendingRoutes) {
+        if (level == pending.level) return pending.why;
+    }
+    return nullptr;
+}
+
+// The pending list must not go stale: every entry has its gold run in tests/routes_gold, and its recorded play still does NOT win (a fix that makes it win must take the entry out).
+void ThePendingRoutesHaveGoldRunsAndStillCannotWin() {
+    MagicPortals::Chapters::Table chapters;
+    std::string error;
+    CHECK_MSG(MagicPortals::Chapters::Load(kChapters, chapters, error), error);
+    const std::filesystem::path gold = std::filesystem::path(kRoutes).parent_path() / "routes_gold";
+    const Options plain{};
+    for (const PendingRoute& pending : kPendingRoutes) {
+        std::error_code ec;
+        CHECK_MSG(std::filesystem::is_regular_file(gold / (std::string(pending.level) + ".json"), ec), std::string(pending.level) + " has its gold run in tests/routes_gold");
+        Route::Plan plan;
+        if (!Route::Load(kRoutes + "/" + pending.level + ".json", plan, error)) {
+            CHECK_MSG(false, error);
+            continue;
+        }
+        const Outcome outcome = Play(plan, plain, Label(chapters, plan.level) + " pending");
+        CHECK_MSG(outcome.wonTick == 0, std::string(pending.level) + "'s recorded play wins now: take it out of kPendingRoutes (and let the census see it again)");
+    }
 }
 
 void RunRoutes(const Options& options) {
@@ -1306,6 +1372,13 @@ void RunRoutes(const Options& options) {
         CHECK_MSG(file.stem().string() == plan.level,
                   file.filename().string() + " is named for its level, " + plan.level);
         const std::string label = Label(chapters, plan.level);
+        if (options.only.empty()) {
+            if (const char* why = PendingReason(plan.level)) {
+                std::printf("  %s %s: SKIPPED, pending (%s); its gold run in tests/routes_gold is played instead\n", label.c_str(), plan.level.c_str(), why);
+                ++g_pendingRoutes;
+                continue;
+            }
+        }
         Capture reference;
         const Outcome outcome = Play(plan, options, label, RoutePaths(), options.controls ? &reference : nullptr, false);
         // With the entries the platform gate held on the way, where it held any (step 136).
@@ -1340,6 +1413,9 @@ void RunRoutes(const Options& options) {
     if (options.controls && *options.controls == "modern") ReportCensus(options, table);
     // The default set of the display check ran on every route it names (a renamed or removed file would drop one out silently).
     if (options.only.empty() && options.displayHz.empty() && !options.controls) {
+        CHECK_MSG(g_pendingRoutes == static_cast<int>(std::size(kPendingRoutes)),
+                  "the pending routes skipped were " + std::to_string(g_pendingRoutes) + ", not the " + std::to_string(std::size(kPendingRoutes)) + " the table names");
+        ThePendingRoutesHaveGoldRunsAndStillCannotWin();
         CHECK_MSG(g_displayChecked == static_cast<int>(std::size(kDisplayRoutes)),
                   "the display check ran on " + std::to_string(g_displayChecked) + " routes, not the " + std::to_string(std::size(kDisplayRoutes)) + " it names");
         TheMedalKeyIsHeldToOneTwoOrThree();

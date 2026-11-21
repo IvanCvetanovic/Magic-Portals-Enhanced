@@ -24,13 +24,17 @@
     "failed (8 shots)."
   ],
   "level": "level3a",
-  "win_by": 565,
+  "win_by": 610,
   "holds": [
     {"walk": "right", "from": 1, "to": 40},
-    {"walk": "right", "from": 95, "to": 126},
-    {"walk": "left", "from": 332, "to": 398},
-    {"walk": "left", "from": 405, "to": 496},
-    {"walk": "right", "from": 502, "to": 565}
+    {"walk": "right", "from": 95, "to": 100},
+    {"walk": "right", "from": 110, "to": 126},
+    {"walk": "left", "from": 332, "to": 370},
+    {"walk": "left", "from": 391, "to": 496},
+    {"walk": "left", "from": 393, "to": 399},
+    {"walk": "right", "from": 561, "to": 595},
+    {"walk": "right", "from": 578, "to": 600},
+    {"walk": "right", "from": 607, "to": 609}
   ],
   "taps": [
     {"tick": 54, "at": [220, 20]},
@@ -41,5 +45,6 @@
     {"tick": 270, "at": [288, 92]},
     {"tick": 296, "at": [400, 205]},
     {"tick": 323, "at": [476, 140]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 8 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 9 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 570, medal 3."
 }

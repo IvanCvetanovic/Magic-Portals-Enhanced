@@ -19,15 +19,16 @@
     "R23 (the tap-time ray), G3 (the platforms' swing and the ring's) and G10 (the walk 2.4 u a tick)."
   ],
   "level": "level27b",
-  "win_by": 352,
+  "win_by": 400,
   "holds": [
-    {"walk": "right", "from": 125, "to": 142},
-    {"walk": "right", "from": 204, "to": 345}
+    {"walk": "right", "from": 128, "to": 152},
+    {"walk": "right", "from": 214, "to": 362}
   ],
   "taps": [
-    {"tick": 25, "at": [332, 124]},
-    {"tick": 118, "at": [32, 150]},
-    {"tick": 146, "at": [556, 165]},
-    {"tick": 200, "at": [376, 215]}
-  ]
+    {"tick": 27, "at": [332, 124]},
+    {"tick": 119, "at": [32, 150]},
+    {"tick": 150, "at": [556, 165]},
+    {"tick": 210, "at": [376, 215]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 4 tap(s), 4 tick(s) moved; every tap point is the earlier play's; 2 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 351, medal 1."
 }

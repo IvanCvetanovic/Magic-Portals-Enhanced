@@ -1,0 +1,20 @@
+{
+  "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
+  "level": "level20c",
+  "medal": 3,
+  "win_by": 800,
+  "holds": [
+    {"walk": "left", "from": 3, "to": 36},
+    {"walk": "right", "from": 79, "to": 113},
+    {"walk": "right", "from": 325, "to": 358}
+  ],
+  "taps": [
+    {"tick": 66, "at": [33, 148]},
+    {"tick": 223, "at": [385, 235]},
+    {"tick": 385, "at": [462, 152]},
+    {"tick": 456, "at": [246, 186]},
+    {"tick": 688, "at": [584, 152]},
+    {"tick": 752, "at": [447, 60]}
+  ],
+  "_about": "4-21 (level20c) GOLD route (step 270), the owner's own gold run of the original (his video 8, read frame by frame) made in the port at the original's pace: the recorded play in tests/routes (4 taps, walks under the lift door) cannot win any more because the gravity well over the button lifts him up and holds him under its disc as soon as he stands on the button - in the original too, and the owner's run is built on it: he is lifted, rests, and leaves by portals shot from the well. 6 portals, 5 of 5 crystals, medal 3. Differences from the footage: the port's player orbits under the disc (about 80 ticks round, x 444 to 476, y 53 to 63) where the original's rests motionless; shot 2 is at (385, 235), not the footage's (397, 247) (that point is under the right move pad); shot 3 is fired from x about 244 and not from x 162 (the camera does not show the button from there) and ends at (462, 152); the two blocked shots from the well are not fired. Narrow keys: shot 3's x (462 wins, 464 fails, 460 falls into the pit), the last walk's end x 236.8 to 251.2, the last tap's tick (730 to 790) and point (x 438 to 468). Wins on tick 755 (win_by 800) with 6 taps and 3 walks."
+}

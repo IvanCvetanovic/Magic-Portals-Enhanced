@@ -7,16 +7,19 @@
     "THE SIGHTING: the knight now stands in the pocket at (26, 217) and searches (right for 2,000 ms, then left, G1a), looking along the three 128-unit buckets of its row, and the floor under the ledge up to x 384 is in them: the corridor takes 137 ticks to cross and a left-looking phase is 125, so the walk cannot be unseen. A scan of the drop's start from 150 to 420 (every 10 ticks, on this file) found a sighting every time and no death (before tick 295 as he drops in, or on 424 as the knight turns right with him at x 338). The shot flies 1.92 units a tick to where he stood (G1b) and he walks 2.4: a stop of 50 ticks from tick 247 gets him hit on 290 (40 does not); the route has no stop. The idle ticks (116 to 164) are the door's fade: 93 ticks from the key's spending to the keyhole's end. WINDOWS (one input moved, the others fixed; out/parity/program/R4/r1_3-25/window.py): tap 1 on ticks 25-36, tap 2 on 56-88, the walk left's start any earlier tick (the door gates the win) to 168 and its end 195 and later (31 ticks needed), the first walk's end 12-18, aims of +-8 units and more (B x 14-38, y 180-204; A x 161-179 at y 13, y 4-22 at x 169). Leans on rules no clip shows: the reflected leg (G9-4, R3c-10), the knight asleep taken through a portal (3-08, 3-10 and 4-28 rest on it too), and the knight's search schedule (a sighting on a route that does not depend on its time: any of its phases would do). No DEV flag, PutPlayer or skipped tick."
   ],
   "level": "level25b",
-  "win_by": 384,
+  "win_by": 470,
   "holds": [
     {"walk": "left", "from": 1, "to": 16},
     {"walk": "right", "from": 32, "to": 47},
-    {"walk": "right", "from": 66, "to": 76},
-    {"walk": "left", "from": 164, "to": 200},
-    {"walk": "right", "from": 201, "to": 384}
+    {"walk": "right", "from": 63, "to": 73},
+    {"walk": "left", "from": 173, "to": 188},
+    {"walk": "left", "from": 190, "to": 223},
+    {"walk": "right", "from": 219, "to": 283},
+    {"walk": "right", "from": 293, "to": 435}
   ],
   "taps": [
     {"tick": 30, "at": [26, 192]},
-    {"tick": 62, "at": [169, 13]}
-  ]
+    {"tick": 122, "at": [169, 13]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 1 tick(s) moved; every tap point is the earlier play's; 7 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 428, medal 3."
 }

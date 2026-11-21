@@ -21,14 +21,15 @@
     "the view); tap D from 190 on, and the walk from 194 on. Aim drift 0.003 px."
   ],
   "level": "level24",
-  "win_by": 230,
+  "win_by": 300,
   "holds": [
-    {"walk": "left", "from": 200, "to": 230}
+    {"walk": "left", "from": 236, "to": 270}
   ],
   "taps": [
-    {"tick": 30, "at": [454, 200]},
-    {"tick": 84, "at": [190, 180]},
-    {"tick": 130, "at": [116, 114]},
-    {"tick": 196, "at": [290, 238.4]}
-  ]
+    {"tick": 30, "at": [454.0, 200.0]},
+    {"tick": 96, "at": [190.0, 180.0]},
+    {"tick": 157, "at": [116.0, 114.0]},
+    {"tick": 232, "at": [290.0, 238.4]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 4 tap(s), 3 tick(s) moved; every tap point is the earlier play's; 1 walk(s) (the earlier play had 1). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 253, medal 2."
 }

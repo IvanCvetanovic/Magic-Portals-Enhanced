@@ -19,24 +19,28 @@
     "sends it, and fires no shot), G4 (a shot flies 25 to 70 ticks), G10 (the walk), the door's closing (step 133) and the 400 ms between taps (a walk into a portal needs no tap)."
   ],
   "level": "level24a",
-  "win_by": 570,
+  "win_by": 580,
   "holds": [
     {"walk": "right", "from": 5, "to": 28},
     {"walk": "right", "from": 84, "to": 90},
+    {"walk": "left", "from": 150, "to": 163},
     {"walk": "right", "from": 190, "to": 211},
-    {"walk": "left", "from": 276, "to": 306},
+    {"walk": "left", "from": 277, "to": 306},
+    {"walk": "right", "from": 309, "to": 313},
+    {"walk": "left", "from": 316, "to": 320},
     {"walk": "right", "from": 386, "to": 430},
     {"walk": "right", "from": 504, "to": 800}
   ],
   "taps": [
     {"tick": 30, "at": [122, 118]},
-    {"tick": 56, "at": [151.6, 202.5]},
+    {"tick": 57, "at": [151.6, 202.5]},
     {"tick": 96, "at": [400, 150]},
     {"tick": 171, "at": [148.1, 202.5]},
     {"tick": 214, "at": [310, 72]},
     {"tick": 270, "at": [360, 206]},
-    {"tick": 313, "at": [505, 222]},
+    {"tick": 311, "at": [505, 222]},
     {"tick": 384, "at": [307, 78.4]},
     {"tick": 436, "at": [608, 244], "shot": false}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 9 tap(s), 2 tick(s) moved; every tap point is the earlier play's; 9 walk(s) (the earlier play had 6). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 538, medal 2."
 }

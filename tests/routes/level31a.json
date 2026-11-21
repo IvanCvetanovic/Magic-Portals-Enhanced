@@ -1,12 +1,32 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
-  "_about": ["2-32 (R1 fix 1): the dragon chase. antiportal_1180 (scale 4, 128 px at 32 x scale, with", "anti_portal_agent_1179) covers the middle, antiportal_1174 (scale 3, 96 px, with", "anti_portal_agent_ent_1488) the high ledge beyond the wall, antiportal_1357 (scale 2, 64 px) the", "last block; every portal here is outside the living rings (the nearest, (990, 175), 130 px from", "antiportal_1180). The view is locked to the dragon, so each hop waits for its target to come into view, and the player keeps to the low blocks, where the dragon's fireballs (at most 10 deg", "below level, R19's lagged aim) pass overhead.", "Re-authored for the wave 3a timing build (CK, G10, G4; round 1, same hops, new ticks): the view's right edge is 455.2 + 0.72 x (tick - 227.8) from tick 228 (the dragon's 45 u/s at the floored 16 ms), a shot takes", "1 + (D - 27.2) / 3.2 ticks, the next tap waits for it to land and for the 400 ms (26 ticks), and a", "tap on a point of the view's bottom-right quarter circle (64 u about the corner) is the walk pad's: a", "target below y 192 must lie 28 u inside the edge. The claw takes a platform whose centre is left of the", "view's left edge + 64 (a sweep every 250 ms): block00_1162 goes on 2047, and a shot that needs 94 ticks to", "(1700, 198) could not leave it in time, so the far low platform is entered at its near end (1672,", "188), 83 ticks, left on 2012.", "Hops: portal pairs to the double block (taps 1-2, 106), a walk right onto the low block (the walk waits until tick 320, so the view's right edge, 455 and fixed until the dragon starts on 228, has passed the low block's end, 532, before the player arrives (about 355): he is inside the view on every tick from 1 to the door, 6.3 u at the closest, on tick 974), block00_1060 (578), single_block_1062 (846),", "the high single_block_1224 (929), which is walked off to the right onto single_block_1129 (985); a shot past", "anti_portal_agent_1179 kills it and its ring (1179); onto the long platform over the moving platform (1400);", "a portal against crate_no_emissive_ent_1161 sends it into the pit (1457), right to the wall, block00_1162 (1559); the far low platform (2012); block00_1181 (2181), block00_1422 (2350) and the top of the double block past the pit (2486); right into wood_piece_small_1287, which falls over as a ramp onto", "double_block_1288, up it and along the bridge into the door. Won on tick 3205. Re-authored in 3b-1's round 1 (R3-3): the earlier route ran ahead of the dragon's camera for its last 194 ticks (2525 to the door, up to 293 u past the view's right edge), which the original allows (AutoCameraController only follows the dragon between camMin and camMax, checkGameLost reads the level's minPos and maxPos and not the view) but no player would see: the door, at x 2554, is in the view only from about tick 3143, the view's right edge moving 0.72 u a tick. So the walk from the last pair's exit (tick 2500, 40 u inside the edge) is held in pulses, 8 ticks of every 26 (19.2 u a pulse, 0.74 u a tick, the camera's own pace): the player is inside the view on every tick of the run, never nearer its right edge than 25.6 u after tick 2300 (the tightest, 6.3 u, is the walk off the high single block onto single_block_1129, on tick 974), and enters the door with it in view. A pulse of 12 in 40 does the same (won 3225, 20 u), 16 in 53 and 24 in 80 do not: both are outside the view for 8 ticks and die to a fireball on 3136."],
+  "_about": [
+    "2-32 (R1 fix 1): the dragon chase. antiportal_1180 (scale 4, 128 px at 32 x scale, with",
+    "anti_portal_agent_1179) covers the middle, antiportal_1174 (scale 3, 96 px, with",
+    "anti_portal_agent_ent_1488) the high ledge beyond the wall, antiportal_1357 (scale 2, 64 px) the",
+    "last block; every portal here is outside the living rings (the nearest, (990, 175), 130 px from",
+    "antiportal_1180). The view is locked to the dragon, so each hop waits for its target to come into view, and the player keeps to the low blocks, where the dragon's fireballs (at most 10 deg",
+    "below level, R19's lagged aim) pass overhead.",
+    "Re-authored for the wave 3a timing build (CK, G10, G4; round 1, same hops, new ticks): the view's right edge is 455.2 + 0.72 x (tick - 227.8) from tick 228 (the dragon's 45 u/s at the floored 16 ms), a shot takes",
+    "1 + (D - 27.2) / 3.2 ticks, the next tap waits for it to land and for the 400 ms (26 ticks), and a",
+    "tap on a point of the view's bottom-right quarter circle (64 u about the corner) is the walk pad's: a",
+    "target below y 192 must lie 28 u inside the edge. The claw takes a platform whose centre is left of the",
+    "view's left edge + 64 (a sweep every 250 ms): block00_1162 goes on 2047, and a shot that needs 94 ticks to",
+    "(1700, 198) could not leave it in time, so the far low platform is entered at its near end (1672,",
+    "188), 83 ticks, left on 2012.",
+    "Hops: portal pairs to the double block (taps 1-2, 106), a walk right onto the low block (the walk waits until tick 320, so the view's right edge, 455 and fixed until the dragon starts on 228, has passed the low block's end, 532, before the player arrives (about 355): he is inside the view on every tick from 1 to the door, 6.3 u at the closest, on tick 974), block00_1060 (578), single_block_1062 (846),",
+    "the high single_block_1224 (929), which is walked off to the right onto single_block_1129 (985); a shot past",
+    "anti_portal_agent_1179 kills it and its ring (1179); onto the long platform over the moving platform (1400);",
+    "a portal against crate_no_emissive_ent_1161 sends it into the pit (1457), right to the wall, block00_1162 (1559); the far low platform (2012); block00_1181 (2181), block00_1422 (2350) and the top of the double block past the pit (2486); right into wood_piece_small_1287, which falls over as a ramp onto",
+    "double_block_1288, up it and along the bridge into the door. Won on tick 3205. Re-authored in 3b-1's round 1 (R3-3): the earlier route ran ahead of the dragon's camera for its last 194 ticks (2525 to the door, up to 293 u past the view's right edge), which the original allows (AutoCameraController only follows the dragon between camMin and camMax, checkGameLost reads the level's minPos and maxPos and not the view) but no player would see: the door, at x 2554, is in the view only from about tick 3143, the view's right edge moving 0.72 u a tick. So the walk from the last pair's exit (tick 2500, 40 u inside the edge) is held in pulses, 8 ticks of every 26 (19.2 u a pulse, 0.74 u a tick, the camera's own pace): the player is inside the view on every tick of the run, never nearer its right edge than 25.6 u after tick 2300 (the tightest, 6.3 u, is the walk off the high single block onto single_block_1129, on tick 974), and enters the door with it in view. A pulse of 12 in 40 does the same (won 3225, 20 u), 16 in 53 and 24 in 80 do not: both are outside the view for 8 ticks and die to a fireball on 3136."
+  ],
   "_step263": "RE-TIMED in planning step 263, when the engine's friction solve was fixed (two tangent axes fixed for the step, a signed accumulator each) and the tables' decoded frictions were applied (materials.json friction_applied): a crate, a barrel and a stone no longer drag at the held 1, so every tick below is of the play on the new build and the notes above describe the old one. The tap POINTS and their number are the old play's, unchanged (the controls census pins them); only the ticks of the taps and of the walks moved (an event-following hill climb over replays, 2-32: 23 tap(s), 36 walk(s), won on tick 2963).",
   "level": "level31a",
-  "win_by": 3010,
+  "win_by": 2990,
   "holds": [
-    {"walk": "right", "from": 320, "to": 353},
-    {"walk": "right", "from": 949, "to": 966},
+    {"walk": "right", "from": 334, "to": 376},
+    {"walk": "left", "from": 414, "to": 424},
+    {"walk": "right", "from": 973, "to": 990},
     {"walk": "right", "from": 1470, "to": 1526},
     {"walk": "right", "from": 2508, "to": 2515},
     {"walk": "right", "from": 2534, "to": 2541},
@@ -51,7 +71,7 @@
     {"tick": 844, "at": [672.7, 168.5]},
     {"tick": 900, "at": [936, 118]},
     {"tick": 931, "at": [856.7, 158.5]},
-    {"tick": 1150, "at": [1118, 104]},
+    {"tick": 1152, "at": [1118, 104]},
     {"tick": 1320, "at": [1238, 108]},
     {"tick": 1398, "at": [986.1, 178.5]},
     {"tick": 1425, "at": [1180, 120]},
@@ -64,7 +84,8 @@
     {"tick": 2179, "at": [1672.7, 202.5]},
     {"tick": 2320, "at": [1951.25, 165]},
     {"tick": 2356, "at": [1824.7, 170.5]},
-    {"tick": 2460, "at": [2050, 100]},
+    {"tick": 2456, "at": [2050, 100]},
     {"tick": 2492, "at": [1952, 170.5]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 23 tap(s), 2 tick(s) moved; every tap point is the earlier play's; 37 walk(s) (the earlier play had 36). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 2949, medal 3."
 }

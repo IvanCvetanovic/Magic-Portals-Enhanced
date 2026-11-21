@@ -28,14 +28,19 @@
     "tap D from 491 on (the tick the shot is in place) and the walk from 498. Aim drift 0.001 px."
   ],
   "level": "level25",
-  "win_by": 541,
+  "win_by": 700,
   "holds": [
-    {"walk": "right", "from": 504, "to": 541}
+    {"walk": "right", "from": 628, "to": 659},
+    {"walk": "right", "from": 640, "to": 670},
+    {"walk": "right", "from": 665, "to": 670},
+    {"walk": "right", "from": 675, "to": 677},
+    {"walk": "right", "from": 720, "to": 723}
   ],
   "taps": [
-    {"tick": 40, "at": [446, 180]},
-    {"tick": 230, "at": [102, 100]},
-    {"tick": 392, "at": [355, 76]},
-    {"tick": 500, "at": [30, 174.3]}
-  ]
+    {"tick": 91, "at": [453.6, 175.0]},
+    {"tick": 336, "at": [66.4, 128.2]},
+    {"tick": 414, "at": [343.2, 87.6]},
+    {"tick": 579, "at": [29.2, 145.7]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 4 tap(s), 4 tick(s) moved; 4 tap POINT(s) moved ((446, 180) -> (453.6, 175); (102, 100) -> (66.4, 128.2); (355, 76) -> (343.2, 87.6); (30, 174.3) -> (29.2, 145.7)); the controls census still passes; 5 walk(s) (the earlier play had 1). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 658, medal 1."
 }

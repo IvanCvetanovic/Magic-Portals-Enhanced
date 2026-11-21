@@ -19,21 +19,22 @@
     "2650 (5000 ms from the button's press on 2546): right again from 2700."
   ],
   "level": "level31",
-  "win_by": 2800,
+  "win_by": 2820,
   "holds": [
     {"walk": "right", "from": 30, "to": 110},
     {"walk": "left", "from": 614, "to": 650},
-    {"walk": "left", "from": 1362, "to": 1399},
-    {"walk": "right", "from": 2068, "to": 2105},
-    {"walk": "right", "from": 2411, "to": 2553},
-    {"walk": "right", "from": 2700, "to": 2790}
+    {"walk": "left", "from": 1364, "to": 1401},
+    {"walk": "right", "from": 2070, "to": 2107},
+    {"walk": "right", "from": 2413, "to": 2555},
+    {"walk": "right", "from": 2714, "to": 2792}
   ],
   "taps": [
-    {"tick": 658, "at": [295.2, 150]},
-    {"tick": 693, "at": [197, 100]},
-    {"tick": 1407, "at": [204.4, 150]},
-    {"tick": 1441, "at": [101, 100]},
-    {"tick": 2113, "at": [113.2, 150]},
-    {"tick": 2141, "at": [197.3, 100]}
-  ]
+    {"tick": 660, "at": [303.8, 145.7]},
+    {"tick": 695, "at": [197, 100]},
+    {"tick": 1409, "at": [204.4, 150]},
+    {"tick": 1443, "at": [101, 100]},
+    {"tick": 2115, "at": [113.2, 150]},
+    {"tick": 2143, "at": [197.3, 100]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 6 tap(s), 6 tick(s) moved; 1 tap POINT(s) moved ((295.2, 150) -> (303.8, 145.7)); the controls census still passes; 6 walk(s) (the earlier play had 6). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 2772, medal 3."
 }

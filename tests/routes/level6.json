@@ -14,13 +14,17 @@
     "player on into a death)."
   ],
   "level": "level6",
-  "win_by": 240,
+  "win_by": 300,
+  "medal": 3,
   "holds": [
     {"walk": "right", "from": 1, "to": 18},
-    {"walk": "right", "from": 82, "to": 240}
+    {"walk": "right", "from": 82, "to": 180},
+    {"walk": "left", "from": 181, "to": 216},
+    {"walk": "right", "from": 217, "to": 300}
   ],
   "taps": [
     {"tick": 29, "at": [140, 60]},
     {"tick": 76, "at": [87.0, 202.3]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 257, medal 3."
 }

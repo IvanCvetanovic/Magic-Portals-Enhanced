@@ -141,6 +141,9 @@ void theWalkIsTheDecodedSpeedNotTheRemakesGuess() {
     ScriptClock::Rules clock;
     std::string error;
     CHECK_MSG(ScriptClock::LoadRules(std::string(MAGICPORTALS_PORT_DATA_DIR) + "/clock.json", clock, error), error);
+    // The decoded walk is stated at one tick an original frame; the shipped pace is 30 since planning step 270 (a frame of 32 ms of script, the
+    // walk per frame twice as long, the same distance a second), so the case sets the matched pace by hand.
+    CHECK_MSG(clock.SetOriginalFrameHz(clock.matchedHz), "the matched rate is a valid pace");
     const ScriptClock::Step step = ScriptClock::TickStep(clock, kStep);
     CHECK_MSG(std::fabs(Minions::WalkOriginal(rules, step) - 1.3 * 16.0 / 33.33333507180214) < 1e-9,
               std::to_string(Minions::WalkOriginal(rules, step)));

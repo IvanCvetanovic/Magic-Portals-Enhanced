@@ -7,18 +7,23 @@
     "Leans on step 140 (the lift's touch), step 156 (a shot goes to the tap-time ray's end: a portal opens in the open air, and on a knight; two taps 26 ticks apart), G10 (2.4 units a tick, no steering in the air), G1a and G1b (the two sightings, C's one shot at where he stood) and Keys.hpp (a minion carries a key; the 26 units). NOT MEASURED ON THE ORIGINAL (rig rows): that a key a knight carries opens a keyhole as the listing's bytes read it (they do not look at the owner), and that a knight standing in a portal as the pair opens goes through (R23; 3-08, 3-10 and 4-28 rest on it too). Margins (one edge moved at a time, 8 ticks either way, against this file's win_by 512): every tap and walk edge wins 4 ticks either way or more and most 8 (taps 114: -8..+7, 199: -7..+8, 304: -8..+6, 336: -6..+8; the first walk can only start later; the second walk's start -8..+4 and its end -4..+8, which win_by 512 limits (the tick is 516 at +5 and -5); a tap before the shot ahead of it has landed, or less than 26 ticks after the tap before it, is refused). With win_by loosened the knight tap alone wins from 330 to 370 (500 at 336, 554 at 370) and the keyhole portal anywhere in x 586-598, y 90-180. A walk begun 7 ticks late (347) is still at x 590 when C lands, at C's left in its sight, and it shoots him dead on 463: he must be beside the door before then."
   ],
   "level": "level22b",
-  "win_by": 512,
+  "win_by": 650,
   "holds": [
     {"walk": "left", "from": 1, "to": 27},
-    {"walk": "right", "from": 206, "to": 292},
-    {"walk": "right", "from": 340, "to": 366},
-    {"walk": "right", "from": 440, "to": 512}
+    {"walk": "right", "from": 206, "to": 267},
+    {"walk": "right", "from": 281, "to": 321},
+    {"walk": "right", "from": 322, "to": 342},
+    {"walk": "right", "from": 466, "to": 516},
+    {"walk": "right", "from": 550, "to": 554},
+    {"walk": "right", "from": 577, "to": 579},
+    {"walk": "right", "from": 604, "to": 624}
   ],
   "taps": [
-    {"tick": 32, "at": [100, 236], "shot": false},
-    {"tick": 114, "at": [350, 30]},
-    {"tick": 199, "at": [95.6, 128.4]},
-    {"tick": 304, "at": [596, 150]},
-    {"tick": 336, "at": [464.3, 217.4]}
-  ]
+    {"tick": 1, "at": [107.6, 230.0], "shot": false},
+    {"tick": 114, "at": [347.5, 16.4]},
+    {"tick": 199, "at": [96.5, 130.4]},
+    {"tick": 291, "at": [601.5, 155.0]},
+    {"tick": 333, "at": [460.3, 224.6]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 5 tap(s), 3 tick(s) moved; 5 tap POINT(s) moved ((100, 236) -> (107.6, 230); (350, 30) -> (347.5, 16.4); (95.6, 128.4) -> (96.5, 130.4); (596, 150) -> (601.5, 155); (464.3, 217.4) -> (460.3, 224.6)); the controls census still passes; 8 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 606, medal 2."
 }

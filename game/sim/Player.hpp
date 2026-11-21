@@ -21,7 +21,7 @@
 //     never reaches and a hidden, dead body falling on does (Steer applies it).
 //
 // IN THE PORT'S UNITS. The original's physics advances 1/30 s a frame; the port's solver
-// steps its 1/60 s tick (ScriptClock::SimRatio is 2). So the player's velocity is carried at
+// steps its 1/60 s tick (ScriptClock::SimRatio is 2 at one tick an original frame, the pace before planning step 270; 1 at the shipped 30). So the player's velocity is carried at
 // SimRatio times the original's, and its gravity is applied as the velocity the original's
 // step would add a frame, times that: both cover, each tick, what the original's step covers
 // in the frame. Every other dynamic body is in that time base too, by the same mechanism

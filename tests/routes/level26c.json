@@ -22,13 +22,14 @@
     "(the knights see only a lit level and only their row), the head-height retry (R23), G10 and G4."
   ],
   "level": "level26c",
-  "win_by": 261,
+  "win_by": 320,
   "holds": [
     {"walk": "left", "from": 136, "to": 176},
     {"walk": "right", "from": 184, "to": 400}
   ],
   "taps": [
     {"tick": 30, "at": [146, 42]},
-    {"tick": 184, "at": [146, 42]}
-  ]
+    {"tick": 199, "at": [146, 42]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 1 tick(s) moved; every tap point is the earlier play's; 2 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 275, medal 1."
 }

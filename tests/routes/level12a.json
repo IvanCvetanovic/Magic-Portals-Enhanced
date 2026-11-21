@@ -17,16 +17,20 @@
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[0].from 1 -> 10, holds[1].to 175 -> 179, taps[0].tick 79 -> 65, taps[2].tick 215 -> 209 (largest move 14 ticks) and it wins on tick 501 with win_by 550. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them. A shot now lands inside a walk, so a player needs the walk finger and the aim finger at once: taps[0] (tick 65) now falls inside holds[0].",
   "_step264": "TAP 4 MOVED in planning step 264, from (387, 110) to (417, 110), when the engine stopped holding a resting body's neighbour awake (a stack now sleeps) and the barrel stopped creeping: the notes above describe a barrel that crept left on the platform to x 408, its left face at 393.8, which the portal at (387, 110) overlapped by 7 px. The barrel now settles at x 438.4 (its left face at 424) in the first 60 ticks and sleeps there, so the same 7 px of overlap is a portal at (417, 110); any x from 414 to 426 wins on tick 501 as before (405 and 410 do not), and the controls census is unchanged. The one tap point of the recorded plays that moved for this reason.",
   "level": "level12a",
-  "win_by": 550,
+  "win_by": 580,
+  "medal": 3,
   "holds": [
-    {"walk": "right", "from": 10, "to": 70},
+    {"walk": "right", "from": 6, "to": 70},
     {"walk": "right", "from": 155, "to": 179},
-    {"walk": "left", "from": 380, "to": 545}
+    {"walk": "left", "from": 379, "to": 421},
+    {"walk": "right", "from": 422, "to": 433},
+    {"walk": "left", "from": 438, "to": 545}
   ],
   "taps": [
-    {"tick": 65, "at": [256, 206]},
-    {"tick": 105, "at": [345, 110]},
-    {"tick": 209, "at": [180, 200]},
-    {"tick": 267, "at": [417, 110]}
-  ]
+    {"tick": 70, "at": [256, 206]},
+    {"tick": 108, "at": [345, 110]},
+    {"tick": 205, "at": [180, 200]},
+    {"tick": 272, "at": [417, 110]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 4 tap(s), 4 tick(s) moved; every tap point is the earlier play's; 5 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 533, medal 3."
 }

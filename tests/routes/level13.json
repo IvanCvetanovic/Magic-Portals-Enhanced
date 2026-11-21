@@ -10,14 +10,15 @@
     "Re-authored on the wave 3a timing build (R3 round 1): won on tick 265."
   ],
   "level": "level13",
-  "win_by": 300,
+  "win_by": 320,
   "holds": [
     {"walk": "right", "from": 1, "to": 30},
-    {"walk": "left", "from": 60, "to": 87},
-    {"walk": "right", "from": 210, "to": 300}
+    {"walk": "left", "from": 68, "to": 95},
+    {"walk": "right", "from": 218, "to": 324}
   ],
   "taps": [
-    {"tick": 90, "at": [118, 205]},
-    {"tick": 125, "at": [330, 195]}
-  ]
+    {"tick": 54, "at": [118, 205]},
+    {"tick": 133, "at": [330, 195]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 2 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 273, medal 1."
 }

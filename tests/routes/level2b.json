@@ -33,20 +33,21 @@
     "step, the player's capsule, the platforms as linearMotion swings them. Leans on the port's rider carry (a rider is carried up and down by the platform's velocity, his feet within 0.01 unit of its top: the port's carry, not the original's push-out and fall, planning step 154 decision 1, deviations 1 and 4), on the platform swinging from the level's first tick (step 154 deviation 2, the bucket clock is not modelled); the original's platform is outside its drawn buckets at the spawn (step 154 decision 6) and may not swing until the camera comes near, which would move this route's boarding and walk-off ticks."
   ],
   "level": "level2b",
-  "win_by": 805,
+  "win_by": 820,
   "holds": [
-    {"walk": "right", "from": 100, "to": 125},
-    {"walk": "right", "from": 200, "to": 211},
-    {"walk": "left", "from": 248, "to": 255},
+    {"walk": "right", "from": 100, "to": 131},
+    {"walk": "right", "from": 200, "to": 215},
+    {"walk": "left", "from": 266, "to": 275},
     {"walk": "right", "from": 584, "to": 598},
     {"walk": "right", "from": 650, "to": 800}
   ],
   "taps": [
-    {"tick": 29, "at": [330, 120]},
+    {"tick": 27, "at": [330, 120]},
     {"tick": 92, "at": [110, 90.3]},
-    {"tick": 130, "at": [600, 70]},
-    {"tick": 195, "at": [393.3, 146.6]},
-    {"tick": 244, "at": [857, 150]},
-    {"tick": 314, "at": [416, 162]}
-  ]
+    {"tick": 134, "at": [600, 70]},
+    {"tick": 200, "at": [393.3, 146.6]},
+    {"tick": 262, "at": [857, 150]},
+    {"tick": 332, "at": [416, 162]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 6 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 5 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 776, medal 2."
 }

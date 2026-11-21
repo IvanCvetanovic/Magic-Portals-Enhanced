@@ -10,13 +10,18 @@
     "the walk is held again from tick 140. Won on tick 388 (375 before the idle hold, step 113: 345)."
   ],
   "level": "level8",
-  "win_by": 420,
+  "win_by": 780,
   "holds": [
-    {"walk": "right", "from": 1, "to": 25},
-    {"walk": "right", "from": 140, "to": 420}
+    {"walk": "right", "from": 7, "to": 7},
+    {"walk": "right", "from": 7, "to": 27},
+    {"walk": "right", "from": 285, "to": 303},
+    {"walk": "right", "from": 402, "to": 486},
+    {"walk": "right", "from": 412, "to": 598},
+    {"walk": "right", "from": 661, "to": 756}
   ],
   "taps": [
-    {"tick": 59, "at": [30, 30]},
-    {"tick": 125, "at": [240, 118]}
-  ]
+    {"tick": 136, "at": [30, 30]},
+    {"tick": 358, "at": [240, 118]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 2 tick(s) moved; every tap point is the earlier play's; 6 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 735, medal 2."
 }

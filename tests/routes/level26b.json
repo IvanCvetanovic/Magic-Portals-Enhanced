@@ -20,16 +20,16 @@
     "last shot has landed. Leans on G1a (the knight's cone, row and bucket, and the dwell the sighting restarts), G1b (its shot), G10 and G4."
   ],
   "level": "level26b",
-  "win_by": 1250,
+  "win_by": 1270,
   "holds": [
-    {"walk": "left", "from": 490, "to": 528},
-    {"walk": "right", "from": 682, "to": 685},
+    {"walk": "left", "from": 490, "to": 531},
+    {"walk": "right", "from": 682, "to": 684},
     {"walk": "left", "from": 946, "to": 1002},
     {"walk": "right", "from": 1048, "to": 1400}
   ],
   "taps": [
-    {"tick": 579, "at": [80, 185]},
-    {"tick": 606, "at": [232.4, 186]},
+    {"tick": 577, "at": [80, 185]},
+    {"tick": 607, "at": [232.4, 186]},
     {"tick": 639, "at": [50, 116]},
     {"tick": 674, "at": [148.5, 186.3]},
     {"tick": 702, "at": [200, 180]},
@@ -38,5 +38,6 @@
     {"tick": 844, "at": [60.5, 118.0]},
     {"tick": 1004, "at": [270, 120]},
     {"tick": 1046, "at": [190, 186.3]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 10 tap(s), 2 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1227, medal 3."
 }

@@ -23,24 +23,25 @@
     "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level20",
-  "win_by": 540,
+  "win_by": 580,
   "holds": [
-    {"walk": "right", "from": 5, "to": 33},
+    {"walk": "right", "from": 5, "to": 35},
     {"walk": "left", "from": 153, "to": 178},
     {"walk": "right", "from": 299, "to": 330},
-    {"walk": "left", "from": 342, "to": 358},
-    {"walk": "left", "from": 400, "to": 403},
-    {"walk": "right", "from": 452, "to": 540}
+    {"walk": "left", "from": 342, "to": 356},
+    {"walk": "left", "from": 420, "to": 432},
+    {"walk": "right", "from": 486, "to": 580}
   ],
   "taps": [
     {"tick": 49, "at": [250, 300]},
     {"tick": 95, "at": [250, 300]},
     {"tick": 142, "at": [277.7, 458.3]},
     {"tick": 232, "at": [252, 200]},
-    {"tick": 268, "at": [246, 330]},
+    {"tick": 274, "at": [246, 330]},
     {"tick": 359, "at": [247, 142]},
-    {"tick": 386, "at": [240, 250]},
-    {"tick": 413, "at": [330, 100]},
-    {"tick": 442, "at": [242.3, 322.5]}
-  ]
+    {"tick": 389, "at": [240, 250]},
+    {"tick": 433, "at": [330, 100]},
+    {"tick": 490, "at": [242.3, 322.5]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 9 tap(s), 4 tick(s) moved; every tap point is the earlier play's; 6 walk(s) (the earlier play had 6). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 539, medal 2."
 }

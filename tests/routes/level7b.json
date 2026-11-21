@@ -45,16 +45,16 @@
     "either way wins."
   ],
   "level": "level7b",
-  "win_by": 1690,
+  "win_by": 1730,
   "holds": [
     {"walk": "left", "from": 154, "to": 240},
     {"walk": "left", "from": 610, "to": 668},
-    {"walk": "right", "from": 795, "to": 887},
+    {"walk": "right", "from": 795, "to": 880},
     {"walk": "left", "from": 997, "to": 1018},
     {"walk": "right", "from": 1020, "to": 1058},
-    {"walk": "left", "from": 1064, "to": 1137},
-    {"walk": "right", "from": 1254, "to": 1371},
-    {"walk": "right", "from": 1515, "to": 1680}
+    {"walk": "left", "from": 1064, "to": 1156},
+    {"walk": "right", "from": 1271, "to": 1388},
+    {"walk": "right", "from": 1532, "to": 1697}
   ],
   "taps": [
     {"tick": 38, "at": [420, 136]},
@@ -66,10 +66,11 @@
     {"tick": 906, "at": [232, 20]},
     {"tick": 948, "at": [240, 20]},
     {"tick": 984, "at": [310.1, 106.5]},
-    {"tick": 1142, "at": [100, 150], "shot": false},
-    {"tick": 1406, "at": [440, 125]},
-    {"tick": 1436, "at": [381.7, 202.5]},
-    {"tick": 1477, "at": [530, 100]},
-    {"tick": 1507, "at": [440, 140.5]}
-  ]
+    {"tick": 1160, "at": [100, 150], "shot": false},
+    {"tick": 1423, "at": [440, 125]},
+    {"tick": 1453, "at": [381.7, 202.5]},
+    {"tick": 1494, "at": [530, 100]},
+    {"tick": 1524, "at": [440, 140.5]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 14 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 8 walk(s) (the earlier play had 8). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1683, medal 3."
 }

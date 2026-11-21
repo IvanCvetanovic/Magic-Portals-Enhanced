@@ -31,28 +31,29 @@
     "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level30c",
-  "win_by": 1310,
+  "win_by": 1320,
   "holds": [
-    {"walk": "left", "from": 134, "to": 216},
-    {"walk": "right", "from": 584, "to": 893},
-    {"walk": "left", "from": 896, "to": 1108},
-    {"walk": "left", "from": 1180, "to": 1290}
+    {"walk": "left", "from": 134, "to": 221},
+    {"walk": "right", "from": 588, "to": 897},
+    {"walk": "left", "from": 900, "to": 1112},
+    {"walk": "left", "from": 1184, "to": 1294}
   ],
   "taps": [
     {"tick": 59, "at": [620, 60]},
     {"tick": 104, "at": [469.7, 42.3]},
     {"tick": 131, "at": [464, 148]},
     {"tick": 322, "at": [200, 150]},
-    {"tick": 389, "at": [464, 148]},
-    {"tick": 416, "at": [426.7, 202.3]},
-    {"tick": 443, "at": [150, 20]},
-    {"tick": 501, "at": [200, 202.3]},
-    {"tick": 527, "at": [252, 40]},
-    {"tick": 556, "at": [192, 99]},
-    {"tick": 892, "at": [464, 148]},
-    {"tick": 1090, "at": [296, 165]},
-    {"tick": 1118, "at": [318.9, 202.3]},
-    {"tick": 1146, "at": [250, 120]},
-    {"tick": 1172, "at": [301.2, 170.3]}
-  ]
+    {"tick": 394, "at": [464, 148]},
+    {"tick": 422, "at": [426.7, 202.3]},
+    {"tick": 450, "at": [150, 20]},
+    {"tick": 505, "at": [200, 202.3]},
+    {"tick": 533, "at": [252, 40]},
+    {"tick": 562, "at": [192, 99]},
+    {"tick": 896, "at": [464, 148]},
+    {"tick": 1094, "at": [296, 165]},
+    {"tick": 1122, "at": [318.9, 202.3]},
+    {"tick": 1150, "at": [250, 120]},
+    {"tick": 1178, "at": [301.2, 170.3]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 15 tap(s), 11 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1280, medal 1."
 }

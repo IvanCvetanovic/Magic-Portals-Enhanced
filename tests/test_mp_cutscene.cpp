@@ -309,6 +309,9 @@ void TheKnightWalksInBeforeTheMedal() {
     // is carried to (ScriptClock::SimRatio 2), which is what the decoded walk is stated in.
     ScriptClock::Rules clock;
     CHECK_MSG(ScriptClock::LoadRules(kPortData + "/clock.json", clock, error), error);
+    // The decoded walk is stated at one tick an original frame (the numbers below); the shipped file's pace is 30 since planning step 270, where
+    // a frame is 32 ms of script and the walk per frame twice as long, carried over twice the ticks to the same distance a second.
+    CHECK_MSG(clock.SetOriginalFrameHz(clock.matchedHz), "the matched rate is a valid pace");
     const ScriptClock::Step step = ScriptClock::TickStep(clock, kStep);
     CHECK_MSG(Near(Cutscene::KnightWalkOriginal(rules, step), 1.7 * 16.0 / 33.33333507180214, 1e-9),
               std::to_string(Cutscene::KnightWalkOriginal(rules, step)));

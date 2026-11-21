@@ -52,21 +52,23 @@
   "_step254": "NOTE OF 2026-11-17 (planning steps 252 and 253): the drop described above, which burns him whatever the length of the walk, is true at the ruling of step 213 (a share of 1); this level now plays at 42 Hz (data/player.json air_decay_rate_hz_by_level), where walks of 5 to 21 ticks land outside the flame's reach if the key is released in the air. This route does not use the drop and wins on tick 506 either way.",
   "level": "level16a",
   "medal": 3,
-  "win_by": 535,
+  "win_by": 560,
   "holds": [
-    {"walk": "left", "from": 174, "to": 211},
-    {"walk": "right", "from": 214, "to": 244},
-    {"walk": "right", "from": 452, "to": 540}
+    {"walk": "left", "from": 179, "to": 215},
+    {"walk": "right", "from": 216, "to": 226},
+    {"walk": "right", "from": 232, "to": 248},
+    {"walk": "right", "from": 456, "to": 548}
   ],
   "taps": [
     {"tick": 26, "at": [190, 200]},
     {"tick": 52, "at": [125, 125]},
     {"tick": 109, "at": [148, 145]},
     {"tick": 157, "at": [275, 252.3]},
-    {"tick": 245, "at": [275, 170]},
-    {"tick": 293, "at": [242, 110]},
-    {"tick": 345, "at": [300, 252.3]},
-    {"tick": 372, "at": [275, 170]},
-    {"tick": 427, "at": [125.2, 252.3]}
-  ]
+    {"tick": 249, "at": [275, 170]},
+    {"tick": 297, "at": [242, 110]},
+    {"tick": 349, "at": [300, 252.3]},
+    {"tick": 376, "at": [275, 170]},
+    {"tick": 431, "at": [125.2, 252.3]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 9 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 512, medal 3."
 }

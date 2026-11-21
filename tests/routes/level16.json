@@ -36,24 +36,25 @@
   ],
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[1].to 124 -> 130, holds[3].from 480 -> 481 (largest move 6 ticks) and it wins on tick 591 with win_by 640. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level16",
-  "win_by": 640,
+  "win_by": 690,
   "holds": [
     {"walk": "left", "from": 5, "to": 40},
-    {"walk": "right", "from": 60, "to": 130},
+    {"walk": "right", "from": 61, "to": 133},
     {"walk": "right", "from": 350, "to": 386},
     {"walk": "right", "from": 481, "to": 521},
-    {"walk": "right", "from": 533, "to": 600}
+    {"walk": "right", "from": 533, "to": 660}
   ],
   "taps": [
     {"tick": 150, "at": [60, 180]},
-    {"tick": 215, "at": [320, 200]},
-    {"tick": 245, "at": [125, 180]},
-    {"tick": 290, "at": [385, 200]},
-    {"tick": 319, "at": [190, 180]},
-    {"tick": 348, "at": [440, 200]},
-    {"tick": 402, "at": [240, 200]},
-    {"tick": 436, "at": [490, 176]},
-    {"tick": 478, "at": [530, 170]},
-    {"tick": 532, "at": [468, 205]}
-  ]
+    {"tick": 222, "at": [320, 200]},
+    {"tick": 255, "at": [125, 180]},
+    {"tick": 304, "at": [385, 200]},
+    {"tick": 339, "at": [190, 180]},
+    {"tick": 370, "at": [440, 200]},
+    {"tick": 427, "at": [240, 200]},
+    {"tick": 465, "at": [490, 176]},
+    {"tick": 514, "at": [530, 170]},
+    {"tick": 570, "at": [468, 205]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 10 tap(s), 9 tick(s) moved; every tap point is the earlier play's; 5 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 642, medal 3."
 }

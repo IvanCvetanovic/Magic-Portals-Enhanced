@@ -79,10 +79,21 @@ constexpr float kPhysicsStep = 1.0f / 60.0f;
 // Doubles, which the harness's CHECK_NEAR (floats) would narrow.
 #define CHECK_NEARD(a, b)                                                                                  do {                                                                                                       const double nearA = (a);                                                                              const double nearB = (b);                                                                              CHECK_MSG(std::fabs(nearA - nearB) < 1e-9, std::string(#a) + " is " + std::to_string(nearA) +                                                        ", expected " + std::to_string(nearB));             } while (false)
 
-ScriptClock::Rules ReadRules() {
+// clock.json as shipped: since planning step 270 the whole game is at the 30 of the owner's videos.
+ScriptClock::Rules ReadShippedRules() {
     ScriptClock::Rules rules;
     std::string error;
     CHECK_MSG(ScriptClock::LoadRules(kPortData + "/clock.json", rules, error), error);
+    return rules;
+}
+
+// The shipped file's decoded numbers (matched rate, snap, physics step) at ONE TICK AN ORIGINAL FRAME, the pace the port had before step 270:
+// what the suite's arithmetic cases (the floor, the interpolators, the carried ratio of 2) were written against. They pin the clock's
+// mechanism, which the pace knob leaves alone, so they do not follow the shipped pace; the cases that pin the shipped pace read
+// ReadShippedRules.
+ScriptClock::Rules ReadRules() {
+    ScriptClock::Rules rules = ReadShippedRules();
+    CHECK_MSG(rules.SetOriginalFrameHz(rules.matchedHz), "the matched rate is a valid pace");
     return rules;
 }
 
@@ -483,10 +494,13 @@ void TheRocketsShakeReArmsEverySeventhTick() {
 // ---- the pace knob: original_frame_hz, the frame's ticks and the original's step ----------------------------------
 
 void ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate() {
-    // The shipped file is at the matched pace: one tick an original frame, the pace the port had before the key existed.
-    const ScriptClock::Rules shipped = ReadRules();
-    CHECK_EQ(shipped.originalFrameHz, 60);
-    CHECK_EQ(shipped.frameTicks, 1);
+    // The shipped file is at the 30 of the owner's videos (planning step 270): an original frame is two ticks. ReadRules is the matched pace.
+    const ScriptClock::Rules shipped = ReadShippedRules();
+    CHECK_EQ(shipped.originalFrameHz, 30);
+    CHECK_EQ(shipped.frameTicks, 2);
+    const ScriptClock::Rules matched = ReadRules();
+    CHECK_EQ(matched.originalFrameHz, 60);
+    CHECK_EQ(matched.frameTicks, 1);
     // And a Rules built in code is the same floor without a file.
     const ScriptClock::Rules bare{};
     CHECK_EQ(bare.originalFrameHz, 60);
@@ -550,31 +564,27 @@ void ThePaceKnobIsReadWholeAndOnlyAsADivisorOfTheMatchedRate() {
 // ---- a level's own pace: original_frame_hz_by_level (planning step 262) -----------------------------------------------
 
 void ALevelCanPlayAtItsOwnPaceAndOnlyAtOneTheKeyTakes() {
-    // The shipped file: 3-22 (level21b, step 262), 4-01 (level0c, step 266) and the eighteen zero-gravity levels (level1c to level18c, step 268) at the 30 of
-    // the owner's videos, every other level at the file's own 60.
-    const ScriptClock::Rules shipped = ReadRules();
-    CHECK_EQ(shipped.baseOriginalFrameHz, 60);
-    bool allAtThirty = shipped.originalFrameHzByLevel.count("level21b") == 1 && shipped.originalFrameHzByLevel.at("level21b") == 30;
-    for (int n = 0; n <= 18; ++n) {
-        const std::string name = "level" + std::to_string(n) + "c";
-        allAtThirty = allAtThirty && shipped.originalFrameHzByLevel.count(name) == 1 && shipped.originalFrameHzByLevel.at(name) == 30;
-    }
-    CHECK_MSG(shipped.originalFrameHzByLevel.size() == 20 && allAtThirty,
-              "3-22 (level21b), 4-01 (level0c) and 4-02 to 4-19 (level1c to level18c) are the twenty levels the shipped table names, at 30");
+    // The shipped file since planning step 270: the table is EMPTY and every level plays at the file's own 30 (before it, 3-22, 4-01 and the
+    // eighteen zero-gravity levels were named in it one by one, and the other levels were at 60).
+    const ScriptClock::Rules shipped = ReadShippedRules();
+    CHECK_EQ(shipped.baseOriginalFrameHz, 30);
+    CHECK_MSG(shipped.originalFrameHzByLevel.empty(), "the shipped table names no level: the whole game is at the file's own pace");
     ScriptClock::Rules rules = shipped;
-    CHECK(rules.ForLevel("level21b"));
-    CHECK_MSG(rules.originalFrameHz == 30 && rules.frameTicks == 2, "level21b plays an original frame in two ticks");
-    CHECK(ScriptClock::SimRatio(ScriptClock::TickStep(rules, kPhysicsStep)) == 1.0);
-    // Back to the file's own for every level the table does not name, and for what is no level at all.
-    for (const char* other : {"level0b", "level21a", "level21bb", "LEVEL21B", "level0cc", ""}) {
-        CHECK(rules.ForLevel("level21b"));
-        CHECK(rules.ForLevel(other));
-        CHECK_MSG(rules.originalFrameHz == 60 && rules.frameTicks == 1, std::string("'") + other + "' plays at the file's own 60");
+    for (const char* level : {"level0", "level21b", "level0c", "level18c", "level31c", "level11", "level20b", "level19c", "nothing", ""}) {
+        CHECK(rules.ForLevel(level));
+        CHECK_MSG(rules.originalFrameHz == 30 && rules.frameTicks == 2, std::string("'") + level + "' plays an original frame in two ticks");
+        CHECK(ScriptClock::SimRatio(ScriptClock::TickStep(rules, kPhysicsStep)) == 1.0);
     }
     // A Rules built in code has no table: ForLevel leaves every level at its pace.
     ScriptClock::Rules bare{};
     CHECK(bare.ForLevel("level21b"));
     CHECK(bare.originalFrameHz == 60 && bare.frameTicks == 1);
+    // And a Rules with a table of its own still plays the named level at the table's pace and the rest at the file's (the mechanism the
+    // shipped file kept when it emptied the table).
+    ScriptClock::Rules named = shipped;
+    named.originalFrameHzByLevel["level21a"] = 60;
+    CHECK(named.ForLevel("level21a") && named.originalFrameHz == 60 && named.frameTicks == 1);
+    CHECK(named.ForLevel("level21b") && named.originalFrameHz == 30 && named.frameTicks == 2);
 
     // The table beside a file's own pace of 30: one level back at 60, the rest at 30, and ForLevel puts the FILE's pace back (not the
     // last level's).
@@ -633,7 +643,7 @@ void ThirtyHertzHalvesTheStepSoTheSimRatioIsExactlyOneAndSixtyIsTwo() {
         CHECK_EQ(ScriptClock::TickStep(rules30, kPhysicsStep, levelStep).framePhase, static_cast<int>(levelStep % 2u));
     }
 
-    // At 60 the shipped file's step is what it was: the full decoded step, a ratio of exactly 2, one tick a frame, phase 0 always.
+    // At 60 (the shipped file's numbers at one tick a frame, the pace before planning step 270) the step is what it was: the full decoded step, a ratio of exactly 2, one tick a frame, phase 0 always.
     const ScriptClock::Rules rules60 = ReadRules();
     const ScriptClock::Step matched = ScriptClock::TickStep(rules60, kPhysicsStep);
     CHECK(matched.simS == rules60.physicsStepS);

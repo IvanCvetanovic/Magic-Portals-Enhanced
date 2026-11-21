@@ -23,19 +23,24 @@
     "outside the camera's view; the only jumps are the three portal traversals."
   ],
   "level": "level17",
-  "win_by": 435,
+  "win_by": 550,
   "holds": [
-    {"walk": "right", "from": 266, "to": 284},
-    {"walk": "right", "from": 346, "to": 520}
+    {"walk": "right", "from": 250, "to": 270},
+    {"walk": "right", "from": 252, "to": 303},
+    {"walk": "right", "from": 416, "to": 465},
+    {"walk": "right", "from": 488, "to": 610},
+    {"walk": "right", "from": 527, "to": 547},
+    {"walk": "right", "from": 563, "to": 565}
   ],
   "taps": [
     {"tick": 28, "at": [112, 130]},
     {"tick": 57, "at": [157, 206.4]},
     {"tick": 86, "at": [288, 100]},
-    {"tick": 138, "at": [40, 160]},
-    {"tick": 167, "at": [343, 50]},
-    {"tick": 241, "at": [112, 144.4]},
-    {"tick": 298, "at": [520, 135]},
-    {"tick": 341, "at": [390.6, 206.4]}
-  ]
+    {"tick": 140, "at": [40, 160]},
+    {"tick": 172, "at": [343, 50]},
+    {"tick": 243, "at": [112, 144.4]},
+    {"tick": 318, "at": [520, 135]},
+    {"tick": 377, "at": [390.6, 206.4]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 8 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 6 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 510, medal 2."
 }

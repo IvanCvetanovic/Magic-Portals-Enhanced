@@ -12,23 +12,26 @@
   "win_by": 900,
   "holds": [
     {"walk": "left", "from": 104, "to": 206},
-    {"walk": "left", "from": 240, "to": 251},
-    {"walk": "right", "from": 290, "to": 340},
-    {"walk": "right", "from": 710, "to": 796},
+    {"walk": "left", "from": 214, "to": 224},
+    {"walk": "right", "from": 244, "to": 264},
+    {"walk": "left", "from": 268, "to": 292},
+    {"walk": "right", "from": 296, "to": 361},
+    {"walk": "right", "from": 704, "to": 796},
     {"walk": "right", "from": 802, "to": 900}
   ],
   "taps": [
     {"tick": 27, "at": [256, 60]},
     {"tick": 93, "at": [327, 78.4]},
-    {"tick": 342, "at": [345, 150]},
-    {"tick": 398, "at": [375, 206]},
-    {"tick": 455, "at": [224, 168]},
-    {"tick": 485, "at": [183.5, 206.4]},
-    {"tick": 548, "at": [455, 150]},
+    {"tick": 336, "at": [345, 150]},
+    {"tick": 401, "at": [375, 206]},
+    {"tick": 453, "at": [224, 168]},
+    {"tick": 481, "at": [183.5, 206.4]},
+    {"tick": 550, "at": [454.15, 150]},
     {"tick": 621, "at": [224.0, 174.4]},
     {"tick": 650, "at": [602, 112]},
     {"tick": 702, "at": [546.6, 196.5]},
     {"tick": 730, "at": [602, 116]},
     {"tick": 799, "at": [662.0, 206.4]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): the _about notes above describe the route and its ticks as they were at the earlier pace. Now: 12 taps (5 ticks moved: 342 -> 336, 398 -> 401, 455 -> 453, 485 -> 481, 548 -> 550); 1 tap point moved ((455, 150) -> (454.15, 150)); 7 walks (the earlier route had 5). Found by a search over replays and by hand. Won on tick 857, medal 3, 12 portals, 5 of 5 crystals; the single standing place at x 455 to 455.9 is at x 454.15 now (the player rests 0.2 units higher on block 1568 at this pace, and 454.0 to 454.3 is hidden from knight C where 454.45 is seen); the pit's knight B no longer rolls out by itself and is pushed along the floor and over its edge by a left walk from 268."
 }

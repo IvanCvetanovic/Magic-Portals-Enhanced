@@ -12,15 +12,20 @@
   ],
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved holds[3].to 824 -> 838 (largest move 14 ticks) and it wins on tick 1123 with win_by 1170. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level6a",
-  "win_by": 1170,
+  "win_by": 1180,
   "holds": [
     {"walk": "right", "from": 165, "to": 185},
-    {"walk": "left", "from": 380, "to": 423},
-    {"walk": "right", "from": 693, "to": 758},
-    {"walk": "left", "from": 783, "to": 838},
-    {"walk": "left", "from": 1043, "to": 1186}
+    {"walk": "left", "from": 381, "to": 389},
+    {"walk": "left", "from": 441, "to": 455},
+    {"walk": "left", "from": 500, "to": 517},
+    {"walk": "right", "from": 733, "to": 827},
+    {"walk": "left", "from": 813, "to": 931},
+    {"walk": "left", "from": 1050, "to": 1155},
+    {"walk": "left", "from": 1197, "to": 1228},
+    {"walk": "left", "from": 1202, "to": 1205}
   ],
   "taps": [
-    {"tick": 200, "at": [352, 262], "shot": false}
-  ]
+    {"tick": 194, "at": [352, 262], "shot": false}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 1 tap(s), 1 tick(s) moved; every tap point is the earlier play's; 9 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1135, medal 2."
 }

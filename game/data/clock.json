@@ -69,7 +69,7 @@
     "SimRatio (a minion's and a knight's walk, a gravity well's pull) and every one a callback reads divided by it (the impacts, a",
     "beholder's rock): ScriptClock.hpp, \"THE CARRIED FRAME\". physics_step_s itself is the decode and is never edited for the pace."
   ],
-  "original_frame_hz": 60,
+  "original_frame_hz": 30,
   "_original_frame_hz": [
     "THE PACE KNOB: the frame rate of the original that the world stands for, in whole hertz. 60 is the original on a 60 Hz screen, the",
     "pace of the port before this key existed (one tick an original frame); 30 is the pace of the owner's gold-run videos. It is the only",
@@ -80,31 +80,12 @@
     "the key - because an original frame is a whole number of ticks.",
     "PROVENANCE. MEASURED on the original: the owner's gold-run videos update 30 times a second, with stalls that are caught up (a mean",
     "of 26), and the physics runs in real time (docs/parity-video-findings.md, section 2). DECIDED by the owner on 2026-11-17: the whole",
-    "game is to play at that pace, nominal 30. The value stays 60 until the commit that flips the pace; this file only carries the key."
+    "game is to play at that pace, nominal 30. THE FLIP (planning step 270, 2026-11-20 by the owner's 'ok, go ahead then'): the value is 30 for EVERY level. Put 60 here to play the whole game at the pace it had before the flip (the recorded plays are timed for 30)."
   ],
-  "original_frame_hz_by_level": {
-    "level0c": 30,
-    "level1c": 30,
-    "level2c": 30,
-    "level3c": 30,
-    "level4c": 30,
-    "level5c": 30,
-    "level6c": 30,
-    "level7c": 30,
-    "level8c": 30,
-    "level9c": 30,
-    "level10c": 30,
-    "level11c": 30,
-    "level12c": 30,
-    "level13c": 30,
-    "level14c": 30,
-    "level15c": 30,
-    "level16c": 30,
-    "level17c": 30,
-    "level18c": 30,
-    "level21b": 30
-  },
+  "original_frame_hz_by_level": {},
   "_original_frame_hz_by_level": [
+    "EMPTY SINCE THE FLIP (planning step 270): every level plays at original_frame_hz (30). The mechanism stays (a level named here plays at its own pace) and the history below stays as the reasons the flip was made: 3-22 (step 262), 4-01 (step 266) and the 18 weightless dungeons 4-02 to 4-19 (step 268) were at 30 one by one before the whole game was.",
+    "THE PARAGRAPHS BELOW ARE HISTORY, as written when the lines were added (steps 262, 266, 268): sentences such as 'this line goes when they do', 'NOT DONE FOR THIS LEVEL', 'Same status as 3-22' and 'to put a level back, delete its line' describe the staged rollout of those steps; step 270 did the rest of the game and removed the lines, and the table is empty.",
     "A LEVEL'S OWN PACE (planning step 262): a level's name (its file stem) to the original_frame_hz its world is played at, in place of the file's own above.",
     "Optional; every level it does not name plays at original_frame_hz. Each value is held to the same rule as the key above (a whole number of hertz from 1 to",
     "matched_hz that divides it) and a level of nothing, a comment where a level belongs or a pace that is not one is refused naming the key.",

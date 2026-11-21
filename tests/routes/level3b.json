@@ -7,10 +7,12 @@
     "Margins: the walk is not a knife-edge. Moved on its own, a hold's edge may come 12 ticks early (traced: 16 early turns him left on the 160 step, where the 128 block's face at x 328 stops him for good) or up to 128 ticks late, and the level is still won unseen with 26 (checked by out/parity/program/R4/r1_3-01/sweep.py on a copy with a wide win_by; the first walk's start can only move later). Won on tick 297 (13 inside win_by); no DEV flag, PutPlayer or skipped tick; no portal shot (the level's budget is the default 2, the route uses none). Medal 2: no portals, the two crystals of the stairs (a gold needs all five of the level's crystals)."
   ],
   "level": "level3b",
-  "win_by": 310,
+  "win_by": 360,
   "holds": [
     {"walk": "right", "from": 1, "to": 143},
-    {"walk": "left", "from": 144, "to": 310}
+    {"walk": "left", "from": 144, "to": 360}
   ],
-  "taps": []
+  "taps": [
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 0 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 2 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 316, medal 2."
 }

@@ -22,7 +22,7 @@
     "follows the last shot's landing by 3 ticks or more and the tap before it by 26 or more."
   ],
   "level": "level22c",
-  "win_by": 320,
+  "win_by": 370,
   "holds": [
     {"walk": "right", "from": 286, "to": 340}
   ],
@@ -31,5 +31,6 @@
     {"tick": 150, "at": [108, 206.4]},
     {"tick": 180, "at": [416, 55]},
     {"tick": 279, "at": [108, 94.4]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 4 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 1 walk(s) (the earlier play had 1). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 321, medal 1."
 }

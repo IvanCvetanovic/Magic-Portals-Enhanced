@@ -16,22 +16,24 @@
     "Leans on R23 (the tap-time ray), G4 (a shot flies 3.2 u a tick), step 133 (the door's latch and the plate), the port's transit (the traveller set at the partner's own point, its velocity turned back; a traversal spends the pair, a fireball's carry does not), Fire and Demolish (a blast within 80 u with a clear line breaks a breakable wall) and planning step 197's order of the stone and the plank."
   ],
   "level": "level28a",
-  "win_by": 800,
+  "win_by": 1070,
   "holds": [
-    {"walk": "left", "from": 211, "to": 242},
-    {"walk": "right", "from": 400, "to": 416},
-    {"walk": "left", "from": 421, "to": 515},
-    {"walk": "right", "from": 520, "to": 590},
-    {"walk": "left", "from": 738, "to": 800}
+    {"walk": "left", "from": 275, "to": 312},
+    {"walk": "right", "from": 439, "to": 459},
+    {"walk": "left", "from": 476, "to": 488},
+    {"walk": "left", "from": 725, "to": 812},
+    {"walk": "right", "from": 814, "to": 888},
+    {"walk": "left", "from": 968, "to": 1070}
   ],
   "taps": [
-    {"tick": 26, "at": [482, 175]},
-    {"tick": 266, "at": [151.7, 193.9]},
-    {"tick": 312, "at": [178, 64]},
-    {"tick": 359, "at": [107.2, 205.4]},
-    {"tick": 424, "at": [180, 97]},
-    {"tick": 486, "at": [372, 66]},
-    {"tick": 680, "at": [178, 64]},
-    {"tick": 732, "at": [282.7, 205]}
-  ]
+    {"tick": 28, "at": [482, 175]},
+    {"tick": 395, "at": [151.7, 193.9]},
+    {"tick": 440, "at": [178, 64]},
+    {"tick": 498, "at": [107.2, 205.4]},
+    {"tick": 565, "at": [180, 97]},
+    {"tick": 813, "at": [372, 66]},
+    {"tick": 906, "at": [178, 64]},
+    {"tick": 962, "at": [282.7, 205]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 8 tap(s), 8 tick(s) moved; every tap point is the earlier play's; 6 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1021, medal 2."
 }

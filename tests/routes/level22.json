@@ -1,30 +1,52 @@
 {
   "_step150": "the shot leaves on a tap's release (planning step 137): each tap goes down on `tick` and comes up on `release`, the next tick unless it says later",
   "_step216": "planning step 216: the player has the original's friction against a rolling stone now (0.15, sim/StoneGrip): what he pushes or walks over is braked a little, and this route (1-23) still wins, on 596 where it won on 597; no key moved. The ticks quoted in the notes below are the earlier build's: the walls that break and the knocks come a few ticks apart from them.",
-  "_about": ["1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1, on the time-base group's build, wave 3b-1 round 1, and in", "wave 3b-2's route phase on the build with R23's tap rules): the player can no longer reach the pillar by walking off the hanging", "platform (the air brake carries a walk-off 22 u, not the 60 u of the old steering), so antiportal_878 (182.4 px) is opened another", "way: the stone is knocked off its pillar by the OTHER stone. A portal over the", "hanging platform's left end at (150, 80), one on the player (tap 152, a tick after the first shot's landing on 151): onto", "the platform. A portal on the platform at (228, 80), 196 from the agent (outside its ring), and then one at (70, 68) 38 from", "rolling_stone_ent_989 (32, 66), on the left block across the gap (the shot is stopped by a body, so the portal lands beside it", "and the stone enters it by overlap, the second of the pair): the stone comes out on the platform (227). The player walks right", "behind it (235-293, 303-331) and pushes it along the platform; it leaves the end, hits 877 on the pillar (327) and both stones", "fall out of the level, the agent bare. The player waits at x 328.6 (the end's feet creep starts at 336; the hold's end has a", "window of 328 to 334, a shorter walk leaves the camera too far left for the tap at x 545 and a longer one dies on 373) and a", "shot through the agent's place to (420, 170), the tap in the ring so it is a doomed shot that flies there, kills the agent and", "the ring goes. R23 (step 156) ends a shot where the tap-time ray ends, and the ray meets a stone that is falling past its line:", "the old tap at 345 ended at (354.1, 103.7) on rolling_stone_ent_989 and failed (the shot never reached the agent); the", "shots tapped at 366 and 369 end at (411.3, 161.3) and (417.4, 167.4), on a body short of the tap, and from 373 the ray ends at the tap", "(420, 170). So the tap waits until both stones are gone (375): the", "first sample within 22.4 of the agent kills it on 396, at (390.7, 140.6), and the ring goes. A portal on the right floor at", "(545, 190), under the hanging column (tap 403, 28 ticks after the first, the 400 ms and two over; placed on 473, inside the view: the camera is", "at the player's 328.6), one on the player (477): onto the floor. A shot up through the window between the column and the post to", "(618, 50) (505, 28 after; placed 553), one on the player (555): out above the post's right side, down and right into the door. Won on tick 597.", "The kill leans on the port's sampled position along the shot (G4); the stone push on the port's own solver (a pushed stone keeps", "the player's 2.4 u a tick). Every tap and the last walk are good for +-2 ticks (12 variants wins on 595 to 599).", "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."],
+  "_about": [
+    "1-23 (planning step 127's idea, re-flown on the timing build, wave 3a round 1, on the time-base group's build, wave 3b-1 round 1, and in",
+    "wave 3b-2's route phase on the build with R23's tap rules): the player can no longer reach the pillar by walking off the hanging",
+    "platform (the air brake carries a walk-off 22 u, not the 60 u of the old steering), so antiportal_878 (182.4 px) is opened another",
+    "way: the stone is knocked off its pillar by the OTHER stone. A portal over the",
+    "hanging platform's left end at (150, 80), one on the player (tap 152, a tick after the first shot's landing on 151): onto",
+    "the platform. A portal on the platform at (228, 80), 196 from the agent (outside its ring), and then one at (70, 68) 38 from",
+    "rolling_stone_ent_989 (32, 66), on the left block across the gap (the shot is stopped by a body, so the portal lands beside it",
+    "and the stone enters it by overlap, the second of the pair): the stone comes out on the platform (227). The player walks right",
+    "behind it (235-293, 303-331) and pushes it along the platform; it leaves the end, hits 877 on the pillar (327) and both stones",
+    "fall out of the level, the agent bare. The player waits at x 328.6 (the end's feet creep starts at 336; the hold's end has a",
+    "window of 328 to 334, a shorter walk leaves the camera too far left for the tap at x 545 and a longer one dies on 373) and a",
+    "shot through the agent's place to (420, 170), the tap in the ring so it is a doomed shot that flies there, kills the agent and",
+    "the ring goes. R23 (step 156) ends a shot where the tap-time ray ends, and the ray meets a stone that is falling past its line:",
+    "the old tap at 345 ended at (354.1, 103.7) on rolling_stone_ent_989 and failed (the shot never reached the agent); the",
+    "shots tapped at 366 and 369 end at (411.3, 161.3) and (417.4, 167.4), on a body short of the tap, and from 373 the ray ends at the tap",
+    "(420, 170). So the tap waits until both stones are gone (375): the",
+    "first sample within 22.4 of the agent kills it on 396, at (390.7, 140.6), and the ring goes. A portal on the right floor at",
+    "(545, 190), under the hanging column (tap 403, 28 ticks after the first, the 400 ms and two over; placed on 473, inside the view: the camera is",
+    "at the player's 328.6), one on the player (477): onto the floor. A shot up through the window between the column and the post to",
+    "(618, 50) (505, 28 after; placed 553), one on the player (555): out above the post's right side, down and right into the door. Won on tick 597.",
+    "The kill leans on the port's sampled position along the shot (G4); the stone push on the port's own solver (a pushed stone keeps",
+    "the player's 2.4 u a tick). Every tap and the last walk are good for +-2 ticks (12 variants wins on 595 to 599).",
+    "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
+  ],
   "_step263": "RE-TIMED in planning step 263, when the engine's friction solve was fixed (two tangent axes fixed for the step, a signed accumulator each) and the tables' decoded frictions were applied (materials.json friction_applied): a crate, a barrel and a stone no longer drag at the held 1, so every tick below is of the play on the new build and the notes above describe the old one. The tap POINTS and their number are the old play's, unchanged (the controls census pins them); only the ticks of the taps and of the walks moved (an event-following hill climb over replays, 1-23: 9 tap(s), 8 walk(s), won on tick 630).",
   "_step264": "RE-TIMED in planning step 264, when the engine began to sleep a stack, bounce a body at the touch and not across a gap, and the table's restitution (a crate 0.2, a stone built with 0) was applied: the ticks below are of the play on that build, and the notes above describe an older one. The tap POINTS and their number are the earlier play's (the controls census pins them). Taps: every tick unchanged. Walks: the 3,000 replays of the hill climb found nothing here; mended by hand from a trace: the second walk to the right now ends on tick 358 where it ended on 363, (the stone he pushes runs ahead of him now and he walked off the edge on tick 404); every other walk is as before. 1-23 won on tick 630.",
   "level": "level22",
-  "win_by": 680,
+  "win_by": 760,
   "holds": [
     {"walk": "left", "from": 5, "to": 19},
-    {"walk": "left", "from": 23, "to": 70},
+    {"walk": "left", "from": 23, "to": 73},
     {"walk": "right", "from": 243, "to": 323},
-    {"walk": "right", "from": 341, "to": 358},
-    {"walk": "right", "from": 603, "to": 624},
-    {"walk": "right", "from": 622, "to": 659},
-    {"walk": "right", "from": 675, "to": 706},
-    {"walk": "right", "from": 716, "to": 776}
+    {"walk": "right", "from": 341, "to": 351},
+    {"walk": "right", "from": 692, "to": 740}
   ],
   "taps": [
     {"tick": 109, "at": [150, 80]},
     {"tick": 152, "at": [47, 202.3]},
     {"tick": 181, "at": [228, 80]},
     {"tick": 215, "at": [70, 68]},
-    {"tick": 390, "at": [420, 170]},
-    {"tick": 436, "at": [545, 190]},
-    {"tick": 509, "at": [324.3, 74.3]},
-    {"tick": 538, "at": [618, 50]},
-    {"tick": 588, "at": [545.0, 202.5]}
-  ]
+    {"tick": 460, "at": [420, 170]},
+    {"tick": 506, "at": [545, 190]},
+    {"tick": 579, "at": [324.3, 74.3]},
+    {"tick": 608, "at": [618, 50]},
+    {"tick": 658, "at": [545.0, 202.5]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 9 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 5 walk(s) (the earlier play had 8). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 720, medal 2."
 }

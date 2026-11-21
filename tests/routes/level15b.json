@@ -25,7 +25,7 @@
     "Medal 2 (silver): two of the three crystals, 10 portals, 17,440 ms (since the pickup rule of planning step 243 the route also takes crystal_ent_1756, on tick 775 in the run of test_mp_routes of step 246; it took one of the three before). The aim's drift is 0.63 px."
   ],
   "level": "level15b",
-  "win_by": 1103,
+  "win_by": 1300,
   "holds": [
     {"walk": "right", "from": 425, "to": 609},
     {"walk": "right", "from": 790, "to": 804},
@@ -34,14 +34,15 @@
   ],
   "taps": [
     {"tick": 32, "at": [140, 40]},
-    {"tick": 88, "at": [80, 205]},
-    {"tick": 122, "at": [350, 100]},
-    {"tick": 403, "at": [132, 122]},
-    {"tick": 619, "at": [500, 100]},
-    {"tick": 664, "at": [432, 205]},
-    {"tick": 705, "at": [697, 100]},
-    {"tick": 772, "at": [494, 144]},
-    {"tick": 814, "at": [680, 100]},
-    {"tick": 856, "at": [822, 206]}
-  ]
+    {"tick": 105, "at": [80, 205]},
+    {"tick": 149, "at": [350, 100]},
+    {"tick": 514, "at": [132, 122]},
+    {"tick": 795, "at": [500, 100]},
+    {"tick": 854, "at": [432, 205]},
+    {"tick": 907, "at": [697, 100]},
+    {"tick": 994, "at": [494, 144]},
+    {"tick": 1049, "at": [680, 100]},
+    {"tick": 1103, "at": [822, 206]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 10 tap(s), 9 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1260, medal 2."
 }

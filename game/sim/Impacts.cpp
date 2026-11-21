@@ -172,7 +172,7 @@ dvec2 GravityStepPx(entt::registry& registry, entt::entity body, double dtS) {
 
 // Whether a step left the body where its velocity alone takes it, and gave it what gravity does: the float state
 // of the engine's integration, not a game number (a velocity of 1000 px/s is 1e-4 px/s of rounding, a step's
-// gravity 33 px/s, and a brake is as much as the approach it takes out). The two guesses of the replay - how far past
+// gravity 33 px/s at the old pace, 8.3 px/s at the shipped one, and a brake is as much as the approach it takes out). The two guesses of the replay - how far past
 // its reach the engine still brakes a pair, and how much of a change may lie along the surfaces - are FreeFlightRules',
 // from earthquake.json.
 constexpr double kFreePositionPx = 0.01;
@@ -317,10 +317,23 @@ namespace {
 // more, up to and including the begin's own step, and ends at the first whose position has the body's surface within
 // `skinPx` of the other's - the one Box2D's Collide would have found touching - or at the begin's own step, which
 // is the only one where nothing braked it. `replayed` is how many steps the begin came after the braked one.
+//
+// ABOVE ONE TICK A STEP (rules.frameTicks > 1, planning step 270): the original's step is frameTicks ticks long, and the port's finer ticks would
+// read a fall on a grid of their own (a hit of k / 6 on the k-th tick, where Box2D reads k / 3 on its k-th step). The steps are told apart as
+// above; then the fall is replayed on BOX2D'S grid from its start: `origin`, the step one newer than the newest push the scan met (a push leaves
+// a real state and a free flight begins again from it), else the oldest step recorded. N = origin + 1 ticks lie between that step's start and the
+// begin's own step's end, K = ceil(N / frameTicks) is how many whole original steps they make, and the replay takes steps 1..K of frameTicks ticks
+// each (v += g dt, x += v dt, as above, with dt and g a step's), stopping at the first whose position has the body within the skin of the other
+// - the one Box2D's Collide would have found touching - or at K, which the engine's own begin is no later than. The grid's phase is the tick the
+// fall began on: where the original's frame boundary stood is not known to the port, so a fall that began in a portal's exit or a throw reads
+// about a tick of gravity (8.3 px/s) off Box2D's own, and in the rare case that the history restarted in mid-flight a step's worth. `clearedBefore` says the history starts the tick after a change of contacts cleared it
+// (Pre::wasCleared): a body put somewhere or let go leaves what it rested on in that very tick, which the history does not hold, so the oldest
+// step is the fall's second and the grid counts one tick more, from the velocity and the place one tick of free flight earlier. At one tick a step
+// the code below is the old path, untouched.
 bool FreeFlightVelocity(const std::vector<dvec2>& velocities, const std::vector<dvec2>& centres,
                         const dvec2& gravityStepPx, double dtS, const Shape& self, const dvec2& selfAtPx, const Shape& other,
                         double otherSpeedPxS, double skinPx, const FreeFlightRules& rules, const dvec2& normal, dvec2& out,
-                        int& replayed) {
+                        int& replayed, bool clearedBefore) {
     const std::size_t steps = velocities.size();
     if (steps == 0 || centres.size() != steps || !(glm::dot(gravityStepPx, gravityStepPx) > 0.0)) return false;
     const auto placed = [&](const dvec2& centre) {
@@ -356,6 +369,32 @@ bool FreeFlightVelocity(const std::vector<dvec2>& velocities, const std::vector<
         pushed = i;
     }
     if (!brakedIt && pushed == 1) return false;
+    if (rules.frameTicks > 1) {
+        const std::size_t origin = pushed > 0 ? pushed - 1 : steps - 1;
+        std::size_t ticks = origin + 1;
+        dvec2 flyingFrom = centres[origin];
+        dvec2 velocity = velocities[origin];
+        if (clearedBefore && origin == steps - 1) {
+            // The history starts the tick after the one that cleared it, and that tick was the fall's first: the oldest step's velocity is what
+            // one tick of gravity left, and the body stood one tick of travel behind where the oldest step found it.
+            ticks += 1;
+            flyingFrom -= velocity * dtS;
+            velocity -= gravityStepPx;
+        }
+        const std::size_t frames = (ticks + static_cast<std::size_t>(rules.frameTicks) - 1) / static_cast<std::size_t>(rules.frameTicks);
+        const double frameS = dtS * static_cast<double>(rules.frameTicks);
+        const dvec2 frameGravity = gravityStepPx * static_cast<double>(rules.frameTicks);
+        for (std::size_t frame = 1; frame <= frames; ++frame) {
+            velocity += frameGravity;
+            flyingFrom += velocity * frameS;
+            if (frame == frames || Between(placed(flyingFrom), other).px <= skinPx) {
+                out = velocity;
+                replayed = static_cast<int>(origin);
+                return true;
+            }
+        }
+        return false;
+    }
     dvec2 centre = centres[braked];
     for (std::size_t after = 0; after <= braked; ++after) {
         // After the step `after` places on from the braked one: carried gravity's `after + 1` steps.
@@ -408,6 +447,10 @@ void Watch::BeforeStep(entt::registry& registry, const std::vector<Watched>& bod
         // The spawn drop: taken by a body the watch has never looked at, carried
         // while it holds, and over once the body is put somewhere.
         if (was != m_pre.end()) {
+            if (!put && was->wasCleared) {
+                now.wasCleared = true;
+                now.sinceCleared = was->sinceCleared + 1;
+            }
             now.dropPx = put ? dvec2(0.0) : was->dropPx;
             now.standing = !put && was->standing;
             now.standYPx = was->standYPx;
@@ -473,7 +516,7 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
         // next is steered: BeforeStep finds a teleport.)
         double reachPx = glm::length(pre.velocityPx) * dtS + real->shape.radiusPx + touchPx;
         // A crate's box has no radius, and the step's own gravity carries it
-        // g dt^2 past its velocity going in - 0.556 px at the layer's 2000 px/s^2 and 60 Hz,
+        // g dt^2 past its velocity going in - 0.556 px at the layer's 2000 px/s^2 and 60 Hz (0.139 px at the shipped pace's 500 px/s^2),
         // over the touching distance - so without that every step of a fall was
         // a put: it lost the speed it fell at, and the step that brings it to its
         // floor, taken from rest after the solver's brake, was never looked at
@@ -486,6 +529,7 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
             pre.recentCentresPx.assign(1, pre.centrePx);
             pre.dropPx = dvec2(0.0);
             pre.standing = false;
+            pre.wasCleared = false;
         }
         pre.readPx = pre.recentPx;
         const bool looked = carried && std::binary_search(m_seen.begin(), m_seen.end(), pre.body);
@@ -552,9 +596,12 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
                 for (const Pre& watched : m_pre) {
                     if (watched.body == other.entity) otherSpeedPxS = glm::length(watched.velocityPx);
                 }
+                // Above one tick a step the tick that cleared the history is the first of the fall (see Pre::wasCleared and
+                // FreeFlightVelocity), while the history is whole since it.
+                const bool clearedBefore = flight.frameTicks > 1 && pre.wasCleared && pre.sinceCleared == pre.recentPx.size();
                 if (FreeFlightVelocity(pre.recentPx, pre.recentCentresPx, GravityStepPx(registry, pre.body, dtS), dtS,
                                        real->shape, nowCentre, other.shape, otherSpeedPxS, skinPx, flight, begin.normal,
-                                       velocity, replayed)) {
+                                       velocity, replayed, clearedBefore)) {
                     begin.freeFlight = true;
                     begin.freeFlightPx = velocity * pre.velocityScale;
                     begin.replayedSteps = replayed;
@@ -590,6 +637,8 @@ std::vector<Begin> Watch::AfterStep(entt::registry& registry, double touchPx, do
             });
         };
         if (changed(m_touching, touching) || changed(touching, m_touching)) {
+            pre.wasCleared = true;
+            pre.sinceCleared = 0;
             pre.recentPx.clear();
             pre.recentCentresPx.clear();
         }

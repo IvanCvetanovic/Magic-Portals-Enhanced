@@ -27,7 +27,7 @@
     "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level17a",
-  "win_by": 1010,
+  "win_by": 1040,
   "holds": [
     {"walk": "right", "from": 5, "to": 20},
     {"walk": "right", "from": 96, "to": 106},
@@ -35,7 +35,7 @@
     {"walk": "left", "from": 205, "to": 223},
     {"walk": "right", "from": 322, "to": 400},
     {"walk": "left", "from": 595, "to": 640},
-    {"walk": "left", "from": 714, "to": 742}
+    {"walk": "left", "from": 714, "to": 734}
   ],
   "taps": [
     {"tick": 39, "at": [32, 236]},
@@ -50,5 +50,6 @@
     {"tick": 822, "at": [88, 80]},
     {"tick": 888, "at": [60, 60]},
     {"tick": 971, "at": [327.1, 138.3]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 12 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 7 walk(s) (the earlier play had 7). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 993, medal 1."
 }

@@ -12,39 +12,20 @@
     "NOT MEASURED ON THE ORIGINAL (the route stands on these): (1) a thrown rolling stone traversing a portal pair at all (rolling_stone.ent carries teleportable 1: decoded, but no capture or clip shows a stone through a portal), and the velocity it leaves with (decoded, not captured: inverted, so up at 6 m/s; the wall's gate has a fourfold margin, and 2.7 times even for a stone at rest); (2) the wall breaking at the stone's speed (ETHBeginContactCallback_breakable_wall's gate of 1.5 is decoded; no clip shows a wall breaking); (3) the launcher's cadence (every 90 ticks, the first on 90) and the stone's path straight down x 74 (decoded stride 1500 ms, not captured); (4) the shot's flight time (21 ticks over 91 units, 41 over 155) and that a portal placed far away on the other side of the room stays there until a stone uses it; (5) the player standing on the breakable wall and falling when it goes (static body, then removed); (6) that the pad does nothing in the air (decoded: applyForces ins 58-91) and the wall-breaking drop's exact x (503.2): the crystals at x 496 are 28 wide (x 482 to 510) so a few units either way do not matter; (7) that the destroyier at (448, 344) does not hurt the player (planning step 221: the listing's only reader is the stone's callback) - he walks through it to the door; (8) the crystals' clocks 5000, 6000 ms against the port's 16 ms ticks (the original's own frames show both gone by 6.3 s, 1-24_h6.3.png). Nobody has done this by hand in this version."
   ],
   "level": "level23",
-  "win_by": 420,
+  "win_by": 400,
   "medal": 3,
   "holds": [
-    {
-      "walk": "left",
-      "from": 20,
-      "to": 62
-    },
-    {
-      "walk": "right",
-      "from": 63,
-      "to": 330
-    },
-    {
-      "walk": "left",
-      "from": 360,
-      "to": 440
-    }
+    {"walk": "left", "from": 24, "to": 70},
+    {"walk": "right", "from": 67, "to": 127},
+    {"walk": "right", "from": 166, "to": 260},
+    {"walk": "right", "from": 173, "to": 176},
+    {"walk": "left", "from": 311, "to": 364},
+    {"walk": "left", "from": 360, "to": 413},
+    {"walk": "left", "from": 420, "to": 447}
   ],
   "taps": [
-    {
-      "tick": 34,
-      "at": [
-        74,
-        90
-      ]
-    },
-    {
-      "tick": 232,
-      "at": [
-        430,
-        90
-      ]
-    }
-  ]
+    {"tick": 38, "at": [74, 90]},
+    {"tick": 214, "at": [430, 90]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 2 tick(s) moved; every tap point is the earlier play's; 7 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 352, medal 3."
 }

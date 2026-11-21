@@ -16,22 +16,24 @@
     "400 ms between taps, so a tap before its window is refused). Leans on the port's hinge direction, its attach point (CMP2, step 174: the bar stands 8 px lower, which is why this same route, untouched, wins 5 ticks earlier than on 832) and the masses of the bar and the barrel (not measured against the original). Wave 4c-2 round 1 re-checked it: win_by 840 is the won tick plus 13 (R3c-9); one tap at a time moved, every tap still wins from 4 ticks late (the shot at 146, the tightest) and 5 early, and every aim from 7 px off on each axis; the player stays at least 76 px inside the camera's view. It unlocks no achievement (medal 2, 8 portals). Won on tick 827."
   ],
   "level": "level18b",
-  "win_by": 840,
+  "win_by": 970,
   "holds": [
     {"walk": "left", "from": 1, "to": 74},
-    {"walk": "left", "from": 150, "to": 172},
-    {"walk": "left", "from": 298, "to": 337},
-    {"walk": "right", "from": 496, "to": 865}
+    {"walk": "right", "from": 160, "to": 166},
+    {"walk": "left", "from": 212, "to": 228},
+    {"walk": "left", "from": 298, "to": 329},
+    {"walk": "right", "from": 602, "to": 970}
   ],
   "taps": [
     {"tick": 92, "at": [208, 205]},
     {"tick": 146, "at": [531, 205]},
-    {"tick": 191, "at": [476, 40]},
-    {"tick": 262, "at": [327.6, 206.4]},
-    {"tick": 293, "at": [350, 122]},
-    {"tick": 356, "at": [240, 68]},
-    {"tick": 417, "at": [388.1, 202.5]},
-    {"tick": 448, "at": [140, 22]},
-    {"tick": 483, "at": [239.6, 74.5]}
-  ]
+    {"tick": 200, "at": [476, 40]},
+    {"tick": 264, "at": [327.6, 206.4]},
+    {"tick": 295, "at": [350, 122]},
+    {"tick": 436, "at": [240, 68]},
+    {"tick": 499, "at": [388.1, 202.5]},
+    {"tick": 530, "at": [140, 22]},
+    {"tick": 566, "at": [239.6, 74.5]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 9 tap(s), 7 tick(s) moved; every tap point is the earlier play's; 5 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 926, medal 2."
 }

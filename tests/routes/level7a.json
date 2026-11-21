@@ -19,18 +19,23 @@
   ],
   "_step213": "re-timed in planning step 213, when the owner ruled the air brake off (player.json movement.air_decay_rate_hz 120): a body off the floor now keeps its x velocity, so this route's landings carried further and it stopped winning; a search over its ticks (same shots, same targets, same walks) moved taps[4].tick 671 -> 665 (largest move 6 ticks) and it wins on tick 766 with win_by 810. Ticks and aims quoted in the notes below are from the earlier timing: this note supersedes them.",
   "level": "level7a",
-  "win_by": 810,
+  "win_by": 1140,
   "holds": [
-    {"walk": "right", "from": 605, "to": 620},
-    {"walk": "left", "from": 645, "to": 655},
-    {"walk": "left", "from": 744, "to": 790}
+    {"walk": "right", "from": 593, "to": 597},
+    {"walk": "right", "from": 607, "to": 609},
+    {"walk": "left", "from": 671, "to": 692},
+    {"walk": "left", "from": 672, "to": 730},
+    {"walk": "left", "from": 679, "to": 706},
+    {"walk": "left", "from": 804, "to": 832},
+    {"walk": "left", "from": 807, "to": 816}
   ],
   "taps": [
-    {"tick": 29, "at": [310, 20]},
-    {"tick": 58, "at": [236, 79]},
-    {"tick": 89, "at": [448, 212]},
-    {"tick": 153, "at": [478, 199]},
-    {"tick": 665, "at": [110, 155]},
-    {"tick": 735, "at": [322, 218]}
-  ]
+    {"tick": 27, "at": [289.7, 7.9]},
+    {"tick": 77, "at": [220.1, 67.2]},
+    {"tick": 107, "at": [438.1, 197.5]},
+    {"tick": 193, "at": [482.7, 196.4]},
+    {"tick": 965, "at": [69.1, 128.8]},
+    {"tick": 1064, "at": [312.9, 228.5]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 6 tap(s), 6 tick(s) moved; 6 tap POINT(s) moved ((310, 20) -> (289.7, 7.9); (236, 79) -> (220.1, 67.2); (448, 212) -> (438.1, 197.5); (478, 199) -> (482.7, 196.4); (110, 155) -> (69.1, 128.8); (322, 218) -> (312.9, 228.5)); the controls census still passes; 7 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1091, medal 2."
 }

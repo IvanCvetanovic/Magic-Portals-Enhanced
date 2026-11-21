@@ -101,10 +101,15 @@ Player::Tuning ReadTuning() {
 // Half the capsule's height: how far its centre stands over the floor it rests on (the engine's own contact skin aside).
 double HalfPx() { return ReadTuning().heightPx * 0.5; }
 
+// clock.json's decoded numbers at ONE TICK AN ORIGINAL FRAME, the pace the port had before planning step 270 put the whole game at the 30 of the
+// owner's videos. This suite's walk, fall, brake and clamp cases were measured and written at that pace (a ratio of 2); they pin the player's
+// mechanism, which the pace knob leaves alone, so they do not follow the shipped pace. What the shipped pace is, is pinned by test_mp_clock
+// and test_mp_layer; the cases here that ask about the pace itself set it by hand.
 ScriptClock::Rules ReadRules() {
     ScriptClock::Rules rules;
     std::string error;
     CHECK_MSG(ScriptClock::LoadRules(kPortData + "/clock.json", rules, error), error);
+    CHECK_MSG(rules.SetOriginalFrameHz(rules.matchedHz), "the matched rate is a valid pace");
     return rules;
 }
 

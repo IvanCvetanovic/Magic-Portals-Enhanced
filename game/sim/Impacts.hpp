@@ -100,9 +100,10 @@ Gap Between(const Shape& a, const Shape& b);
 bool Collides(entt::registry& registry, entt::entity a, entt::entity b);
 
 // How many steps of a body's velocities are kept, back to the last time it met
-// or left something: a second at the port's 60 Hz, which is longer than any fall
-// a level's height allows (the player falls 256 units in about 0.36 s at the
-// decoded gravity, Player.hpp) and past which a stone's only grows. The engine's solver takes a closing pair's approach out before the pair
+// or left something: a second of ticks. At the old pace (one tick an original frame, 60 Hz) that was longer than any fall
+// a level's height allows (the player fell 256 units in about 0.36 s); at the shipped pace (planning step 270, two ticks a
+// frame) a stone falls 256 units in about a second, so a longer fall loses its start (the replay then begins at the oldest tick held,
+// with the phase caveat of FreeFlightVelocity), and past it a stone's speed only grows. The engine's solver takes a closing pair's approach out before the pair
 // meets - a speculative contact, apart but inside the step's reach, which it
 // brakes to a stop, in stages, from as far as a step's travel above a floor - so
 // the speed a pair came together at is a velocity of a step before the one it
@@ -127,7 +128,7 @@ struct Begin {
     // leaves it - in the same units as velocityPx. Else not set, and Approaching reads the history.
     bool freeFlight = false;
     glm::dvec2 freeFlightPx{0.0};
-    int replayedSteps = 0; // the steps the replay went on past the one the engine braked after
+    int replayedSteps = 0; // at one tick a step: the steps the replay went on past the one the engine braked after; above it: the ticks back to where the replay began its grid
 
     // What the callback reads along `along` (a unit vector): the free flight's own velocity where there is
     // one, else the history's.
@@ -151,6 +152,11 @@ struct FreeFlightRules {
     // How much of a change of velocity may lie along the surfaces for it to be the other's brake and not a push of
     // something else's, per unit of what it took out of the approach. A GUESS too (impacts.free_flight).
     double brakeFrictionCone = 0.0;
+    // How many of the port's ticks one step of the original's Box2D world is (ScriptClock::Step::frameTicks): 1 while a tick is a step, 2 at the 30
+    // of the owner's videos (planning step 270), which is the shipped pace. Above 1 the replay flies the fall on Box2D's own grid (one step is this
+    // many ticks long), so a stone's hit reads k / 3 on the original's k-th step and not on the port's finer one, where the same fall would
+    // read k / 6 and a drop could land a step's worth of speed under the edge it crosses in the original (2.5, the kill; 2.0, a stone's shake; the wall's own gate is 1.5).
+    int frameTicks = 1;
 };
 
 class Watch {
@@ -208,6 +214,12 @@ private:
         double standYPx = 0.0;            // ...with its centre here, where the original's stays
         bool stepped = false;             // a step has left it at afterPx
         glm::dvec2 afterPx{0.0};          // its transform as the last step left it
+        // A change of contacts cleared the history (planning step 270; read only above one tick a step): the tick that met or left something
+        // is dropped from it with the rest, but a free flight begins in that tick - a body put somewhere, a stone off a ledge - and the
+        // original's step grid counts from it. `sinceCleared` is how many ticks have been recorded since, so the history is the whole of what
+        // came after the clear only while that equals recentPx.size() (a trimmed or restarted history has lost it).
+        bool wasCleared = false;
+        std::size_t sinceCleared = 0;
     };
 
     std::vector<Pre> m_pre;

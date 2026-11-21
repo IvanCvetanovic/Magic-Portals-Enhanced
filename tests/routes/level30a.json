@@ -40,15 +40,20 @@
     "the head-height retry and the moving platform's decode."
   ],
   "level": "level30a",
-  "win_by": 610,
+  "win_by": 650,
   "holds": [
-    {"walk": "left", "from": 111, "to": 300}
+    {"walk": "left", "from": 137, "to": 191},
+    {"walk": "left", "from": 282, "to": 337},
+    {"walk": "left", "from": 292, "to": 325},
+    {"walk": "left", "from": 388, "to": 474},
+    {"walk": "left", "from": 506, "to": 555}
   ],
   "taps": [
-    {"tick": 29, "at": [418, 247]},
-    {"tick": 113, "at": [696, 226.5]},
-    {"tick": 262, "at": [294, 112]},
-    {"tick": 490, "at": [56, 90]},
-    {"tick": 590, "at": [225, 241]}
-  ]
+    {"tick": 49, "at": [418, 247]},
+    {"tick": 129, "at": [696, 226.5]},
+    {"tick": 349, "at": [294, 112]},
+    {"tick": 483, "at": [56, 90]},
+    {"tick": 594, "at": [225, 241]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 5 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 5 walk(s) (the earlier play had 1). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 605, medal 1."
 }

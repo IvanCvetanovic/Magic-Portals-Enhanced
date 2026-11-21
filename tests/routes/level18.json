@@ -13,14 +13,19 @@
     "Won on tick 184; every tap's tick can move 4 ticks either way, measured one tap at a time (8 either way is refused by the 400 ms between taps or by a shot still in flight, but tap 138 can go 12 ticks later), and no achievement is unlocked."
   ],
   "level": "level18",
-  "win_by": 196,
+  "win_by": 310,
   "holds": [
-    {"walk": "right", "from": 152, "to": 196}
+    {"walk": "right", "from": 181, "to": 183},
+    {"walk": "right", "from": 192, "to": 194},
+    {"walk": "right", "from": 265, "to": 273},
+    {"walk": "right", "from": 267, "to": 284},
+    {"walk": "right", "from": 269, "to": 280}
   ],
   "taps": [
-    {"tick": 30, "at": [450, 182]},
-    {"tick": 75, "at": [224, 286]},
-    {"tick": 106, "at": [398, 185]},
-    {"tick": 138, "at": [321, 264]}
-  ]
+    {"tick": 30, "at": [453.5, 178.5]},
+    {"tick": 75, "at": [230.3, 288.6]},
+    {"tick": 126, "at": [415.1, 179.1]},
+    {"tick": 173, "at": [324.6, 237.0]}
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 4 tap(s), 2 tick(s) moved; 4 tap POINT(s) moved ((450, 182) -> (453.5, 178.5); (224, 286) -> (230.3, 288.6); (398, 185) -> (415.1, 179.1); (321, 264) -> (324.6, 237)); the controls census still passes; 5 walk(s) (the earlier play had 1). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 267, medal 2."
 }

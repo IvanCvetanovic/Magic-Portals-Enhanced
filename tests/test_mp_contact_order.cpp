@@ -40,6 +40,7 @@
 #include "TestHarness.hpp"
 #include "MpSuite.hpp"
 
+#include "DataDirs.hpp"
 #include "MagicPortalsLayer.hpp"
 #include "core/Components.hpp"
 #include "core/Input.hpp"
@@ -464,23 +465,21 @@ bool Within(double value, double low, double high) {
     return value >= low && value <= high;
 }
 
-// A copy of the port's data with the table emptied: the layer reads its port data from a directory, so the control is the same layer
-// and the same binary on a table that names nothing (no relink, no switch in the code).
-std::string DataWithAnEmptyTable() {
-    const std::filesystem::path copy = Scratch() / "port-data-empty-table";
-    std::error_code ec;
-    std::filesystem::remove_all(copy, ec);
-    std::filesystem::copy(kPortData, copy, std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
-    CHECK_MSG(!ec, "the port's data is copied: " + ec.message());
-    Write(copy / "contact_order.json", "{ \"levels\": {} }");
-    return copy.string();
-}
-
 void The2_29StoneRollsAsTheOriginalsDoesAndOnlyBecauseOfTheTable() {
     constexpr int kFrames = 560;
     Series keyed;
     Series control;
-    if (!Drive("", kFrames, keyed) || !Drive(DataWithAnEmptyTable(), kFrames, control)) return;
+    // The clip is the original on the emulator at 60 updates a second, so its frames are ticks: both runs read a copy of the port's data at ONE TICK
+    // AN ORIGINAL FRAME whatever pace the shipped file plays at (the 30 of the owner's videos since planning step 270, where the same events fall
+    // twice as many ticks in: the plank first turns on tick 211, f105.5 of the clip's frames). The control's copy has its table emptied: the layer
+    // reads its port data from a directory, so the control is the same layer and the same binary on a table that names nothing (no relink, no
+    // switch in the code).
+    const DataDirs::ScratchData keyedData = DataDirs::PortDataWithClock(60, kPortData);
+    const DataDirs::ScratchData controlData = DataDirs::PortDataWithClock(60, kPortData);
+    CHECK_MSG(keyedData.Ok() && controlData.Ok(), "two scratch copies of the port's data at 60 frames a second are made");
+    if (!keyedData.Ok() || !controlData.Ok()) return;
+    Write(std::filesystem::path(controlData.Path()) / "contact_order.json", "{ \"levels\": {} }");
+    if (!Drive(keyedData.Path(), kFrames, keyed) || !Drive(controlData.Path(), kFrames, control)) return;
     const Readings k = Read(keyed);
     const Readings c = Read(control);
     Print("keyed (the shipped table)", k);
@@ -531,6 +530,10 @@ bool BeginWall(WallRun& run, bool flagged) {
     if (!ok) return false;
     ScriptClock::Rules clock;
     CHECK_MSG(ScriptClock::LoadRules(kPortData + "/clock.json", clock, error), error);
+    // The clip this case is measured against is the original on the emulator at 60 updates a second, so its frames are ticks: the case runs at
+    // ONE TICK AN ORIGINAL FRAME whatever pace the shipped file plays at (the 30 of the owner's videos since planning step 270, where the same
+    // events fall twice as many ticks in; the order of contacts, which is what this suite pins, does not depend on the pace).
+    CHECK_MSG(clock.SetOriginalFrameHz(clock.matchedHz), "the matched rate is a valid pace");
     run.step = ScriptClock::TickStep(clock, kTick);
     run.simRatio = ScriptClock::SimRatio(run.step);
     // The order is the CASE's, whatever the table says: every body unflagged, then the stone as asked.

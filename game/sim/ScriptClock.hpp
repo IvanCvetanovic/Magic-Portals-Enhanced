@@ -149,15 +149,16 @@ inline double Ms(const Step& step) { return step.scriptS * 1000.0; }
 inline double SimRatio(const Step& step) {
     return step.physicsS > 0.0f ? step.simS / static_cast<double>(step.physicsS) : 1.0;
 }
-// THE CARRIED FRAME (planning step 152, WT). While frameTicks is 1 - clock.json's pace until its
-// original_frame_hz says otherwise - one tick of the port is one frame of the original, and
+// THE CARRIED FRAME (planning step 152, WT). While frameTicks is 1 - the pace the port had until planning step 270, which
+// clock.json's original_frame_hz of 30 has since changed for every level - one tick of the port is one frame of the original, and
 // the original's physics world advances simS in each, where the engine's solver advances physicsS. So
 // EVERY dynamic body is carried at SimRatio times the original's velocity and SimRatio squared times its
 // acceleration, and these three are the only places the factor is named: the world's gravity
 // (Game::UseWorldGravity), every velocity the sim writes (a walk, a pull, a recoil) and every velocity
 // it reads back into the original's own units (a hit's intensity, a trail, a push's aim). A quantity the
 // original applies once a FRAME - a pull's velocity, a brake's multiplier, a gravity well's lap - is,
-// while frameTicks is 1, the same number a tick, and is not scaled by either. It stays so for every
+// while frameTicks is 1, the same number a tick, and is not scaled by either. (At the shipped two ticks a frame a pull
+// or a brake is a real-time quantity read through the script's own milliseconds, or one of the helpers below.) It stays so for every
 // caller of this file today: the helpers after WallMs (FrameTravel, FrameRoot, FrameDelayTicks,
 // OriginalStepCarriedS) are the named rules for a frame of more than one tick, each the identity at
 // one; so far only the air brake (FrameTravel, FrameRoot) and the translation clamp (OriginalStepCarriedS) call them.

@@ -16,7 +16,7 @@
   ],
   "_step254": "NOTE OF 2026-11-17 (planning steps 253 and 254): the note step 213 left above, that the air brake is off, no longer holds on this level, which plays at 42 Hz (a share of 0.602) since step 253, and the knights have the original's capsule body (minions.json body.capsule), so a knight shoved off the top platform ends further left than the 'circle slides off the edge' note says. This recorded play still wins on tick 843 (12 portals, 1 of 5 crystals, medal 2). A play that earns gold (12 portals, 5 of 5 crystals; gold here is 14 portals) is in tests/routes_gold/level20b.json: it is not here because replacing this file moves the controls census by one tap (tests/golden, the owner's).",
   "level": "level20b",
-  "win_by": 855,
+  "win_by": 900,
   "holds": [
     {"walk": "left", "from": 203, "to": 207},
     {"walk": "right", "from": 264, "to": 310},
@@ -35,5 +35,6 @@
     {"tick": 674, "at": [546.6, 196.5]},
     {"tick": 744, "at": [606, 118]},
     {"tick": 801, "at": [428, 206.4]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 12 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 856, medal 2."
 }

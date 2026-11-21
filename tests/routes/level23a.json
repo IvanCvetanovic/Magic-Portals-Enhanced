@@ -22,22 +22,23 @@
     "within 32 of the flame (G8 not built)."
   ],
   "level": "level23a",
-  "win_by": 500,
+  "win_by": 550,
   "holds": [
     {"walk": "left", "from": 33, "to": 48},
-    {"walk": "left", "from": 360, "to": 405},
-    {"walk": "right", "from": 408, "to": 700}
+    {"walk": "left", "from": 385, "to": 430},
+    {"walk": "right", "from": 433, "to": 725}
   ],
   "taps": [
     {"tick": 10, "release": 31, "at": [48, 40], "to": [150, 20], "shot": false},
-    {"tick": 52, "at": [15, 40]},
-    {"tick": 78, "at": [169, 79]},
-    {"tick": 104, "at": [15, 10]},
-    {"tick": 130, "at": [207, 44]},
+    {"tick": 53, "at": [15, 40]},
+    {"tick": 80, "at": [169, 79]},
+    {"tick": 107, "at": [15, 10]},
+    {"tick": 134, "at": [207, 44]},
     {"tick": 145, "release": 166, "at": [150, 20], "to": [239, 12], "shot": false},
     {"tick": 200, "at": [305, 60]},
-    {"tick": 265, "at": [125, 80]},
+    {"tick": 269, "at": [125, 80]},
     {"tick": 292, "release": 323, "at": [239, 12], "to": [15, 12], "shot": false},
     {"tick": 327, "release": 348, "at": [15, 12], "to": [28, 98], "shot": false}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 10 tap(s), 5 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 508, medal 2."
 }

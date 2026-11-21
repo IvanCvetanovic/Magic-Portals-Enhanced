@@ -1329,7 +1329,7 @@ bool MagicPortalsLayer::loadLevel(entt::registry& registry, int index) {
 
     // THE LEVEL'S OWN PACE (clock.json original_frame_hz_by_level, planning step 262): a level named there plays its world at that frame
     // rate of the original (3-22 at the 30 of the owner's gold-run videos, where the arm that carries the key turns in half the real
-    // time) and every other at the file's own. The tick that loads this level goes on to its first step with the Step built from the
+    // time) and every other at the file's own. Since planning step 270 the table is empty and the file's own is 30 for every level; the mechanism stays. The tick that loads this level goes on to its first step with the Step built from the
     // OLD level's rules (see m_levelStepCount above), so the Step is made again from the new ones, at the first frame's phase.
     m_clockRules.ForLevel(entry.name);
     m_step = ScriptClock::TickStep(m_clockRules, m_step.physicsS, 0u);
@@ -14419,7 +14419,7 @@ void MagicPortalsLayer::fixedTick(entt::registry& registry, const ScriptClock::S
         // The free-flight replay's judgments are earthquake.json's: the circle skin in screen px (converted as touchPx
         // is), the two guesses in the watch's own units.
         const Impacts::FreeFlightRules flight{Earthquake::ToUnits(m_quakeRules, m_quakeRules.circleTouchPx),
-                                              m_quakeRules.brakeReachSlackUnits, m_quakeRules.brakeFrictionCone};
+                                              m_quakeRules.brakeReachSlackUnits, m_quakeRules.brakeFrictionCone, step.frameTicks};
         m_impactBegins = m_impacts.AfterStep(registry, Earthquake::ToUnits(m_quakeRules, m_quakeRules.touchPx),
                                              static_cast<double>(step.physicsS), flight);
         // A stone that began to touch a knight hard enough crushes it in that same callback (planning step 159), before

@@ -15,14 +15,16 @@
     "against the original), G10 (the walk is held through the fall) and G4 (shot speed)."
   ],
   "level": "level29a",
-  "win_by": 330,
+  "win_by": 320,
   "medal": 3,
   "holds": [
-    {"walk": "left", "from": 1, "to": 70},
+    {"walk": "left", "from": 1, "to": 22},
+    {"walk": "left", "from": 33, "to": 80},
     {"walk": "left", "from": 200, "to": 330}
   ],
   "taps": [
     {"tick": 89, "at": [370, 130]},
     {"tick": 129, "at": [245, 40]}
-  ]
+  ],
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 2 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 2). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 276, medal 3."
 }
