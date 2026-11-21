@@ -311,6 +311,26 @@ struct CrushRig {
     Puzzle::Channels channels;
     entt::entity presser = entt::null;
     entt::entity player = entt::null;
+    // The shipped door's numbers, which a case may change a switch of (the owner's ruling of step 273 is two of them).
+    Mover::DoorRules rules = g_data.puzzle.door;
+    std::vector<entt::entity> knights;   // what CrushMinions is shown
+    std::vector<entt::entity> squashed;  // what it has returned, in order
+
+    // A knight's body as the port builds one (Minions::UseCapsule): the transform is a circle's centre 7 over the feet, and the capsule 18.2 wide and
+    // 36.2 tall is centred 11.1 over it, on the entity point, which is what is given.
+    static constexpr double kKnightAboveCircleCentrePx = 11.1;
+    entt::entity AddKnight(const glm::dvec2& entityPointPx) {
+        const entt::entity knight = registry.create();
+        registry.emplace<TransformComponent>(knight).position =
+            Units::ToWorld(entityPointPx.x, entityPointPx.y + kKnightAboveCircleCentrePx);
+        auto& capsule = registry.emplace<CapsuleColliderComponent>(knight);
+        capsule.radius = static_cast<float>(Units::ToMetres(9.1));
+        capsule.height = static_cast<float>(Units::ToMetres(36.2));
+        capsule.center = glm::vec3(0.0f, static_cast<float>(Units::ToMetres(kKnightAboveCircleCentrePx)), 0.0f);
+        registry.emplace<RigidBodyComponent>(knight);
+        knights.push_back(knight);
+        return knight;
+    }
 
     bool Build(const glm::dvec2& playerPx, std::string& error) {
         UseRemakeGravity(registry);
@@ -321,10 +341,10 @@ struct CrushRig {
         door.button = 0;
         door.entity = LevelBuilder::BuildEntity(g_level30, door.name, registry, PortOptions(), built, error);
         if (door.entity == entt::null ||
-            !Mover::DoorFromNode(*g_level30.FindNode(door.name), g_data.puzzle.door, door.motion, error)) {
+            !Mover::DoorFromNode(*g_level30.FindNode(door.name), rules, door.motion, error)) {
             return false;
         }
-        channels.doorRules = g_data.puzzle.door;
+        channels.doorRules = rules;
         channels.doors.push_back(door);
         Puzzle::Button button;
         button.name = "button";
@@ -351,6 +371,10 @@ struct CrushRig {
     void Tick() {
         channels.Tick(registry, kStep);
         channels.Crush(registry, player);
+        for (const entt::entity gone : channels.CrushMinions(registry, knights)) {
+            squashed.push_back(gone);
+            knights.erase(std::remove(knights.begin(), knights.end(), gone), knights.end());
+        }
     }
     const Puzzle::SwitchedDoor& Door() const { return channels.doors.front(); }
 };
@@ -411,11 +435,13 @@ void AClosingDoorSparesWhatItOnlyGrazes() {
         CHECK_MSG(touched && !rig.channels.playerKilled,
                   "a player 20 off the door's middle is touched by its fall and not killed");
     }
-    // A contact that began while the door was not closing is not a crush when the
+    // THE DECODE: a contact that began while the door was not closing is not a crush when the
     // door then closes on it (BeginContact fires once): the player is put where
-    // the raised door's bottom already overlaps its head, and the switch let go.
+    // the raised door's bottom already overlaps its head, and the switch let go. The owner's
+    // ruling of step 273 (crush_pinned) says otherwise, so this is judged on the decode's rules.
     {
         CrushRig rig;
+        rig.rules.crushPinned = false;
         std::string error;
         CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
         if (rig.player == entt::null) return;
@@ -429,7 +455,111 @@ void AClosingDoorSparesWhatItOnlyGrazes() {
         rig.Press(false);
         for (int tick = 0; tick < 80; ++tick) rig.Tick();
         CHECK_MSG(!rig.channels.playerKilled && rig.Door().motion.status != Mover::DoorStatus::Open,
-                  "and is not killed as it closes on the same contact");
+                  "and with crush_pinned off (the decode) is not killed as it closes on the same contact");
+    }
+    // THE OWNER'S RULING (step 273, movers.json door.crush_pinned): the same player is killed on the first tick of the closing.
+    {
+        CrushRig rig;
+        std::string error;
+        CHECK_MSG(g_data.puzzle.door.crushPinned, "the shipped table has crush_pinned");
+        CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
+        if (rig.player == entt::null) return;
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        rig.registry.get<TransformComponent>(rig.player).position = Units::ToWorld(592.0, 170.0);
+        rig.Tick();
+        CHECK_MSG(rig.Door().playerTouching && rig.Door().motion.status == Mover::DoorStatus::Open && !rig.channels.playerKilled,
+                  "while the door is open the player under its bottom is not killed (only a CLOSING door kills)");
+        rig.Press(false);
+        int killedOn = -1;
+        for (int tick = 1; tick <= 80 && killedOn < 0; ++tick) {
+            rig.Tick();
+            if (rig.channels.playerKilled) killedOn = tick;
+        }
+        CHECK_MSG(killedOn > 0 && rig.Door().motion.status == Mover::DoorStatus::Closing && rig.channels.killedBy == "door_lift_976",
+                  "and is killed, by door_lift_976, once the door is closing on it: tick " + std::to_string(killedOn));
+    }
+}
+
+// THE OWNER'S RULING OF 2026-11-21 (step 273): a closing door kills a knight by the player's own gate.
+void AClosingDoorCrushesAKnight() {
+    // A knight standing on the shut door's floor line, its feet at 255 and its capsule's centre at 236.9, under door_lift_976's middle (x 592).
+    // The door opens, the switch lets go, and on its way down its bottom (64 below its centre) reaches the capsule's top at 218.8 with the door's
+    // centre at about 154.8: 236.9 is below 154.8 + 70.4, and 0 is within 17.6 across.
+    {
+        CrushRig rig;
+        std::string error;
+        CHECK_MSG(g_data.puzzle.door.crushMinions, "the shipped table has crush_minions");
+        CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
+        if (rig.player == entt::null) return;
+        const entt::entity knight = rig.AddKnight(glm::dvec2(592.0, 236.9));
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        CHECK_MSG(rig.squashed.empty() && rig.Door().motion.status == Mover::DoorStatus::Open, "raised clear of the knight, who is untouched");
+        rig.Press(false);
+        int killedOn = -1;
+        double doorY = 0.0;
+        for (int tick = 1; tick <= 80 && killedOn < 0; ++tick) {
+            rig.Tick();
+            if (!rig.squashed.empty()) {
+                killedOn = tick;
+                doorY = rig.Door().motion.atPx.y;
+            }
+        }
+        std::printf("  crush: door_lift_976 closing onto a knight: killed on tick %d, the door at y %.2f\n", killedOn, doorY);
+        CHECK_MSG(killedOn > 0 && rig.squashed.size() == 1 && rig.squashed.front() == knight &&
+                      rig.Door().motion.status == Mover::DoorStatus::Closing && doorY > 146.0 && doorY < 162.0,
+                  "the knight is killed on the tick the door first touches it, the door at y " + std::to_string(doorY));
+        CHECK_MSG(!rig.channels.playerKilled, "and the player, far away, is not");
+    }
+    // The decode (crush_minions off): the same door passes through the same knight without a kill.
+    {
+        CrushRig rig;
+        rig.rules.crushMinions = false;
+        std::string error;
+        CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
+        if (rig.player == entt::null) return;
+        rig.AddKnight(glm::dvec2(592.0, 236.9));
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        rig.Press(false);
+        for (int tick = 0; tick < 80; ++tick) rig.Tick();
+        CHECK_MSG(rig.squashed.empty(), "with crush_minions off no knight is killed (the decode: the callback kills the player alone)");
+    }
+    // A knight beside the door's middle by 20 is touched and spared, as the player is.
+    {
+        CrushRig rig;
+        std::string error;
+        CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
+        if (rig.player == entt::null) return;
+        rig.AddKnight(glm::dvec2(612.0, 236.9));
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        rig.Press(false);
+        bool touched = false;
+        for (int tick = 0; tick < 80; ++tick) {
+            rig.Tick();
+            touched = touched || !rig.Door().touchedBy.empty();
+        }
+        CHECK_MSG(touched && rig.squashed.empty(), "a knight 20 off the door's middle is touched by its fall and not killed");
+    }
+    // A knight already touching the raised door's bottom when it begins to close is killed on the way down (crush_pinned), and not with it off.
+    for (const bool pinned : {true, false}) {
+        CrushRig rig;
+        rig.rules.crushPinned = pinned;
+        std::string error;
+        CHECK_MSG(rig.Build(glm::dvec2(592.0, 1000.0), error), error);
+        if (rig.player == entt::null) return;
+        const entt::entity knight = rig.AddKnight(glm::dvec2(592.0, 1000.0));
+        rig.Press(true);
+        for (int tick = 0; tick < 70; ++tick) rig.Tick();
+        rig.registry.get<TransformComponent>(knight).position = Units::ToWorld(592.0, 170.0 + CrushRig::kKnightAboveCircleCentrePx);
+        rig.Tick();
+        CHECK_MSG(!rig.Door().touchedBy.empty() && rig.squashed.empty() && rig.Door().motion.status == Mover::DoorStatus::Open,
+                  std::string("a knight under the raised door's bottom touches it and is not killed while it is open (pinned ") + (pinned ? "on" : "off") + ")");
+        rig.Press(false);
+        for (int tick = 0; tick < 80; ++tick) rig.Tick();
+        CHECK_MSG(rig.squashed.empty() != pinned, std::string("and is ") + (pinned ? "killed" : "not killed") + " as the door closes on the same contact");
     }
 }
 
@@ -745,6 +875,48 @@ void AClosingDoorKillsThePlayerInTheLevel() {
     CHECK_MSG(diedOn > 0 && play.hazards.killedBy == "door_lift_976" && !play.hazards.diedByFalling &&
                   play.channels.playerKilled,
               "the player dies under the falling door, killed by door_lift_976");
+}
+
+// Game's half: a knight held under the raised door of level30 is taken as a crushed knight is, with its blood and its count.
+void AClosingDoorTakesAKnightInTheLevel() {
+    Play play;
+    std::string error;
+    CHECK_MSG(StartLevel30(play, true, error), error);
+    if (play.player == entt::null) return;
+    std::vector<Minions::Waypoint> patrol(2);
+    patrol[0].name = "wayA0";
+    patrol[0].atPx = glm::dvec2(700.0, 255.0);
+    patrol[1].name = "wayA1";
+    patrol[1].atPx = glm::dvec2(500.0, 255.0);
+    const entt::entity body = play.minions.Summon(play.registry, "knight", glm::dvec2(592.0, 255.0), patrol);
+    CHECK_MSG(body != entt::null, "a knight is summoned");
+    if (body == entt::null) return;
+    // Held where it would stand on the floor: the transform is the circle's centre, 7 over the feet (the entity point is EntityAboveCentrePx higher).
+    const glm::dvec2 stand(592.0, 255.0 - play.minions.rules.bodyRadiusPx);
+    const auto hold = [&] {
+        play.registry.get<TransformComponent>(body).position = Units::ToWorld(stand.x, stand.y);
+        play.registry.get<RigidBodyComponent>(body).velocity = glm::vec3(0.0f);
+    };
+    PutBody(play, "crate_small_ent_973", glm::dvec2(94.0, 190.0));
+    for (int tick = 0; tick < 90; ++tick) {
+        hold();
+        Tick(play, 0.0f);
+    }
+    const Puzzle::SwitchedDoor* door = play.channels.FindDoor("door_lift_976");
+    CHECK_MSG(door != nullptr && door->motion.status == Mover::DoorStatus::Open && !play.minions.minions.back().gone,
+              "door_lift_976 raised by the crate, over a knight that is alive");
+    if (door == nullptr) return;
+    play.registry.destroy(play.built.entities.at("crate_small_ent_973"));
+    int diedOn = -1;
+    for (int tick = 1; tick <= 90 && diedOn < 0; ++tick) {
+        hold();
+        Tick(play, 0.0f);
+        if (play.minions.minions.back().gone) diedOn = tick;
+    }
+    std::printf("  crush in level30: the knight under door_lift_976 died on tick %d of its fall, the door at y %.2f, the knight's circle held at y %.2f\n", diedOn,
+                BodyPx(play, "door_lift_976").y, stand.y);
+    CHECK_MSG(diedOn > 0 && play.minions.taken == 1 && !play.registry.valid(body) && !play.hazards.playerDied,
+              "the knight is taken by the falling door, counted once, and the player is not killed");
 }
 
 void ThePlayerPressesAButtonAndItLetsGo() {
@@ -2261,6 +2433,8 @@ void runTests() {
     ACrateRidesADoorUpAndDown();
     AClosingDoorCrushesThePlayerUnderIt();
     AClosingDoorSparesWhatItOnlyGrazes();
+    AClosingDoorCrushesAKnight();
+    AClosingDoorTakesAKnightInTheLevel();
     ThePlayerLandsOnLevel30();
     ThePlayerWalksAcrossTheSeam();
     Level30sButtonsAreWiredToItsDoors();

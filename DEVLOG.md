@@ -5431,3 +5431,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - he wants his engine's name on the game as on Penumbra.
 
 **Where it stands / next:** with step 271 in the same working tree; the next thing is his phone, and a release only on his word.
+
+### 2026-11-21 15:25 - Session 80, the afternoon: a closing door kills a knight, and a body already touching it - Step 273
+**Asked:** "4-31 squshes knight needs ot die, the same goes for my character".
+**Did:** read his answer as the ruling the Step 271 record asked for: `crush_minions` (the knights die by the player's own gate, the same first tick of a contact) and `crush_pinned` (a body already touching the door when it starts to close dies too, the player included) in `movers.json`, `Channels::CrushMinions` + one call in `Game::BeforeStep` into the existing `Minions::Take` funnel; two new test functions and the old "not a crush" test kept on the decode's rules.
+**Broke / dead ends:** (1) The first whole-level test killed the knight at a door height 9 units too high to touch it: the knight's TRANSFORM is its circle's centre, not its entity point, so the gate (and my test's hold) read the wrong centre; the gate now adds the capsule's own offset. (2) A stray brace from my own edit script. (3) A correction of the two entries above: the Step 272 entry is stamped 15:10 and was written at about 14:20 (the commit is 14:24), and the Step 271 entry's 14:20 was written at 14:14: those stamps were estimated, not read from `date`. Nothing else moved: 97 suites, 279,415 checks, 0 failures, the 2,553 checks of the recorded plays unchanged.
+**Decision:** both switches true; a door that is already SHUT is not judged; stones and crates are not.
+**Assets check:** nothing but code, data and records; no capture was made.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** Linux 64-bit, zero warnings: 97 suites, 279,415 checks, 0 failures (test_mp_play 402, test_mp_routes 2553, census 1661); the 32-bit stand-in, zero warnings: test_mp_play 402, test_mp_routes 2553, test_mp_census 1661, test_mp_minions 916, all 0 failures; Windows MSVC build of the whole tree: zero warnings (no Windows suite launched: Smart App Control).
+**Inferred mood:** a guess - he wants the doors to be the dangerous things they look like.
+
+**Where it stands / next:** with Steps 271 and 272 on origin/main; his phone report; no release without his word.

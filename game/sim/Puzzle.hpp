@@ -16,6 +16,10 @@
 // below the door's centre by more than 0.55 of the door's height and within 0.55
 // of its width either side, the player dies (Crush).
 //
+// AND, BY THE OWNER'S RULING OF 2026-11-21 (planning step 273; movers.json door.crush_minions and crush_pinned, not the decode): the same door kills a KNIGHT
+// by the same rule (CrushMinions), and a body already touching the door when it begins to close, its centre inside the same gate, is killed too, the player
+// included, on the first tick of the closing: a body caught between a closing door and the floor does not stay there alive.
+//
 // AND A PRESSED BUTTON SINKS (movers.json `button`, decoded in D10). It slides
 // `sink_units` down over its node's `stride` milliseconds, eased by sin(PIb * x),
 // and back up the same way when the last body leaves. Each slide starts from its
@@ -91,6 +95,7 @@ struct SwitchedDoor {
     Mover::Door motion;
     int button = -1;              // its switch, an index into Channels::buttons; -1 for none
     bool playerTouching = false;  // as of the last Crush, to find a contact's beginning
+    std::vector<entt::entity> touchedBy; // the knights touching it as of the last CrushMinions, for the same
 };
 
 struct Channels {
@@ -115,6 +120,12 @@ struct Channels {
     // its width of it across, kills it. The player's centre is its capsule's, 18.1
     // over the feet since step 153: the original's entity point (Keys says so).
     void Crush(entt::registry& registry, entt::entity player);
+
+    // The same door and the same rule on the knights (movers.json door.crush_minions, the owner's ruling and not the decode): every body in `bodies`
+    // that a closing door kills this tick, for the caller to take (Game::Crush). Judged exactly as Crush judges the player: the knight's centre is
+    // its capsule's (the entity point: the body's transform is the circle's centre, and the capsule's own offset is the rest). Empty, and the memory of
+    // contacts cleared, when the rule is off.
+    std::vector<entt::entity> CrushMinions(entt::registry& registry, const std::vector<entt::entity>& bodies);
 
     // Whether any button on the channel is pressed.
     bool Pressed(int channel) const;

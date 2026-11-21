@@ -419,6 +419,15 @@ void BeforeStep(const Data& data, entt::registry& registry, Level& level, float 
     // last step left the player: the contact the original's next step begins
     // (Puzzle::Channels::Crush). Its death is folded in with the others, below.
     level.channels.Crush(registry, level.player);
+    // And the same door on the knights, by the owner's ruling of 2026-11-21 (Puzzle::Channels::CrushMinions): taken as a stone's crush takes one.
+    {
+        std::vector<entt::entity> knights;
+        for (const Minions::Minion& minion : level.minions.minions) {
+            if (!minion.gone && minion.body != entt::null && registry.valid(minion.body)) knights.push_back(minion.body);
+        }
+        const std::vector<entt::entity> squashed = level.channels.CrushMinions(registry, knights);
+        if (!squashed.empty()) Crush(registry, level, squashed);
+    }
     level.movers.Tick(registry, step);
     // The bobbing slabs, beside the platforms and for the same reason: what sets
     // a body's position belongs before the step, what judges one after it.

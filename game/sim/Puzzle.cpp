@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 namespace MagicPortals::Puzzle {
 
@@ -115,35 +116,77 @@ void Channels::Tick(entt::registry& registry, const ScriptClock::Step& step) {
     }
 }
 
+namespace {
+
+// The door's box where the registry has it now, which is where the last callback put it.
+bool DoorBoxOf(entt::registry& registry, const SwitchedDoor& door, Trigger::Box& out) {
+    if (door.entity == entt::null || !registry.valid(door.entity)) return false;
+    const auto* transform = registry.try_get<Supersonic::TransformComponent>(door.entity);
+    const auto* box = registry.try_get<Supersonic::BoxColliderComponent>(door.entity);
+    if (transform == nullptr || box == nullptr) return false;
+    out = Trigger::Box{glm::vec2(transform->position.x + box->center.x, transform->position.y + box->center.y),
+                       glm::vec2(box->size.x * 0.5f, box->size.y * 0.5f)};
+    return true;
+}
+
+// #13-96, in the level's pixels (+y down): doorPos is where the last callback put the door, and "below" is the larger y.
+bool BelowTheDoor(const SwitchedDoor& door, const glm::dvec2& half, const glm::dvec2& otherPx) {
+    const glm::dvec2 doorPx = door.motion.atPx;
+    return otherPx.y > doorPx.y + half.y && otherPx.x > doorPx.x - half.x && otherPx.x < doorPx.x + half.x;
+}
+
+// What the original's GetPositionXY reads for a body: the player's transform is its capsule's centre, but a knight's is its circle's centre and its capsule
+// stands EntityAboveCentrePx over it (Minions::UseCapsule), the entity point. The collider's own offset is that difference, so the centre is the collider's.
+glm::dvec2 GateCentreOf(entt::registry& registry, entt::entity body) {
+    glm::vec3 at = registry.get<Supersonic::TransformComponent>(body).position;
+    if (const auto* capsule = registry.try_get<Supersonic::CapsuleColliderComponent>(body)) at += capsule->center;
+    return Units::ToPixels(at);
+}
+
+} // namespace
+
 void Channels::Crush(entt::registry& registry, entt::entity player) {
     const bool there = player != entt::null && registry.valid(player) &&
                        registry.all_of<Supersonic::TransformComponent>(player);
     const glm::dvec2 half = doorRules.sizeUnits * doorRules.crushShare;
     for (SwitchedDoor& door : doors) {
         bool touching = false;
-        if (there && door.entity != entt::null && registry.valid(door.entity)) {
-            const auto* transform = registry.try_get<Supersonic::TransformComponent>(door.entity);
-            const auto* box = registry.try_get<Supersonic::BoxColliderComponent>(door.entity);
-            if (transform != nullptr && box != nullptr) {
-                const Trigger::Box doorBox{glm::vec2(transform->position.x + box->center.x,
-                                                     transform->position.y + box->center.y),
-                                           glm::vec2(box->size.x * 0.5f, box->size.y * 0.5f)};
-                touching = Trigger::Overlaps(registry, player, doorBox);
-            }
-        }
-        // BeginContact: the first tick of an overlap, whatever the status then.
-        const bool began = touching && !door.playerTouching;
+        Trigger::Box doorBox;
+        if (there && DoorBoxOf(registry, door, doorBox)) touching = Trigger::Overlaps(registry, player, doorBox);
+        // BeginContact: the first tick of an overlap, whatever the status then. The owner's ruling (crushPinned) judges every tick of one.
+        const bool began = touching && (!door.playerTouching || doorRules.crushPinned);
         door.playerTouching = touching;
         if (!began || playerKilled || door.motion.status != Mover::DoorStatus::Closing) continue;
-        // #13-96, in the level's pixels (+y down): doorPos is where the last
-        // callback put the door, and "below" is the larger y.
-        const glm::dvec2 doorPx = door.motion.atPx;
-        const glm::dvec2 otherPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(player).position);
-        if (otherPx.y > doorPx.y + half.y && otherPx.x > doorPx.x - half.x && otherPx.x < doorPx.x + half.x) {
+        if (BelowTheDoor(door, half, Units::ToPixels(registry.get<Supersonic::TransformComponent>(player).position))) {
             playerKilled = true;
             killedBy = door.name;
         }
     }
+}
+
+std::vector<entt::entity> Channels::CrushMinions(entt::registry& registry, const std::vector<entt::entity>& bodies) {
+    std::vector<entt::entity> killed;
+    const glm::dvec2 half = doorRules.sizeUnits * doorRules.crushShare;
+    for (SwitchedDoor& door : doors) {
+        if (!doorRules.crushMinions) {
+            door.touchedBy.clear();
+            continue;
+        }
+        Trigger::Box doorBox;
+        const bool boxed = DoorBoxOf(registry, door, doorBox);
+        std::vector<entt::entity> touching;
+        for (const entt::entity body : bodies) {
+            if (!boxed || body == entt::null || !registry.valid(body) || !registry.all_of<Supersonic::TransformComponent>(body)) continue;
+            if (!Trigger::Overlaps(registry, body, doorBox)) continue;
+            touching.push_back(body);
+            const bool known = std::find(door.touchedBy.begin(), door.touchedBy.end(), body) != door.touchedBy.end();
+            if ((known && !doorRules.crushPinned) || door.motion.status != Mover::DoorStatus::Closing) continue;
+            if (std::find(killed.begin(), killed.end(), body) != killed.end()) continue;
+            if (BelowTheDoor(door, half, GateCentreOf(registry, body))) killed.push_back(body);
+        }
+        door.touchedBy = std::move(touching);
+    }
+    return killed;
 }
 
 bool Channels::Pressed(int channel) const {
@@ -213,6 +256,17 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     }
     read.door.sizeUnits = glm::dvec2(size[0].AsNumber(), size[1].AsNumber());
     read.door.easeRad = read.easeRad;
+    // Optional, the owner's ruling of 2026-11-21 (planning step 273): absent means the decode's rule alone.
+    const auto flag = [&](const char* key, bool& to) {
+        if (!root["door"].Has(key)) return true;
+        if (!root["door"][key].IsBool()) {
+            error = path + ": door." + std::string(key) + " is not true or false";
+            return false;
+        }
+        to = root["door"][key].AsBool();
+        return true;
+    };
+    if (!flag("crush_minions", read.door.crushMinions) || !flag("crush_pinned", read.door.crushPinned)) return false;
     out = read;
     return true;
 }

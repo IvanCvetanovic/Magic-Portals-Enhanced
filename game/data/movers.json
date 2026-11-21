@@ -163,7 +163,17 @@
       "0 shut, 1 opening, 2 open, -1 closing. Its switch opens it only from shut and closes it",
       "only from fully raised, so one press lifts it all the way and a release lowers it all",
       "the way. A door closing onto the player kills it. Planning step 133. `ease_rad` is the",
-      "button's (PIb, smoothEnd): the interpolator is the same PositionInterpolator."
+      "button's (PIb, smoothEnd): the interpolator is the same PositionInterpolator.",
+      "",
+      "THE OWNER'S RULING, 2026-11-21 (planning step 273), NOT THE DECODE: the owner played 4-31 on his",
+      "phone and saw a knight a closing door came down on stand between the door and the floor alive,",
+      "and asked that it die, 'the same goes for my character'. The decoded callback below kills",
+      "the player alone, and only on the tick a contact begins; the original on screen was not",
+      "measured on a knight and the owner's videos show no door on one. So `crush_minions` (true:",
+      "a closing door kills a knight by the player's own gate, the same first tick of a contact) and",
+      "`crush_pinned` (true: the gate is judged on every tick of an overlap with a closing door,",
+      "for the knights and the player both, so a body that was already touching when the door began to",
+      "close does not stay alive either) are the owner's, each a switch: false restores the decode."
     ],
     "_source": [
       "ETHCallback_door_lift (android_game.bin 411544..414041), read in step 133:",
@@ -193,6 +203,8 @@
     ],
     "rise_share": 0.8,
     "size_units": [32.0, 128.0],
-    "crush_share": 0.55
+    "crush_share": 0.55,
+    "crush_minions": true,
+    "crush_pinned": true
   }
 }

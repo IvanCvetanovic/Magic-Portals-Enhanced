@@ -50,6 +50,10 @@ struct DoorRules {
     glm::dvec2 sizeUnits{0.0};   // GetSize(): metal_door.png at scale 1
     double crushShare = 0.0;     // ETHBeginContactCallback_door_lift's doorHalfSize, GetSize() x 0.55
     double easeRad = 0.0;        // PIb: smoothEnd is sin(bias x this), the button's
+    // THE OWNER'S RULING of 2026-11-21 (planning step 273), NOT the decode's: the decoded callback kills the player alone and only on the tick a contact
+    // begins. He asked that whatever a closing door squashes dies, the knights as the player does, and the player when the contact began earlier.
+    bool crushMinions = false;   // a closing door kills a knight by the player's rule (the same gate, the same first tick of a contact)
+    bool crushPinned = false;    // and the gate is judged on every tick of an overlap with a closing door, not only on the first (the player's and the knights')
 
     double RisePx() const { return riseShare * sizeUnits.y; }
 };
