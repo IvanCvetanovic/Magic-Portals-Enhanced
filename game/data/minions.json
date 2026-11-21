@@ -174,8 +174,10 @@
     "capsule": {
       "radius_px": 9.1,
       "height_px": 36.2,
+      "all_levels": true,
       "levels": ["level20b", "level22b", "level18b", "level27c"],
       "_note": [
+        "PLANNING STEP 271, 2026-11-21: THE CAPSULE IS ON EVERY LEVEL (all_levels true; `levels` below is only the record of where it began). The owner, on 4-27 (level26c), after trying the build of the pace flip on his phone: 'when I push the enemies, I can start going over them through their sprite if they start going in the opposite direction. this should not be possible. it seems like the enemy collision is just one small bump on the ground'. The cause was the circle of 7 units (14 tall) every unnamed level gave a knight where the original's body is 36 tall: the player's own capsule steps over a bump that low. The scratch build of step 253 had counted the plays it would change; at the pace of step 270 they were 3-18, 4-25, 4-29 and 4-31 (re-timed in step 271); the WHY ONLY SOME LEVELS paragraph below is the history of the earlier policy.",
         "THE ORIGINAL'S BODY, for the levels named in `levels` (planning step 253): minion.ent's two circles of radius 9.1 at +-9 are the hull the player's own capsule is,",
         "18.2 wide and 36.2 tall. It is built with its bottom where the one circle's is (the feet stand where they stood) and its centre at the ENTITY point, EntityAboveCentrePx over",
         "the circle's centre, so every number measured from the entity point or from the feet - the waypoints, arrive_px, settle_px, the sight's origin - is unchanged. Refused",

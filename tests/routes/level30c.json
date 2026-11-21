@@ -31,29 +31,30 @@
     "NOTE (planning step 213): the air brake this note quotes (0.86 a tick) is off since the owner's ruling (player.json movement.air_decay_rate_hz 120): a body off the floor keeps all its x velocity, so the reason above no longer holds as written; the route still wins."
   ],
   "level": "level30c",
-  "win_by": 1320,
+  "win_by": 1340,
   "holds": [
     {"walk": "left", "from": 134, "to": 221},
-    {"walk": "right", "from": 588, "to": 897},
-    {"walk": "left", "from": 900, "to": 1112},
-    {"walk": "left", "from": 1184, "to": 1294}
+    {"walk": "right", "from": 600, "to": 909},
+    {"walk": "left", "from": 912, "to": 1124},
+    {"walk": "left", "from": 1196, "to": 1306}
   ],
   "taps": [
     {"tick": 59, "at": [620, 60]},
     {"tick": 104, "at": [469.7, 42.3]},
-    {"tick": 131, "at": [464, 148]},
+    {"tick": 132, "at": [464, 148]},
     {"tick": 322, "at": [200, 150]},
     {"tick": 394, "at": [464, 148]},
     {"tick": 422, "at": [426.7, 202.3]},
-    {"tick": 450, "at": [150, 20]},
-    {"tick": 505, "at": [200, 202.3]},
-    {"tick": 533, "at": [252, 40]},
-    {"tick": 562, "at": [192, 99]},
-    {"tick": 896, "at": [464, 148]},
-    {"tick": 1094, "at": [296, 165]},
-    {"tick": 1122, "at": [318.9, 202.3]},
-    {"tick": 1150, "at": [250, 120]},
-    {"tick": 1178, "at": [301.2, 170.3]}
+    {"tick": 462, "at": [151.0, 20]},
+    {"tick": 517, "at": [200, 202.3]},
+    {"tick": 545, "at": [252, 40]},
+    {"tick": 574, "at": [192, 99]},
+    {"tick": 908, "at": [464, 148]},
+    {"tick": 1106, "at": [296, 165]},
+    {"tick": 1134, "at": [318.9, 202.3]},
+    {"tick": 1162, "at": [250, 120]},
+    {"tick": 1190, "at": [301.2, 170.3]}
   ],
-  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 15 tap(s), 11 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1280, medal 1."
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 15 tap(s), 11 tick(s) moved; every tap point is the earlier play's; 4 walk(s) (the earlier play had 4). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1280, medal 1.",
+  "_step271": "RE-TIMED AGAIN in planning step 271, when every knight got the body of the original (a capsule 18.2 wide and 36.2 tall, minions.json body.capsule.all_levels) where it had been a circle of 7 the player could step over: the earlier ticks above are those of the circle. 15 tap(s), 10 tick(s) moved; 1 tap POINT(s) moved ((150, 20) -> (151, 20)); the controls census still passes; 4 walk(s) (the earlier play had 4). Found by a search over replays that keeps the taps' count and follows the events. Won on tick 1292, medal 1."
 }

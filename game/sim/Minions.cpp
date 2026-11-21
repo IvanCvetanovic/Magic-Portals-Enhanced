@@ -150,6 +150,14 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
             error = path + ": body.capsule.height_px is at least twice body.capsule.radius_px";
             return false;
         }
+        // Optional: the capsule on every level (planning step 271). Absent or false, only the levels named below have it.
+        if (capsule.Has("all_levels")) {
+            if (!capsule["all_levels"].IsBool()) {
+                error = path + ": body.capsule.all_levels is not true or false";
+                return false;
+            }
+            read.capsule.allLevels = capsule["all_levels"].AsBool();
+        }
         if (!capsule.Has("levels") || !capsule["levels"].IsArray()) {
             error = path + ": body.capsule.levels is missing or not a list";
             return false;
@@ -407,7 +415,8 @@ double WalkCarried(const Rules& rules, const ScriptClock::Step& step) {
 }
 
 void ForLevel(Rules& rules, const std::string& level) {
-    rules.capsuleOn = std::find(rules.capsule.levels.begin(), rules.capsule.levels.end(), level) != rules.capsule.levels.end();
+    rules.capsuleOn = rules.capsule.allLevels ||
+                      std::find(rules.capsule.levels.begin(), rules.capsule.levels.end(), level) != rules.capsule.levels.end();
 }
 
 namespace {

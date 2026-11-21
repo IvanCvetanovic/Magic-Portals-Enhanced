@@ -1005,12 +1005,19 @@ void AMinionsBodyIsGroundAsACrateAndAPlatformAre() {
     if (level.minions.minions.empty()) return;
     const Minions::Minion& minion = level.minions.minions.front();
     const glm::dvec2 minionAt = Units::ToPixels(played.get<TransformComponent>(minion.body).position);
-    const double top = minionAt.y - level.minions.rules.bodyRadiusPx;
+    // The knight's body is the capsule on every level since planning step 271 (its top is the entity point less half its height) and the circle of 7 where a table says so.
+    const bool capsule = played.all_of<Supersonic::CapsuleColliderComponent>(minion.body);
+    const double top = capsule ? minionAt.y - level.minions.rules.EntityAboveCentrePx() - level.minions.rules.entityAboveFeetPx
+                               : minionAt.y - level.minions.rules.bodyRadiusPx;
     // The player over its top: the capsule's bottom 2 above it, the sensor's octagon reaching 2.9 into it.
     played.get<TransformComponent>(level.player).position = Units::ToWorld(minionAt.x, top - data.tuning.heightPx * 0.5 - 2.0);
     played.get<RigidBodyComponent>(level.player).velocity = glm::vec3(0.0f);
     const bool onMinion = Player::Grounded(played, level.player, data.tuning);
-    played.remove<SphereColliderComponent>(minion.body);
+    if (capsule) {
+        played.remove<Supersonic::CapsuleColliderComponent>(minion.body);
+    } else {
+        played.remove<SphereColliderComponent>(minion.body);
+    }
     const bool withoutIt = Player::Grounded(played, level.player, data.tuning);
     std::printf("  %s: the player over a minion's top: on the ground %s, with the minion's collider taken away %s\n", name.c_str(),
                 onMinion ? "yes" : "no", withoutIt ? "yes" : "no");

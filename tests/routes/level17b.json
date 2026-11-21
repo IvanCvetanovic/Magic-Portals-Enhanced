@@ -18,7 +18,7 @@
   "win_by": 580,
   "holds": [
     {"walk": "left", "from": 3, "to": 20},
-    {"walk": "right", "from": 266, "to": 325},
+    {"walk": "right", "from": 266, "to": 318},
     {"walk": "right", "from": 345, "to": 600}
   ],
   "taps": [
@@ -28,5 +28,6 @@
     {"tick": 150, "at": [214, 100]},
     {"tick": 337, "at": [177.4, 364.4]}
   ],
-  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 5 tap(s), 1 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 531, medal 2."
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 5 tap(s), 1 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 3). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 531, medal 2.",
+  "_step271": "RE-TIMED AGAIN in planning step 271, when every knight got the body of the original (a capsule 18.2 wide and 36.2 tall, minions.json body.capsule.all_levels) where it had been a circle of 7 the player could step over: the earlier ticks above are those of the circle. 5 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 3 walk(s) (the earlier play had 3). Found by a search over replays that keeps the taps' count and follows the events. Won on tick 531, medal 2."
 }

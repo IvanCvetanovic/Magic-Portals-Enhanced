@@ -10,7 +10,8 @@
     "data). test_mp_census fails if controls.json differs from `valid_for` in any number, and fails if the levels this list names are not the levels it computes, in either",
     "direction. A changed growth (a thumb's, a later measured data change) means the census is RE-RUN and the list re-signed by the owner before the list is relied on again (CTL-13 made modern the default in planning step 198); it",
     "is never edited here to make the suite pass. The tables below it are the design's own arithmetic, kept as data so that the test has an oracle which is not the code it tests.",
-    "Labels and counts only: no level bound, spawn point or tap is written here (those are the original's and live under out/)."
+    "Labels and counts only: no level bound, spawn point or tap is written here (those are the original's and live under out/).",
+    "PLANNING STEP 271 (2026-11-21), edited by hand by the agent and named to the owner: 4-25's recorded play (level24c) had its first shot's point moved from (80, 200) to (80, 193), because every knight is now the original's capsule and the old aim ended on the knight's head; at the new point the census no longer finds a control swallowing it at sizes 0.9 and 1, so 4-25 leaves `grouped` size_sweep rows 5 and 6 (the shipped `split` lists are unchanged) and the first design's box-alone count at size 1.0 is one less (6, 6, 6, 6, 21, 20 became 5, 5, 5, 5, 20, 19)."
   ],
   "_source": [
     "DERIVED from the independent python model out/parity/program/CTL/CTL6b/work/arrows_model.py (places and hits for both arrangements, written from the design's section 1 and the",
@@ -1315,7 +1316,6 @@
               "3-27",
               "3-29",
               "4-23",
-              "4-25",
               "4-28"
             ]
           },
@@ -1343,7 +1343,6 @@
               "3-27",
               "3-29",
               "4-23",
-              "4-25",
               "4-28"
             ]
           },
@@ -1576,12 +1575,12 @@
         24
       ],
       "box_only": [
-        6,
-        6,
-        6,
-        6,
-        21,
-        20
+        5,
+        5,
+        5,
+        5,
+        20,
+        19
       ]
     },
     "size_1_4": {

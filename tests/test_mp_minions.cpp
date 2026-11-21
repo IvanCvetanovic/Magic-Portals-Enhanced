@@ -973,9 +973,10 @@ void theBlackKnightsBodyIsAMinions() {
     std::printf("  ghost_minion.ent's body is minion.ent's: %d of 11 attributes and blocks the same\n", same);
 }
 
-// THE ORIGINAL'S BODY, FOR THE LEVELS THAT NAME IT (planning step 253; minions.json body.capsule; backlog G1b-6). minion.ent is two circles of 9.1
-// at +-9, the hull the player's own capsule is; the port builds one circle of 7 everywhere but in 3-21 (level20b), where the owner needs a knight
-// pushed off a platform to be shoved further while it falls. The capsule's bottom is the circle's and its centre the entity point, so the feet, the
+// THE ORIGINAL'S BODY (planning steps 253 and 271; minions.json body.capsule; backlog G1b-6). minion.ent is two circles of 9.1
+// at +-9, the hull the player's own capsule is; until step 271 the port built one circle of 7 everywhere but in four named levels, and the owner found on 4-27
+// that he could walk over a knight "through its sprite": the shipped table now says all_levels, and a table that does not (the named-levels policy, which the
+// loader still reads) keeps the circle elsewhere. The capsule's bottom is the circle's and its centre the entity point, so the feet, the
 // waypoints and the sight's origin stand where they did.
 void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     const std::string minionsJson = std::string(MAGICPORTALS_PORT_DATA_DIR) + "/minions.json";
@@ -990,7 +991,16 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     const std::vector<std::string> named = {"level20b", "level22b", "level18b", "level27c"};
     CHECK_MSG(shipped.capsule.levels == named, "the table names 3-21, 3-23, 3-19 and 4-28");
     CHECK(!shipped.capsuleOn);
+    // Since planning step 271 the shipped table names no level but every one: ForLevel turns the capsule on for any name.
+    CHECK_MSG(shipped.capsule.allLevels, "the shipped table has the capsule on every level (all_levels)");
+    Minions::Rules every = shipped;
+    for (const char* level : {"level0b", "level26c", "level20", "level0", "level31c"}) {
+        Minions::ForLevel(every, level);
+        CHECK_MSG(every.capsuleOn, std::string("the level '") + level + "' has the capsule");
+    }
+    // The named-levels policy the loader still reads (all_levels false), on a copy: the four have it and everything else keeps the one circle.
     Minions::Rules own = shipped;
+    own.capsule.allLevels = false;
     for (const std::string& level : named) {
         Minions::ForLevel(own, "level0b");
         CHECK(!own.capsuleOn);
@@ -1001,7 +1011,7 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     CHECK(own.capsuleOn);
     for (const char* other : {"level0b", "level20", "level20a", "level20bb", "LEVEL20B", ""}) {
         Minions::ForLevel(own, other);
-        CHECK_MSG(!own.capsuleOn, std::string("the level '") + other + "' keeps the one circle");
+        CHECK_MSG(!own.capsuleOn, std::string("the level '") + other + "' keeps the one circle (named levels only)");
     }
     Minions::ForLevel(own, "level20b");
     CHECK(own.capsuleOn);
@@ -1053,18 +1063,17 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
         if (summoned != entt::null) check(summoned, "a summoned knight");
     }
 
-    // And another level's knights keep the circle.
+    // And every other level's knights have it too (planning step 271): not the circle of 7 a player could step over.
     {
         Run run;
         if (!Begin(kLevel, run)) return;
-        CHECK(!run.level.minions.rules.capsuleOn);
+        CHECK(run.level.minions.rules.capsuleOn);
         int seen = 0;
         for (const auto& minion : run.level.minions.minions) {
             if (minion.body == entt::null) continue;
             ++seen;
-            const auto* sphere = run.registry.try_get<Supersonic::SphereColliderComponent>(minion.body);
-            CHECK_MSG(sphere != nullptr && std::fabs(sphere->radius * Units::kPixelsPerMetre - 7.0) < 1e-4, minion.name + " is the circle of 7");
-            CHECK_MSG(run.registry.try_get<Supersonic::CapsuleColliderComponent>(minion.body) == nullptr, minion.name + " has no capsule");
+            CHECK_MSG(run.registry.try_get<Supersonic::SphereColliderComponent>(minion.body) == nullptr, minion.name + " is no circle of 7");
+            CHECK_MSG(run.registry.try_get<Supersonic::CapsuleColliderComponent>(minion.body) != nullptr, minion.name + " has the capsule");
         }
         CHECK(seen >= 2);
     }
@@ -1101,9 +1110,9 @@ void theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel() {
     std::filesystem::remove_all(dir, ec);
 }
 
-// THE BLAST RADIUS (planning steps 252 and 253): of the 128 levels, the two the tables name play their own rate and one of them the knight's capsule, and
-// every other level loads exactly as before.
-void onlyTheNamedLevelsPlayTheirOwnRateAndBody() {
+// THE BLAST RADIUS (planning steps 252, 253 and 271): of the 128 levels, the two the tables name play their own air rate, and the knight's capsule is on in
+// every one (step 271; until then in four named levels).
+void onlyTheNamedLevelsPlayTheirOwnRateAndEveryLevelsKnightHasTheBody() {
     Chapters::Table chapters;
     std::string error;
     CHECK_MSG(Chapters::Load(MAGICPORTALS_CHAPTERS_FILE, chapters, error), error);
@@ -1118,8 +1127,7 @@ void onlyTheNamedLevelsPlayTheirOwnRateAndBody() {
         const bool airOwn = entry.name == "level16a" || entry.name == "level20b";
         CHECK_MSG((data.tuning.airRateHz == 42.0) == airOwn && (airOwn || data.tuning.airRateHz == 120.0),
                   entry.name + " plays at " + std::to_string(data.tuning.airRateHz) + " Hz");
-        const bool capsuleOwn = entry.name == "level20b" || entry.name == "level22b" || entry.name == "level18b" || entry.name == "level27c";
-        CHECK_MSG(data.minions.capsuleOn == capsuleOwn, entry.name + ": the knight's capsule is on only for 3-21, 3-23, 3-19 and 4-28");
+        CHECK_MSG(data.minions.capsuleOn, entry.name + ": the knight's capsule is on (every level since planning step 271)");
     }
     CHECK_EQ(seen, 128);
 }
@@ -1144,7 +1152,7 @@ void runTests() {
     anEntityTheRulesDoNotKnowIsRefused();
     theBlackKnightsBodyIsAMinions();
     theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel();
-    onlyTheNamedLevelsPlayTheirOwnRateAndBody();
+    onlyTheNamedLevelsPlayTheirOwnRateAndEveryLevelsKnightHasTheBody();
 }
 
 } // namespace

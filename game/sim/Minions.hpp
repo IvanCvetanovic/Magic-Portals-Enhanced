@@ -169,6 +169,9 @@ struct Rules {
         double radiusPx = 0.0;
         double heightPx = 0.0;
         std::vector<std::string> levels;
+        // Every level (minions.json body.capsule.all_levels, planning step 271): the capsule is the knight's body wherever one stands, and `levels` is then
+        // only a record of where it began. False: only the named levels, as steps 253 to 270 had it.
+        bool allLevels = false;
     };
     Capsule capsule;
     bool capsuleOn = false;

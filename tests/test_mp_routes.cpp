@@ -1213,6 +1213,11 @@ void TheDropToKnightBsRightOnLevel20bIsLivedAndEitherHalfOfItsFixIsNeeded() {
         const std::size_t at = text.find(named);
         CHECK_MSG(at != std::string::npos, "minions.json names level20b in body.capsule.levels (the control empties the list)");
         if (at != std::string::npos) text.replace(at, named.size(), "\"levels\": []");
+        // And the capsule is on every level since planning step 271 (all_levels): the control turns that off as well, so the knight is the circle it was.
+        const std::string everyLevel = "\"all_levels\": true,";
+        const std::size_t every = text.find(everyLevel);
+        CHECK_MSG(every != std::string::npos, "minions.json says all_levels true (the control turns it off)");
+        if (every != std::string::npos) text.replace(every, everyLevel.size(), "\"all_levels\": false,");
         std::ofstream out(portCopy / "minions.json", std::ios::binary | std::ios::trunc);
         out << text;
     }

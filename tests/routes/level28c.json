@@ -23,7 +23,7 @@
     "603-621, 670-1100 start 663-683 (the later the start, the later the win: 1015 to 1035)."
   ],
   "level": "level28c",
-  "win_by": 1070,
+  "win_by": 1100,
   "holds": [
     {"walk": "right", "from": 150, "to": 180},
     {"walk": "right", "from": 192, "to": 212},
@@ -47,8 +47,9 @@
     {"tick": 186, "at": [88, 50]},
     {"tick": 366, "at": [400, 60]},
     {"tick": 533, "at": [571, 217]},
-    {"tick": 614, "at": [392, 100]},
+    {"tick": 614, "at": [392, 94]},
     {"tick": 656, "at": [332, 206.4]}
   ],
-  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 6 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 16 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1022, medal 2."
+  "_step270": "RE-TIMED in planning step 270, when the whole game was put at the 30 updates a second of the owner's videos (clock.json original_frame_hz 30 for every level): a fall, a swing or a drift takes twice the ticks it took, a walk, a shot and a door the same. The ticks below are of the play on that build and the earlier ones are gone. 6 tap(s), 0 tick(s) moved; every tap point is the earlier play's; 16 walk(s) (the earlier play had 5). Re-timed by a search over replays or by hand edits and replays (the Step 270 record says which kind of work). Won on tick 1022, medal 2.",
+  "_step271": "RE-TIMED AGAIN in planning step 271, when every knight got the body of the original (a capsule 18.2 wide and 36.2 tall, minions.json body.capsule.all_levels) where it had been a circle of 7 the player could step over: the earlier ticks above are those of the circle. 6 tap(s), 0 tick(s) moved; 1 tap POINT(s) moved ((392, 100) -> (392, 94)); the controls census still passes; 16 walk(s) (the earlier play had 16). Found by a search over replays that keeps the taps' count and follows the events. Won on tick 1060, medal 2."
 }

@@ -5407,3 +5407,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - he wants it done ("ok, go ahead then") and will want to see a phone play before a release.
 
 **Where it stands / next:** the working tree holds everything, uncommitted until the audit and the gates are written; 0.2.3 stays the latest; next is his word and a hand-play.
+
+### 2026-11-21 14:20 - Session 80, the afternoon: every knight has the original's body (his 4-27 report), the door report read and not acted on - Step 271
+**Asked:** "when i push the enemies, i can start going over them through their sprite ... it seems like the enemy collision is just one small bump on the ground", then "in 4-31 if the door squish the enemies, they do not die. they just get stuck between the doors and the floor".
+**Did:** found the cause in the data, not the footage first: every knight was ONE circle of 7 (14 tall) except on four named levels, where the original's body is the player's own capsule (36.2 tall); `body.capsule.all_levels` turns it on for every level. Measured the blast first on a scratch copy of the data: four plays stopped winning (3-18, 4-25, 4-29, 4-31); a workflow of four agents re-timed them against the same plays with the old bodies (3 needed a tap point moved, 1 to 7 units); the owner's video 8 read for 4-27 (a knight is 44 to 45 tall, he pushes it 180 frames and never goes over) and for 4-31 (one knight, parked; the door comes down on nothing seen). The door report is NOT acted on: the decode kills only the player.
+**Broke / dead ends:** (1) The first suites run after turning the capsule on had 157 failures in three suites, none of them a surprise: tests that pinned "every other level keeps the circle" and one that removed a sphere collider. (2) 4-25's census: moving its first shot's point to clear the knight changed the owner's census (the alternative arrangement's lists and a count); 87 points of a grid win and none keeps the census, so its golden is edited by hand and said so. (3) The 3-21 drop test's control (the knight a circle) was silently broken by the change until its copy of the tables turned all_levels off too.
+**Decision:** no door kill without evidence; ask the owner where and what he expects.
+**Assets check:** the video of 4-27/4-31 and every frame cut from it were deleted; only the notes (text and numbers) remain in `out/parity/video1/v8b/`, gitignored.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** 97 suites, 279,392 checks, 0 failures, run on the working tree that also holds step 272 (its two new suites are 1,174 of the checks); census 1661; four plays re-timed (a `_step271` note each); one golden edited by hand.
+**Inferred mood:** a guess - he is testing on the phone level by level and finds what the old bodies hid; the next report will be from 4-28 on.
+
+**Where it stands / next:** step 272 (the engine's intro) is in the same working tree; both wait for his word to release.

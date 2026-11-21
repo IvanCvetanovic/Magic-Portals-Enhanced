@@ -16,20 +16,21 @@
     "by 1 to 20 ticks wins as well (a win 537 + the shift)."
   ],
   "level": "level24c",
-  "win_by": 565,
+  "win_by": 590,
   "holds": [
-    {"walk": "left", "from": 175, "to": 237},
-    {"walk": "right", "from": 241, "to": 302},
-    {"walk": "right", "from": 503, "to": 703}
+    {"walk": "left", "from": 179, "to": 241},
+    {"walk": "right", "from": 245, "to": 306},
+    {"walk": "right", "from": 509, "to": 709}
   ],
   "taps": [
-    {"tick": 29, "at": [80, 200]},
-    {"tick": 82, "at": [275, 48]},
-    {"tick": 127, "at": [186, 90]},
-    {"tick": 165, "at": [270.0, 202.5]},
-    {"tick": 304, "at": [300, 200]},
-    {"tick": 349, "at": [180.2, 90.5]},
-    {"tick": 446, "at": [380, 48]},
-    {"tick": 494, "at": [300.0, 202.5]}
-  ]
+    {"tick": 29, "at": [80.0, 193.0]},
+    {"tick": 84, "at": [275, 48]},
+    {"tick": 129, "at": [186, 90]},
+    {"tick": 169, "at": [270.0, 202.5]},
+    {"tick": 308, "at": [300, 200]},
+    {"tick": 353, "at": [180.2, 90.5]},
+    {"tick": 450, "at": [380, 48]},
+    {"tick": 500, "at": [300.0, 202.5]}
+  ],
+  "_step271": "RE-TIMED AGAIN in planning step 271, when every knight got the body of the original (a capsule 18.2 wide and 36.2 tall, minions.json body.capsule.all_levels) where it had been a circle of 7 the player could step over: the earlier ticks above are those of the circle. 8 tap(s), 7 tick(s) moved; 1 tap POINT(s) moved ((80, 200) -> (80, 193)); the controls census still passes; 3 walk(s) (the earlier play had 3). Found by a search over replays that keeps the taps' count and follows the events. Won on tick 543, medal 2."
 }
