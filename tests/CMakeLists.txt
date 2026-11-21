@@ -162,6 +162,14 @@ set_property(SOURCE test_mp_cifixture.cpp APPEND PROPERTY
 # ignores a finger that went down before the new level's first frame, until it lifts. Scripts of the machine's five inputs and the traces they must give; pure.
 add_mp_test(test_mp_levelstart)
 
+# The Supersonic Engine's intro (planning step 272): sim/Splash's timeline, skip, press watch, layout, quads and who sees it, and the logo's file; pure.
+add_mp_test(test_mp_splash)
+
+# The same intro through the real layer (planning step 272): a bare layer with Paths::splash, ticked and drawn as the app does over the engine's device path: the game does not
+# tick for 120 ticks, the frame is the ground and the logo and nothing else, a key or a click from tick 18 ends it, none before, and without the option or the logo there is no
+# intro. Needs the converted levels like test_mp_layer, and is skipped (77) without them.
+add_mp_test(test_mp_splashflow SKIPS_WITH_77)
+
 # The same rule through the real layer (planning step 205): a bare layer with Paths::coverLevelStarts, ticked and drawn as the app does, walked from the menu to a tile:
 # nothing loads in the asking frame, the next frame is a single black quad, the load runs in the tick after it, and a press made under the cover or queued during the load
 # fires no shot. Needs the converted levels like test_mp_layer, and is skipped (77) without them.

@@ -244,6 +244,82 @@ class H2Binaries(SyntheticRepos):
         self.assertIn('f14.md', ' '.join(f.path for f in notes))
 
 
+class OwnPicture(SyntheticRepos):
+    """The second place a picture is committed (planning step 272): the Supersonic Engine's logo, the author's own work, by exact name, with its README beside it and its bytes pinned."""
+    PIC = 'game/data/images/splash/supersonic-logo.png'
+    README = 'game/data/images/splash/README.md'
+    BYTES = b'\x89PNG\r\n\x1a\n\0\0 a logo, with NUL bytes in it'
+
+    def pinned(self, data=None):
+        return mock.patch.object(cp, 'OWN_PICTURES', {self.PIC: (self.README, hashlib.sha256(self.BYTES if data is None else data).hexdigest(), 'a test logo')})
+
+    def with_picture(self, **more):
+        files = self.edited()
+        files[self.PIC] = self.BYTES
+        files[self.README] = 'The logo of the engine this edition runs on.\n'
+        files.update(more)
+        return files
+
+    def test_the_pinned_picture_with_its_readme_passes_h1_h2_and_h5(self):
+        with self.pinned():
+            files = self.with_picture()
+            for rule in ('H1', 'H2', 'H5'):
+                self.assertGreen(files, rule)
+            notes = self.by(self.findings(files, rules=['H1']), cp.NOTE, 'H1')
+            self.assertTrue(any(f.path == self.PIC for f in notes))
+
+    def test_without_its_readme_it_is_refused(self):
+        with self.pinned():
+            files = self.with_picture()
+            del files[self.README]
+            found = self.assertRed(files, 'H1', 1)
+            self.assertIn('README', found[0].text)
+
+    def test_other_bytes_of_that_name_are_refused(self):
+        with self.pinned():
+            files = self.with_picture()
+            files[self.PIC] = self.BYTES + b'x'
+            found = self.assertRed(files, 'H1', 1)
+            self.assertIn('pinned', found[0].text)
+
+    def test_a_picture_over_the_cap_is_refused_and_one_at_the_cap_is_not(self):
+        with self.pinned(), mock.patch.object(cp, 'MOST_LOGO_BYTES', len(self.BYTES)):
+            self.assertGreen(self.with_picture(), 'H1')
+        with self.pinned(), mock.patch.object(cp, 'MOST_LOGO_BYTES', len(self.BYTES) - 1):
+            self.assertRed(self.with_picture(), 'H1', 1)
+
+    def test_nothing_else_widens(self):
+        # a picture of another name, in the same folder, in a sub-folder, of another type, anywhere else
+        for name in ('game/data/images/splash/other.png', 'game/data/images/splash/sub/supersonic-logo.png', 'game/data/images/supersonic-logo.png', 'supersonic-logo.png',
+                     'game/data/images/splash/supersonic-logo.jpg', 'game/data/images/splash/supersonic-logo.bmp'):
+            with self.pinned():
+                files = self.with_picture()
+                files[name] = b'x'
+                found = self.errors(self.findings(files), 'H1')
+                self.assertTrue(found and all(f.path == name for f in found), '%s: %r' % (name, [repr(f) for f in found]))
+
+    def test_the_picture_is_not_let_through_without_the_exception(self):
+        files = self.with_picture()   # the shipped table: the logo is pinned there, and these are not its bytes
+        found = self.errors(self.findings(files), 'H1')
+        self.assertTrue(found and all(f.path == self.PIC for f in found), [repr(f) for f in found])
+
+    def test_history_does_not_count_the_picture_and_does_count_any_other(self):
+        with self.pinned():
+            repo = self.make(self.with_picture(**{'other.png': b'x'}))
+            result = cp.run_history(repo, accounts=[ACCOUNT])
+        found = [f.path for f in result.findings if f.cls == cp.HISTORY and f.rule in ('H1', 'H2')]
+        self.assertEqual(found, ['other.png'])
+
+    def test_the_pinned_hash_is_the_one_of_the_shipped_file(self):
+        self.assertEqual(list(cp.OWN_PICTURES), [self.PIC])
+        path = os.path.join(REPO, *self.PIC.split('/'))
+        if os.path.isfile(path):
+            with open(path, 'rb') as file:
+                data = file.read()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), cp.OWN_PICTURES[self.PIC][1])
+            self.assertLessEqual(len(data), cp.MOST_LOGO_BYTES)
+
+
 class FontFaces(SyntheticRepos):
     """The one place a font binary is committed (planning step 237): the interface languages' open-licence faces, each with its OFL text beside it."""
     FACE = 'game/data/fonts/Kurale-Regular.ttf'

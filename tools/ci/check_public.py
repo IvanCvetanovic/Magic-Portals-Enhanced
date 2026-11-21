@@ -18,6 +18,8 @@ allowed placeholder, an allow-listed file, a record file's words). HISTORY (only
 THE RULES, by id (each has a test that passes a repository and fails an edited copy of it: tools/ci/test_check_public.py):
   H1  no tracked name has an extension of EXTENSIONS: pictures, sounds, original-game data files, binaries, packages, keys and keystores.
   H2  no tracked file holds a NUL byte (a binary), and none is larger than MOST_BYTES; the ten largest are printed as NOTEs.
+      THE SECOND EXCEPTION (planning step 272): the one picture named in OWN_PICTURES, the Supersonic Engine's logo (the author's own work, MIT), by exact name, with its README
+      beside it, no larger than MOST_LOGO_BYTES and with the pinned sha256; it is a NOTE each time. Nothing else widens (test_check_public.py, OwnPicture).
       The ONE exception to H1 and H2 (planning step 237): a .ttf named <Family>-<Style>.ttf in game/data/fonts with OFL-<Family>.txt beside it, no larger than MOST_FONT_BYTES;
       those OFL texts are exempt from H5 as LICENSE is. Nothing else widens (tests/test_check_public.py, FontFaces). This is a DELIBERATE WIDENING of the hard rule's mechanical
       check, which cannot tell an OFL font from a Windows or an Asantee one by its name: tools/ci/test_fonts_pinned.py closes it from the other side (every .ttf of the folder is the
@@ -46,6 +48,7 @@ Standard library only; git is run as a program.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import posixpath
 import re
@@ -98,6 +101,25 @@ def font_face_licence(path):
     """The licence text a font face of game/data/fonts has beside it, or None when `path` is not named like such a face."""
     m = FONT_FACE_NAME.match(path)
     return 'game/data/fonts/OFL-%s.txt' % m.group('family') if m else None
+
+# H1 and H2, the second exception (planning step 272): THE SUPERSONIC ENGINE'S LOGO, the picture the game shows for two seconds when it starts (the same intro Penumbra and the Castle of
+# Shadows Enhanced shows). It is the author's own work, MIT like the engine (the engine's branding folder), and not the original game's art; it is let through by EXACT NAME, only with
+# the README beside it that says where it came from, no larger than MOST_LOGO_BYTES, and only if its bytes are the ones pinned here (a different picture of that name is refused, so
+# the exception cannot carry anything else). A NOTE says each time that it is the reason a binary is let through.
+OWN_PICTURES = {
+    'game/data/images/splash/supersonic-logo.png': (
+        'game/data/images/splash/README.md',
+        'd5592a2c7b22c2da5bc97736965e346d5f6628958c4b7f8e7032214a0c38a8c1',
+        "the Supersonic Engine's logo, the author's own work (MIT)",
+    ),
+}
+MOST_LOGO_BYTES = 120 * 1000
+
+
+def is_own_picture(path):
+    """Whether `path` is the one picture OWN_PICTURES lets through (by name alone; rule_h1 holds it to its README, its size and its bytes)."""
+    return path in OWN_PICTURES
+
 
 # H3. (id, regex, what it is). The keystore password option takes a value that is not a reference (file:, env:, stdin) and not a placeholder.
 SECRET_PATTERNS = (
@@ -332,6 +354,18 @@ def rule_h1(ctx):
             elif data is not None and len(data) > MOST_FONT_BYTES:
                 out.append(Finding(ERROR, 'H1', path, 0, 'a font face of %d bytes: larger than the %d one of game/data/fonts may be' % (len(data), MOST_FONT_BYTES)))
             continue
+        if is_own_picture(path):
+            readme, sha, what = OWN_PICTURES[path]
+            data = ctx.tree.raw(path)
+            if readme not in ctx.tree.files:
+                out.append(Finding(ERROR, 'H1', path, 0, 'the logo needs its README %s beside it' % readme))
+            elif data is not None and len(data) > MOST_LOGO_BYTES:
+                out.append(Finding(ERROR, 'H1', path, 0, 'the logo is %d bytes: larger than the %d it may be' % (len(data), MOST_LOGO_BYTES)))
+            elif data is not None and hashlib.sha256(data).hexdigest() != sha:
+                out.append(Finding(ERROR, 'H1', path, 0, 'a picture of the logo\'s name whose bytes are not the pinned ones (sha256 %s): the exception is for that picture alone' % sha))
+            else:
+                out.append(Finding(NOTE, 'H1', path, 0, 'a picture let through by name and hash: %s' % what))
+            continue
         if ext in EXTENSIONS:
             out.append(Finding(ERROR, 'H1', path, 0, 'a tracked file with the extension .%s (a picture, sound, binary, package, key or game data file is never committed)' % ext))
     return out
@@ -346,7 +380,7 @@ def rule_h2(ctx):
         sizes.append((len(data), path))
         if len(data) > MOST_BYTES:
             out.append(Finding(ERROR, 'H2', path, 0, '%d bytes: larger than the %d a tracked file may be' % (len(data), MOST_BYTES)))
-        if b'\0' in data and not data.startswith((b'\xff\xfe', b'\xfe\xff')) and font_face_licence(path) is None:
+        if b'\0' in data and not data.startswith((b'\xff\xfe', b'\xfe\xff')) and font_face_licence(path) is None and not is_own_picture(path):
             out.append(Finding(ERROR, 'H2', path, 0, 'holds a NUL byte at offset %d: a binary file' % data.index(b'\0')))
     for size, path in sorted(sizes, reverse=True)[:LARGEST_SHOWN]:
         out.append(Finding(NOTE, 'H2', path, 0, 'one of the %d largest files: %d bytes' % (LARGEST_SHOWN, size)))
@@ -841,7 +875,7 @@ def run_history(repo, accounts=None, budget=120.0):
     # H1 on every name ever added
     t = time.time()
     for path, commit in sorted(history_names(repo).items()):
-        if extension_of(path) in EXTENSIONS and font_face_licence(path) is None:
+        if extension_of(path) in EXTENSIONS and font_face_licence(path) is None and not is_own_picture(path):
             result.findings.append(Finding(HISTORY, 'H1', path, 0, 'added with the extension .%s in commit %s' % (extension_of(path), commit[:10])))
     result.seconds['H1 names'] = time.time() - t
     blobs = history_blobs(repo)
@@ -869,7 +903,7 @@ def run_history(repo, accounts=None, budget=120.0):
             header = proc.stdout.readline().split()
             data = proc.stdout.read(int(header[2]))
             proc.stdout.read(1)
-            self_file = is_self(path) or font_face_licence(path) is not None
+            self_file = is_self(path) or font_face_licence(path) is not None or is_own_picture(path)
             if self_file:
                 continue
             binary = b'\0' in data and not data.startswith((b'\xff\xfe', b'\xfe\xff'))

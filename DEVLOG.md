@@ -5419,3 +5419,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - he is testing on the phone level by level and finds what the old bodies hid; the next report will be from 4-28 on.
 
 **Where it stands / next:** step 272 (the engine's intro) is in the same working tree; both wait for his word to release.
+
+### 2026-11-21 15:10 - Session 80, the afternoon: the Supersonic Engine's intro, the same as Penumbra's - Step 272
+**Asked:** "also i want you do add the supersonic engine intro this game, the same like for penumbra."
+**Did:** read the sibling's E35 and its `Splash.*`, wrote the same pure module here (`game/sim/Splash`: 120 ticks, skip from tick 18, the press watch, the layout, the quads) over this port's own definition of a player's run instead of its flag list, wired it into the layer (nothing ticks while it is up) and `main` (`--splash on|off`), copied the owner's logo (his own MIT work, one picture) and made the checker's second narrow exception for it, with tests for both.
+**Broke / dead ends:** (1) `check_public.py` refuses every picture, so the logo needed an exception in the checker: that is a change to a guard, said plainly and left for him to accept; the extension grep of the workflow rules prints the file on purpose. (2) The layout test's first tolerance (2% of the aspect) was wrong for a 100-pixel window where the height rounds to a whole pixel: it checks the height to the pixel now. (3) The game executable of the Linux clone was stale (`sync_branch.sh` builds the test binary only), so the first capture said "unrecognised option --splash": build the `MagicPortals` target before a capture.
+**Decision:** no hold-pressed arming as Penumbra has: the layer's finger memory starts as a gap and the menus act on a recorded press; argued from the code, not tested on a device.
+**Assets check:** the one picture committed is the logo, by exact name and hash; the capture pictures of the intro and of the game's first frame (which show the original's art) were deleted.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** Linux clone, 64-bit, zero warnings: 97 suites, 279,392 checks, 0 failures (census 1661, routes, minions 916, player 661); the 32-bit stand-in, zero warnings: test_mp_splash 801, test_mp_splashflow 373, test_mp_minions 916, test_mp_player 661, test_mp_census 1661, test_mp_routes 2553, all 0 failures; Windows MSVC build of the whole tree: zero warnings (no Windows suite launched: Smart App Control); the checker's 8 OwnPicture tests and the repository run of check_public.py: no ERROR; `test_mp_splash` 801, `test_mp_splashflow` 373, `OwnPicture` 8 tests.
+**Inferred mood:** a guess - he wants his engine's name on the game as on Penumbra.
+
+**Where it stands / next:** with step 271 in the same working tree; the next thing is his phone, and a release only on his word.

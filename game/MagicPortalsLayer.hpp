@@ -66,6 +66,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Selector.hpp"
 #include "sim/Sky.hpp"
 #include "sim/Sounds.hpp"
+#include "sim/Splash.hpp"
 #include "sim/Sprites.hpp"
 #include "sim/Switches.hpp"
 #include "sim/Tiers.hpp"
@@ -224,6 +225,10 @@ public:
         // display is measured and every picture is drawn at its tick's place whatever
         // pictures.json says (planning step 150). Set by main from the engine's flag.
         bool fixedStep = false;
+        // THE SUPERSONIC ENGINE'S INTRO (planning step 272, sim/Splash.hpp): a start that plays it, two seconds of the engine's logo before anything of the game.
+        // main sets it for a player's run that names no level (Splash::Wanted) and --splash on|off decides otherwise; false, as in every suite and every capture,
+        // the layer runs from its first tick as it always did.
+        bool splash = false;
 
         // Whether the layer walks its sprites every frame to log the ones that cross the view's edge ("on", "off", "GONE" lines: reportSprites).
         // A developer's instrument, and the walk costs a pass over every sprite on every frame for lines nobody reads in a player's run
@@ -3717,6 +3722,27 @@ private:
     Picker::Rules m_pickerRules;
     bool m_pickerReady{false};
     std::string m_languageEntryImage;
+
+    // ---- THE SUPERSONIC ENGINE'S INTRO (planning step 272; sim/Splash.hpp) -------------------------------------------------------------------------------
+    // While m_splash holds a clock the game is not ticked: no menu, no level, no sound, no music, no tick counted (m_ticks stands still), and the finger memory
+    // stays as it was at the start (a gap), so a finger that skipped the intro and is still down when it ends was not seen to go down and is no press of the
+    // menu. The frame is the intro's quads over the whole window and nothing else. A press in a frame that ran no tick is kept for the next tick.
+    std::optional<Splash::Clock> m_splash;
+    Splash::PressWatch m_splashWatch;
+    bool m_splashPressSeen = false;
+    bool m_splashTicked = false; // a tick ran since the last frame
+    std::string m_splashTexture;
+    glm::vec2 m_splashImage{0.0f};
+    void startSplash();
+    void watchSplash();
+    void stepSplash();
+    void drawSplash(entt::registry& registry);
+public:
+    // Whether the intro is on the screen now (a suite's and a capture's question).
+    bool SplashUp() const { return m_splash.has_value(); }
+    // The intro's ticks so far, 0 when it is not up.
+    unsigned SplashTicks() const { return m_splash ? m_splash->Ticks() : 0u; }
+private:
     std::string m_pickerFontFile;
     bool m_pickerFontTried{false};
     std::vector<std::string> m_pickerNames;

@@ -35,6 +35,7 @@
 #include "core/SimulationClock.hpp"
 #include "core/SpriteAnimationSystem.hpp"
 #include "core/ViewportInfo.hpp"
+#include "platform/Gamepads.hpp"
 #include "platform/SafeArea.hpp"
 // For handing a level's lightmaps back when it goes. Only through the pointer the
 // app publishes in the registry's context, which a suite's bare registry has not.
@@ -296,6 +297,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     // the menu as for a level. Assigned rather than emplaced: a --scene load
     // may already have put a RenderSettings of its own in the context.
     registry.ctx().insert_or_assign<Supersonic::RenderSettings>(SceneRendering());
+    if (m_paths.splash) startSplash();
     {
         Lighting::Rules lighting;
         std::string why;
@@ -14223,7 +14225,81 @@ void MagicPortalsLayer::stopMusic(entt::registry& registry) {
     m_track.clear();
 }
 
+// ---- THE SUPERSONIC ENGINE'S INTRO (sim/Splash.hpp, planning step 272) -------------------------------------------------------------------------------
+
+void MagicPortalsLayer::startSplash() {
+    const std::filesystem::path logo = std::filesystem::path(m_paths.portData) / Splash::kLogoFile;
+    std::error_code ec;
+    int width = 0;
+    int height = 0;
+    std::string why;
+    if (std::filesystem::is_regular_file(logo, ec) && Sprites::ImageSize(logo.string(), width, height, why) && width > 0 && height > 0) {
+        m_splashImage = glm::vec2(static_cast<float>(width), static_cast<float>(height));
+        m_splashTexture = logo.string();
+        m_splash.emplace();
+        SUPERSONIC_LOG_INFO("Magic Portals") << "Supersonic intro: started" << std::endl;
+        return;
+    }
+    // A data folder without the picture is no intro, with a line in the log: never a blank screen for two seconds.
+    SUPERSONIC_LOG_WARN("Magic Portals") << "Supersonic intro: the logo cannot be read (" << logo.string() << (why.empty() ? "" : ": " + why)
+                                         << "); starting without it" << std::endl;
+}
+
+// Every key, mouse button, finger and gamepad button that is down now, as the intro's press watch sees them.
+void MagicPortalsLayer::watchSplash() {
+    using Supersonic::Input;
+    Splash::Devices devices;
+    for (int key = 0; key <= Supersonic::Key::Last; ++key) devices.keys[static_cast<std::size_t>(key)] = Input::IsKeyDown(key);
+    for (int button = 0; button < 3; ++button) devices.mouse[static_cast<std::size_t>(button)] = Input::IsMouseButtonDown(button);
+    const int count = Input::ContactCount();
+    for (int index = 0; index < count; ++index) {
+        const Supersonic::Contact contact = Input::GetContact(index);
+        if (contact.id >= 0 && contact.phase != Supersonic::ContactPhase::Ended) devices.contactIds.push_back(contact.id);
+    }
+    const int pads = std::min(Supersonic::Gamepads::Count(), static_cast<int>(Splash::kPads));
+    for (int pad = 0; pad < pads; ++pad) {
+        Supersonic::GamepadState state;
+        if (!Supersonic::Gamepads::Get(pad, state)) continue;
+        for (int button = 0; button < Supersonic::Pad::ButtonCount; ++button) {
+            devices.pads[static_cast<std::size_t>(pad)][static_cast<std::size_t>(button)] = state.buttons[button];
+        }
+    }
+    if (m_splashWatch.Observe(Splash::HeldOf(devices))) m_splashPressSeen = true;
+}
+
+void MagicPortalsLayer::stepSplash() {
+    watchSplash();
+    const bool pressed = m_splashPressSeen;
+    m_splashPressSeen = false;
+    m_splash->Step(pressed);
+    if (m_splash->Done()) {
+        SUPERSONIC_LOG_INFO("Magic Portals") << "Supersonic intro: finished at tick " << m_splash->Ticks() << " ("
+                                             << (m_splash->Skipped() ? "skipped" : "ran out") << ")" << std::endl;
+    }
+}
+
+void MagicPortalsLayer::drawSplash(entt::registry& registry) {
+    const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>();
+    const glm::vec2 size = viewport != nullptr && viewport->Size().x > 0.0f && viewport->Size().y > 0.0f ? viewport->Size() : glm::vec2(1280.0f, 720.0f);
+    const glm::uvec2 window(static_cast<unsigned>(std::lround(size.x)), static_cast<unsigned>(std::lround(size.y)));
+    const Supersonic::SafeAreaInsets safe = Supersonic::SafeArea::Get();
+    const Splash::Layout layout = Splash::ComputeLayout(window, safe, m_splashImage);
+    auto* const* slot = registry.ctx().find<Supersonic::ScreenOverlay*>();
+    if (slot == nullptr || *slot == nullptr) return; // a bare registry (a suite) has no overlay
+    for (Supersonic::ScreenOverlay::Quad& quad : Splash::BuildQuads(window, layout, m_splash->Alpha(), m_splashTexture)) (*slot)->Add(std::move(quad));
+}
+
 void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
+    // The intro ends on the tick after its last, and that tick is the game's first (nothing of the game was ticked, nothing is owed).
+    if (m_splash && m_splash->Done()) {
+        m_splash.reset();
+        m_splashPressSeen = false;
+    }
+    if (m_splash) {
+        m_splashTicked = true;
+        stepSplash();
+        return;
+    }
     // What the last frame's edge cull hid is shown again before any of this tick's code reads or
     // writes a picture's visibility (restoreEdgeCulls).
     restoreEdgeCulls(registry);
@@ -15643,6 +15719,14 @@ bool MagicPortalsLayer::PressPause(entt::registry& registry, Pause::Button butto
 // ---- per frame: nothing the level or a replay depends on --------------------
 
 void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
+    // The intro's frame instead of the game's: its quads over the whole window and nothing else (no sound, no music, no HUD). A press in a frame that ran no
+    // tick (a display faster than 60 Hz) is the press of the tick it is handed to.
+    if (m_splash) {
+        drawSplash(registry);
+        if (!m_splashTicked) watchSplash();
+        m_splashTicked = false;
+        return;
+    }
     // As OnFixedUpdate's first line, for a frame that ran no tick.
     restoreEdgeCulls(registry);
     // What the display's rate is, from the frame the engine has just drawn: the next ticks

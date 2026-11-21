@@ -275,6 +275,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // level is entered directly, and that is how the suites and every headless
     // render run: neither ever sees the menu.
     std::string start;
+    std::optional<bool> splashForced; // --splash on|off (sim/Splash.hpp)
     std::vector<char*> engineArgs{argv[0]};
     // The asset root (planning step 200): --root and --no-baked-paths, and a flag for each path that replaces the root's answer for
     // that one path. Resolved after --help, once every flag is read, in the order sim/AssetRoot.hpp states.
@@ -763,6 +764,17 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
             }
             continue;
         }
+        // THE SUPERSONIC ENGINE'S INTRO (planning step 272): on forces it, off removes it. Taken out here, in every build: it is a player's switch too.
+        if (arg == "--splash") {
+            const std::string value = i + 1 < argc ? std::string(argv[i + 1]) : std::string();
+            if (value != "on" && value != "off") {
+                std::cerr << "--splash wants on or off\n";
+                return EXIT_FAILURE;
+            }
+            ++i;
+            splashForced = value == "on";
+            continue;
+        }
 #if !MAGICPORTALS_DEV_TOOLS
         // A developer's flag in a build made without the developer tools (MAGICPORTALS_DEV_TOOLS=OFF): refused HERE, by name and with the reason,
         // where the engine's parser below would say only that it does not know the option.
@@ -836,6 +848,10 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    --screenshot, --saves or the like) speaks the system's language when it\n"
                   << "                    is one of these, else English, until the player picks one in the game;\n"
                   << "                    a capture or a scripted run is English\n"
+                  << "  --splash on|off   the Supersonic Engine's intro (two seconds of its logo before the\n"
+                  << "                    game; a key, a click or a tap ends it): on forces it, off removes it.\n"
+                  << "                    Without it the intro plays on a player's run that names no --level\n"
+                  << "                    and never in a capture, a route or a scripted run\n"
                   << "  --levels <dir>    the converted levels (" << DefaultText(paths.levels) << ")\n"
                   << "  --chapters <file> chapters.json, the level order (" << DefaultText(paths.chapters) << ")\n"
                   << "  --achievements <file>\n"
@@ -968,6 +984,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
 #endif
         fatal.attended = MagicPortals::AttendedRun(options, dev);
     }
+    // THE SUPERSONIC ENGINE'S INTRO (planning step 272): on a player's run that names no level, and wherever --splash on says so.
+    paths.splash = MagicPortals::Splash::Wanted(fatal.attended, !start.empty(), splashForced);
 
     // WHERE THE GAME'S DATA IS (planning step 200, PORT-2), resolved once and handed down, in the order sim/AssetRoot.hpp states. After
     // --help, which needs no data, and before anything is opened or made: a --root that does not hold the game ends the run here with a

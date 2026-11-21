@@ -50,6 +50,7 @@ add_library(MagicPortalsSim STATIC
     LevelBuilder.cpp
     LevelEnd.cpp
     LevelStart.cpp
+    Splash.cpp
     LightmapBake.cpp
     Lighting.cpp
     Loading.cpp
