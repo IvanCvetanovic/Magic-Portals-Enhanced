@@ -3,10 +3,11 @@
 Run:   python -m unittest discover -s tools/ci -p "test_*.py" -v        (standard library only)
 
 What is pinned: the world holds the fixture level, its tables, the port's own tables and two invented stubs and nothing else; no file in it has the name of a picture, a sound or
-a level of the original; the content packager accepts it and its own verify passes on the result; and the tool refuses an output folder that is not empty or that lies in the
+a level of the original (the author's own logo, the checker's one named exception, is let through by its name and its pinned bytes); the content packager accepts it and its own verify passes on the result; and the tool refuses an output folder that is not empty or that lies in the
 repository's tracked sources.
 """
 import contextlib
+import hashlib
 import importlib.util
 import io
 import os
@@ -27,7 +28,17 @@ def load_tool():
     return module
 
 
+def load_checker():
+    spec = importlib.util.spec_from_file_location('check_public_under_test', os.path.join(HERE, 'check_public.py'))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # its dataclasses look their module up by name
+    spec.loader.exec_module(module)
+    return module
+
+
 tool = load_tool()
+# The one picture the checker lets through (planning step 272): the author's own logo, by exact name and pinned bytes. The world copies game/data, so it holds it.
+OWN_PICTURES = load_checker().OWN_PICTURES
 # What a file of the original, or of anyone's art, is called (the hard rule's list): none may be a name in the world.
 FORBIDDEN_SUFFIXES = ('.png', '.bmp', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.mp3', '.ogg', '.wav', '.esc', '.ent', '.enml', '.par', '.fnt', '.pvr', '.pkm')
 
@@ -72,7 +83,15 @@ class TheWorld(unittest.TestCase):
     def test_no_name_in_it_is_a_picture_a_sound_or_a_file_of_the_original(self):
         for root in (self.repo, self.ref):
             for name in self.files(root):
+                if name in OWN_PICTURES:
+                    with open(os.path.join(root, *name.split('/')), 'rb') as f:
+                        self.assertEqual(hashlib.sha256(f.read()).hexdigest(), OWN_PICTURES[name][1], name + ' is not the pinned picture')
+                    continue
                 self.assertFalse(name.lower().endswith(FORBIDDEN_SUFFIXES), name)
+
+    def test_only_the_named_logo_is_let_through(self):
+        # the exception is a name in a table of one, not a suffix: any other picture still fails the test above
+        self.assertEqual(sorted(OWN_PICTURES), ['game/data/images/splash/supersonic-logo.png'])
 
     def test_the_content_packager_accepts_it_and_verifies_the_result(self):
         content = os.path.join(self.tmp, 'content')
