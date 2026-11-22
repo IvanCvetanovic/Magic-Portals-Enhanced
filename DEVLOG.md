@@ -5455,3 +5455,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - relieved that it works, and done with the releases that did not.
 
 **Where it stands / next:** v1.0.0 is the only release and the latest; origin/main has the record commit; his phone and everyone else's are next.
+
+### 2026-11-22 12:58 - Session 80, midday: the fourteen old tags deleted, the README and the install guide corrected - Step 275
+**Asked:** "delete 14 old tags too, fix readme".
+**Did:** deleted v0.1.0..v0.2.3 on the remote and locally by an explicit list (hashes in Step 275, so any can be made again); rewrote the README sentences (front paragraph, Windows, Linux, Android rows) and the install guide's (release wording, the 32-bit entry, the storage margin 150 MB -> about 2 GB, the first-start entry) that named releases that are gone or numbers 1.0.0 changed.
+**Broke / dead ends:** none; I took "fix readme" to cover the install guide too, because my question had named both; I did NOT add the new entry for the parse-error dialog (it was not what he answered).
+**Decision:** the README no longer says "ctest lists 97 tests" or "draws the original's art" or "all 128 routes win" for this release: this release did not run ctest, did not look at pictures on Linux and has two pending routes.
+**Assets check:** docs only; no capture.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** `tools/ci` 353 tests (1 skipped) and `tools/package` 428 (4 skipped) pass; `check_version` ok; `check_public` no ERROR; remote tags: v1.0.0 only; releases: v1.0.0 only.
+**Inferred mood:** a guess - tidy-minded: one release, one tag, a README that matches.
+
+**Where it stands / next:** v1.0.0 is the one release and the one tag; the next thing is whatever his phone and the world say.
