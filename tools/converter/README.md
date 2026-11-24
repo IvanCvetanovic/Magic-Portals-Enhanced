@@ -12,7 +12,7 @@ from the engine source and checked against the real files.
 
 ## Setup and use
 
-The repository's [`README.md`](../../README.md) has the setup: step 2 creates this
+The repository's [`docs/developing.md`](../../docs/developing.md) has the setup: step 2 creates this
 directory's `.venv/` (gitignored) and installs the package with its `[dev]` extra (pytest,
 ruff); step 3 converts all four worlds. Nothing here needs network access at runtime.
 

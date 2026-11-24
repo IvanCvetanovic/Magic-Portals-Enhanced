@@ -30,7 +30,7 @@ The verdict per level:
 `sealed_by` and `opened_by` are the bodies on the cheapest path, where crossing a body the
 port cannot open costs far more than one it can: the fewest walls that have to go.
 
-Usage, from the repository root with the parity venv (README, *Parity work*):
+Usage, from the repository root with the parity venv (docs/developing.md, *Parity work*):
     tools/parity/.venv/Scripts/python tools/parity/reachability.py --check
         rerun over out/levels and compare with the pinned tools/parity/reachability.json;
         exit 1 and print each difference when one is found

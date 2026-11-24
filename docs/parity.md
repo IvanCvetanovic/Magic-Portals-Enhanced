@@ -80,7 +80,7 @@ Saves for specific states are kept in `out/parity/saves/`. Force-stop the app be
 
 ## 4. Capturing the port
 
-The game being compared is the Supersonic port. `README.md` → *Local setup* steps 5-7 configure and
+The game being compared is the Supersonic port. `docs/developing.md` → *Local setup* steps 5-7 configure and
 build it, and → *Capture flags* has the capture command and lists the flags a capture uses (`--help`
 prints every flag). §7 below is the owner's layout: `tools\parity\port_build.bat` configures (the first
 time) and builds this repository's `build/`.

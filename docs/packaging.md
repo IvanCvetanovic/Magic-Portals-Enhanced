@@ -73,7 +73,7 @@ belongs in a folder the player may write to: a portable folder, or a per-user in
 
 ## 3. What the packager puts in
 
-**Before you run it** you need the owner's inputs on the machine; none of them is in this repository (README, *Local setup after cloning*,
+**Before you run it** you need the owner's inputs on the machine; none of them is in this repository (docs/developing.md, *Local setup after cloning*,
 has the steps):
 
 1. the original's APK unpacked into `reference/extracted/` (its `assets/` folder is `<reference>/extracted/assets`);

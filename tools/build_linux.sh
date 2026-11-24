@@ -8,7 +8,7 @@
 #
 #   tools/build_linux.sh [options]
 #
-# The game's data is NOT in this repository (README, *Local setup after cloning*): the converted levels, the original's extracted assets and the
+# The game's data is NOT in this repository (docs/developing.md, *Local setup after cloning*): the converted levels, the original's extracted assets and the
 # achievements table are the owner's, gitignored, and a developer's build finds them through six paths it bakes in. Without them the
 # game draws boxes and the suites that need them skip (exit 77, reported as skipped, never as passed). Give them with one folder or one by one:
 #

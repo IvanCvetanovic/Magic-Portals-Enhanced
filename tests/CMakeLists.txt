@@ -493,7 +493,7 @@ set_property(SOURCE test_mp_census.cpp APPEND PROPERTY
 
 # And the static check beside it: no level's door sealed off in the port, rerun over the
 # converted levels this build reads and compared with tools/parity/reachability.json. It is
-# Python, not a suite, so it is registered only where the parity venv is (README, Parity work);
+# Python, not a suite, so it is registered only where the parity venv is (docs/developing.md, Parity work);
 # it exits 77 - SKIPPED - without the converted levels, as the suites above do.
 # The venv's interpreter lives in Scripts/ on Windows and bin/ elsewhere; reachability.py needs only the standard library, so a build that has no
 # venv can name any python3 here (tools/build_linux.sh does).

@@ -10,7 +10,7 @@ Step 207 (section 11) moved the engine to the commit whose crash report names th
 
 The record of the steps is [`planning/2026-09-11-magic-portals-remaster.md`](planning/2026-09-11-magic-portals-remaster.md), Steps 203 (the build) and 204 (the
 first run). The data the APK carries comes from the content packager ([`packaging.md`](packaging.md), [`tools/package/README.md`](../tools/package/README.md));
-the Windows and Linux builds are in `packaging.md` and the README.
+the Windows and Linux builds are in `packaging.md` and `developing.md`.
 
 ## 0. What ran on the emulator, and what did not
 

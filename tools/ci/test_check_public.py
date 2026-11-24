@@ -1117,17 +1117,19 @@ class TheReadme(unittest.TestCase):
 
     def test_the_headings_other_files_point_at_are_still_there_in_their_order(self):
         headings = [l[3:] for l in self.text.split('\n') if l.startswith('## ')]
-        names = ('Permission', 'Status', 'The Supersonic port', 'How it fits together', 'Local setup after cloning', 'Run it', 'Parity work', 'Docs')
+        # The developer sections (Status, Local setup after cloning, Run it, Parity work, ...) moved to docs/developing.md with the picture-led front page;
+        # what still points at the README is the install guide (#platforms, #controls), docs/releasing.md and the game's credits (#credits), and the Permission section.
+        names = ('Controls', 'Platforms', 'Permission', 'Credits')
         for name in names:
             self.assertIn(name, headings)
         order = [headings.index(n) for n in names]
         self.assertEqual(order, sorted(order))
 
-    def test_the_front_has_the_sections_a_stranger_looks_for_before_the_developer_part(self):
-        front = self.text.split('\n## For developers and contributors')[0]
-        for name in ('Platforms', 'How to play', 'Controls', 'Build it', 'What is where', 'Credits', 'Licence', 'Contributing'):
-            self.assertIn('\n## %s\n' % name, front)
-        self.assertLess(len(front.split('\n')), 125, 'the front is meant to be read in a minute')
+    def test_the_readme_is_a_short_front_with_the_sections_a_stranger_looks_for_and_a_link_to_the_developer_part(self):
+        for name in ('Platforms', 'Controls', 'Build it yourself', 'Credits', 'Licence'):
+            self.assertIn('\n## %s\n' % name, self.text)
+        self.assertIn('](docs/developing.md)', self.text)
+        self.assertLess(len(self.text.split('\n')), 125, 'the front is meant to be read in a minute')
 
     def test_the_platform_table_names_all_five_platforms_and_says_what_each_status_is_made_of(self):
         rows = [l for l in self.text.split('\n') if l.startswith('| ') and l.split('|')[1].strip() in ('Windows', 'Linux', 'Android', 'macOS', 'iOS')]

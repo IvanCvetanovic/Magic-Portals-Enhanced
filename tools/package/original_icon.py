@@ -265,7 +265,7 @@ def build(reference, out, repo):
             continue
         path = os.path.join(reference, 'apk_work', 'decoded', 'res', SOURCE_FOLDER % source, SOURCE_NAME)
         if not os.path.isfile(path):
-            raise IconError('the original\'s %s icon is not at %s (the reference folder is the one README, Local setup after cloning, makes)' % (density, path))
+            raise IconError('the original\'s %s icon is not at %s (the reference folder is the one docs/developing.md, Local setup after cloning, makes)' % (density, path))
         with open(path, 'rb') as f:
             data = f.read()
         width, height, rows = read_png(data, path)

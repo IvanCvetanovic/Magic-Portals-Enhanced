@@ -20,7 +20,7 @@ python tools/package/version.py [code|windows]                        python too
 ```
 
 **Before you run it**: the original's APK unpacked into `reference/extracted/`, and the converter run so that `out/levels`, `out/data` and
-`out/assets` exist (README, *Local setup after cloning*, steps 1-8; `docs/packaging.md` §3 lists them); `reference/magic-rampage/` only for
+`out/assets` exist (docs/developing.md, *Local setup after cloning*, steps 1-8; `docs/packaging.md` §3 lists them); `reference/magic-rampage/` only for
 `--with-pad-art`. None of it is in a fresh clone.
 
 * `--repo` is this repository after the converter has run (it reads `out/levels`, `out/data`, `out/assets`, and the committed `data/` and
