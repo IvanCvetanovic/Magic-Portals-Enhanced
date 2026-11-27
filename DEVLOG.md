@@ -5516,3 +5516,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - pleased that the players' complaints are answered within a day.
 
 **Where it stands / next:** 1.0.1 is live; players' reports are next (the black screen and the iPhone especially).
+
+### 2026-11-27 17:50 - Session 82, late: a player's Vulkan report, investigated and not changed - Step 280
+**Asked:** "one user is reporting that his phone is giving him the error that vulkan 1.2 is needed. can we make it playable other version? We had the same problem with penumbra and i think we added vulkan 1.1. support or somrthing?"
+**Built:** nothing; backlog PLAY-7 and a line in PLAY-4. A read-only investigation (workflow `wf_9eeba81f-a2f`: four readers and two sceptics).
+**Broke / dead ends:** found along the way: the "Android 8 or newer" the guides promise is very likely false (Android 8's loader refuses the 1.2 the engine asks for; inferred from Android's source, never tried).
+**Decision:** no code until the player's exact message is known, and the engine change for Vulkan 1.0 is his call.
+**Assets check:** docs only.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** 16 release APKs read, every one asks for 1.1.
+**Inferred mood:** a guess - wants every phone in.
+
+**Where it stands / next:** waiting for the player's message and his word on Vulkan 1.0 support.

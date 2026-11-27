@@ -35441,3 +35441,15 @@ R-B (H2: the player steps on the lift door's button while A walks back toward th
 **NOT RUN.** The APK on any device or emulator, the update over 1.0.0 included; any file on a phone, a Mac or an iPhone by a person; a level of any download played by hand.
 
 **LEFT FOR THE OWNER.** (1) The Android check when the PC has the memory. (2) The Mac and iPhone icons (step 278). (3) The answers about the black screen and the iPhone (PLAY-4, PLAY-5). (4) Whether 1.0.0 stays on the releases page.
+
+## Step 280 - A player's Vulkan report read, not changed (PLAY-7; DOCS ONLY)
+
+**Asked.** The owner, 2026-11-27: "one user is reporting that his phone is giving him the error that vulkan 1.2 is needed. can we make it playable other version? We had the same problem with penumbra and i think we added vulkan 1.1. support or somrthing?"
+
+**What was done.** A read-only investigation (workflow `wf_9eeba81f-a2f`: the phone's paths, what Vulkan 1.0 would take, what the sibling port did, public facts about devices; two sceptics over the first two). Nothing was built or run, no file of either port or of the engine changed, and its web queries named neither the owner nor the project (120 calls read). Results in backlog PLAY-7 and one sentence in PLAY-4: the sibling's 1.1 fix is in every release; no unmodified released Android build says 1.2 is needed; Android 8.x very likely cannot start the game (the engine's 1.2 instance request; read from Android's source, never tried); accepting 1.0 looks feasible as an engine change and is not made.
+
+**Gates.** `check_public` no ERROR, `check_version` ok.
+
+**FILES.** `docs/parity-backlog.md`, this record, the DEVLOG entry.
+
+**LEFT FOR THE OWNER.** (1) The player's exact message. (2) Whether to accept Vulkan 1.0 (an engine commit, a pin bump, a release). (3) The "Android 8 or newer" wording in `README.md` and `docs/install.md`, which is probably wrong as the program stands.
