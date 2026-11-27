@@ -4,7 +4,7 @@
 
 **The 2D puzzle-platformer by Asantee Games, rebuilt for modern systems.**
 
-<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-03-chapter-1-portals.jpg" alt="Level 1-18: the hooded mage between a pale portal and a blue portal, open in two stone arches lit by a torch, with the on-screen controls." width="80%"></p>
+<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-03-chapter-1-portals.jpg" alt="Level 1-18: the hooded mage between a pale portal and a blue portal, open in two stone arches lit by a torch, with the on-screen controls." width="80%"></p>
 
 <a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Windows.zip"><img alt="Download for Windows" height="56" src="https://img.shields.io/badge/Download%20for-Windows-2F7DE1?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>&nbsp;&nbsp;<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Android.apk"><img alt="Download for Android" height="56" src="https://img.shields.io/badge/Download%20for-Android-1E8C6E?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>&nbsp;&nbsp;<a href="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-Linux.tar.gz"><img alt="Download for Linux" height="56" src="https://img.shields.io/badge/Download%20for-Linux-E0533D?style=for-the-badge&labelColor=1B1F3B&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTExIDNoMnY5LjZsMy4zLTMuMyAxLjQgMS40TDEyIDE2LjRsLTUuNy01LjcgMS40LTEuNCAzLjMgMy4zVjN6TTQgMThoMTZ2Mkg0eiIvPjwvc3ZnPg=="></a>
 
@@ -13,7 +13,7 @@
 Free, no ads, no game account (installing on an iPhone or iPad needs your own Apple ID). 128 levels in four chapters, with the original's art and sound.<br>
 **[How to install: step by step](docs/install.md)** · [Report a problem](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/issues/new/choose)
 
-[![Licence: MIT](https://img.shields.io/badge/licence-MIT-1F6FEB)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white) ![Vulkan](https://img.shields.io/badge/Vulkan-1.2-AC162C?logo=vulkan&logoColor=white)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-1F6FEB)](LICENSE) ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white) ![Vulkan](https://img.shields.io/badge/Vulkan-1.0%2B-AC162C?logo=vulkan&logoColor=white)
 
 </div>
 
@@ -23,11 +23,11 @@ Free, no ads, no game account (installing on an iPhone or iPad needs your own Ap
 
 You walk, shoot a portal at a wall and step through it to reach the door of each level. Magic Portals was first made for phones by Asantee Games and was delisted in 2025. This version runs on the [Supersonic Engine](https://github.com/IvanCvetanovic/Supersonic-Engine) (C++20, Vulkan) and is built to play like the original. It is checked against the original running in an emulator and does not match it everywhere yet ([where it differs](docs/developing.md#status)).
 
-<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-01-main-menu.jpg" alt="Main menu: the Magic Portals title, a red dragon, a hooded mage and a portal." width="48%">&nbsp;<img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-04-chapter-2-orbs.jpg" alt="Level 2-18: the mage beside a crate, with a blue orb above and a glowing orange orb ahead." width="48%"></p>
+<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-01-main-menu.jpg" alt="Main menu: the Magic Portals title, a red dragon, a hooded mage and a portal." width="48%">&nbsp;<img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-04-chapter-2-orbs.jpg" alt="Level 2-18: the mage beside a crate, with a blue orb above and a glowing orange orb ahead." width="48%"></p>
 
-<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-05-chapter-3-castle.jpg" alt="Level 3-02: a pale and a blue portal open in two arches, with a knight below." width="48%">&nbsp;<img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-06-chapter-4-key.jpg" alt="Level 4-15: a spacesuited mage floats among bubbles, a key and a locked door." width="48%"></p>
+<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-05-chapter-3-castle.jpg" alt="Level 3-02: a pale and a blue portal open in two arches, with a knight below." width="48%">&nbsp;<img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-06-chapter-4-key.jpg" alt="Level 4-15: a spacesuited mage floats among bubbles, a key and a locked door." width="48%"></p>
 
-<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-07-chapter-4-bubbles.jpg" alt="Level 4-18: the spacesuited mage among large green bubbles over a planet." width="48%">&nbsp;<img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.1/screenshot-02-chapter-select.jpg" alt="Chapter select: the first chapter&#x27;s door is unlocked and the second is padlocked." width="48%"></p>
+<p align="center"><img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-07-chapter-4-bubbles.jpg" alt="Level 4-18: the spacesuited mage among large green bubbles over a planet." width="48%">&nbsp;<img src="https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/download/v1.0.2/screenshot-02-chapter-select.jpg" alt="Chapter select: the first chapter&#x27;s door is unlocked and the second is padlocked." width="48%"></p>
 
 ## What this version adds
 
@@ -49,13 +49,13 @@ You walk, shoot a portal at a wall and step through it to reach the door of each
 
 | Platform | Needs | Checked so far |
 |---|---|---|
-| Windows | 64-bit PC, Vulkan 1.2, Microsoft's Visual C++ runtime (not included) | **Verified by a run on one PC:** the download starts on Windows 11, run there by a script; nobody has played it, and no other PC has run it. |
-| Linux | 64-bit Linux on an x86-64 CPU (a distribution from about 2022), X11, Vulkan 1.2 | **Verified by a run, without a real GPU:** the download starts levels on a software graphics driver. |
-| Android | Android 8 or newer, 64-bit or 32-bit, Vulkan 1.1 | **Verified on an emulator, and a test build on one real phone** (earlier versions). The current download has not been installed anywhere, and the 32-bit program has never run on a phone. |
+| Windows | 64-bit PC, Vulkan 1.0 or newer, Microsoft's Visual C++ runtime (not included) | **Verified by a run on one PC:** the download starts on Windows 11, run there by a script; nobody has played it, and no other PC has run it. |
+| Linux | 64-bit Linux on an x86-64 CPU (a distribution from about 2022), X11, Vulkan 1.0 or newer | **Verified by a run, without a real GPU:** the download starts levels on a software graphics driver. |
+| Android | Android 8 or newer, 64-bit or 32-bit, Vulkan 1.0 or newer | **Verified on an emulator, and a test build on one real phone** (earlier versions). The current download has not been installed anywhere, and the 32-bit program has never run on a phone. |
 | macOS | macOS 13.3 or newer | **Verified on a CI runner only:** started on a GitHub test Mac with a virtual graphics card, and the Intel half has not run with the game inside. No developer's signature and not notarised. |
 | iOS | iPhone or iPad, iOS 16.3 or newer | **Built, never started.** It needs a sideloading tool and your own Apple ID, which has not been tried. |
 
-Vulkan is the graphics interface the game draws with. Most PCs from the last eight years have a Vulkan 1.2 driver; update your graphics driver if the game will not start ([the guide](docs/install.md#windows-pc)). Many phones from about 2018 on have the Vulkan 1.1 the Android file asks for, but not all, and a phone with only 1.1 has not been tried. [docs/platforms.md](docs/platforms.md) has the detail behind each row.
+Vulkan is the graphics interface the game draws with. The game takes every version of it, from 1.0; update your graphics driver if the game will not start ([the guide](docs/install.md#windows-pc)). Many older phone chips allow less than the full renderer asks; the game then uses a simpler drawing path that draws the same picture, and a Vulkan 1.0 chip that cannot take even that is named in a message. **Vulkan 1.0 support is new: it was checked on a PC that pretended to be a 1.0 system and a 1.0 graphics chip. No real device of that age, and no Android 8 at all, has run it.** [docs/platforms.md](docs/platforms.md) has the detail behind each row.
 
 ## Build it yourself
 

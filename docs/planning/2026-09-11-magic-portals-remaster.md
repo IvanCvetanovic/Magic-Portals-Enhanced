@@ -35481,3 +35481,19 @@ R-B (H2: the player steps on the lift door's button while A walks back toward th
 **FILES.** `engine` (pin); `CMakeLists.txt`; `game/main.cpp`, `game/sim/EngineTuning.{hpp,cpp}`, `StartChecks.hpp`, `game/data/engine.json`, `game/data/lang/ar.json`, `game/android/AndroidMain.cpp`, `AndroidManifest.xml` (comments), `game/ios/IOSMain.mm`, `game/macos/MacMain.mm` (comments); `tests/test_mp_tuning.cpp`, `test_mp_platform.cpp`; `tools/package/*` (messages, `test_vulkan_wiring.py` new), `tools/build_linux.sh`; `docs/android.md`, `apple.md`, `developing.md`, `packaging.md`, `parity-backlog.md`, this record, the DEVLOG entry.
 
 **LEFT FOR THE OWNER.** (1) The player's exact message, and whether 1.0.2 starts on their phone. (2) A try on a real Android 8 or Vulkan 1.0 phone, if anyone has one. (3) The sibling port's engine still asks 1.2 of every instance; the first engine commit would carry over. (4) The other ten languages' title button was not changed.
+
+## Step 282 - Release 1.0.2 for all five platforms (REL-3; GAMEPLAY: none beyond step 281; CODE: none beyond the version number; PUBLISHED)
+
+**Asked.** The owner, 2026-11-27, "ok, start if you need any engine changes you are allowed to do it, commit and push under my name only", to the proposal to release Vulkan 1.0 support as 1.0.2 for all platforms once it passed.
+
+**What was done.** `a1118b8` bumps the version to 1.0.2 (versionCode 10002) over step 281's `b413282` (both pushed). `release.yml` (run 46057408903) and the `windows` job of `ci.yml` (run 46057412719; 55 passed, 44 skipped) on it; the content package and the signed APK on the owner's PC (the existing key, never printed; the original's icon); the original's icon put on the runner's Windows program (only `.rsrc` differs); `release.py` checked and assembled Windows and Linux; a pre-release with the six files; `apple-release.yml` on the tag `v1.0.2` (run 46060425741); the Apple files and the seven-line sums added; then `--prerelease=false --latest`. The seven front-page pictures were copied from `v1.0.1` to `v1.0.2` and the README moved to it.
+
+**Checked.** Every asset downloaded without a login matches `SHA256SUMS.txt`, also through `releases/latest/download/<name>`. The published APK has 1.0.1's signing certificate and application id and versionCode 10002; its list equals the content package and its 18 shaders the engine's. The Windows archive's program ran two levels and the main menu and the Linux archive's nine runs (five levels, one with the intro, three of them also forced to Vulkan 1.0 and the compact scene): no error, and each forced run's picture identical to the plain one's. The Apple app: seal accepted, the same names before and after, game data and shaders byte for byte, five languages started on a GitHub Mac (which reports Vulkan 1.2: the full scene, not the compact one). Tests on the release tree: Windows 99 suites 291,269 checks 0 failures, Linux 64-bit 99 suites 291,230, route lines unchanged; the 32-bit stand-in as in step 281.
+
+**Not checked.** The APK was installed and started on no phone and no emulator (the emulator's guard wants 6 GiB free and about 5.3 GiB were; not bypassed), although this release changes how Android starts Vulkan. No real Vulkan 1.0 or 1.1 device, no Android 8. The Windows full-screen keys and window icon were not tried again.
+
+**If it must be taken back.** `gh release edit v1.0.1 --latest`. A phone that took 1.0.2 must uninstall to go back, losing its medals.
+
+**FILES.** `CMakeLists.txt`, `docs/android.md`, `apple.md`, `packaging.md`, `tools/package/check_version.py` (the bump, `a1118b8`); `README.md`, `docs/install.md`, `docs/platforms.md`, `tools/package/check_version.py`, `docs/parity-backlog.md`, this record, the DEVLOG entry.
+
+**LEFT FOR THE OWNER.** (1) Whether 1.0.2 starts on the reporting player's phone, and the message if not. (2) A start of the APK on the emulator or a phone. (3) Step 281's list.

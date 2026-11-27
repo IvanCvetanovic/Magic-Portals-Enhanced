@@ -5540,3 +5540,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - wants nobody with an old phone left out.
 
 **Where it stands / next:** committed; the release of 1.0.2 is next. Not seen on any device of the age this is for.
+
+### 2026-11-27 21:17 - Session 82, night: release 1.0.2 for all five platforms - Step 282
+**Asked:** "ok, start ... commit and push under my name only" (the release was part of the proposal he answered).
+**Built:** release 1.0.2, published and latest: Windows, Linux, Android, macOS, iOS; the front page and the guides now say Vulkan 1.0.
+**Broke / dead ends:** the Android emulator check could not run again (about 5.3 GiB free, 6 wanted, even with the Linux subsystem shut down).
+**Decision:** published without an Android start, as 1.0.1 was, and said so in the notes; this time the change touches Android's start, so it is the first thing to tell him.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; the staged-extension check printed nothing; captures deleted.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** runs 46057408903, 46057412719, 46060425741; eight files and seven pictures on v1.0.2; Windows 99 suites 291,269 checks, Linux 291,230, 0 failures.
+**Inferred mood:** a guess - wants the player with the old phone to try it.
+
+**Where it stands / next:** 1.0.2 is live; the player's answer, and an Android start, are next.

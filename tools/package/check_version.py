@@ -84,7 +84,7 @@ MANIFEST_MUST_NOT_SPELL = ('versionName', 'versionCode')
 
 # ---- ALLOWED: hits of the literal that are not this program's version. (A file, or the start of a path; the reason is the decision.) --------------
 ALLOWED = (
-    ('README.md', "the address of the front page's screenshots (releases/download/v1.0.1/screenshot-*.jpg): the pictures are assets of the release they were attached to and stay there when the version moves (docs/releasing.md says to attach them again and change the address)"),
+    ('README.md', "the address of the front page's screenshots (releases/download/v1.0.2/screenshot-*.jpg): the pictures are assets of the release they were attached to and stay there when the version moves (docs/releasing.md says to attach them again and change the address)"),
     ('tools/converter/', "the converter's own version (pyproject.toml, __init__.py): another product, released on its own"),
     ('tools/apple/test_', 'invented test data of the Apple scripts\' tests (a stand-in plutil, a template filled with several versions)'),
     ('tools/package/test_', 'invented file names and fixtures of the packager\'s tests'),
