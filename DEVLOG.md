@@ -5504,3 +5504,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - he wants it to look like the game he remembers everywhere.
 
 **Where it stands / next:** committed; then the version bump and the release of 1.0.1.
+
+### 2026-11-27 16:37 - Session 82, evening: release 1.0.1 for all five platforms - Step 279
+**Asked:** "release as 1.0.1 pls. for all platforms, you can di tge windows build nd whatever is necssarry".
+**Built:** release 1.0.1, published and latest: Windows (with the original's icon), Linux, Android, macOS, iOS.
+**Broke / dead ends:** (1) The Android emulator check could not run: it needs 6 GB of free memory and the PC had 4.9 to 5.4 GB; waited 8 more minutes, then shipped with the notes saying so. (2) My first Windows icon test script had two Windows paths broken by Python's escapes and left the game running; closed and rerun. (3) The version bump's change set had to be set aside and reapplied so the icon step could be committed first.
+**Decision:** the release's Windows program is the runner's with only its icon resources changed on this PC, so no path of this PC is in it.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; every screen capture and the throwaway unpacked downloads in the scratch folders were deleted.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** 99 suites, 291,175 checks, 0 failures on 64-bit and on the 32-bit stand-in; CI Windows 55 passed 44 skipped; runs 46017029975, 46017034819, 46021439105; eight assets and seven pictures on v1.0.1.
+**Inferred mood:** a guess - pleased that the players' complaints are answered within a day.
+
+**Where it stands / next:** 1.0.1 is live; players' reports are next (the black screen and the iPhone especially).

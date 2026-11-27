@@ -35409,3 +35409,35 @@ R-B (H2: the player steps on the lift door's button while A walks back toward th
 **FILES.** `game/windows/MagicPortalsWindows.cmake`, `tools/package/windows_icon.py` (new), `tools/package/test_windows_icon.py` (new), `tools/package/README.md`, `docs/packaging.md`, `docs/releasing.md`, `docs/parity-backlog.md`, this record, the DEVLOG entry.
 
 **LEFT FOR THE OWNER.** The macOS app and the iPhone file still show the drawn icon: the same pictures could be put there, in the Apple assembly, at your word.
+
+## Step 279 - Release 1.0.1 for all five platforms (REL-2; GAMEPLAY: that of step 277; CODE: none beyond the version number; PUBLISHED)
+
+**Asked.** The owner, 2026-11-26: "release as 1.0.1 pls. for all platforms, you can di tge windows build nd whatever is necssarry"; later "i turned off smart app control, so you can do it now".
+
+**The tree.** `b8c9e2f` (version 1.0.1, versionCode 10001, Windows 1.0.1.0), on steps 277 and 278, pushed to `main` as a fast-forward from `c31a91b`. `check_version` needed one new `ALLOWED` row: `NOTICE.md` names GLM's own 1.0.1.
+
+**GitHub.** `release.yml` run 46017029975 (all programs, success). `ci.yml` job `windows` run 46017034819 (success): the code built, ctest without the game's data 55 passed and 44 skipped, the fixture level from the developer's build and from the archive's release program on lavapipe, and the no-data start failing in words.
+
+**On the owner's PC, on the release's tree.** Linux 64-bit: 99 suites, 291,175 checks, 0 failures (ctest 102/102). 32-bit x86 stand-in: 99 suites, 291,175 checks, 0 failures (100 of 100, the two build-option pins left out). The 290 route lines unchanged on both. `tools/package` 439 (5 skipped), `tools/ci` 353 (1 skipped), `check_public` no ERROR. The Windows suites were run on step 277's tree (291,214 checks, 0 failures); steps 278 and this one change no game code. Content package: 927 files, 27,162,342 bytes, differing from 1.0.0's only in `port-data` (`controls.json`, `earthquake.json`, `minions.json`, the eleven language files) and its two lists. APK: the owner's existing key (certificate `ac1d43bd...66da`, the published 1.0.0's too), three libraries, the original's icon, `release.py android` passed.
+
+**The programs.** `check-program` passed the runner's Windows and Linux programs (Linux with `--max-glibc 2.35`). The Windows program then got the original's icon (step 278; `ee582f5f...` to `2ba14780...`, 7,774,720 bytes): by section, only `.rsrc` differs and `.reloc` moved with the same bytes; `check-program` passed the copy.
+
+| File | Bytes | SHA-256 begins |
+|---|---|---|
+| `MagicPortals-Windows.zip` | 27,548,571 | `fa54013c` |
+| `MagicPortals-Android.apk` | 37,446,891 | `2a5951b6` |
+| `MagicPortals-Linux.tar.gz` | 28,912,136 | `e53e06fe` |
+| `MagicPortals-macOS.zip` | 36,453,140 | `bf8806b6` |
+| `MagicPortals-iOS.ipa` | 29,462,528 | `7bfe8544` |
+
+**The order.** Pre-release `v1.0.1` with the three programs, `LICENSE`, `NOTICE.md` and the sums; `apple-release.yml` run 46021439105 from the tag, with the published Windows zip as its content (the seal broken as packaged, then "valid on disk" after the ad-hoc signing and again unpacked from the zip; 994 names before and after; five language starts of level 1-01, each "finished: clean" with no error or warning); the Mac and iPhone files uploaded; the seven-line sums last (its first five lines unchanged); all eight files fetched without a login and byte-equal; the game's files inside all five downloads byte-equal to the content package.
+
+**The downloads, tried.** Windows, on the owner's PC (a script, with `APPDATA` and `TEMP` in throwaway folders): `F11` and `Alt`+`Enter` between a 1302x776 window and 1920x1200, `desktop.json` after each, the next start full screen, both exits 0, logs without error; the window's big and small icons and the file's icon read back as the original's (looked at). Linux, in the Linux subsystem under Xvfb: levels 1-01 (with and without the intro), 3-07, 4-01, 4-27, 4-31 for 400 frames, all clean; the player's script (no walk arrows on the first run, the `A` key walks, `F11` and `Alt`+`Enter`, the kept choice, both switches), screenshots looked at and deleted. Android: the signer, app id and version compared with the published 1.0.0's; **the emulator run was NOT made** (`tools/android_emulator.py` wants 6 GB free; 4.9 to 5.4 were free through the release, with another of the owner's projects running for part of it; the guard was not lowered).
+
+**Published** (`gh release edit ... --prerelease=false --latest`); `releases/latest` is `v1.0.1`; the six `latest/download` addresses answer 302 then 200 with the published bytes; the notes on the page equal the file read here. 1.0.0 and its tag stay.
+
+**After.** The seven front-page pictures attached to `v1.0.1` too (byte-equal), the README's addresses moved to it; the README's Windows and Android rows, `docs/install.md` (the Windows status, the APK's entries re-read) and `docs/platforms.md` (what was tried, and what was not) brought up to date.
+
+**NOT RUN.** The APK on any device or emulator, the update over 1.0.0 included; any file on a phone, a Mac or an iPhone by a person; a level of any download played by hand.
+
+**LEFT FOR THE OWNER.** (1) The Android check when the PC has the memory. (2) The Mac and iPhone icons (step 278). (3) The answers about the black screen and the iPhone (PLAY-4, PLAY-5). (4) Whether 1.0.0 stays on the releases page.
