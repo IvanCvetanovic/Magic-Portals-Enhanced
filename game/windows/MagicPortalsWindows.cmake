@@ -64,15 +64,17 @@ function(magicportals_windows_release target)
     set(MAGICPORTALS_RC_NAME "${target}")
 
     # The icon is OPTIONAL and is never part of this repository (the hard rule: no image file is committed, an icon included). Given a file it is
-    # embedded as resource 1; given none the resource is simply not there. A path that names nothing is an error, never a build without it that
-    # the person did not ask for. Forward slashes: a resource compiler reads a backslash inside a string as an escape.
+    # embedded twice: as resource 1, the file's icon in Explorer, and as GLFW_ICON, the name the window library looks for to give the game's window
+    # and taskbar button an icon (without it they show Windows' generic program icon; planning step 278). Given none neither is there. A path that
+    # names nothing is an error, never a build without it that the person did not ask for. Forward slashes: a resource compiler reads a backslash
+    # inside a string as an escape. A release's program gets the original's icon after the build (tools/package/windows_icon.py).
     set(MAGICPORTALS_RC_ICON_LINE "")
     if (MPW_ICON)
         if (NOT EXISTS "${MPW_ICON}")
             message(FATAL_ERROR "MAGICPORTALS_ICON names no file: ${MPW_ICON}")
         endif()
         file(TO_CMAKE_PATH "${MPW_ICON}" _icon)
-        set(MAGICPORTALS_RC_ICON_LINE "1 ICON \"${_icon}\"")
+        set(MAGICPORTALS_RC_ICON_LINE "1 ICON \"${_icon}\"\nGLFW_ICON ICON \"${_icon}\"")
     endif()
 
     set(_rc "${CMAKE_CURRENT_BINARY_DIR}/${target}.rc")

@@ -5492,3 +5492,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - glad people are playing it, and in a hurry to get the fixes to them.
 
 **Where it stands / next:** Step 277 committed; the 1.0.1 release of this tree is next.
+
+### 2026-11-27 15:29 - Session 82, afternoon: the Windows program gets the original's icon - Step 278
+**Asked:** "also for windows app, you are using the old app icon and not the one you use for android, pls fix that too".
+**Built:** `tools/package/windows_icon.py` (the original's icon as a Windows icon file, and put on the CI program); the resource script embeds an icon under `GLFW_ICON` too, so the window and taskbar show it.
+**Broke / dead ends:** none worth the name; the second fault (the window showing Windows' generic icon) had been there since the first release and no check could see it.
+**Decision:** change the CI program's icon resources on this PC rather than build the release here, so that no path of this PC goes into the published program; the Mac and iPhone icons were not asked for and are left.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; the icon files are under `out/` only; the preview pictures were deleted.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** `tools/package` 439 tests (11 new), `tools/ci` 353, all passing.
+**Inferred mood:** a guess - he wants it to look like the game he remembers everywhere.
+
+**Where it stands / next:** committed; then the version bump and the release of 1.0.1.

@@ -15,6 +15,8 @@ python tools/package/release.py check-program <program> --platform windows|linux
 python tools/package/release.py assemble --platform windows|linux --program <program> (--content <content folder> | --no-data) --out <folder> [--vc-redist <folder>] [--max-glibc X.Y]
 python tools/package/release.py assemble --platform macos|ios --shell <zip|ipa|folder> [--content <content folder>] --out <folder>
 python tools/package/release.py android  --apk <release apk> --sdk <sdk> --out <folder>
+python tools/package/windows_icon.py ico --reference <the reference folder> --out <file.ico>        (the original's icon; Windows release only)
+python tools/package/windows_icon.py apply --program <MagicPortals.exe> --ico <file.ico> --out <folder>/MagicPortals.exe        (Windows)
 python tools/package/release.py sums <release folder> [--check]       python tools/package/release.py check-version
 python tools/package/version.py [code|windows]                        python tools/package/check_version.py
 ```
