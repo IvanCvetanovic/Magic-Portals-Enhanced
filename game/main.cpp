@@ -44,6 +44,7 @@
 #include "RunKind.hpp"
 #include "sim/AssetRoot.hpp"
 #include "sim/Controls.hpp"
+#include "sim/Desktop.hpp"
 #include "sim/EngineTuning.hpp"
 #include "sim/Files.hpp"
 #include "sim/Language.hpp"
@@ -815,7 +816,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     const bool routeGiven = false;
     const bool visitGiven = false;
 #endif
-    const auto options = Supersonic::LaunchOptions::Parse(static_cast<int>(engineArgs.size()), engineArgs.data());
+    // Not const: a desktop player's kept full screen is set on it before the engine opens its window (below).
+    auto options = Supersonic::LaunchOptions::Parse(static_cast<int>(engineArgs.size()), engineArgs.data());
     if (options.helpRequested) {
         std::cout << Supersonic::LaunchOptions::Usage()
                   << "  --level <name>    the level to start at, as chapters.json names it. Without it\n"
@@ -849,7 +851,7 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    is one of these, else English, until the player picks one in the game;\n"
                   << "                    a capture or a scripted run is English\n"
                   << "  --splash on|off   the Supersonic Engine's intro (two seconds of its logo before the\n"
-                  << "                    game; a key, a click or a tap ends it): on forces it, off removes it.\n"
+                  << "                    game; a key (not F11, Alt or Alt+Enter on a computer), a click or a tap ends it): on forces it, off removes it.\n"
                   << "                    Without it the intro plays on a player's run that names no --level\n"
                   << "                    and never in a capture, a route or a scripted run\n"
                   << "  --levels <dir>    the converted levels (" << DefaultText(paths.levels) << ")\n"
@@ -1198,6 +1200,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     paths.spriteReport = tuning.spriteReport;
     // A phone's run covers its level starts (planning step 205, sim/LevelStart.hpp); every other run starts a level inside the tick that asked, as it always did.
     paths.coverLevelStarts = mobile;
+    // A DESKTOP PLAYER'S RUN (planning step 277, sim/Desktop.hpp): full screen by F11, Alt+Enter and Options, no walk arrows on the picture unless chosen.
+    // A person at the run, a build that is not a phone's, and no phone profile: every capture, route and suite is as it was.
+    paths.desktop = MagicPortals::Desktop::PlayerRun(fatal.attended, MagicPortals::kMobileBuild, mobile);
     // A phone's run cannot do without its options file (planning step 203, PORT3-3 (d)): the lowest Vulkan version a phone's GPU may report is in it,
     // and the engine's own defaults ask for 1.2, which many phones' stock drivers do not offer. A start with the defaults would end with a GPU
     // complaint that blames the phone; this one says what is wrong. A desktop run with the file unreadable goes on with the engine's defaults, as
@@ -1262,6 +1267,18 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                      "medals earned this session will not be kept.\n";
     }
     paths.saveDir = saveDir.string();
+    // The desktop player's full screen, as it was left (planning step 277): asked of the engine before it opens the window, so the first frame is already
+    // full screen. --fullscreen and --windowed decide their own run, and neither is kept. A table or a file that will not read leaves the window as the
+    // command line asked; the layer reads both again and says what was wrong.
+    if (paths.desktop) {
+        MagicPortals::Desktop::Rules desktopRules;
+        MagicPortals::Desktop::Store kept;
+        std::string why;
+        if (!MagicPortals::Desktop::LoadRules(paths.portData + MagicPortals::Controls::kDataFile, desktopRules, why)) desktopRules = {};
+        if (!kept.Open(paths.saveDir, why)) why.clear();
+        options.fullscreen = MagicPortals::Desktop::StartFullscreen(kept.Fullscreen(), desktopRules.fullscreenDefault, options.fullscreen, options.windowed);
+        paths.startsFullscreen = options.fullscreen;
+    }
     SUPERSONIC_LOG_INFO("Magic Portals") << "folders: levels " << paths.levels << ", data " << paths.data << ", port data "
                                          << paths.portData << ", saves " << (paths.saveDir.empty() ? "(none)" : paths.saveDir)
                                          << std::endl;

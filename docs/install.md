@@ -18,7 +18,7 @@ The download is **not code-signed** (it has no digital signature from a publishe
 
 ## Windows PC
 
-**You need:** a 64-bit Windows PC and a graphics driver that supports Vulkan 1.2 (most PCs from the last eight years or so have one; update the driver through Windows Update, or from NVIDIA, AMD or Intel). The maker's own builds of the game have been run on Windows 11 (the test program of a later build was not: Windows refused to start it; the program in the download has not been started on any PC); whether it starts on Windows 10 was not tried.
+**You need:** a 64-bit Windows PC and a graphics driver that supports Vulkan 1.2 (most PCs from the last eight years or so have one; update the driver through Windows Update, or from NVIDIA, AMD or Intel). The maker's own builds of the game have been run on Windows 11 (Smart App Control, while it was on, refused some of them); the program in the download has not been started on any PC; whether it starts on Windows 10 was not tried.
 
 > **Check this first on Windows 11:** because the download is not code-signed, a PC with **Smart App Control** turned on may refuse to run it, and then there is no *Run anyway* button. To see whether it is on, open **Settings**, **Privacy & security**, **Windows Security**, **App & browser control**, **Smart App Control settings**. If it says *On*, the game will probably not start; turning it off is a choice about your whole PC, so decide for yourself.
 
@@ -133,6 +133,8 @@ sudo apt install libvulkan1 mesa-vulkan-drivers libasound2
 
 **[Download for iPhone and iPad](https://github.com/IvanCvetanovic/Magic-Portals-Enhanced/releases/latest/download/MagicPortals-iOS.ipa)**
 
+**Downloading the file on the iPhone or iPad and tapping it does not install it.** That is expected: an app from outside the App Store is put on the device by a sideloading tool, which starts on a computer.
+
 1. **Install a sideloading tool** and follow its own instructions. The file cannot be installed as it is: the tool signs it again with your own Apple ID when it puts it on your device.
 2. **Give the tool `MagicPortals-iOS.ipa`** and install it on your iPhone or iPad.
 3. **Trust it on the device** (*Settings*, *General*, *VPN & Device Management*) and, on iOS 16 and newer, turn on *Developer Mode* (*Settings*, *Privacy & Security*) if the device asks, as the tools describe. Developer Mode is a setting meant for developers that Apple says lowers the device's security; it can be turned off again (from Apple's documentation, not tried here).
@@ -141,11 +143,15 @@ sudo apt install libvulkan1 mesa-vulkan-drivers libasound2
 
 ## Playing
 
-The modern on-screen controls are the default: the two arrows in the bottom corners walk, a touch or click where you want a portal shoots it, and the buttons at the top restart, pause and clear your portals. On a desktop the mouse stands in for a finger, and `←` `→` or `A` `D` walk, `R` restarts the level and `Esc` pauses. The original's classic layout is one tile away in Options, where *Adjust controls* also changes the size, opacity and place of the modern ones. [The README](../README.md#controls) has the list.
+**On a computer**, `←` `→` or `A` `D` (`Q` `D` on a French keyboard) walk and a click where you want a portal shoots it; the buttons at the top restart, pause and clear your portals (`R` restarts the level, `Esc` pauses). `F11` or `Alt`+`Enter` switches full screen, and so does *Fullscreen* in Options (the gear on the main menu); the game remembers it. The on-screen walk arrows are off on a computer; *Walk arrows* in Options shows them (meant for a touch screen with no keyboard to hand; not tried on one). On a Mac, `Alt` is the `Option` key, and the system may take `F11` for itself (not tried).
+
+**On a phone or tablet** the modern on-screen controls are the default: the two arrows in the bottom corners walk, a touch where you want a portal shoots it, and the buttons at the top restart, pause and clear your portals.
+
+The original's classic layout is one tile away in Options, where *Adjust controls* also changes the size, opacity and place of the modern ones (on a computer, while the walk arrows are on). [The README](../README.md#controls) has the list.
 
 ## Where the game keeps things
 
-Your medals, the sound and music switches, your achievements, your choice of controls and your choice of language (`language.json`) are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, `~/Library/Application Support/Magic Portals` on a Mac, and in the app's own storage on Android and on an iPhone or iPad (uninstalling the app removes them; on an iPhone this is inferred, never seen). On a Mac the game also keeps a copy of its shaders and a pipeline cache in `~/Library/Caches/com.ivancvetanovic.magicportals`, made again at each start (the cache's place is inferred from the log), so delete that folder too when you remove the game; on an iPhone or iPad the same is expected in the app's own `Library/Caches` (inferred, never seen). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
+Your medals, the sound and music switches, your achievements, your choice of controls, your full-screen and walk-arrow choices on a computer (`desktop.json`) and your choice of language (`language.json`) are kept between runs, in `%APPDATA%\Magic Portals` on Windows, `~/.local/share/Magic Portals` on Linux, `~/Library/Application Support/Magic Portals` on a Mac, and in the app's own storage on Android and on an iPhone or iPad (uninstalling the app removes them; on an iPhone this is inferred, never seen). On a Mac the game also keeps a copy of its shaders and a pipeline cache in `~/Library/Caches/com.ivancvetanovic.magicportals`, made again at each start (the cache's place is inferred from the log), so delete that folder too when you remove the game; on an iPhone or iPad the same is expected in the app's own `Library/Caches` (inferred, never seen). To start from nothing, delete that folder. The game changes nothing else outside its own folder (and a log and a cache of files it can make again in the temporary folder). To remove the game, delete its folder and, if you like, the one above.
 
 ## Reporting a problem
 

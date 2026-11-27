@@ -173,8 +173,49 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& 
         return fail();
     }
 
+    // The desktop screen (planning step 277).
+    if (!Object(options, "desktop", why, "options")) return fail();
+    const Json::Value& desktop = options["desktop"];
+    Rules::Desktop& d = read.desktop;
+    if (!Text(desktop, "title", d.title, why, "options.desktop") ||
+        !Fraction(desktop, "title_at_screen", d.titleAtScreen, why, "options.desktop") ||
+        !Fraction(desktop, "tile_modern_at_screen", d.tileAtScreen[0], why, "options.desktop") ||
+        !Fraction(desktop, "tile_classic_at_screen", d.tileAtScreen[1], why, "options.desktop") ||
+        !Fraction(desktop, "adjust_at_screen", d.adjustAtScreen, why, "options.desktop") ||
+        !Object(desktop, "switches", why, "options.desktop")) {
+        return fail();
+    }
+    const Json::Value& switches = desktop["switches"];
+    const std::string at = "options.desktop.switches";
+    if (!Number(switches, "row_at_screen", 0.0, 1.0, d.rowAtScreen, why, at) ||
+        !Number(switches, "centre_offset_units", 0.0, 1000.0, d.centreOffsetUnits, why, at) ||
+        !Size(switches, "size_units", d.sizeUnits, why, at) || !UiLayer::Read::Pair(switches, "mark_at_units", d.markAtUnits, why, at) ||
+        !Size(switches, "mark_size_units", d.markSizeUnits, why, at) ||
+        !Positive(switches, "mark_border_units", d.markBorderUnits, why, at) || !ReadColour(switches, "mark_rgba", d.mark, why, at) ||
+        !UiLayer::Read::Pair(switches, "word_at_units", d.wordAtUnits, why, at) ||
+        !Positive(switches, "word_max_width_units", d.maxWidthUnits, why, at) || !Text(switches, "font", d.font, why, at) ||
+        !Positive(switches, "units_per_font_px", d.unitsPerFontPx, why, at) ||
+        !Text(switches, "fullscreen_word", d.fullscreenWord, why, at) || !Text(switches, "walk_pads_word", d.walkPadsWord, why, at)) {
+        return fail();
+    }
+    // The two switches stand side by side and must not meet.
+    if (2.0 * d.centreOffsetUnits < d.sizeUnits.x) {
+        why = at + ".centre_offset_units puts the two switches on each other";
+        return fail();
+    }
+
     out = std::move(read);
     return true;
+}
+
+Rules ForDesktop(const Rules& rules) {
+    Rules out = rules;
+    out.desktop.shown = true;
+    out.title.words = rules.desktop.title;
+    out.title.atScreen = rules.desktop.titleAtScreen;
+    for (std::size_t i = 0; i < out.tiles.size(); ++i) out.tiles[i].atScreen = rules.desktop.tileAtScreen[i];
+    out.adjust.atScreen = rules.desktop.adjustAtScreen;
+    return out;
 }
 
 Entry EntryAt(const Rules& rules, const UiLayer::Rules& layer, const MenuState::Rules& state, const glm::dvec2& viewUnits, double stateMs,
@@ -201,6 +242,8 @@ std::optional<Controls::Style> StyleOf(Widget widget) {
     case Widget::None:
     case Widget::Back:
     case Widget::Adjust: // the button that opens the adjustment screen chooses no style
+    case Widget::Fullscreen:
+    case Widget::WalkPads:
         break;
     }
     return std::nullopt;
@@ -233,6 +276,13 @@ Hud::Rect AdjustRect(const Rules& rules, const glm::dvec2& viewUnits) {
     return Hud::Rect{centre - rules.adjust.sizeUnits * 0.5, rules.adjust.sizeUnits};
 }
 
+Hud::Rect SwitchRect(const Rules& rules, Widget widget, const glm::dvec2& viewUnits) {
+    const Rules::Desktop& d = rules.desktop;
+    const double side = widget == Widget::Fullscreen ? -1.0 : 1.0;
+    const glm::dvec2 centre(viewUnits.x * 0.5 + side * d.centreOffsetUnits, viewUnits.y * d.rowAtScreen);
+    return Hud::Rect{centre - d.sizeUnits * 0.5, d.sizeUnits};
+}
+
 Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point,
                 bool adjustShown) {
     if (Credits::BackHitRect(credits, viewUnits, stateMs).Contains(point)) return Widget::Back;
@@ -240,6 +290,11 @@ Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dv
         if (TileRect(rules, style, viewUnits).Contains(point)) return WidgetOf(style);
     }
     if (adjustShown && AdjustRect(rules, viewUnits).Contains(point)) return Widget::Adjust;
+    if (rules.desktop.shown) {
+        for (const Widget widget : {Widget::Fullscreen, Widget::WalkPads}) {
+            if (SwitchRect(rules, widget, viewUnits).Contains(point)) return widget;
+        }
+    }
     return Widget::None;
 }
 
@@ -261,7 +316,7 @@ std::array<Hud::Rect, 5> ThumbnailRects(const Rules& rules, const Controls::Rule
 
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,
                           const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held,
-                          bool adjustShown, const Strings::Table* strings) {
+                          bool adjustShown, const Strings::Table* strings, const Switches& switches) {
     std::vector<Piece> pieces;
     // The credits' background and back button, as the credits draw them: its first two pieces. (Its papyrus and its strip are the credits'.)
     for (const Credits::Piece& piece : Credits::Pieces(credits, viewUnits, stateMs, Credits::Scroll{}, held == Widget::Back)) {
@@ -277,7 +332,8 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
     {
         Piece title;
         title.element = Element::Title;
-        title.words = strings != nullptr ? strings->Show(Strings::Key::kOptionsTitle) : rules.title.words;
+        const std::string_view key = rules.desktop.shown ? Strings::Key::kOptionsDesktopTitle : Strings::Key::kOptionsTitle;
+        title.words = strings != nullptr ? strings->Show(key) : rules.title.words;
         title.font = rules.title.font;
         title.unitsPerFontPx = rules.title.unitsPerFontPx;
         title.maxWidthUnits = rules.title.maxWidthUnits;
@@ -315,6 +371,8 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
         }
         const std::array<Hud::Rect, 5> rects = ThumbnailRects(rules, controls, hud, tuning, style, tile);
         for (const Controls::Id id : Controls::kClaimOrder) {
+            // A desktop with its walk arrows off shows none on the tiles either.
+            if (rules.desktop.shown && !switches.walkPads && Controls::IsWalk(id)) continue;
             Piece control;
             control.element = Element::ThumbnailControl;
             control.rect = rects[static_cast<std::size_t>(id)];
@@ -359,6 +417,47 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
         word.maxWidthUnits = rules.adjust.maxWidthUnits;
         word.rect = Hud::Rect{button.min + rules.adjust.wordAtUnits, glm::dvec2(0.0)};
         word.colour = tinted(Colour{255, 255, 255, rules.adjust.wordAlphaByte});
+        pieces.push_back(std::move(word));
+    }
+    if (!rules.desktop.shown) return pieces;
+    const Rules::Desktop& d = rules.desktop;
+    for (const Widget widget : {Widget::Fullscreen, Widget::WalkPads}) {
+        const Hud::Rect plate = SwitchRect(rules, widget, viewUnits);
+        const bool on = widget == Widget::Fullscreen ? switches.fullscreen : switches.walkPads;
+        const bool isHeld = held == widget;
+        const auto tinted = [&](Colour colour) {
+            if (!isHeld) return colour;
+            for (int i = 0; i < 3; ++i) colour[static_cast<std::size_t>(i)] = colour[static_cast<std::size_t>(i)] * pressTint / 255;
+            return colour;
+        };
+        const auto quad = [&](Element element, const Hud::Rect& rect, const Colour& colour) {
+            Piece piece;
+            piece.element = element;
+            piece.rect = rect;
+            piece.colour = tinted(colour);
+            piece.widget = widget;
+            pieces.push_back(std::move(piece));
+        };
+        // Lit while on, as the chosen tile is.
+        quad(Element::SwitchFrame, plate, on ? rules.chosenFrame : rules.idleFrame);
+        // The mark: a square's four edges, and its filling while on.
+        const Hud::Rect mark{plate.min + d.markAtUnits, d.markSizeUnits};
+        const double b = d.markBorderUnits;
+        quad(Element::SwitchMark, Hud::Rect{mark.min, glm::dvec2(mark.size.x, b)}, d.mark);
+        quad(Element::SwitchMark, Hud::Rect{glm::dvec2(mark.min.x, mark.Max().y - b), glm::dvec2(mark.size.x, b)}, d.mark);
+        quad(Element::SwitchMark, Hud::Rect{glm::dvec2(mark.min.x, mark.min.y + b), glm::dvec2(b, mark.size.y - 2.0 * b)}, d.mark);
+        quad(Element::SwitchMark, Hud::Rect{glm::dvec2(mark.Max().x - b, mark.min.y + b), glm::dvec2(b, mark.size.y - 2.0 * b)}, d.mark);
+        if (on) quad(Element::SwitchMark, Hud::Rect{mark.min + glm::dvec2(2.0 * b), mark.size - glm::dvec2(4.0 * b)}, d.mark);
+        Piece word;
+        word.element = Element::Word;
+        const std::string_view key = widget == Widget::Fullscreen ? Strings::Key::kOptionsFullscreen : Strings::Key::kOptionsWalkPads;
+        word.words = strings != nullptr ? strings->Show(key) : (widget == Widget::Fullscreen ? d.fullscreenWord : d.walkPadsWord);
+        word.font = d.font;
+        word.unitsPerFontPx = d.unitsPerFontPx;
+        word.maxWidthUnits = d.maxWidthUnits;
+        word.rect = Hud::Rect{plate.min + d.wordAtUnits, glm::dvec2(0.0)};
+        word.colour = tinted(Colour{255, 255, 255, on ? rules.chosenWordAlphaByte : rules.idleWordAlphaByte});
+        word.widget = widget;
         pieces.push_back(std::move(word));
     }
     return pieces;

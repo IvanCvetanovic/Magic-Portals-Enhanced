@@ -84,7 +84,7 @@ add_mp_test(test_mp_numbers)
 add_mp_test(test_mp_levels SKIPS_WITH_77)
 
 # UTF-8 text and the interface languages (planning step 236, PORT-32): sim/Utf8's decoder and encoder (each malformed class pinned to its exact
-# output, a fuzz for the round trip), sim/Strings' language table and its twenty-nine keys (fourteen interface strings and, since steps 247 and 248, fifteen picture words) in eleven languages (key and placeholder parity, the
+# output, a fuzz for the round trip), sim/Strings' language table and its thirty-three keys (eighteen interface strings and, since steps 247 and 248, fifteen picture words) in eleven languages (key and placeholder parity, the
 # original fonts' character set, the drift against the English the rules fields still hold, fallback to English), and sim/Language's saved
 # choice. Pure sim and a scratch directory; its drift case ties en.json to the English the rule tables still hold (the secret achievement's words are
 # Asantee's, in no committed table: the overlay's, test_mp_langsim).
@@ -373,6 +373,13 @@ add_mp_test(test_mp_padart)
 # controls.json (from MP_TEST_PORTDATA when a mutation test sets it), so it never skips.
 add_mp_test(test_mp_options)
 
+# A desktop player's run (planning step 277): sim/Desktop (the keys that ask for full screen, how a start opens, desktop.json), controls.json's
+# `desktop` block and the desktop Options screen's two switches. Pure; it reads only the port's own controls.json and ui.json. The layer's cases - no
+# walk arrows on a desktop's levels, the keys walking, F11 and Alt+Enter, the switches by a touch - are the suite test_mp_desktop_levels of the same
+# file, which exits 77 without the converted levels and Enhanced's data.
+add_mp_test(test_mp_desktop)
+add_mp_test(test_mp_desktop_levels IN_SOURCE test_mp_desktop SKIPS_WITH_77)
+
 # The adjustment screen (planning step 192, CTL-11): sim/Adjust, the `adjust` block of controls.json and the editor pictures sim/PadArt draws - the seven
 # widgets (a box and a face each) at every window shape, Back's fixed place under the clear-portals preview and its clearances (the numbers of
 # out/parity/program/CTL/CTL11/editor_clearance.py), the tile arithmetic (limits, the size chain, re-lock, Restore), the strict-inside press, the readouts, the
@@ -442,7 +449,7 @@ set_property(SOURCE test_mp_langlayer.cpp APPEND PROPERTY
 # Every text is synthetic, and the suite needs nothing outside this repository.
 add_mp_test(test_mp_langsim)
 
-# Does every translation fit its box? (planning step 238) The fourteen interface strings in the real font set of each of the eleven languages against
+# Does every translation fit its box? (planning step 238) The interface strings in the real font set of each of the eleven languages against
 # the limits the rule tables name (and, since steps 247 and 248, the fifteen picture words against the boxes and floors of game/data/picture_recipes.json), and - a suite of its own that exits 77 without the gitignored achievements.<code>.json files - the achievements'
 # titles, descriptions, unlock cards and popups, and the locked secret achievements' words.
 add_mp_test(test_mp_overflow)

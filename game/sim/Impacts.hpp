@@ -50,10 +50,12 @@ struct Watched {
     // body.entity_above_feet_px). The stone's and minion's rows aim at it.
     glm::dvec2 pointOffsetPx{0.0};
     // Where the original's body stood against the port's when it was made, +y
-    // down: a minion's is lower (the port centres its circle on the marker, the
-    // original puts its entity point there). A body looked at for the first time
-    // is looked at there - the pairs it touches, the point it aims from - until
-    // its own shape reaches one of those pairs, or it is put somewhere else.
+    // down. A body looked at for the first time is looked at there - the pairs it
+    // touches, the point it aims from - until its own shape reaches one of those
+    // pairs, or it is put somewhere else. No body of the game has one since planning
+    // step 277: until then a knight's was EntityAboveCentrePx (the port centred it
+    // on its marker, 11.1 above the original's); now it is made where the
+    // original's is (Minions::State::Spawn). The camera's suite pins the rule.
     glm::dvec2 spawnDropPx{0.0};
     // The original's own Box2D velocity per unit of this body's port velocity, which a begin reports
     // it by: the callbacks read GetLinearVelocity of a world that steps 1/30 s a frame, and every body

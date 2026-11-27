@@ -866,7 +866,7 @@ void EveryStringTheTablesDrawIsInBothSlots() {
         std::size_t drawn = 0;
         const std::vector<std::string> holes = HolesOf(plan, table, world.faces, achievements, drawn);
         CHECK_MSG(holes.empty(), "a hole in the fonts of " + code + ": " + (holes.empty() ? "" : holes.front()) + " (" + std::to_string(holes.size()) + ")");
-        CHECK_MSG(drawn >= 30, code + ": the fourteen strings have more than a handful of code points: " + std::to_string(drawn));
+        CHECK_MSG(drawn >= 30, code + ": the interface strings have more than a handful of code points: " + std::to_string(drawn));
         if (!achievements.empty()) CHECK_MSG(drawn >= 60, code + ": with the achievements, more still: " + std::to_string(drawn));
         ++covered;
     }

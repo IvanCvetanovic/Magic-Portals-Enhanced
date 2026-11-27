@@ -433,6 +433,45 @@
       "word_at_units": [80, 18],
       "frame_rgba": [34, 30, 52, 190],
       "word_alpha_byte": 255
+    },
+
+    "desktop": {
+      "_source": [
+        "THE SCREEN ON A DESKTOP PLAYER'S RUN (sim/Desktop, planning step 277): the same screen with two switches under it, Fullscreen and Walk arrows. A phone's",
+        "screen is the one above and is not touched. PORT, every number: the title, the tiles and the adjustment button move up to make room (a 256-unit view: the",
+        "title at 25.6, the Modern tile 45.1 to 93.1, the Classic tile 96.3 to 144.3, the adjustment button 149.7 to 185.7, the switches 199 to 231). The two",
+        "switches stand side by side, their centres centre_offset_units either side of the middle: 150 wide each, 8 apart, so both are on any view 308 units wide or more (5:4 is 320).",
+        "The title is Options, not Controls: full screen is not a control. A switch is the idle tile's plate, lit (the chosen tile's) while it is on, with a square",
+        "mark_size_units at mark_at_units from its top-left, drawn as a mark_border_units frame and filled while on; the word's centre is word_at_units, held to",
+        "word_max_width_units. units_per_font_px 0.27: PORT, a little under the tiles' 0.3 so the longest English word fits beside the mark."
+      ],
+      "_guess": true,
+      "title": "Options",
+      "title_at_screen": [0.5, 0.1],
+      "tile_modern_at_screen": [0.5, 0.27],
+      "tile_classic_at_screen": [0.5, 0.47],
+      "adjust_at_screen": [0.5, 0.655],
+      "switches": {
+        "_source": [
+          "row_at_screen, centre_offset_units, size_units, mark_at_units, mark_size_units, mark_border_units, mark_rgba, word_at_units, word_max_width_units, font,",
+          "units_per_font_px: PORT, the two switches of the desktop Options screen (planning step 277), as the block above says."
+        ],
+        "_guess": true,
+        "row_at_screen": 0.84,
+        "centre_offset_units": 79,
+        "size_units": [150, 32],
+        "mark_at_units": [8, 9],
+        "mark_size_units": [14, 14],
+        "mark_border_units": 2,
+        "mark_rgba": [244, 247, 255, 255],
+        "word_at_units": [86, 16],
+        "word_max_width_units": 116,
+        "_word_max_width_source": "PORT: the word centred 86 units into a 150-unit switch, right of the mark (8 to 22): 116 keeps 6 units off each.",
+        "font": "Matura84_shadow.fnt",
+        "units_per_font_px": 0.27,
+        "fullscreen_word": "Fullscreen",
+        "walk_pads_word": "Walk arrows"
+      }
     }
   },
 
@@ -668,6 +707,36 @@
           "body_inset": 0.109375
         }
       }
+    }
+  },
+
+  "desktop": {
+    "_source": [
+      "What a desktop player who has chosen nothing gets (sim/Desktop, planning step 277): players' reports of 2026-11-26, relayed by the owner: 'people are unable",
+      "to put the game into fullscreen when playing on windows and the mobile controls still show', and the owner's 'pls fix them'.",
+      "walk_pads_default false: PORT: no walk arrows on the screen, the keys walk (A and D, the left and right arrows); the Options screen's switch shows them.",
+      "fullscreen_default false: PORT: a desktop run still opens in a window, as every release has; F11, Alt+Enter or the Options switch go full screen and the",
+      "choice is kept."
+    ],
+    "_guess_walk_pads_default": true,
+    "walk_pads_default": false,
+    "_guess_fullscreen_default": true,
+    "fullscreen_default": false,
+
+    "walk_hint": {
+      "_source": [
+        "The words that teach walking where a desktop's walk arrows are hidden (planning step 277): 1-01 (ui.json hud.pads tutorial_level) teaches walking with a",
+        "ring round the arrows and no words, so a desktop without them says the keys instead, along the bottom. PORT, every number: at_screen [0.5, 0.93] is",
+        "below the arrows' row; units_per_font_px 0.28; word_max_width_units 300 fits the 5:4 view (320 wide) with 10 a side; alpha_byte 235.",
+        "The words name the arrow keys alone: A and D walk too, but they are the keys in a US layout's A and D places (Q and D on a French keyboard)."
+      ],
+      "_guess": true,
+      "words": "Walk with the arrow keys",
+      "font": "Matura84_shadow.fnt",
+      "units_per_font_px": 0.28,
+      "at_screen": [0.5, 0.93],
+      "word_max_width_units": 300,
+      "alpha_byte": 235
     }
   },
 

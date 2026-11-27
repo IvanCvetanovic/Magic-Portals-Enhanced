@@ -52,6 +52,7 @@
 #include "sim/Art.hpp"
 #include "sim/Chapters.hpp"
 #include "sim/Game.hpp"
+#include "sim/Impacts.hpp"
 #include "sim/Minions.hpp"
 #include "sim/Particles.hpp"
 #include "sim/Roles.hpp"
@@ -1132,6 +1133,90 @@ void onlyTheNamedLevelsPlayTheirOwnRateAndEveryLevelsKnightHasTheBody() {
     CHECK_EQ(seen, 128);
 }
 
+// Whether `p` lies inside the closed outline (even-odd crossings).
+bool Inside(const std::vector<glm::dvec2>& outline, const glm::dvec2& p) {
+    bool in = false;
+    for (std::size_t i = 0, j = outline.size() - 1; i < outline.size(); j = i++) {
+        const glm::dvec2& a = outline[i];
+        const glm::dvec2& b = outline[j];
+        if ((a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y)) in = !in;
+    }
+    return in;
+}
+
+// 3-07 (the owner's report, 2026-11-26: a knight wedged in the stone over its ledge, walking on the spot). spawnMinion adds the entity at its marker's
+// point, so every knight of every level begins with its ENTITY point there, its body EntityAboveCentrePx under it. Built at the point, a knight began
+// 11.1 high, and 3-07's ledge knight had the axis of its capsule through the underside of the stone over it: the nearest points then meet on that face,
+// and the engine's capsule-against-hull test falls back to world up (engine CollisionHull.cpp), here into the stone.
+void everyKnightBeginsAtItsMarkerClearOfTheStone() {
+    Chapters::Table chapters;
+    std::string error;
+    CHECK_MSG(Chapters::Load(MAGICPORTALS_CHAPTERS_FILE, chapters, error), error);
+    int levels = 0;
+    int knights = 0;
+    for (const auto& entry : chapters.levels) {
+        Run run;
+        if (!Begin(entry.name, run)) continue;
+        bool any = false;
+        for (const Minions::Minion& minion : run.level.minions.minions) {
+            if (minion.body == entt::null) continue;
+            any = true;
+            ++knights;
+            const std::string what = entry.name + " " + minion.name;
+            const glm::dvec2 bodyPx = Units::ToPixels(run.registry.get<TransformComponent>(minion.body).position);
+            const glm::dvec2 entityPx = bodyPx - glm::dvec2(0.0, run.level.minions.rules.EntityAboveCentrePx());
+            CHECK_MSG(glm::distance(entityPx, minion.spawnPx) < 1e-3, what + " begins with its entity point on its marker");
+            Impacts::Shape knight;
+            CHECK_MSG(Impacts::ShapeOf(run.registry, minion.body, knight) && knight.core.size() == 2, what + " is a capsule");
+            if (knight.core.size() != 2) continue;
+            for (const entt::entity solid : run.registry.view<TransformComponent>()) {
+                if (solid == minion.body) continue;
+                const auto* rigid = run.registry.try_get<RigidBodyComponent>(solid);
+                if (rigid != nullptr && !rigid->isKinematic) continue;
+                Impacts::Shape stone;
+                if (!Impacts::ShapeOf(run.registry, solid, stone) || stone.core.size() < 3 || !Impacts::Collides(run.registry, minion.body, solid)) continue;
+                bool through = false;
+                for (int i = 0; i <= 32 && !through; ++i) through = Inside(stone.core, glm::mix(knight.core[0], knight.core[1], i / 32.0));
+                CHECK_MSG(!through, what + " does not begin with the axis of its body inside a solid at (" +
+                                        std::to_string(entityPx.x) + ", " + std::to_string(entityPx.y) + ")");
+            }
+        }
+        if (any) ++levels;
+    }
+    CHECK_EQ(levels, 35);
+    CHECK_EQ(knights, 60);
+
+    // 3-07 itself: knight C comes down onto its ledge (top 222) and walks it, between its two waypoints; it does not rise into the stone over it
+    // (whose underside is 176).
+    Run run;
+    if (!Begin("level6b", run)) return;
+    const Minions::Minion* found = run.level.minions.FindMinion("minion_spawn_1255");
+    CHECK(found != nullptr && found->body != entt::null);
+    if (found == nullptr || found->body == entt::null) return;
+    const entt::entity body = found->body;
+    const double above = run.level.minions.rules.EntityAboveCentrePx();
+    double highest = 1e9;
+    double leftmost = 1e9;
+    double rightmost = -1e9;
+    for (int tick = 1; tick <= 600 && run.registry.valid(body); ++tick) {
+        Tick(run);
+        if (!run.registry.valid(body)) break;
+        const glm::dvec2 at = Units::ToPixels(run.registry.get<TransformComponent>(body).position) - glm::dvec2(0.0, above);
+        highest = std::min(highest, at.y);
+        if (tick > 60) {
+            leftmost = std::min(leftmost, at.x);
+            rightmost = std::max(rightmost, at.x);
+        }
+    }
+    CHECK_MSG(run.registry.valid(body), "3-07's knight C is alive after ten seconds");
+    if (!run.registry.valid(body)) return;
+    const glm::dvec2 at = Units::ToPixels(run.registry.get<TransformComponent>(body).position) - glm::dvec2(0.0, above);
+    CHECK_MSG(highest > 190.0, "it never went up into the stone: highest entity y " + std::to_string(highest));
+    CHECK_MSG(std::fabs(at.y - (222.0 - run.level.minions.rules.entityAboveFeetPx)) < 1.5, "it stands on its ledge: entity y " + std::to_string(at.y));
+    CHECK_MSG(leftmost < 245.0 && rightmost > 280.0,
+              "it walks its patrol: x " + std::to_string(leftmost) + " to " + std::to_string(rightmost));
+}
+
 void runTests() {
     theWalkIsTheDecodedSpeedNotTheRemakesGuess();
     aMarkerResolvesItsWaypointsByPrefix();
@@ -1153,6 +1238,7 @@ void runTests() {
     theBlackKnightsBodyIsAMinions();
     theKnightHasTheOriginalsBodyWhereTheTableNamesTheLevel();
     onlyTheNamedLevelsPlayTheirOwnRateAndEveryLevelsKnightHasTheBody();
+    everyKnightBeginsAtItsMarkerClearOfTheStone();
 }
 
 } // namespace

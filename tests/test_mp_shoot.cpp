@@ -122,7 +122,7 @@ struct Rig {
         patrol[1].name = "wayA1";
         patrol[1].atPx = glm::dvec2(x - 100.0, y);
         patrol[1].holdMs = holdMs;
-        const entt::entity body = state.Summon(registry, "knight", glm::dvec2(x, y + rules.EntityAboveCentrePx()), patrol);
+        const entt::entity body = state.Summon(registry, "knight", glm::dvec2(x, y), patrol);
         CHECK(body != entt::null);
         state.minions.back().holdMs = holdMs;
         state.minions.back().moveVec = glm::dvec2(1.0, 0.0);

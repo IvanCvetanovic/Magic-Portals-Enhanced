@@ -17,7 +17,7 @@ Free, no ads, no game account (installing on an iPhone or iPad needs your own Ap
 
 </div>
 
-> **First launch.** On a PC, unpack the whole archive and start `MagicPortals` (`MagicPortals.exe` on Windows) from the folder it unpacked into. Windows asks you to confirm the download (it is not code-signed), and **Windows 11 PCs with Smart App Control turned on (a Windows security setting) may refuse it** ([how to check](docs/install.md#windows-pc)). Android asks you to allow the install ([how](docs/install.md#android-phone-or-tablet)). macOS is expected to stop the unsigned Mac app the first time ([how to open it](docs/install.md#mac)). The iPhone and iPad file needs a sideloading tool (a program on a computer that installs it) and your own Apple ID ([how](docs/install.md#iphone-and-ipad)). The Mac and iPhone files are recent and have never run on a real Mac or iPhone. [The step-by-step guide](docs/install.md) has every click.
+> **First launch.** On a PC, unpack the whole archive and start `MagicPortals` (`MagicPortals.exe` on Windows) from the folder it unpacked into. Windows asks you to confirm the download (it is not code-signed), and **Windows 11 PCs with Smart App Control turned on (a Windows security setting) may refuse it** ([how to check](docs/install.md#windows-pc)). Android asks you to allow the install ([how](docs/install.md#android-phone-or-tablet)). macOS is expected to stop the unsigned Mac app the first time ([how to open it](docs/install.md#mac)). Tapping the iPhone and iPad file on the phone does not install it: it needs a sideloading tool (a program on a computer that installs it) and your own Apple ID ([how](docs/install.md#iphone-and-ipad)). The Mac and iPhone files are recent and have never run on a real Mac or iPhone. [The step-by-step guide](docs/install.md) has every click.
 
 ## The game
 
@@ -38,9 +38,10 @@ You walk, shoot a portal at a wall and step through it to reach the door of each
 
 ## Controls
 
-* **Walk:** the two arrows in the bottom corners, or `←` `→` or `A` `D`.
+* **Walk:** `←` `→` or `A` `D` (`Q` `D` on a French keyboard) on a computer; on a phone or tablet, the two arrows in the bottom corners (a computer shows them if you turn on *Walk arrows* in Options, the gear on the main menu).
 * **Shoot a portal:** touch or click where it should go. On a desktop the mouse stands in for a finger.
 * **Restart and pause:** the buttons at the top right. `R` retries the level and `Esc` pauses, and goes back in a menu.
+* **Full screen** (computer): `F11` or `Alt`+`Enter` (on a Mac `Option`+`Return`), or *Fullscreen* in Options. The game remembers it.
 * **Clear portals:** the button at the top left.
 * **There is no jump.** The original has none. No gamepad is supported.
 

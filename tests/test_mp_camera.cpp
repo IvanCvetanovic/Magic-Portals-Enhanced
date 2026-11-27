@@ -1191,14 +1191,14 @@ void AStoneThatIsNotInAFreeFlightIsReadAsBefore() {
     }
 }
 
-// A minion's spawn drop (Watched::spawnDropPx): the port centres its 7 px circle
-// on the marker, the original's entity point is there and its feet reach 18.1 px
-// below it, 11.1 lower than the port's (minions.json). A knight whose marker
-// stands 16 px over its floor - 51 of the game's 62 - has the original's feet 2.1
-// px into it at once: that pair is marked at the first look and the port's 9 px
-// fall onto it is no begin. One whose marker stands higher begins where the
-// original's lands, aimed from the original's entity point, and not again when
-// the port's own circle arrives 11.1 px later.
+// A spawn drop (Watched::spawnDropPx), the watch's rule, on a rig of its own: a 7 px
+// circle centred on a point whose body should have stood with that point as its entity
+// point, its feet 18.1 below it - as the port made a knight until planning step 277,
+// 11.1 higher than the original's (minions.json). A marker 16 px over its floor has
+// the lower feet 2.1 px into it at once: that pair is marked at the first look and the
+// circle's 9 px fall onto it is no begin. A higher one begins where the lower body
+// lands, aimed from its entity point, and not again when the circle arrives 11.1 later.
+// The game gives no body a drop since step 277.
 void ASpawnedMinionIsLookedAtWhereTheOriginalsStands() {
     const glm::dvec2 point(0.0, -11.1);
     const glm::dvec2 drop(0.0, 11.1);

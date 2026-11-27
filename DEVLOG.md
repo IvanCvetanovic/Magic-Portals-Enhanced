@@ -5480,3 +5480,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - pleased that the page can show the game now, and a little rueful about the notification.
 
 **Where it stands / next:** committed as one docs-only commit; the page is live once it is pushed; the owner's items are in Step 276 (CLAUDE.md and `.gitignore` point at README sections that moved; `docs/platforms.md` is behind on the Android APK).
+
+### 2026-11-27 15:18 - Session 82: the first players' reports (full screen, phone controls on a PC, a knight in the stone at 3-07) - Step 277
+**Asked:** (2026-11-26) "I got first bug reports for the game. the firts is that people are unable to put the game into fullscreen when playing on windows and the mobile controls still show. the second is in chapter 3 dungeon 7:" with a phone recording, then "pls fix them"; then to release it as 1.0.1 for all platforms; (2026-11-27) two more reports: a black screen on a "Bold K5" with Android 14, and an iPhone 12 player who could not install the file.
+**Built:** `F11` / `Alt`+`Enter` and a Fullscreen switch on a computer, kept in `desktop.json`; no walk arrows on a computer unless switched on; a keyboard hint on 1-01 in eleven languages; every knight now starts where the original makes it (11.1 units lower), which frees 3-07's.
+**Broke / dead ends:** (1) The knight fix left the impact watch's old 11.1 compensation in place, so it was applied twice; a review found it. (2) A new player on a computer had no way to learn how to walk once the arrows were gone; the hint came from the review, was too wide, was made smaller, then shorter, and finally lost "A and D" because those keys are Q and D on a French keyboard. (3) The first Windows test launch was refused by Smart App Control (one launch); he turned it off. (4) A background test run in WSL was killed for low memory and was not restarted until he asked for the release. (5) The second review stopped overnight on an expired login and was resumed. (6) My first probe of the knights' landings read the wrong velocity and had to be rewritten to read it as the game does.
+**Decision:** the arrows are off by default on a computer and a switch brings them back; the engine is not changed (its capsule-under-a-hull case is backlog PLAY-3); nothing is changed for the two reports of 2026-11-27 but one sentence about the iPhone file.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; the staged-extension check printed nothing; the frames of his recording and every capture of mine were deleted.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** Linux 99 suites, 291,175 checks, 0 failures; Windows (his PC) 99 suites, 291,214 checks, 0 failures; 290 route lines unchanged; `tools/ci` 353 and `tools/package` 428 tests pass; 60 knight spawn markers, one began with its capsule's axis in the stone.
+**Inferred mood:** a guess - glad people are playing it, and in a hurry to get the fixes to them.
+
+**Where it stands / next:** Step 277 committed; the 1.0.1 release of this tree is next.

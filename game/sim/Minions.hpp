@@ -236,7 +236,7 @@ struct Minion {
     // adds when it dies (ETHCallback_ghost_minion #35-104, R4: not built here).
     std::string entity;
     bool summoned = false;    // called up by the chapter-3 boss (Summon), not spawned by a marker
-    glm::dvec2 spawnPx{0.0, 0.0};
+    glm::dvec2 spawnPx{0.0, 0.0}; // the marker's point (or Summon's): where its ENTITY point starts, the body EntityAboveCentrePx under it
     entt::entity body = entt::null;
     std::vector<Waypoint> waypoints;
     std::size_t dest = 0;      // the waypoint being walked to
@@ -434,6 +434,9 @@ struct State {
     // still stands. Returns the body, for the caller to hand to the portals as
     // Game hands what Spawn makes - a minion is teleportable. entt::null when
     // there is nothing to build it from.
+    //
+    // `atPx` is where its ENTITY point starts, as spawnMinion's is: the body is built
+    // under it, as Spawn builds a marker's.
     //
     // The patrol is passed IN, already resolved: the boss resolves its prefix
     // when the level is found, because Game::AfterStep has no scene to resolve a

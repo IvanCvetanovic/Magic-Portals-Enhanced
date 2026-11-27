@@ -1,7 +1,8 @@
 {
   "_about": [
-    "The 29 short strings of one language (14 interface strings and 15 picture words), keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
+    "The 33 short strings of one language (18 interface strings and 15 picture words), keyed by the names in sim/Strings.hpp (Strings::Key). Placeholders: {n} {percent} {title}.",
     "PROVENANCE: machine-translated by a language model from English, terms aligned with the Magic Rampage Companion app, reviewed by a second model pass, NOT by a native speaker.",
+    "The four desktop strings of planning step 277 (options.desktop_title, options.fullscreen, options.walk_pads, hint.walk_keys) are machine translations too, checked by a second model pass, with no native reader (LANG-1).",
     "Native review is open (planning step 236, LEFT FOR THE OWNER). A key missing from this file shows the English one, and a placeholder that differs from the English one is refused for that key.",
     "The seven picture.* keys (planning step 247) are machine translations too, with no native reader (LANG-1); picture.portals_created is the SHORTER of two wordings, chosen only so that the phrase fits the picture's box at a readable size (tests/test_mp_overflow.cpp).",
     "The eight picture.* and credits.* keys of planning step 248 (picture.current_score, picture.golden_score, picture.game_finished, credits.role.design, credits.role.illustration, credits.role.illustration_at, credits.role.modelling, credits.thanks) are machine translations too, with no native reader (LANG-1). picture.game_finished is the card's first paragraph only: a language other than English shows no Facebook line at all, because the Facebook button was omitted on purpose (the owner's choice, option A; the two other options are left open). A space is a place a line may break; in Japanese it is never a gap in the three picture phrases, and the credits phrases keep the spaces round their dashes."
@@ -19,6 +20,10 @@
     "options.modern": "Modern",
     "options.classic": "Klasik",
     "options.adjust": "Düğmeleri ayarla",
+    "options.desktop_title": "Ayarlar",
+    "options.fullscreen": "Tam ekran",
+    "options.walk_pads": "Yön okları",
+    "hint.walk_keys": "Ok tuşlarıyla yürü",
     "hint.camera": "kamerayı kaydır",
     "language.title": "Dil",
     "picture.tap_start": "DOKUN VE BAŞLA",

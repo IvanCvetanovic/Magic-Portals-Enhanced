@@ -1,6 +1,6 @@
 // The interface languages and their strings (planning step 236, PORT-32): sim/Strings and game/data/lang/.
 //
-// Eleven languages - en (the default) de es fr it pt ru tr uk ja ar - and twenty-nine short strings each: fourteen the fonts draw and, since planning steps 247 and 248
+// Eleven languages - en (the default) de es fr it pt ru tr uk ja ar - and thirty-three short strings each: eighteen the fonts draw and, since planning steps 247 and 248
 // (LANG-2), fifteen the picture bake draws into the original's pictures (the picture keys). What is pinned:
 //
 //   the table      languages.json lists exactly Strings::Lang's codes in its order, each with its own native name (pinned as code points), its
@@ -25,7 +25,7 @@
 //                  dashboard header and new label, selector warning with locking's percent, credits tail, controls.json's options words,
 //                  camera.json's hint and achievements.json's two cards; the secret achievement's words are not in git at all: the overlay's, tests/test_mp_langsim).
 //                  THE DOCUMENTED EXCEPTION: the seven picture keys have no rule-table English - their English is the words the original's pictures carry as
-//                  pixels - so they are pinned here by value instead (a change of one is deliberate), and the fourteen that remain are the ones read through the rules
+//                  pixels - so they are pinned here by value instead (a change of one is deliberate), and the eighteen that remain are the ones read through the rules
 //   picture keys   (planning step 247) the seven exist in all eleven languages, are not empty, carry no placeholder and no line break, are not a copy of the English in
 //                  any of the ten languages (the one documented exception: French 'points' IS the English word), are in LOGICAL order for Arabic (no
 //                  presentation form), have no ASCII lower case in the picture whose words are capitals (TAP START), and are in no font slot's list
@@ -48,6 +48,7 @@
 #include "sim/Controls.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Dashboard.hpp"
+#include "sim/Desktop.hpp"
 #include "sim/Hint.hpp"
 #include "sim/Hud.hpp"
 #include "sim/Locking.hpp"
@@ -632,16 +633,17 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
     const Strings::LanguageTable table = RealLanguages();
     const Map english = ReadStrings("en");
     const std::set<std::string> keys = AllKeys();
-    CHECK_EQ(static_cast<int>(keys.size()), 29);
+    CHECK_EQ(static_cast<int>(keys.size()), 33);
     {
         std::set<std::string> found;
         for (const auto& [key, value] : english) {
             (void)value;
             found.insert(key);
         }
-        CHECK_MSG(found == keys, "en.json has exactly the twenty-nine keys of Strings::kKeys");
+        CHECK_MSG(found == keys, "en.json has exactly the thirty-three keys of Strings::kKeys");
     }
     int translated = 0;
+    std::set<std::pair<std::string, std::string>> interfaceSameAsEnglish;
     int pictureTranslated = 0;
     std::set<std::string> pictureKeys;
     for (const std::string_view key : Strings::kPictureKeys) pictureKeys.insert(std::string(key));
@@ -662,11 +664,18 @@ void EveryLanguageHasExactlyEnglishsKeysAndPlaceholders() {
             CHECK_MSG(Placeholders(text) == Placeholders(english.at(key)), code + "." + key + " carries English's placeholders: " + text);
             CHECK_MSG(Breaks(text) == Breaks(english.at(key)), code + "." + key + " has English's line breaks");
             if (lang != Lang::En && text != english.at(key)) (pictureKeys.count(key) == 1 ? pictureTranslated : translated) += 1;
+            if (lang != Lang::En && text == english.at(key) && pictureKeys.count(key) == 0) interfaceSameAsEnglish.emplace(code, key);
         }
     }
-    // Ten languages by fourteen interface keys, of which a few are the same word in several languages (Modern, a name): a file that was copied from
-    // English would be a handful.
-    CHECK_MSG(translated >= 122, "the languages are translated, not copied: " + std::to_string(translated) + " of 140 differ from English");
+    // Ten languages by eighteen interface keys. The only ones that read as the English are the words a language shares with it, listed here: anything
+    // else is a string copied and not translated.
+    const std::set<std::pair<std::string, std::string>> shared = {{"de", "options.modern"}, {"tr", "options.modern"}, {"fr", "options.desktop_title"}};
+    std::string copied;
+    for (const auto& [code, key] : interfaceSameAsEnglish) {
+        if (shared.count({code, key}) == 0) copied += " " + code + "." + key;
+    }
+    CHECK_MSG(copied.empty() && interfaceSameAsEnglish.size() == shared.size() && translated == 180 - static_cast<int>(shared.size()),
+              "the languages are translated, not copied: " + std::to_string(translated) + " of 180 differ from English; copied:" + copied);
     // And ten languages by fifteen picture keys: every one differs from the English, except the ONE documented exception below.
     CHECK_MSG(pictureTranslated == 149, "the picture words are translated, not copied: " + std::to_string(pictureTranslated) + " of 150 differ from English (149 are expected)");
 
@@ -705,8 +714,8 @@ void ThePictureKeysAreTheWordsOfThePictures() {
         const std::string name(key);
         CHECK_MSG(pinned.count(name) == 1 && english.at(name) == pinned.at(name), "the English of " + name + " is the picture's word: " + english.at(name));
     }
-    // 14 + 15: the other fourteen are the ones the drift case reads through the rules.
-    CHECK_EQ(static_cast<int>(Strings::kKeys.size()) - static_cast<int>(Strings::kPictureKeys.size()), 14);
+    // 18 + 15: the other eighteen are the ones the drift case reads through the rules.
+    CHECK_EQ(static_cast<int>(Strings::kKeys.size()) - static_cast<int>(Strings::kPictureKeys.size()), 18);
     // The one word that is the same in a language as in English: French says "points". Any other copy of the English is a file that was not translated.
     const std::set<std::pair<std::string, std::string>> sameAsEnglish = {{"fr", "picture.points"}};
     for (const Lang lang : AllLangs()) {
@@ -1007,6 +1016,13 @@ void EnglishIsTheEnglishTheRulesFieldsStillHold() {
     const std::set<std::string> tiles = {options.tiles[0].word, options.tiles[1].word};
     CHECK_MSG(tiles == (std::set<std::string>{en.Get(Strings::Key::kOptionsModern), en.Get(Strings::Key::kOptionsClassic)}), "the two tiles' words");
     CHECK_MSG(options.adjust.word == en.Get(Strings::Key::kOptionsAdjust), "the adjust button: " + options.adjust.word);
+    // The desktop screen's title and switches (planning step 277).
+    CHECK_MSG(options.desktop.title == en.Get(Strings::Key::kOptionsDesktopTitle), "the desktop title: " + options.desktop.title);
+    CHECK_MSG(options.desktop.fullscreenWord == en.Get(Strings::Key::kOptionsFullscreen), "the full screen switch: " + options.desktop.fullscreenWord);
+    CHECK_MSG(options.desktop.walkPadsWord == en.Get(Strings::Key::kOptionsWalkPads), "the walk arrows switch: " + options.desktop.walkPadsWord);
+    Desktop::Rules desktop;
+    CHECK_MSG(Desktop::LoadRules(kData + "/controls.json", desktop, why), "controls.json's desktop block reads: " + why);
+    CHECK_MSG(desktop.walkHint.words == en.Get(Strings::Key::kHintWalkKeys), "the walking hint: " + desktop.walkHint.words);
 
     // hint.camera: camera.json's hint.
     Hint::Rules hint;
@@ -1023,14 +1039,14 @@ void EnglishIsTheEnglishTheRulesFieldsStillHold() {
     CHECK_MSG(achievements.locked.message == en.Get(Strings::Key::kCardLockedLevel), "the locked-level card: " + achievements.locked.message);
 
     // The seven picture keys have no rule-table English (the documented exception: ThePictureKeysAreTheWordsOfThePictures pins their values), so the keys this
-    // case read through the rules are the other fourteen.
+    // case read through the rules are the other eighteen.
     int ruleKeys = 0;
     for (const Strings::KeySpec& spec : Strings::kKeys) {
         bool picture = false;
         for (const std::string_view key : Strings::kPictureKeys) picture = picture || key == spec.key;
         ruleKeys += picture ? 0 : 1;
     }
-    CHECK_EQ(ruleKeys, 14);
+    CHECK_EQ(ruleKeys, 18);
     // The secret achievement's words are Asantee's and are in no committed table: no key of Strings::kKeys is about it, and no language file has one.
     for (const Strings::KeySpec& spec : Strings::kKeys) CHECK_MSG(std::string(spec.key).find("secret") == std::string::npos, "no key is the secret achievement's: " + std::string(spec.key));
 }

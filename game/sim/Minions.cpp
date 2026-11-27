@@ -431,14 +431,23 @@ void UseCapsule(entt::registry& registry, entt::entity body, const Rules& rules)
     capsule.center = glm::vec3(0.0f, Units::ToMetres(rules.EntityAboveCentrePx()), 0.0f);
 }
 
+// Where the body goes for a knight whose ENTITY point is `entityPx`. spawnMinion adds the entity AT the marker's own
+// point (minions.json spawn, #25-39), and the port's entity point stands EntityAboveCentrePx over its body's centre.
+// Built at the point itself, every knight began 11.1 higher than the original's: with the 36-tall capsule 3-07's ledge
+// knight began 13 into the stone over him, was pushed up into it and stayed wedged there (the owner's report,
+// 2026-11-26).
+glm::dvec2 BodyCentreAt(const Rules& rules, const glm::dvec2& entityPx) {
+    return entityPx + glm::dvec2(0.0, rules.EntityAboveCentrePx());
+}
+
 } // namespace
 
 std::vector<entt::entity> State::Spawn(entt::registry& registry) {
     std::vector<entt::entity> made;
     for (Minion& minion : minions) {
         if (minion.body != entt::null) continue;
-        minion.body = LevelBuilder::BuildRigidCircle(registry, minion.name, minion.spawnPx, rules.bodyRadiusPx,
-                                                     LevelBuilder::Options{}, minion.entity);
+        minion.body = LevelBuilder::BuildRigidCircle(registry, minion.name, BodyCentreAt(rules, minion.spawnPx),
+                                                     rules.bodyRadiusPx, LevelBuilder::Options{}, minion.entity);
         if (minion.body == entt::null) continue;
 
         // minion.ent carries fixedRotation="1", and here that is not a detail. The
@@ -468,7 +477,7 @@ entt::entity State::Summon(entt::registry& registry, const std::string& name, co
     // here either: minion.ent is fixedRotation="1", and a circle left free to
     // turn rolls under friction through the post it is meant to hold.
     minion.body =
-        LevelBuilder::BuildRigidCircle(registry, minion.name, minion.spawnPx, rules.bodyRadiusPx,
+        LevelBuilder::BuildRigidCircle(registry, minion.name, BodyCentreAt(rules, minion.spawnPx), rules.bodyRadiusPx,
                                        LevelBuilder::Options{}, minion.entity);
     if (minion.body == entt::null) return entt::null;
     registry.get<RigidBodyComponent>(minion.body).lockRotation = glm::bvec3(true, true, true);

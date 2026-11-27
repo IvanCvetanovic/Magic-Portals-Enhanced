@@ -7,7 +7,7 @@
 // FontBake makes from game/data/fonts for ru tr uk ja ar, exactly as the layer asks for them - at the size its rule table draws it, against
 // the slot's limit.
 //
-//   test_mp_overflow               the fourteen interface strings (game/data/lang) in each of the eleven languages, against the slot each is
+//   test_mp_overflow               the interface strings (game/data/lang) in each of the eleven languages, against the slot each is
 //                                  drawn in. English must fit with nothing to spare to scale (the limits are the English widths, so no English
 //                                  string is ever shrunk), and no translation may need a font smaller than kReadableScale of the rule's: below
 //                                  that a line is not readable on a phone, and the translation has to be shortened, not squeezed. Prints each
@@ -34,6 +34,7 @@
 #include "sim/Controls.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Dashboard.hpp"
+#include "sim/Desktop.hpp"
 #include "sim/FontBake.hpp"
 #include "sim/Hint.hpp"
 #include "sim/Hud.hpp"
@@ -158,6 +159,7 @@ struct Rules {
     Credits::Rules credits;
     Controls::Rules controls;
     Options::Rules options;
+    Desktop::Rules desktop;
     Hint::Rules hint;
     Notificator::Rules notificator;
     Achievements::Rules achievements;
@@ -170,6 +172,7 @@ std::unique_ptr<Rules> LoadRules() {
     rules->ok = Dashboard::LoadRules(kData + "/ui.json", rules->dashboard, error) && Selector::LoadRules(kData + "/ui.json", rules->selector, error) &&
                 Credits::LoadRules(kData + "/ui.json", rules->credits, error) && Controls::LoadRules(kData + Controls::kDataFile, rules->controls, error) &&
                 Options::LoadRules(kData + Controls::kDataFile, rules->controls, rules->options, error) &&
+                Desktop::LoadRules(kData + Controls::kDataFile, rules->desktop, error) &&
                 Hint::LoadRules(kData + "/camera.json", rules->hint, error) &&
                 Notificator::LoadRules(kData + "/achievements.json", kData + "/gravitywell.json", rules->notificator, error) &&
                 Achievements::LoadRules(kData + "/achievements.json", rules->achievements, error);
@@ -177,7 +180,7 @@ std::unique_ptr<Rules> LoadRules() {
     return rules;
 }
 
-// The slots of the fourteen keys the tables draw with a limit, with the numbers of the real rule tables.
+// The slots of the keys the tables draw with a limit, with the numbers of the real rule tables.
 std::vector<Slot> SlotsOf(const Rules& rules) {
     std::vector<Slot> slots;
     const auto line = [&](const std::string& key) -> const Credits::Rules::Tail::Line* {
@@ -199,6 +202,12 @@ std::vector<Slot> SlotsOf(const Rules& rules) {
     slots.push_back({"options Modern tile", std::string(Strings::Key::kOptionsModern), false, rules.options.wordUnitsPerFontPx, rules.options.wordMaxWidthUnits, 0.0});
     slots.push_back({"options Classic tile", std::string(Strings::Key::kOptionsClassic), false, rules.options.wordUnitsPerFontPx, rules.options.wordMaxWidthUnits, 0.0});
     slots.push_back({"options adjust button", std::string(Strings::Key::kOptionsAdjust), false, rules.options.adjust.unitsPerFontPx, rules.options.adjust.maxWidthUnits, 0.0});
+    // The desktop screen (planning step 277): its title in the title's slot, and the two switches.
+    slots.push_back({"desktop options title", std::string(Strings::Key::kOptionsDesktopTitle), false, rules.options.title.unitsPerFontPx, rules.options.title.maxWidthUnits, 0.0});
+    slots.push_back({"full screen switch", std::string(Strings::Key::kOptionsFullscreen), false, rules.options.desktop.unitsPerFontPx, rules.options.desktop.maxWidthUnits, 0.0});
+    slots.push_back({"walk arrows switch", std::string(Strings::Key::kOptionsWalkPads), false, rules.options.desktop.unitsPerFontPx, rules.options.desktop.maxWidthUnits, 0.0});
+    slots.push_back({"1-01's walking hint", std::string(Strings::Key::kHintWalkKeys), false, rules.desktop.walkHint.unitsPerFontPx,
+                     rules.desktop.walkHint.maxWidthUnits, 0.0});
     slots.push_back({"1-21's hint", std::string(Strings::Key::kHintCamera), false, rules.hint.unitsPerFontPx, rules.hint.maxWidthUnits, 0.0});
     return slots;
 }
@@ -207,7 +216,7 @@ void TheLimitsAreInTheTables() {
     const std::unique_ptr<Rules> rules = LoadRules();
     if (!rules->ok) return;
     const std::vector<Slot> slots = SlotsOf(*rules);
-    CHECK_MSG(slots.size() == 11u, "eleven slots with a limit: " + std::to_string(slots.size()));
+    CHECK_MSG(slots.size() == 15u, "fifteen slots with a limit: " + std::to_string(slots.size()));
     for (const Slot& slot : slots) {
         CHECK_MSG(slot.units > 0.0 && slot.maxWidth > 0.0, slot.what + " has a size and a limit in its rule table");
     }

@@ -85,11 +85,38 @@ struct Rules {
         int wordAlphaByte = 255;
         double maxWidthUnits = 0.0; // 0: no limit
     } adjust;
+
+    // THE SCREEN ON A DESKTOP PLAYER'S RUN (sim/Desktop, planning step 277): the title, the tiles and the adjustment button higher, and two switches
+    // in a row under them, Fullscreen and Walk arrows. Not shown, and nothing of it used, until ForDesktop says so: a phone's screen and a bare
+    // layer's are the ones above.
+    struct Desktop {
+        bool shown = false;
+        std::string title;
+        glm::dvec2 titleAtScreen{0.5};
+        std::array<glm::dvec2, 2> tileAtScreen{}; // by kTileStyles
+        glm::dvec2 adjustAtScreen{0.5};
+        double rowAtScreen = 0.5;                 // the switches' centres, as a fraction of the view's height
+        double centreOffsetUnits = 0.0;           // each switch's centre this far left or right of the view's middle
+        glm::dvec2 sizeUnits{0.0};
+        glm::dvec2 markAtUnits{0.0};              // the mark's top-left from the switch's
+        glm::dvec2 markSizeUnits{0.0};
+        double markBorderUnits = 0.0;
+        Colour mark{};
+        glm::dvec2 wordAtUnits{0.0};              // the word's centre from the switch's top-left
+        double maxWidthUnits = 0.0;               // the word's limit
+        std::string font;
+        double unitsPerFontPx = 0.0;
+        std::string fullscreenWord;
+        std::string walkPadsWord;
+    } desktop;
 };
 
 // controls.json's `options` block. `controls` is the table the file's `art.generated` names were read into: the gear's file must not be
 // one of them (the generated tier writes them all into one folder). False, with `error` naming the key.
 bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& out, std::string& error);
+
+// The screen a desktop player's run shows: `rules` with the desktop block's places in force and its two switches.
+Rules ForDesktop(const Rules& rules);
 
 // ---- the main menu's entry ---------------------------------------------------------------------------------
 
@@ -109,8 +136,8 @@ Entry EntryAt(const Rules& rules, const UiLayer::Rules& layer, const MenuState::
 
 // What a touch can be on. The back button is the credits': 64 x 64 at the left edge's middle, a place no main-menu button occupies, so
 // the press that returns cannot also press one. `Adjust` is the button under the tiles that opens the adjustment screen: a widget only
-// while the style in force is Modern (WidgetAt and Pieces are told).
-enum class Widget { None, Back, ModernTile, ClassicTile, Adjust };
+// while the style in force is Modern (WidgetAt and Pieces are told). `Fullscreen` and `WalkPads` are the desktop screen's switches (ForDesktop).
+enum class Widget { None, Back, ModernTile, ClassicTile, Adjust, Fullscreen, WalkPads };
 
 Widget WidgetOf(Controls::Style style);
 // The style a tile chooses; none for a widget that is not a tile.
@@ -140,9 +167,13 @@ Hud::Rect TileRect(const Rules& rules, Controls::Style style, const glm::dvec2& 
 // The adjustment button's rectangle on a view.
 Hud::Rect AdjustRect(const Rules& rules, const glm::dvec2& viewUnits);
 
+// A desktop switch's rectangle on a view (`widget` is Fullscreen or WalkPads).
+Hud::Rect SwitchRect(const Rules& rules, Widget widget, const glm::dvec2& viewUnits);
+
 // The widget a point is on: the back button where its entrance has it (Credits::BackHitRect), else the tile whose rectangle holds it
-// (closed on every edge, as Hud::Rect::Contains), else - only where `adjustShown` - the adjustment button, else none. The kinds cannot
-// overlap at any supported aspect (a test holds it), so the order is not a rule. A button that is not shown is not claimed.
+// (closed on every edge, as Hud::Rect::Contains), else - only where `adjustShown` - the adjustment button, else - only on the desktop
+// screen - a switch, else none. The kinds cannot overlap at any supported aspect (a test holds it), so the order is not a rule. A button
+// that is not shown is not claimed.
 Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point,
                 bool adjustShown = false);
 
@@ -159,7 +190,9 @@ enum class Element {
     ThumbnailBase, // a flat quad
     ThumbnailControl, // a flat quad, one of the five
     Word,          // words
-    AdjustFrame    // a flat quad: the adjustment button's plate
+    AdjustFrame,   // a flat quad: the adjustment button's plate
+    SwitchFrame,   // a flat quad: a desktop switch's plate
+    SwitchMark     // a flat quad: a piece of a switch's mark (four edges, and its filling while on)
 };
 
 struct Piece {
@@ -173,15 +206,24 @@ struct Piece {
     double maxWidthUnits = 0.0;          // words: the slot's limit, 0 for none; the layer fits the words to it
     std::optional<Controls::Style> tile; // the tile a piece belongs to
     std::optional<Controls::Id> control;  // ThumbnailControl: which of the five
+    Widget widget = Widget::None;         // SwitchFrame, SwitchMark and a switch's word: which switch
+};
+
+// What the desktop switches show: whether the window covers the screen, and whether the walk arrows are on the picture (a tile's thumbnail
+// shows them only then). A run without the switches reads neither.
+struct Switches {
+    bool fullscreen = false;
+    bool walkPads = true;
 };
 
 // Every picture of the screen `stateMs` after its first frame, in drawing order: the credits' background, its back button (at its bounce
 // and press tint), the title, then each tile - frame, thumbnail base, the five controls, its word. The tile of `chosen` is lit; the widget
 // `held` (a touch went down on it and is still inside it) is drawn at the press tint. Where `adjustShown`, the adjustment button (its plate
-// and its word) comes last. With a string table (planning step 238: every language but English) the title, the two tiles' words and the
-// adjustment button's word are the table's, shaped.
+// and its word) comes after the tiles, and on the desktop screen the two switches come last (each its plate, its mark, its word). With a
+// string table (planning step 238: every language but English) the title, the two tiles' words, the adjustment button's word and the
+// switches' words are the table's, shaped.
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,
                           const Controls::Tuning& tuning, const glm::dvec2& viewUnits, double stateMs, Controls::Style chosen, Widget held,
-                          bool adjustShown = false, const Strings::Table* strings = nullptr);
+                          bool adjustShown = false, const Strings::Table* strings = nullptr, const Switches& switches = Switches{});
 
 } // namespace MagicPortals::Options

@@ -2526,8 +2526,11 @@ void WhatIsRefused() {
     Collect(root, prefix, paths);
     // The `options` block is the Options screen's, read by Options::LoadRules and refused key by key in test_mp_options, and the `adjust` block is the
     // adjustment screen's (planning step 192), read by Adjust::LoadRules and refused key by key in test_mp_adjust; this table is Controls::LoadRules',
-    // which leaves both blocks to them (a key it does not know is ignored), so neither is in this table.
-    paths.erase(std::remove_if(paths.begin(), paths.end(), [](const Path& path) { return path.front() == "options" || path.front() == "adjust"; }), paths.end());
+    // which leaves both blocks to them (a key it does not know is ignored), so neither is in this table. The `desktop` block (planning step 277) is
+    // sim/Desktop's in the same way, refused by name in test_mp_desktop.
+    paths.erase(std::remove_if(paths.begin(), paths.end(),
+                               [](const Path& path) { return path.front() == "options" || path.front() == "adjust" || path.front() == "desktop"; }),
+                paths.end());
     CHECK_MSG(paths.size() > 100, "the file has " + std::to_string(paths.size()) + " keys of the table");
 
     // The shipped file loads, and so does its own rewrite through the writer used below (so a refusal is the edit's, not the writer's).

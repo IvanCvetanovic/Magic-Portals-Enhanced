@@ -4,11 +4,11 @@
 //
 // Magic Portals is English; the Enhanced port is shown in eleven languages, in the order of the Magic Rampage Companion app's picker and of
 // Penumbra's Languages.hpp: en (the default) de es fr it pt ru tr uk ja ar. This module is the DATA side of that: which languages there are
-// (game/data/lang/languages.json), the twenty-nine short strings of each (game/data/lang/<code>.json), and the one place text is
+// (game/data/lang/languages.json), the thirty-three short strings of each (game/data/lang/<code>.json), and the one place text is
 // prepared for the screen (Display). It draws nothing and knows no font; the layer wires it (planning step 238), with the fonts
 // (FontBake) and the achievements' translations (Achievements::Localized); the picker is a later step's.
 //
-// WHAT IS TRANSLATED AND WHAT IS NOT. Only text the port draws with a FONT can be: the fourteen interface keys below, the achievements and the secret
+// WHAT IS TRANSLATED AND WHAT IS NOT. Only text the port draws with a FONT can be: the eighteen interface keys below, the achievements and the secret
 // achievement's two sentences (Asantee's words, so their translations stay out of git: they are Achievements::LoadTranslation's gitignored overlay),
 // and, since planning steps 247 and 248 (LANG-2), the fifteen PICTURE keys: the words the original draws as pixels inside its pictures - TAP START,
 // Achievements, Select chapter, points, level finished, portals created, game over, the current and the golden score plaques, the game-finished card and the five
@@ -71,7 +71,7 @@ constexpr bool InOriginalFonts(std::uint32_t codePoint) {
 
 // ---- the keys ---------------------------------------------------------------------------------------------------------
 
-// The twenty-nine strings: fourteen the fonts draw and fifteen the picture bake draws. A key is a name, never a bare literal at a call site. Per-achievement text is not here, and neither is the secret
+// The thirty-three strings: eighteen the fonts draw and fifteen the picture bake draws. A key is a name, never a bare literal at a call site. Per-achievement text is not here, and neither is the secret
 // achievement's (its title, and its sentence with the chapter and the level): they are Asantee's words, and the achievements overlay
 // (Achievements::LoadTranslation, planning step 238) has its own gitignored files, which hold the achievements by id and a `secret` block.
 namespace Key {
@@ -87,6 +87,12 @@ inline constexpr std::string_view kOptionsTitle = "options.title";
 inline constexpr std::string_view kOptionsModern = "options.modern";
 inline constexpr std::string_view kOptionsClassic = "options.classic";
 inline constexpr std::string_view kOptionsAdjust = "options.adjust";
+// The desktop Options screen's title and its two switches (planning step 277).
+inline constexpr std::string_view kOptionsDesktopTitle = "options.desktop_title";
+inline constexpr std::string_view kOptionsFullscreen = "options.fullscreen";
+inline constexpr std::string_view kOptionsWalkPads = "options.walk_pads";
+// How to walk, on 1-01, where a desktop's walk arrows are hidden (planning step 277).
+inline constexpr std::string_view kHintWalkKeys = "hint.walk_keys";
 inline constexpr std::string_view kHintCamera = "hint.camera";
 inline constexpr std::string_view kLanguageTitle = "language.title";
 // The words of the original's pictures (planning step 247): drawn by sim/PictureBake with the committed faces, never by a font slot's atlas. The English
@@ -126,7 +132,7 @@ struct KeySpec {
     std::array<std::string_view, 2> placeholders;
 };
 
-inline constexpr std::array<KeySpec, 29> kKeys = {{
+inline constexpr std::array<KeySpec, 33> kKeys = {{
     {Key::kHudPart, {Placeholder::kN, ""}},
     {Key::kDashboardChapter, {Placeholder::kN, ""}},
     {Key::kDashboardNew, {"", ""}},
@@ -139,6 +145,10 @@ inline constexpr std::array<KeySpec, 29> kKeys = {{
     {Key::kOptionsModern, {"", ""}},
     {Key::kOptionsClassic, {"", ""}},
     {Key::kOptionsAdjust, {"", ""}},
+    {Key::kOptionsDesktopTitle, {"", ""}},
+    {Key::kOptionsFullscreen, {"", ""}},
+    {Key::kOptionsWalkPads, {"", ""}},
+    {Key::kHintWalkKeys, {"", ""}},
     {Key::kHintCamera, {"", ""}},
     {Key::kLanguageTitle, {"", ""}},
     {Key::kPictureTapStart, {"", ""}},
@@ -161,10 +171,11 @@ inline constexpr std::array<KeySpec, 29> kKeys = {{
 // The strings the Matura slot (Matura84_shadow.fnt) draws, and the ones the Verdana slot (Verdana40_shadow.fnt) does. Matura draws a
 // capital I like a J (the glyph at id 73 is a swash), so no Matura string of a language set in the original's fonts may hold a capital 'I'
 // (the translators were told, and tests/test_mp_strings.cpp checks). Every key is in exactly one list: these two, or the picture keys below.
-inline constexpr std::array<std::string_view, 11> kMaturaKeys = {
-    Key::kHudPart,        Key::kDashboardChapter, Key::kSelectorRequires, Key::kCreditsEnhanced,
-    Key::kCreditsEngine,  Key::kOptionsTitle,     Key::kOptionsModern,    Key::kOptionsClassic,
-    Key::kOptionsAdjust,  Key::kHintCamera,       Key::kLanguageTitle,
+inline constexpr std::array<std::string_view, 15> kMaturaKeys = {
+    Key::kHudPart,        Key::kDashboardChapter, Key::kSelectorRequires,    Key::kCreditsEnhanced,
+    Key::kCreditsEngine,  Key::kOptionsTitle,     Key::kOptionsModern,       Key::kOptionsClassic,
+    Key::kOptionsAdjust,  Key::kHintCamera,       Key::kLanguageTitle,       Key::kOptionsDesktopTitle,
+    Key::kOptionsFullscreen, Key::kOptionsWalkPads,      Key::kHintWalkKeys,
 };
 inline constexpr std::array<std::string_view, 3> kVerdanaKeys = {
     Key::kDashboardNew, Key::kCardUnlocked, Key::kCardLockedLevel,

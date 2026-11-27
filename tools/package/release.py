@@ -1015,13 +1015,22 @@ def runtime_paragraph(redist_names):
             '    Install the latest redistributable from Microsoft (https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist), then start the game again.')
 
 
+# How a computer plays (planning step 277): the keys, the full screen, and where the walk arrows went.
+CONTROLS_PARAGRAPH = [
+    'HOW TO PLAY',
+    '  * Walk with the left and right arrow keys, or A and D (Q and D on a French keyboard). Click where a portal shot should go.',
+    '  * R retries the level, Esc pauses (and goes back in a menu). Restart, pause and clear portals are also buttons on the screen.',
+    '  * Full screen: F11, or Alt+Enter (on a Mac, Option+Return), or the Fullscreen switch in Options (the gear on the main menu). The game remembers it.',
+    '  * The on-screen walk arrows are off on a computer; the Walk arrows switch in Options shows them (meant for a touch screen).', '']
+
+
 def playing_windows(version, arch, redist_names, data, dev):
     lines = [version_line(version, 'Windows', arch), '=' * 60, '',
              'TO PLAY',
              '  1. Unpack the whole zip into a folder you may write to (for example inside Documents). Do not run the game from inside the zip.',
              '  2. Start MagicPortals.exe. It must stay next to the folders "assets" (the engine\'s shaders) and "content" (the game).' if data else
              '  2. Start MagicPortals.exe. It must stay next to the folder "assets" (the engine\'s shaders). THIS ARCHIVE HAS NO GAME DATA: the game will say so and stop.',
-             '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets\\scenes there; in a folder you cannot write to the game still starts, without the cache.', '',
+             '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets\\scenes there; in a folder you cannot write to the game still starts, without the cache.', ''] + CONTROLS_PARAGRAPH + [
              'WHAT YOUR PC NEEDS',
              '  * 64-bit Windows. The game has been run on Windows 11 (builds made by the maker, on his PC); whether it starts on Windows 10 was not tried. The tool that made this archive reads the program as bytes and never starts it.',
              '  * A graphics driver that provides Vulkan 1.2 or newer (NVIDIA, AMD or Intel: from the maker, or Windows Update).',
@@ -1037,7 +1046,7 @@ def playing_windows(version, arch, redist_names, data, dev):
              '  * Read the log (next section) and send it with a report.', '',
              'WHERE THE GAME WRITES',
              '  * Your medals, the sound and music switches, the achievements, your control choices and your language choice: %APPDATA%\\Magic Portals (scores.json, audio.json,',
-             '    achievements.json, controls.json, language.json). Delete the folder to start from nothing.',
+             '    achievements.json, controls.json, desktop.json, language.json). Delete the folder to start from nothing.',
              '  * The log of the last run: %TEMP%\\magicportals.log (the run before it: magicportals.prev.log), and files the game can make again in %TEMP%\\supersonic-magicportals.', '',
              'THIS ARCHIVE',
              ('  content\\manifest.json lists every file of the game with its size and SHA-256; SHA256SUMS.txt, beside the archive, has the archive\'s own.' if data else
@@ -1065,7 +1074,7 @@ def playing_linux(version, arch, needs, data, dev, stripped=None):
              '  2. Start ./MagicPortals from a terminal, in a desktop session (some file managers do not start a program of this kind by a double-click). It must stay next to the folders "assets" (the engine\'s shaders) and',
              '     "content" (the game).' if data else
              '     "content" (the game). THIS ARCHIVE HAS NO GAME DATA: the game will say so and stop.',
-             '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets/scenes there; in a folder you cannot write to the game still starts, without the cache.', '',
+             '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets/scenes there; in a folder you cannot write to the game still starts, without the cache.', ''] + CONTROLS_PARAGRAPH + [
              'WHAT YOUR PC NEEDS',
              '  * 64-bit Linux on an x86-64 CPU, in a desktop session with an X11 display. The program opens libX11 at run time; on a Wayland desktop it needs XWayland, which',
              '    was not tried.',
@@ -1329,15 +1338,21 @@ def classify_shell(files, platform):
     return Shell(files, bundle, exe, data_dir, top, platform, bundle.startswith('Payload/'), simulator)
 
 
+# The Mac's READ ME FIRST says how to play too, as PLAYING.txt does on the other computers.
+MAC_CONTROLS = '\n'.join(CONTROLS_PARAGRAPH) + '\n'
+
+
 def intro_text(platform, version, arch, simulator, resealed=False):
     if platform == MACOS and resealed:
         return ('Magic Portals Enhanced %s - macOS (%s), WITH the game inside the app\n\n'
                 'The app is MagicPortals.app; the game\'s levels, pictures and sounds are in its Contents/Resources/GameData. Nothing here has ever been run on a person\'s Mac.\n'
-                'This archive was assembled on a GitHub macOS machine by .github/workflows/apple-release.yml, which also signed the app again (below). LICENSE and NOTICE.md are the licence and the notices.\n\n' % (version, arch))
+                'This archive was assembled on a GitHub macOS machine by .github/workflows/apple-release.yml, which also signed the app again (below). LICENSE and NOTICE.md are the licence and the notices.\n\n' % (version, arch)
+                + MAC_CONTROLS)
     if platform == MACOS:
         return ('Magic Portals Enhanced %s - macOS (%s), WITH the game inside the app\n\n'
                 'The app is MagicPortals.app; the game\'s levels, pictures and sounds are in its Contents/Resources/GameData. Nothing here has ever been run on a Mac.\n'
-                'The packager that wrote this archive cannot sign or notarise (it runs on a PC). LICENSE and NOTICE.md are the licence and the notices.\n\n' % (version, arch))
+                'The packager that wrote this archive cannot sign or notarise (it runs on a PC). LICENSE and NOTICE.md are the licence and the notices.\n\n' % (version, arch)
+                + MAC_CONTROLS)
     return ('Magic Portals Enhanced %s - iOS (%s%s), WITH the game inside the app\n\n'
             'The app is MagicPortals.app; the game\'s levels, pictures and sounds are in its GameData folder. Nothing iOS has ever been run on a device or a simulator.\n'
             'LICENSE and NOTICE.md are the licence and the notices.\n\n' % (version, arch, ', simulator' if simulator else ''))

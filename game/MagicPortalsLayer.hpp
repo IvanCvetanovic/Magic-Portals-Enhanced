@@ -33,6 +33,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Camera.hpp"
 #include "sim/Chapters.hpp"
 #include "sim/Controls.hpp"
+#include "sim/Desktop.hpp"
 #include "sim/Credits.hpp"
 #include "sim/Cutscene.hpp"
 #include "sim/Dashboard.hpp"
@@ -161,6 +162,10 @@ public:
     // culled it, a pass refused the draw, or it was drawn and produced nothing
     // visible. This says which.
     static constexpr const char* kDump = "mp.dump";
+    // A desktop player's full screen (planning step 277, sim/Desktop): F11 alone, or Enter while an Alt is held. Read only where Paths::desktop.
+    static constexpr const char* kFullscreen = "mp.fullscreen";            // F11
+    static constexpr const char* kFullscreenEnter = "mp.fullscreen.enter"; // Enter and the keypad's Enter
+    static constexpr const char* kAltKey = "mp.altkey";                    // either Alt key (not kLeftAlt/kRightAlt, the A and D alternates)
 
     // WHERE A BAKED LIGHTMAP GOES (CMP-14, planning step 196). The layer bakes a static lit sprite's lightmap when its
     // level loads (sim/LightmapBake.hpp, one texel per bitmap unit as the original does at a screen of 480 px or more)
@@ -243,6 +248,14 @@ public:
         // next frame the layer draws is a plain black cover, the load runs in the first tick after it was drawn, and a finger that went down before the new level's
         // first frame is ignored until it lifts. main passes the phone profile (kMobileBuild or --profile mobile). Every suite's bare Paths keeps the old path.
         bool coverLevelStarts = false;
+
+        // A DESKTOP PLAYER'S RUN (planning step 277; sim/Desktop.hpp): F11 and Alt+Enter switch full screen, Options has the Fullscreen and
+        // Walk arrows switches, the walk arrows are off unless the player turned them on, and both choices are kept in desktop.json in saveDir.
+        // main sets it for an attended run of a build that is not a phone's. False, as in every suite and every capture, the layer is as it was.
+        bool desktop = false;
+        // Whether main asked the window to open full screen (the player's kept choice, or --fullscreen): what the switch shows where there is no
+        // window to ask.
+        bool startsFullscreen = false;
 
         // WHICH CONTROLS THE RUN PLAYS (planning step 181, CTL-5; the design's 2.1): what main's
         // Controls::ResolvePolicy made of --controls and of the kind of run. The default is the
@@ -1429,6 +1442,19 @@ public:
     // The widget the held touch went down on and is still inside (the press tint), on the main menu (the entry) and on Options.
     bool OptionsEntryHeld() const { return m_menuTouch.optionsHeld; }
 
+    // ---- a desktop player's run (planning step 277, sim/Desktop.hpp) ---------------------------------------------------------------
+    //
+    // Whether the two walk arrows are on the picture and can be pressed: always, except on a desktop player's run whose player has them off. The keys walk
+    // either way.
+    bool WalkPadsShown() const { return !m_paths.desktop || m_walkPads; }
+    // Whether the window covers the screen: asked of the window, and where there is none (a suite), what was last asked.
+    bool FullscreenNow(const entt::registry& registry) const;
+    // The words that say how to walk, drawn along the bottom of the tutorial level while a desktop player's arrows are hidden and the level is being
+    // played; empty everywhere else.
+    std::string WalkHintWords() const;
+    // The player's two choices as the layer holds them: memory-only where the run has nowhere to save.
+    const Desktop::Store& DesktopStore() const { return m_desktopStore; }
+
     // ---- the language picker (planning step 239, PORT-35) -----------------------------------------------------------------------
     //
     // A globe on the main menu (under the Options gear) and one in the corner of Options open a screen of eleven plates, each the language's own name
@@ -1459,8 +1485,10 @@ public:
     // portals forced shown) and seven widgets - size and opacity stepped, the lock, Restore and Back - and what it changes is the tuning the layer
     // lays out, claims and draws with from the next level on (ControlsApplied). It reads the FIRST finger only, as every menu does.
     //
-    // Where the button that opens it is drawn and claimed: Options shows it only while the style in force is Modern (a classic run has nothing to adjust).
-    bool AdjustAvailable() const { return OptionsAvailable() && playsModern(); }
+    // Where the button that opens it is drawn and claimed: Options shows it only while the style in force is Modern (a classic run has nothing to
+    // adjust), and only while the walk arrows are on the picture (planning step 277: a desktop that hides them has little to adjust, and the screen
+    // would show arrows no level draws).
+    bool AdjustAvailable() const { return OptionsAvailable() && playsModern() && WalkPadsShown(); }
     const Adjust::Rules& AdjustRules() const { return m_adjustRules; }
     // The widgets on the menu's view, as the screen lays them out this tick.
     Adjust::Layout AdjustLayout() const;
@@ -3707,6 +3735,19 @@ private:
     // read OUTSIDE the chain of loaders above: a table that will not read costs the modern controls and
     // never a classic run, the parity rig or a suite.
     void resolveControls();
+    // A desktop player's choices, after the controls' (planning step 277): nothing at all where Paths::desktop is false.
+    void resolveDesktop();
+    // F11 or Alt+Enter went down this tick: full screen the other way.
+    void watchDesktopKeys(entt::registry& registry);
+    // The window asked for, and the choice kept.
+    void setFullscreen(entt::registry& registry, bool fullscreen);
+    void chooseWalkPads(bool shown);
+    void saveDesktop();
+    Desktop::Rules m_desktopRules;
+    Desktop::Store m_desktopStore;
+    bool m_splashAltEnter{false}; // an Enter that went down with an Alt, still held: not the intro's skip
+    bool m_walkPads{true};    // meaningful only where Paths::desktop
+    bool m_fullscreen{false}; // what was last asked of the window
     // The player's choice (planning step 185). Open in resolveControls beside the switches in OnAttach; in memory only where the policy forbids
     // saving (a forced style) or the run has nowhere to save.
     Controls::Store m_controlsStore;

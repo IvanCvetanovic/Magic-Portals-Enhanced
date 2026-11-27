@@ -382,8 +382,7 @@ struct Rig {
         patrol[1].name = "wayA1";
         patrol[1].atPx = glm::dvec2(x - 100.0, y);
         patrol[1].holdMs = holdMs;
-        const entt::entity body =
-            state.Summon(registry, "knight", glm::dvec2(x, y + rules.EntityAboveCentrePx()), patrol);
+        const entt::entity body = state.Summon(registry, "knight", glm::dvec2(x, y), patrol);
         CHECK(body != entt::null);
         if (arrived) {
             state.minions.back().holdMs = holdMs;
@@ -754,7 +753,7 @@ void EveryPatrolLegIsClearInTheStaticLevel() {
         const Minions::Senses senses;
         for (const Minions::Minion& minion : state.minions) {
             const std::size_t n = minion.waypoints.size();
-            const glm::dvec2 start = minion.spawnPx - glm::dvec2(0.0, state.rules.EntityAboveCentrePx());
+            const glm::dvec2 start = minion.spawnPx; // where its entity point starts
             // From where it is first placed to its first waypoint, then each waypoint to the next and the last to the first.
             std::vector<std::pair<glm::dvec2, glm::dvec2>> pairs;
             if (n >= 1) pairs.emplace_back(start, minion.waypoints[0].atPx);

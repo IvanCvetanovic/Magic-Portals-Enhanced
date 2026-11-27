@@ -114,6 +114,10 @@
     "entities": ["minion.ent", "ghost_minion.ent"],
     "_source_entities": [
       "What a marker may add, and what the sim holds it as (Minions::Minion::entity).",
+      "Where it is added: at the marker's own point (spawnMinion #25-39, AddEntity there), so the knight's ENTITY point is the marker and the port",
+      "builds its body EntityAboveCentrePx under it (Minions::State::Spawn and Summon, planning step 277; until then the body's centre stood on the",
+      "marker, 11.1 high, and 3-07's ledge knight began inside the stone over it).",
+      "",
       "ETHCallback_minion_spawn (bytes 426511..426876) #31-51 hands the marker's",
       "GetString('entityName') to spawnMinion; of the 60 markers that spawn in the 128 levels only",
       "level31b's minion_spawn_908 names one, ghost_minion.ent. R16 is the owner's standing",

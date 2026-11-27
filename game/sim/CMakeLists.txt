@@ -22,6 +22,7 @@ add_library(MagicPortalsSim STATIC
     Selector.cpp
     Dashboard.cpp
     Demolish.cpp
+    Desktop.cpp
     Diamonds.cpp
     Earthquake.cpp
     EdgeCover.cpp

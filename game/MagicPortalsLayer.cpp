@@ -24,6 +24,7 @@
 #include "core/Application.hpp"
 #include "core/DetMath.hpp"
 #include "core/Input.hpp"
+#include "core/WindowControl.hpp"
 #include "core/Light2D.hpp"
 #include "core/Log.hpp"
 #include "core/Raycast.hpp"
@@ -433,6 +434,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     if (read) loadPickerRules();
     // Which controls this run plays: after the chain and outside it, before any level is built.
     resolveControls();
+    // A desktop player's walk arrows and full screen (planning step 277), after the controls' tables and before any level is built.
+    resolveDesktop();
     // The tick's two deltas before the first tick runs: what a constructor that moves
     // by "a frame" (the space sky's planet, the loading screen) is handed.
     m_step = ScriptClock::TickStep(m_clockRules, kTick);
@@ -674,6 +677,72 @@ void MagicPortalsLayer::resolveControls() {
     }
     // The Options entry's gear: written only in a run in which the feature exists.
     resolveOptionsEntry();
+}
+
+void MagicPortalsLayer::resolveDesktop() {
+    m_desktopRules = Desktop::Rules{};
+    m_desktopStore = Desktop::Store{};
+    m_walkPads = true;
+    m_fullscreen = m_paths.startsFullscreen;
+    if (!m_paths.desktop) return;
+    std::string why;
+    // A table or a file that will not read leaves the shipped defaults (Desktop::Rules): the keys still walk and still switch.
+    if (!Desktop::LoadRules(m_paths.portData + Controls::kDataFile, m_desktopRules, why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "desktop defaults not read: " << why << std::endl;
+    }
+    if (!m_desktopStore.Open(m_paths.saveDir, why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "desktop choices not read, the defaults kept: " << why << std::endl;
+    }
+    // Hidden only where the Options switch can bring them back: a run without that screen (--controls classic, or tables that will not read) keeps the
+    // arrows it always had.
+    m_walkPads = !m_optionsReady || m_desktopStore.WalkPads().value_or(m_desktopRules.walkPadsDefault);
+    // The Options screen's desktop shape, with its two switches.
+    if (m_optionsReady) m_optionsRules = Options::ForDesktop(m_optionsRules);
+    SUPERSONIC_LOG_INFO("Magic Portals") << "desktop: the walk arrows are " << (m_walkPads ? "on" : "off (A, D and the arrow keys walk)")
+                                         << "; F11 or Alt+Enter switches full screen" << std::endl;
+}
+
+std::string MagicPortalsLayer::WalkHintWords() const {
+    if (!m_paths.desktop || WalkPadsShown() || !tutorialPads() || !m_loaded || m_screen != Screen::None || m_finishing || m_dying || GameTimeStopped() ||
+        m_level.portals.noGravity) {
+        return {};
+    }
+    return strings() != nullptr ? m_strings.Show(Strings::Key::kHintWalkKeys) : m_desktopRules.walkHint.words;
+}
+
+bool MagicPortalsLayer::FullscreenNow(const entt::registry& registry) const {
+    const auto* window = registry.ctx().find<Supersonic::WindowControl*>();
+    return window != nullptr && *window != nullptr ? (*window)->IsFullscreen() : m_fullscreen;
+}
+
+void MagicPortalsLayer::watchDesktopKeys(entt::registry& registry) {
+    using Supersonic::Input;
+    if (!m_paths.desktop) return;
+    if (!Desktop::ToggleAsked(Input::TickWasPressed(kFullscreen), Input::TickWasPressed(kFullscreenEnter), Input::IsDown(kAltKey))) return;
+    setFullscreen(registry, !FullscreenNow(registry));
+}
+
+void MagicPortalsLayer::setFullscreen(entt::registry& registry, bool fullscreen) {
+    if (auto* const* window = registry.ctx().find<Supersonic::WindowControl*>(); window != nullptr && *window != nullptr) {
+        (*window)->SetFullscreen(fullscreen);
+    }
+    m_fullscreen = fullscreen;
+    m_desktopStore.SetFullscreen(fullscreen);
+    saveDesktop();
+    SUPERSONIC_LOG_INFO("Magic Portals") << "window: " << (fullscreen ? "full screen" : "a window") << " (the player's choice)" << std::endl;
+}
+
+void MagicPortalsLayer::chooseWalkPads(bool shown) {
+    m_walkPads = shown;
+    m_desktopStore.SetWalkPads(shown);
+    saveDesktop();
+    SUPERSONIC_LOG_INFO("Magic Portals") << "desktop: the walk arrows are " << (shown ? "on" : "off") << " (chosen in Options)" << std::endl;
+}
+
+void MagicPortalsLayer::saveDesktop() {
+    if (std::string why; !m_desktopStore.Save(why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "desktop choices not saved: " << why << std::endl;
+    }
 }
 
 void MagicPortalsLayer::chooseControlsStyle(Controls::Style style) {
@@ -1269,6 +1338,12 @@ void MagicPortalsLayer::bindInput() {
     // G, because Key has no function keys at all - it stops at the letters,
     // the arrows and the modifiers.
     Input::BindActionKey(kDump, Key::G);
+    // A desktop player's full screen (planning step 277). Bound in every run, read only on a desktop player's.
+    Input::BindActionKey(kFullscreen, Desktop::kKeyF11);
+    Input::BindActionKey(kFullscreenEnter, Key::Enter);
+    Input::BindActionKey(kFullscreenEnter, Desktop::kKeyKeypadEnter);
+    Input::BindActionKey(kAltKey, Key::LeftAlt);
+    Input::BindActionKey(kAltKey, Key::RightAlt);
 }
 
 // ---- levels -----------------------------------------------------------------
@@ -4306,6 +4381,7 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         loadUiFont(m_optionsRules.title.font);
         loadUiFont(m_optionsRules.wordFont);
         loadUiFont(m_optionsRules.adjust.font);
+        if (m_optionsRules.desktop.shown) loadUiFont(m_optionsRules.desktop.font);
     }
     if (changed && screen == Screen::Language) {
         // A fresh screen, in the language on the screen: its title is that language's in the original's font of the role, and its names are the atlas.
@@ -4972,6 +5048,15 @@ void MagicPortalsLayer::optionsInput(entt::registry& registry) {
         // The screen opens on the next tick, as every state does, under its own black; the press is spent here.
         m_pendingMenu.kind = PendingMenu::Kind::Screen;
         m_pendingMenu.screen = Screen::Adjust;
+        return;
+    }
+    // The desktop switches (planning step 277): the window changes on the next frame; the arrows from the next level load, as a style does.
+    if (press.widget == Options::Widget::Fullscreen) {
+        setFullscreen(registry, !FullscreenNow(registry));
+        return;
+    }
+    if (press.widget == Options::Widget::WalkPads) {
+        chooseWalkPads(!m_walkPads);
         return;
     }
     // A tile: the run plays that style from the next level load, and the choice is kept. Pressing the lit one is a choice too, and is kept -
@@ -5829,7 +5914,8 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
         if (OptionsAvailable()) {
             for (const Options::Piece& piece :
                  Options::Pieces(m_optionsRules, m_creditsRules, m_controlsRules, m_hudRules, m_controlsApplied, view, m_menuClock.ms,
-                                 m_controlsStyle, m_optionsTouch.held, AdjustAvailable(), strings())) {
+                                 m_controlsStyle, m_optionsTouch.held, AdjustAvailable(), strings(),
+                                 Options::Switches{FullscreenNow(registry), WalkPadsShown()})) {
                 const glm::vec4 colour(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
                                        static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
                 switch (piece.element) {
@@ -5857,6 +5943,8 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 case Options::Element::ThumbnailBase:
                 case Options::Element::ThumbnailControl:
                 case Options::Element::AdjustFrame:
+                case Options::Element::SwitchFrame:
+                case Options::Element::SwitchMark:
                     add(piece.rect, std::string(), colour);
                     break;
                 }
@@ -10172,6 +10260,7 @@ void MagicPortalsLayer::buildControls() {
     for (const Made& one : made) {
         // The modern controls were built above, from their own pictures.
         if (playsModern()) break;
+        if (Controls::IsWalk(one.kind) && !WalkPadsShown()) continue;
         ControlButton button;
         button.kind = one.kind;
         // menuImage prefers sprites/hd/, which is what the original draws on any
@@ -10181,6 +10270,9 @@ void MagicPortalsLayer::buildControls() {
         // must not be eaten by something nobody can see.
         if (!button.image.empty()) m_controls.push_back(button);
     }
+
+    // A desktop's walking lesson (planning step 277): its words' font, on the tutorial level.
+    if (m_paths.desktop && tutorialPads()) loadUiFont(m_desktopRules.walkHint.font);
 
     // The ring, only where it is ever drawn. ring_sprite.png has no hd twin,
     // and needs none: it is drawn at a stated size, not its own.
@@ -10263,6 +10355,8 @@ void MagicPortalsLayer::buildControls() {
 void MagicPortalsLayer::buildModernControls() {
     // All five, in the claim order, which is the order a touch is asked in (controlUnderPointer).
     for (const Control kind : Controls::kClaimOrder) {
+        // A desktop player with the walk arrows off has none to see, to press or to ring (planning step 277).
+        if (Controls::IsWalk(kind) && !WalkPadsShown()) continue;
         ControlButton button;
         button.kind = kind;
         const ModernArt& art = m_modernArt[static_cast<std::size_t>(kind)];
@@ -10504,6 +10598,8 @@ void MagicPortalsLayer::logModernControls(const entt::registry& registry) {
     };
     bool first = true;
     for (const Control control : Controls::kClaimOrder) {
+        // Only what is on the picture: a desktop run with its walk arrows off names none (planning step 277).
+        if (Controls::IsWalk(control) && !WalkPadsShown()) continue;
         const std::size_t at = static_cast<std::size_t>(control);
         line << (first ? "" : ", ") << Controls::KeyOf(control) << " ";
         first = false;
@@ -11011,6 +11107,16 @@ void MagicPortalsLayer::EmitHud(entt::registry& registry) const {
         }
     }
 
+    // 6a. A desktop with no walk arrows says how to walk on the level whose arrows the original rings (planning step 277): along the bottom, where
+    //     the arrows are not.
+    if (const std::string words = WalkHintWords(); !words.empty()) {
+        if (const Supersonic::BitmapFont* font = uiFont(m_desktopRules.walkHint.font)) {
+            const double fitted = Hud::FitUnitsPerFontPx(*font, words, m_desktopRules.walkHint.unitsPerFontPx, m_desktopRules.walkHint.maxWidthUnits);
+            write(m_desktopRules.walkHint.font, words, m_desktopRules.walkHint.atScreen * view, fitted, true,
+                  static_cast<double>(m_desktopRules.walkHint.alphaByte) / 255.0);
+        }
+    }
+
     // 7. 1-21's "move the camera around" (camera.json `hint`): the DrawFadingText the
     //    hand's first call makes, which the engine's drawable manager draws after the
     //    caption it was handed after - over everything, on the screen and not the
@@ -11075,8 +11181,8 @@ double MagicPortalsLayer::modernHintLeft(const Supersonic::BitmapFont& font, con
     const Controls::Layout settled = Controls::LayOut(Controls::Style::Modern, m_controlsRules, m_hudRules, m_controlsApplied, view,
                                                       ControlsInsets(), m_hudRules.pads.slideMs);
     std::array<bool, 5> shown{};
-    shown[static_cast<std::size_t>(Control::Left)] = !m_level.portals.noGravity;
-    shown[static_cast<std::size_t>(Control::Right)] = !m_level.portals.noGravity;
+    shown[static_cast<std::size_t>(Control::Left)] = !m_level.portals.noGravity && WalkPadsShown();
+    shown[static_cast<std::size_t>(Control::Right)] = !m_level.portals.noGravity && WalkPadsShown();
     return Controls::HintLeft(Controls::Style::Modern, m_controlsRules, settled, row, view, shown);
 }
 
@@ -11097,6 +11203,8 @@ const MagicPortalsLayer::ControlButton* MagicPortalsLayer::controlUnderPointer(c
 }
 
 bool MagicPortalsLayer::onWalkControl(const glm::dvec2& viewPoint) const {
+    // No arrows on the picture, so nothing there but the world (planning step 277).
+    if (!WalkPadsShown()) return false;
     if (playsModern() && m_hudReady && !claimsClassic()) {
         // THE MODERN PAIR'S HIT RECTANGLES at this age, asked as classic's discs are: whether or not the pair is shown
         // (a weightless level has none and a touch resting where it would be still counts - design D12), and whether or
@@ -13318,25 +13426,19 @@ std::vector<Impacts::Watched> MagicPortalsLayer::impactBodies() const {
     // ETHBeginContactCallback_minion: minion.ent's, which is every minion but a
     // ghost_minion.ent. Aimed from its entity point, which stands above its circle.
     //
-    // And made where the original's is not. spawnMinion adds minion.ent with its
-    // ENTITY POINT on the marker (ETHCallback_minion_spawn #12-19, #51; spawnMinion
-    // #25-39), its feet circle's bottom entity_above_feet_px under it; the port
-    // centres its one circle on the marker (Minions::State::Spawn), so its body
-    // stands EntityAboveCentrePx higher. 51 of the 62 markers put the original's
-    // feet into the floor under them (Q.2 spawn_census): a new body at rest, its
-    // pair begun on its first step (b2World::Step's FindNewContacts, then Collide)
-    // with hitIntensity 0, which the callback's `> 0` (#124-125) never calls on -
-    // where the port's knight falls onto that floor. So the watch looks at a new
-    // minion where the original's stands until its own circle comes down.
+    // Watched where it is: since planning step 277 the port makes a knight where the
+    // original's is, its entity point on the marker (Minions::State::Spawn), so the
+    // spawn drop step 104 gave a new knight (Watched::spawnDropPx, while the port made
+    // it EntityAboveCentrePx high) is none. A knight made with its feet in a floor
+    // has that pair marked at the first look and calls nothing, as the original's.
     const glm::dvec2 minionPoint(0.0, -m_level.minions.rules.EntityAboveCentrePx());
-    const glm::dvec2 minionDrop(0.0, m_level.minions.rules.EntityAboveCentrePx());
     for (const Minions::Minion& minion : m_level.minions.minions) {
         if (minion.gone) continue;
         // The entity the marker ADDS (R16, planning step 97): minion.ent unless it names
         // another, and never empty - so level31b's ghost_minion.ent, which has no
         // ETHBeginContactCallback_ of its own, stays out (the merge, planning step 112).
         if (!Earthquake::IsEntity(minion.entity, entityOf(Call::MinionImpact))) continue;
-        watch(Impacts::Watched{minion.body, Impacts::Kind::Minion, minionPoint, minionDrop});
+        watch(Impacts::Watched{minion.body, Impacts::Kind::Minion, minionPoint});
     }
     // crateContactCallback's six callers: every crate, whose begins are a sound
     // and no shake (planning step 142). Each pair a watched body touches is its
@@ -14250,6 +14352,19 @@ void MagicPortalsLayer::watchSplash() {
     using Supersonic::Input;
     Splash::Devices devices;
     for (int key = 0; key <= Supersonic::Key::Last; ++key) devices.keys[static_cast<std::size_t>(key)] = Input::IsKeyDown(key);
+    // A desktop's full screen keys change the window and leave the intro playing (planning step 277). An Enter that went down with Alt held stays the full
+    // screen key until it is let go, whichever of the two comes up first.
+    if (m_paths.desktop) {
+        using namespace Supersonic;
+        const bool alt = Input::IsKeyDown(Key::LeftAlt) || Input::IsKeyDown(Key::RightAlt);
+        const bool enter = Input::IsKeyDown(Key::Enter) || Input::IsKeyDown(Desktop::kKeyKeypadEnter);
+        m_splashAltEnter = enter && (alt || m_splashAltEnter);
+        for (const int key : {Desktop::kKeyF11, Key::LeftAlt, Key::RightAlt}) devices.keys[static_cast<std::size_t>(key)] = false;
+        if (m_splashAltEnter) {
+            devices.keys[static_cast<std::size_t>(Key::Enter)] = false;
+            devices.keys[static_cast<std::size_t>(Desktop::kKeyKeypadEnter)] = false;
+        }
+    }
     for (int button = 0; button < 3; ++button) devices.mouse[static_cast<std::size_t>(button)] = Input::IsMouseButtonDown(button);
     const int count = Input::ContactCount();
     for (int index = 0; index < count; ++index) {
@@ -14290,6 +14405,8 @@ void MagicPortalsLayer::drawSplash(entt::registry& registry) {
 }
 
 void MagicPortalsLayer::OnFixedUpdate(entt::registry& registry, float fixedDelta) {
+    // Full screen answers wherever the game is, the intro included (planning step 277).
+    watchDesktopKeys(registry);
     // The intro ends on the tick after its last, and that tick is the game's first (nothing of the game was ticked, nothing is owed).
     if (m_splash && m_splash->Done()) {
         m_splash.reset();

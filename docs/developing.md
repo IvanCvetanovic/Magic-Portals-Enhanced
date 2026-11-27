@@ -90,7 +90,7 @@ ctest --test-dir build
 Configure and build in a shell with MSVC's environment (an x64 Native Tools prompt, or after
 `vcvars64.bat`); `tools\parity\port_build.bat` does both steps on the owner's machine. It
 compiles from a fresh clone and runs a hand-written test level that needs no game content ([docs/building.md](building.md), section 5), but it plays the game only after the original's levels are converted
-locally, and 43 of the 97 tests that `ctest` lists skip without them (`test_mp` itself runs 94 suites when the data is there; measured on Linux with `out/` and `reference/` hidden at planning step 250: 54 passed, 43 skipped and none failed; `test_mp_shoot` and
+locally, and (as measured before the suites of later steps) 43 of the 97 tests that `ctest` lists skip without them (`test_mp` itself ran 94 suites when the data was there; measured on Linux with `out/` and `reference/` hidden at planning step 250: 54 passed, 43 skipped and none failed; `test_mp_shoot` and
 `test_mp_sprites` used to fail there and each now has a second suite for the part that needs the data, planning step 209): *Local setup* below, steps 5-8.
 
 **Build on Linux.** `tools/build_linux.sh` configures (Ninja, Release, X11) and builds `MagicPortals` and `test_mp` on Ubuntu 24.04
@@ -471,7 +471,7 @@ read in 67.8 ms`) and each level's (`level0 data read in 7.7 ms`), to one decima
 The medals and the sound and music switches are kept between runs, as the original keeps
 them, in `%APPDATA%\Magic Portals\` on Windows (`~/.local/share/Magic Portals` on Linux; [docs/platforms.md](platforms.md) has the other platforms) (`scores.json`, and `audio.json` from the first press of
 a switch). So is the choice of controls (`controls.json`, from the first tile pressed in
-Options) and the choice of language (`language.json`, from the first language picked). `--saves <dir>` moves all of them, for a run that must not touch the player's.
+Options), a computer's full-screen and walk-arrow choices (`desktop.json`) and the choice of language (`language.json`, from the first language picked). `--saves <dir>` moves them, for a run that must not touch the player's (such a run is not a player's, so it neither reads nor writes `desktop.json` and has no full-screen keys or desktop switches).
 
 Each of them is written in one step: a temporary of its own name beside the file, flushed and checked
 after it is closed, renamed over the file, and the live file is never removed to make room; `scores.json`,
@@ -500,17 +500,25 @@ configures once - if `build\`'s data paths move, delete `build-play\` and run it
 | a second finger (a touch device, or a replayed tick) | `--controls modern` with `input.two_contacts` on in `game/data/controls.json` (shipped on; `--controls modern,contacts=one` turns it off for a run): a finger held on an arrow or a corner button keeps its control while another finger shoots, aims, pans the camera or taps a help block - a thumb on the walk arrow no longer stops a shot. One finger works the controls and one the world; a further finger, or a second one on a control while another works the controls, is ignored (restart and pause are not pressed through a held arrow); a finger that lands on the very tick the one holding its place lifts is not lost, its press follows on the next tick. With one finger nothing differs from the one-pointer game, and the classic style never reads a second finger. **A desktop mouse is one finger, and no real multi-touch hardware has been tried (the Android build takes touch, and was run on an emulator): only replayed ticks are tested** |
 | left mouse on a menu | buttons and tiles; drag scrolls the credits and the achievements, the wheel scrolls the achievements |
 | left mouse on the main menu's top-right gear | Options (below); a run that is not a developer's and not `--controls classic` has it |
-| left mouse on Options' "Adjust controls" button | the adjustment screen (below); shown and claimed only while the style in force is Modern |
+| left mouse on Options' "Adjust controls" button | the adjustment screen (below); shown and claimed only while the style in force is Modern and, on a desktop player's run, the walk arrows are on |
 | left mouse on the adjustment screen | the seven widgets (below): a tile acts on the release strictly inside it after a press strictly inside it; with the lock open, a press on a control's drawn box grabs it and the drag moves it (below); a press on empty space does nothing, and no pointer reaches a level while it is up |
 | `Esc` | in a level: pause, and resume from it; closes a popup; in a menu: back a screen; on the main menu: quit |
+| `F11`, or `Alt`+`Enter` | full screen and back, anywhere in the game (a desktop player's run, below); the choice is kept |
 | `R` | retry the level |
 | `N` | skip to the next level (dev) |
 | `B` | draw the physics bodies' boxes over the art (dev). These boxes are the one lit draw the port makes: with `--sprites-only on` (*Performance options*; off as shipped) they, and a level drawn without its art, draw flat; at the shipped 16 px shadow maps they cast no shadow (`--shadow-maps 0` brings it back) |
 | `G` | write what the game believes it is drawing to the log (dev) |
 
+**A desktop player's run** (planning step 277, `sim/Desktop`): a run a person is at (as above, no developer's flag) of a build that is not a phone's, and not under `--profile mobile`. Its levels show **no walk arrows**
+(`A`/`D` and `←`/`→` walk; restart, pause and clear portals stay, for the mouse), and 1-01, whose arrows the original rings, says the keys along the bottom instead. `F11` or
+`Alt`+`Enter` switches full screen (the intro goes on), and Options has two switches under its tiles, **Fullscreen** and **Walk arrows** (a touch screen laptop with its keys folded
+away turns them on; the adjustment button shows only while they are on). A run without that Options screen (`--controls classic`, or tables that will not read) keeps its arrows. Both choices are kept in
+`desktop.json` beside `scores.json`, and the next start opens as it was left, full screen from its first frame; `--fullscreen` and `--windowed` decide their own run and are not kept.
+The shipped defaults are `controls.json`'s `desktop` block (a window, no arrows). A capture, a route or a suite is not such a run and plays as before.
+
 **The Options screen** (planning step 185). A player's run has a gear in the main menu's top-right corner, in the slot of the
 original's omitted Facebook button, which opens Options: two tiles, **Modern** (Magic Rampage's inset controls) and **Classic** (the
-original's), each with a small picture of where its five controls stand, and the credits' own back button. Press a tile (down and up on
+original's), each with a small picture of where its five controls stand (three on a desktop player's run with the walk arrows off), and the credits' own back button. Press a tile (down and up on
 it) and that style is the one the next level plays; the lit tile is the one in force. The choice is kept in `controls.json` beside
 `scores.json` and read at the next start (`controls: modern (saved)` in the log); a player who has never chosen gets the shipped default,
 which is **Modern** since planning step 198 (the owner's word of 2026-10-22; `default_mode` in `game/data/controls.json`, one value): a new
@@ -527,7 +535,7 @@ the controls on that screen (below), or written by hand in the file, or asked by
 (from the grid to chapter select, and from there to the main menu), the gear; `Esc` is the pause and the two backs.
 
 **The adjustment screen** (planning step 192, CTL-11 of the modern-controls plan). Options has an "Adjust controls" button under its two tiles, drawn and pressable only while the style in force is
-Modern (a classic run has nothing to adjust: no button, nothing under its place). It opens a screen of its own - a menu state like Options, with no level loaded under it - which shows **the five
+Modern (a classic run has nothing to adjust: no button, nothing under its place) and, on a desktop player's run, only while the walk arrows are on. It opens a screen of its own - a menu state like Options, with no level loaded under it - which shows **the five
 controls as a level draws them** (the same layout, alpha and pictures; clear-portals shown always, as it is in a level only while a portal is alive) over a flat backdrop, and **seven widgets** in the middle:
 the **size** row (a minus tile, the size in force, a plus tile: 0.4 to 1.4 by 0.1; the default look is 0.7), the **opacity** row (0.2 to 1.8 by 0.2; the default is 1.0), the **lock** and **Restore**, and
 **Back** at the top left, under the clear-portals preview. A tile is pressed by going down inside it and coming up inside it (strictly: on its edge is outside); a tile at its limit, and Restore with nothing to restore, are drawn dim and do
