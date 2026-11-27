@@ -49,9 +49,9 @@ inline constexpr double kDynamicTargetFpsMax = 240.0;   // no display this port 
 inline constexpr std::uint32_t kDynamicMostPixels = 67108864;      // 64 Mpx: an 8K window; a budget beyond it is not one
 inline constexpr std::uint32_t kDynamicMostTargetHeight = 4320;    // an 8K picture's height
 
-// The Vulkan 1.x minors the engine's device selection takes (GameManifest::minimumVulkanMinor, clamped into 1 to 2 by GameRuntime::ResolveVulkanMinor,
-// engine/src/core/GameRuntime.cpp:117): the table says what it means and is refused outside it, as for the shadow maps.
-inline constexpr std::uint32_t kVulkanMinorMin = 1;
+// The Vulkan 1.x minors the engine's device selection takes (GameManifest::minimumVulkanMinor, at most 2 by GameRuntime::ResolveVulkanMinor,
+// engine/src/core/GameRuntime.cpp): the table says what it means and is refused outside it, as for the shadow maps. 0 is Vulkan 1.0 (planning step 281).
+inline constexpr std::uint32_t kVulkanMinorMin = 0;
 inline constexpr std::uint32_t kVulkanMinorMax = 2;
 
 // A setting that can differ by the kind of run.
@@ -75,7 +75,7 @@ struct DynamicResolutionBlock {
 // The "mobile" block: each member is a key the block may hold, and PRESENT means it replaces the desktop answer for a run under the phone profile.
 // Absent means the phone profile answers as the desktop does.
 struct MobileBlock {
-    std::optional<std::uint32_t> minimumVulkanMinor; // minimum_vulkan_minor: 1 or 2. 1 lets a GPU that reports Vulkan 1.1 be used (a phone's stock driver)
+    std::optional<std::uint32_t> minimumVulkanMinor; // minimum_vulkan_minor: as the top-level key, for a phone's run
     std::optional<std::uint32_t> shadowMapResolution; // shadow_map_resolution: as the top-level key
     std::optional<bool> assetWatching;                // asset_watching: a plain true/false, for both kinds of run (a phone has nobody to hot-reload for)
     // Planning step 205 (PORT-7). A plain true/false for BOTH kinds of run, like asset_watching:
@@ -88,6 +88,10 @@ struct MobileBlock {
 
 // game/data/engine.json. The defaults are the engine AS IT WAS, and the layer as it was: nothing opted into.
 struct Table {
+    // minimum_vulkan_minor: 0, 1 or 2, the lowest Vulkan 1.x a GPU may report. Absent is the engine's own (1.2). Optional, so a table without it reads.
+    std::optional<std::uint32_t> minimumVulkanMinor;
+    // compact_scene_for_old_gpus: GameManifest::compactSceneForOldGpus. Optional; absent is false (the engine's own: no compact scene set).
+    bool compactSceneForOldGpus = false;
     std::uint32_t shadowMapResolution = 0;     // 0: the engine's own sizes (2048 cascades, 1024 cubes and spot maps)
     bool spritesOnlyScenePipelines = false;    // the four scene pipelines built with every draw folded to the unlit path
     PerRun assetWatching;                      // the engine's stat of every watched file on every frame (default true)
@@ -115,7 +119,8 @@ struct Resolved {
     bool assetWatching = true;
     bool spriteReport = true;
     float perfLogSeconds = 0.0f;
-    std::uint32_t minimumVulkanMinor = 0; // 0: not asked, the engine's own (Vulkan 1.2); 1 or 2: set on the manifest
+    std::optional<std::uint32_t> minimumVulkanMinor; // empty: not asked, the engine's own (Vulkan 1.2); 0 (Vulkan 1.0), 1 or 2: set on the manifest
+    bool compactSceneForOldGpus = false; // a GPU that allows few storage buffers may take the engine's compact scene set
     std::uint32_t sceneSamples = 0;       // 0: not asked, the engine's own (the device's best, at most 4); 1, 2 or 4: set on the manifest
     DynamicResolutionBlock dynamicResolution; // enabled false: not asked, the engine as it was (the scene target is the window's size)
     bool perfOverlay = false;

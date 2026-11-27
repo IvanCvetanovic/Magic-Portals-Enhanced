@@ -833,10 +833,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
                   << "                    --root or one of the folders above. What a release build does always\n"
                   << "  --profile <desktop|mobile>\n"
                   << "                    which engine settings the run asks for (the 'mobile' block of\n"
-                  << "                    game/data/engine.json is the phone's, among them the lowest Vulkan\n"
-                  << "                    version a GPU may report). Without it the build's own: mobile in a\n"
-                  << "                    phone's build, desktop in any other; with it a desktop run can try\n"
-                  << "                    the phone's settings, and the other way round\n"
+                  << "                    game/data/engine.json is the phone's). Without it the build's own:\n"
+                  << "                    mobile in a phone's build, desktop in any other; with it a desktop\n"
+                  << "                    run can try the phone's settings, and the other way round\n"
                   << "  --lang <code>     the language this run speaks, over the one the player chose:\n"
                   << "                    " << LangCodesText() << "\n"
                   << "                    (English is the original's). The run neither reads nor\n"
@@ -1203,8 +1202,8 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
     // A DESKTOP PLAYER'S RUN (planning step 277, sim/Desktop.hpp): full screen by F11, Alt+Enter and Options, no walk arrows on the picture unless chosen.
     // A person at the run, a build that is not a phone's, and no phone profile: every capture, route and suite is as it was.
     paths.desktop = MagicPortals::Desktop::PlayerRun(fatal.attended, MagicPortals::kMobileBuild, mobile);
-    // A phone's run cannot do without its options file (planning step 203, PORT3-3 (d)): the lowest Vulkan version a phone's GPU may report is in it,
-    // and the engine's own defaults ask for 1.2, which many phones' stock drivers do not offer. A start with the defaults would end with a GPU
+    // A phone's run cannot do without its options file (planning step 203, PORT3-3 (d)): the lowest Vulkan version a GPU may report is in it,
+    // and the engine's own default asks for 1.2, which many phones' drivers do not offer. A start with the default would end with a GPU
     // complaint that blames the phone; this one says what is wrong. A desktop run with the file unreadable goes on with the engine's defaults, as
     // it always has (the warning below says so).
     if (mobile && !tuningRead) {
@@ -1236,9 +1235,12 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         manifest.dynamicResolution.minTargetHeight = tuning.dynamicResolution.minTargetHeight;
         manifest.dynamicResolution.emergencyBelowFps = tuning.dynamicResolution.emergencyBelowFps;
     }
-    // Asked only where the profile asks (a phone's): left alone, the engine wants Vulkan 1.2 as it always has, and a phone whose stock driver
-    // reports 1.1 would have no GPU the engine accepts and end its start before the first frame (sibling port, E39).
-    if (tuning.minimumVulkanMinor != 0) manifest.minimumVulkanMinor = tuning.minimumVulkanMinor;
+    // Asked only where the table asks (game/data/engine.json takes Vulkan 1.0 for every run since planning step 281): left alone, the engine wants
+    // Vulkan 1.2, and a GPU that reports less would not be accepted and the start would end before the first frame (sibling port, E39).
+    if (tuning.minimumVulkanMinor) manifest.minimumVulkanMinor = *tuning.minimumVulkanMinor;
+    // A phone GPU on a Vulkan 1.0 driver often allows 4 storage buffers a shader stage, under the full scene set's 7: this game draws nothing lit for a
+    // player, so it may take the engine's compact set there (engine/src/renderer/SceneLimits.hpp; planning step 281).
+    manifest.compactSceneForOldGpus = tuning.compactSceneForOldGpus;
     // The window is shown the moment it exists, and nothing reads its messages until the first frame: a start that takes five seconds
     // or more (a cold disk, an antivirus scanning a freshly copied exe, a slow GPU driver compiling its pipelines) makes Windows call
     // it "Not responding" and offer to close it, which looks like a crash. This reads the window's events between the startup stages,

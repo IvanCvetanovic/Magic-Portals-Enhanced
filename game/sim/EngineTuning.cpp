@@ -17,6 +17,7 @@ namespace {
 // The keys of the "mobile" object, which is the block's whole vocabulary.
 constexpr const char* kMobileKey = "mobile";
 constexpr const char* kMinimumVulkanMinorKey = "minimum_vulkan_minor";
+constexpr const char* kCompactSceneKey = "compact_scene_for_old_gpus";
 constexpr const char* kShadowMapKey = "shadow_map_resolution";
 constexpr const char* kAssetWatchingKey = "asset_watching";
 constexpr const char* kSpritesOnlyKey = "sprites_only_scene_pipelines";
@@ -120,6 +121,18 @@ bool ValidShadowMapResolution(double asked) {
     return asked == std::floor(asked) && (asked == 0.0 || (asked >= kShadowMapMin && asked <= kShadowMapMax));
 }
 
+// minimum_vulkan_minor, at the top level or in the phone block (`where` names which): a whole number the engine's device selection takes.
+bool ReadVulkanMinor(const Json::Value& minor, const std::string& where, std::optional<std::uint32_t>& out, const std::string& path, std::string& error) {
+    const double asked = minor.IsNumber() ? minor.AsNumber() : -1.0;
+    if (!minor.IsNumber() || asked != std::floor(asked) || asked < static_cast<double>(kVulkanMinorMin) || asked > static_cast<double>(kVulkanMinorMax)) {
+        error = path + ": " + where + " is a whole number from " + std::to_string(kVulkanMinorMin) + " to " + std::to_string(kVulkanMinorMax) +
+                " (the Vulkan 1.x minor a GPU must report)";
+        return false;
+    }
+    out = static_cast<std::uint32_t>(asked);
+    return true;
+}
+
 // The "mobile" object. Required, so that a block lost from the file is noticed where the file is read; every key in it is optional, because a key
 // present IS the override and a key absent leaves the desktop's answer.
 bool ReadMobile(const Json::Value& root, MobileBlock& out, const std::string& path, std::string& error) {
@@ -140,15 +153,9 @@ bool ReadMobile(const Json::Value& root, MobileBlock& out, const std::string& pa
         }
     }
     MobileBlock read;
-    if (node.Has(kMinimumVulkanMinorKey)) {
-        const Json::Value& minor = node[kMinimumVulkanMinorKey];
-        const double asked = minor.IsNumber() ? minor.AsNumber() : 0.0;
-        if (!minor.IsNumber() || asked != std::floor(asked) || asked < kVulkanMinorMin || asked > kVulkanMinorMax) {
-            error = path + ": " + kMobileKey + "." + kMinimumVulkanMinorKey + " is " + std::to_string(kVulkanMinorMin) + " or " +
-                    std::to_string(kVulkanMinorMax) + " (the Vulkan 1.x minor a GPU must report)";
-            return false;
-        }
-        read.minimumVulkanMinor = static_cast<std::uint32_t>(asked);
+    if (node.Has(kMinimumVulkanMinorKey) && !ReadVulkanMinor(node[kMinimumVulkanMinorKey], std::string(kMobileKey) + "." + kMinimumVulkanMinorKey,
+                                                              read.minimumVulkanMinor, path, error)) {
+        return false;
     }
     if (node.Has(kShadowMapKey)) {
         const Json::Value& size = node[kShadowMapKey];
@@ -243,6 +250,16 @@ bool Load(const std::string& path, Table& out, std::string& error) {
         return false;
     }
     read.spritesOnlyScenePipelines = root["sprites_only_scene_pipelines"].AsBool();
+    if (root.Has(kMinimumVulkanMinorKey) && !ReadVulkanMinor(root[kMinimumVulkanMinorKey], kMinimumVulkanMinorKey, read.minimumVulkanMinor, path, error)) {
+        return false;
+    }
+    if (root.Has(kCompactSceneKey)) {
+        if (!root[kCompactSceneKey].IsBool()) {
+            error = path + ": " + kCompactSceneKey + " is true or false";
+            return false;
+        }
+        read.compactSceneForOldGpus = root[kCompactSceneKey].AsBool();
+    }
     if (!ReadPerRun(root, "asset_watching", read.assetWatching, path, error) ||
         !ReadPerRun(root, "sprite_report", read.spriteReport, path, error) || !ReadMobile(root, read.mobile, path, error)) {
         return false;
@@ -261,6 +278,8 @@ Resolved Resolve(const Table& table, bool attended, bool mobile, const Overrides
     std::uint32_t sceneSamples = 0;
     DynamicResolutionBlock dynamicResolution; // disabled: the engine as it was
     Resolved out;
+    out.minimumVulkanMinor = table.minimumVulkanMinor;
+    out.compactSceneForOldGpus = table.compactSceneForOldGpus;
     if (mobile) {
         if (table.mobile.shadowMapResolution) shadowMapResolution = *table.mobile.shadowMapResolution;
         if (table.mobile.assetWatching) assetWatching = *table.mobile.assetWatching;
@@ -268,7 +287,7 @@ Resolved Resolve(const Table& table, bool attended, bool mobile, const Overrides
         if (table.mobile.spriteReport) spriteReport = *table.mobile.spriteReport;
         if (table.mobile.sceneSamples) sceneSamples = *table.mobile.sceneSamples;
         if (table.mobile.dynamicResolution) dynamicResolution = *table.mobile.dynamicResolution;
-        out.minimumVulkanMinor = table.mobile.minimumVulkanMinor.value_or(0);
+        if (table.mobile.minimumVulkanMinor) out.minimumVulkanMinor = table.mobile.minimumVulkanMinor;
     }
     // --dynamic-res over any profile: the mobile block's numbers are the only numbers there are (the sibling's, E41 and E47), so a desktop run asked for
     // dynamic resolution gets them too; the flag alone decides whether it is on.
@@ -376,6 +395,7 @@ std::string Describe(const Resolved& resolved) {
         out << "off";
     }
     if (resolved.perfOverlay) out << ", perf overlay on";
+    if (resolved.compactSceneForOldGpus) out << ", compact scene for old GPUs allowed";
     if (resolved.dynamicResolution.enabled) {
         const DynamicResolutionBlock& dr = resolved.dynamicResolution;
         // A budget of 0 is NO budget (the engine's own: SupersonicApp.cpp acts on it only above 0), and the log of a player's run must not read as one of nothing.

@@ -59,7 +59,7 @@ different resolvers, and the entry never falls through to the game's.)
 
 **Before the game starts**, the macOS entry (inside a `.app` only; a build-tree run is passed through untouched) makes the path flags absolute against the folder the
 program was started in (**only the flags `AppleLayout::kPathFlags` lists**: `--root`, `--levels`, `--art`, `--data`, `--original`, `--chapters`, `--achievements`, `--port-data`,
-`--padart`, `--saves` and `--screenshot`; the engine's other path flags, `--screenshot-ui`, `--record`, `--replay` and `--scene` (`engine/src/core/LaunchOptions.cpp:184-186, 227-235`), are handed on as
+`--padart`, `--saves` and `--screenshot`; the engine's other path flags, `--screenshot-ui`, `--record`, `--replay` and `--scene` (`engine/src/core/LaunchOptions.cpp:192-194, 235-243`), are handed on as
 typed, so a relative value of one of them lands in the engine's working folder and not where it was typed: WRITTEN that way and not fixed in this step, APPLE-24), copies the bundle's shaders into `~/Library/Caches/<bundle id>/engine/assets/shaders` **at every launch** and makes that its working
 directory. **Why:** the engine takes the executable's folder or the working directory as its asset root when it holds `assets/shaders`, and a signed
 bundle is read-only (and must stay unchanged to keep its seal), while the engine writes where it runs. The iOS entry does the same into `Library/Caches/engine`.

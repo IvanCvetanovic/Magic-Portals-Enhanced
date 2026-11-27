@@ -35,7 +35,7 @@ THE LAYOUT (docs/packaging.md; game/sim/AssetRoot.cpp Layout::Packaged is the sa
     pad-art/           Magic Rampage's control pictures, ONLY with --with-pad-art (<reference>/magic-rampage: controls/, editor/)
     manifest.json      every file with its size, sha256 and kind, and the references that name nothing
     SHA256SUMS.txt     the same hashes in `sha256sum -c` form
-`shell` lays out a runnable desktop folder: the program, assets/shaders/*.spv beside it (the engine opens its 17 shaders by relative path)
+`shell` lays out a runnable desktop folder: the program, assets/shaders/*.spv beside it (the engine opens its 18 shaders by relative path)
 and content/ -- it only proves the layout; the release archives are a later step.
 
 Deterministic: the same input gives a byte-identical folder (sorted order, fixed times, no clock in the manifest). Standard library only.

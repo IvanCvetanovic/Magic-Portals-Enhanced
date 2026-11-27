@@ -5528,3 +5528,15 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - wants every phone in.
 
 **Where it stands / next:** waiting for the player's message and his word on Vulkan 1.0 support.
+
+### 2026-11-27 20:21 - Session 82, night: Vulkan 1.0 and one Arabic wording - Step 281
+**Asked:** "I guess it makes the most sesne to support all vulkan verison then?", then "ok, start if you need any engine changes you are allowed to do it, commit and push under my name only"; during it, a player's remark that the Arabic title button should say اضغط للبدء, and his question whether the achievement points do anything: in the port they are only the achievements screen's total, and nothing unlocks from them (chapters unlock from level medals).
+**Built:** the engine takes Vulkan 1.0 (instance and device) and has a compact scene set for old graphics chips; the game allows both; the Arabic button.
+**Broke / dead ends:** (1) The first plan, lowering the version only, would have left most old phones out: their drivers allow 4 storage buffers and the scene asked 7; found by reading public device reports. (2) The new shader job broke the engine's shader check script; nothing ran it until a review's sceptic did. (3) A simulated profile first raised a validation error of its own (portability subset) until that emulation was switched off.
+**Decision:** a separate compact variant instead of shrinking the full layout, so newer GPUs run exactly what they ran; the Android manifest's feature line is left.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; the staged-extension check printed nothing; captures are under `out/` and deleted after the release.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** Windows 99 suites, 291,269 checks, 0 failures; Linux 291,230; 32-bit stand-in 0 build warnings, 100 of 100 ctest entries (its `test_mp_build` left out, as at earlier releases), 99 suites 291,230 checks 0 failures; 18 shaders; four engine commits.
+**Inferred mood:** a guess - wants nobody with an old phone left out.
+
+**Where it stands / next:** committed; the release of 1.0.2 is next. Not seen on any device of the age this is for.

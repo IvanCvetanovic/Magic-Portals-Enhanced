@@ -1033,7 +1033,7 @@ def playing_windows(version, arch, redist_names, data, dev):
              '  The engine keeps a small cache in a folder "cache" beside the program, and makes an empty folder assets\\scenes there; in a folder you cannot write to the game still starts, without the cache.', ''] + CONTROLS_PARAGRAPH + [
              'WHAT YOUR PC NEEDS',
              '  * 64-bit Windows. The game has been run on Windows 11 (builds made by the maker, on his PC); whether it starts on Windows 10 was not tried. The tool that made this archive reads the program as bytes and never starts it.',
-             '  * A graphics driver that provides Vulkan 1.2 or newer (NVIDIA, AMD or Intel: from the maker, or Windows Update).',
+             '  * A graphics driver that provides Vulkan 1.0 or newer (NVIDIA, AMD or Intel: from the maker, or Windows Update). Below 1.2 it has not been tried.',
              runtime_paragraph(redist_names),
              '  * On a Windows "N" edition: the Media Feature Pack. The game decodes its sounds with Windows Media Foundation, and without the pack Windows shows a message about',
              '    MFPlat.DLL before the game starts.',
@@ -1078,7 +1078,7 @@ def playing_linux(version, arch, needs, data, dev, stripped=None):
              'WHAT YOUR PC NEEDS',
              '  * 64-bit Linux on an x86-64 CPU, in a desktop session with an X11 display. The program opens libX11 at run time; on a Wayland desktop it needs XWayland, which',
              '    was not tried.',
-             '  * A Vulkan 1.2 driver and the Vulkan loader, libvulkan.so.1 (Mesa\'s radv, anv or lavapipe, or the vendor\'s driver; Debian and Ubuntu: libvulkan1).',
+             '  * A Vulkan driver (1.0 or newer; below 1.2 not tried) and the Vulkan loader, libvulkan.so.1 (Mesa\'s radv, anv or lavapipe, or the vendor\'s driver; Debian and Ubuntu: libvulkan1).',
              '  * libasound.so.2 (ALSA) for sound (Debian and Ubuntu: libasound2, or libasound2t64 on releases from 2024 on).',
              need_line,
              stripped_line, '',

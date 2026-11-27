@@ -64,7 +64,7 @@ A desktop package puts the program beside it (`package.py shell` lays this out a
 
 ```
 MagicPortals(.exe)
-assets/shaders/*.spv   the engine opens its 17 shaders by relative path from the program's own folder
+assets/shaders/*.spv   the engine opens its 18 shaders by relative path from the program's own folder
 content/               the folder above
 ```
 
@@ -279,7 +279,7 @@ desktop's answer when present:
 
 | Key | Value | Why |
 |---|---|---|
-| `minimum_vulkan_minor` | 1 | the lowest Vulkan 1.x a GPU may report. The engine wants 1.2; the stock drivers of many phones on Android 11 and 12 report 1.1, so with the default the start ends before the first frame (the sibling port's step E39). A desktop run leaves it out and asks for 1.2. The log line says what the run was given: `... minimum Vulkan 1.2` or, under the profile, `1.1` |
+| `minimum_vulkan_minor` | 0 | the lowest Vulkan 1.x a GPU may report. Since planning step 281 it is 0, Vulkan 1.0, here and in the table's top-level key, so a desktop run takes it too (the engine wants 1.2 without a key; 1 was the phone's value from step 201, the sibling port's step E39). A GPU that allows fewer than 7 storage buffers a shader stage takes the compact scene set (`compact_scene_for_old_gpus`, also in the table), and below 1.1 one that cannot take that either is refused (`engine/src/renderer/SceneLimits.hpp`). The log line says what the run was given: `... minimum Vulkan 1.0` |
 | `shadow_map_resolution` | 16 | as the desktop's own key, repeated so that changing the desktop's does not move a phone |
 | `asset_watching` | false | the engine's per-frame stat of every watched file, for both kinds of run: a phone has nobody to hot-reload for |
 | `sprites_only_scene_pipelines` | true | the four scene pipelines built with the lit surface folded away (planning step 205). Every picture of this port was byte for byte the desktop's with it on (the 19 baselines and the 128-level f420 sweep, plain and classic, under `--profile mobile`); the gain is the sibling port's, on an Adreno 640 (a 2D menu in 75 ms instead of 117), and the cost is the developer's lit boxes, which draw flat |
@@ -341,7 +341,7 @@ Planning step 208 (PORT-10). `tools/package/release.py` turns **a built program 
 
 | Platform | File | Holds | The program is built by |
 |---|---|---|---|
-| Windows | `MagicPortals-<version>-windows-x64.zip` | `MagicPortals.exe`, `assets/shaders/*.spv` (17), `content/`, `PLAYING.txt`, `LICENSE`, `NOTICE.md`, and with `--vc-redist` the runtime DLLs the program imports | the owner's PC (section 6's exact command, `out/build-release`), or `release.yml` (MSVC on a Windows runner, the same options; written in step 209, **RUN on 2026-11-03**: its first dispatch failed at the configure, its second built the program on `windows-2025-vs2026` and `check-program` passed it, `ci.md` section 9) |
+| Windows | `MagicPortals-<version>-windows-x64.zip` | `MagicPortals.exe`, `assets/shaders/*.spv` (18), `content/`, `PLAYING.txt`, `LICENSE`, `NOTICE.md`, and with `--vc-redist` the runtime DLLs the program imports | the owner's PC (section 6's exact command, `out/build-release`), or `release.yml` (MSVC on a Windows runner, the same options; written in step 209, **RUN on 2026-11-03**: its first dispatch failed at the configure, its second built the program on `windows-2025-vs2026` and `check-program` passed it, `ci.md` section 9) |
 | Linux | `MagicPortals-<version>-linux-x86_64.tar.gz` | the same, the program with its executable bit | the owner's WSL or a CI Linux runner (`release.yml`, Ubuntu 22.04, g++ 12.3: RUN on 2026-11-03, `check-program --max-glibc 2.35` passed): `tools/build_linux.sh --no-baked-paths --dev-tools OFF --portable --strip --build-dir <folder>` (section 6: build it on the oldest system it should run on) |
 | macOS | `MagicPortals-<version>-macos-universal.zip` | the CI shell's `MagicPortals/MagicPortals.app` with `Contents/Resources/GameData` added, `READ ME FIRST.txt`, `LICENSE`, `NOTICE.md` | GitHub's macOS runner (`.github/workflows/apple.yml`, the owner dispatches it) |
 | iOS | `MagicPortals-<version>-ios-arm64.ipa` | `Payload/MagicPortals.app` with `GameData` at the bundle's root, `READ ME FIRST.txt`, `LICENSE`, `NOTICE.md` | the same workflow (`-simulator` for the simulator bundle) |

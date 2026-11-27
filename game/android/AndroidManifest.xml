@@ -16,9 +16,9 @@
     THE APPLICATION ID below is a PLACEHOLDER the owner confirms before anything is published: an id is permanent once an app is on a store. It differs
     from the original game's and from the sibling port's.
 
-    minSdk 26 is where AAudio begins (the engine's audio on Android). The game needs a Vulkan 1.1 device (uses-feature below; the engine checks it at
-    start, and game/data/engine.json "mobile" sets the lowest minor to 1): only Google Play filters on uses-feature, so a sideloaded APK on a phone
-    that reports less starts and is told so. Landscape only, and EVERY configuration change handled in place, because a NativeActivity that is
+    minSdk 26 is where AAudio begins (the engine's audio on Android). The game takes any Vulkan version from 1.0 (game/data/engine.json
+    "minimum_vulkan_minor" 0, planning step 281; the engine checks the GPU at start). The uses-feature below still names 1.1: only Google Play filters
+    on uses-feature and this file is not in a store, so it does not stop a sideloaded APK on a 1.0 phone (not tried on one). Landscape only, and EVERY configuration change handled in place, because a NativeActivity that is
     recreated starts its native thread again over a running game: the 18 kinds that the android-35 platform defines (platforms/android-35/data/res/
     values/attrs_manifest.xml, flag names of the configChanges attribute). Step 203 listed 14 and missed mcc, mnc, fontWeightAdjustment and
     grammaticalGender (PORT5-9 (a)); tools/package/android_package.py requires all 18 offline and, at package time, every kind the SDK's own platform file

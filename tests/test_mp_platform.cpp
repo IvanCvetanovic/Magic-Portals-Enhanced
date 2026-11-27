@@ -101,7 +101,7 @@ void TheLoaderThatIsMissingSaysWhatIsMissingAndWhatToDo() {
     CHECK_MSG(Has(verdict.what, "Install or update the graphics driver"), "it says what to do");
     CHECK_MSG(Has(verdict.what, "NVIDIA") && Has(verdict.what, "AMD") && Has(verdict.what, "Intel"), "and from whom");
     CHECK_MSG(Has(verdict.what, "start the game again"), "and what to do after");
-    // The version the run asks of a GPU, so that a person with a 1.1 driver does not read "1.2" as their trouble.
+    // The version the run asks of a GPU, so that a person with an older driver does not read "1.2" as their trouble.
     // mutation: hard-code 1.2 in the words; drop the clamp.
     CHECK_MSG(Has(verdict.what, "Vulkan 1.2 or newer"), "a run that asks for 1.2 says 1.2");
     const StartChecks::Verdict phone = Fails(StartChecks::kLoadErrorModuleNotFound, 1);
@@ -109,7 +109,7 @@ void TheLoaderThatIsMissingSaysWhatIsMissingAndWhatToDo() {
     // Clamped into the engine's range (GameRuntime::ResolveVulkanMinor), the numbers the engine would really use.
     const StartChecks::Verdict zero = Fails(StartChecks::kLoadErrorModuleNotFound, 0);
     const StartChecks::Verdict three = Fails(StartChecks::kLoadErrorModuleNotFound, 3);
-    CHECK_MSG(Has(zero.what, "Vulkan 1.1 or newer"), "a minimum of 0 is the engine's floor, 1.1");
+    CHECK_MSG(Has(zero.what, "Vulkan 1.0 or newer"), "a minimum of 0 is Vulkan 1.0, as the shipped table asks");
     CHECK_MSG(Has(three.what, "Vulkan 1.2 or newer"), "and a minimum of 3 its ceiling, 1.2");
     // No path, no account name and no machine in the words: they go into a log a player sends and a box a player reads.
     CHECK_MSG(!Has(verdict.what, "\\") && !Has(verdict.what, "/") && !Has(verdict.what, ":\\"), "the words carry no path");
@@ -170,12 +170,13 @@ void TheVersionIsClampedByTheEnginesOwnRange() {
     // The run asks of a GPU what the engine would use: GameRuntime::ResolveVulkanMinor's range, which EngineTuning keeps as kVulkanMinorMin and Max.
     // The words use those constants, not two numbers of their own.
     // mutation: clamp with other literals (1, 3) or (2, 2); clamp to the constants swapped; do not clamp.
-    CHECK_EQ(EngineTuning::kVulkanMinorMin, std::uint32_t{1});
+    CHECK_EQ(EngineTuning::kVulkanMinorMin, std::uint32_t{0});
     CHECK_EQ(EngineTuning::kVulkanMinorMax, std::uint32_t{2});
     for (const std::uint32_t code : {StartChecks::kLoadErrorModuleNotFound, StartChecks::kLoadErrorBadImage, std::uint32_t{1114}}) {
         for (std::uint32_t asked = 0; asked <= EngineTuning::kVulkanMinorMax + 2; ++asked) {
             const std::uint32_t used = std::clamp(asked, EngineTuning::kVulkanMinorMin, EngineTuning::kVulkanMinorMax);
             const std::uint32_t other = used == EngineTuning::kVulkanMinorMin ? EngineTuning::kVulkanMinorMax : EngineTuning::kVulkanMinorMin;
+            CHECK_MSG(other != used, "the words checked against differ");
             const StartChecks::Verdict verdict = Fails(code, asked);
             CHECK_MSG(Has(verdict.what, "Vulkan 1." + std::to_string(used) + " or newer"),
                       "code " + std::to_string(code) + ", asked " + std::to_string(asked) + ": says 1." + std::to_string(used));

@@ -53,8 +53,8 @@ struct LoadResult {
 // Tries to load the named library. Injected, so that a suite can say "no", with any code, without removing a DLL from the machine it runs on.
 using TryLoad = std::function<LoadResult(const std::string& library)>;
 
-// Asks `tryLoad` for the Vulkan loader. `minimumVulkanMinor` is the 1.x the run asks of a GPU (the engine's 1 to 2, as GameManifest::minimumVulkanMinor
-// clamps it): the words name it, because a person with a 1.1 driver reads "Vulkan 1.2" as their trouble. A failure is told three ways: the loader
+// Asks `tryLoad` for the Vulkan loader. `minimumVulkanMinor` is the 1.x the run asks of a GPU (the engine's 0 to 2, as GameManifest::minimumVulkanMinor
+// clamps it): the words name it, because a person with an older driver reads "Vulkan 1.2" as their trouble. A failure is told three ways: the loader
 // or a file it needs was not found (126), the file is there and is not a usable image (193: damaged, or the wrong kind of computer), and any other
 // code, shown as it is. An absent function is a question that cannot be answered, told as a failure that gave no reason.
 Verdict CheckVulkanLoader(const TryLoad& tryLoad, std::uint32_t minimumVulkanMinor);

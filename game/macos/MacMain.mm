@@ -64,7 +64,7 @@ std::string UserSupportFolder() {
 }
 
 // ~/Library/Caches/<bundle id>/engine, with the bundle's shaders copied into
-// assets/shaders. Copied every launch: seventeen small files, and a newer
+// assets/shaders. Copied every launch: eighteen small files, and a newer
 // bundle's shaders must never lose to an older copy. False if it cannot be
 // made; the engine then looks where it always does (the build's engine
 // checkout, which a bundle run on another Mac does not have).

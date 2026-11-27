@@ -84,7 +84,7 @@ endif()
 # picture. They are settled here, above every target, so game/ and tests/ read one answer. docs/packaging.md says which belong in a release.
 #
 # MAGICPORTALS_MOBILE: a phone's build. ON by itself when the target is Android or iOS, OFF otherwise. It makes the run start under the phone
-# profile (game/data/engine.json "mobile": a lowest Vulkan version of 1.1 among it) unless --profile says otherwise, and takes the developer
+# profile (game/data/engine.json "mobile") unless --profile says otherwise, and takes the developer
 # tools and the measurement tool out of the program. Its Android entry point is game/android/AndroidMain.cpp (planning step 203) and its iOS one
 # game/ios/IOSMain.mm (planning step 206, written and never run). It may be turned ON on a desktop to build what a phone's build compiles, which is how the
 # compilers are asked about it without a phone.
@@ -93,10 +93,10 @@ if (ANDROID OR IOS)
     set(_magicPortalsMobileDefault ON)
 endif()
 option(MAGICPORTALS_MOBILE "A phone's build: the phone profile by default, no developer tools (ON by itself for an Android or iOS target)" ${_magicPortalsMobileDefault})
-# The Android program is entered by game/android/AndroidMain.cpp and starts under the phone profile (Vulkan 1.1): without it the engine's default (1.2) refuses
-# many phones' stock drivers. Turning it OFF on an Android configure would build a program that cannot start on them, so it stops here (planning step 203).
+# The Android program is entered by game/android/AndroidMain.cpp and starts under the phone profile (game/data/engine.json "mobile"). Turning it OFF on an
+# Android configure would build a program that runs a phone with a computer's settings, so it stops here (planning step 203).
 if (ANDROID AND NOT MAGICPORTALS_MOBILE)
-    message(FATAL_ERROR "MAGICPORTALS_MOBILE is OFF for an Android configure. The Android program is a phone's build (the phone profile, Vulkan 1.1); leave it ON, which is its default there.")
+    message(FATAL_ERROR "MAGICPORTALS_MOBILE is OFF for an Android configure. The Android program is a phone's build (the phone profile); leave it ON, which is its default there.")
 endif()
 
 # MAGICPORTALS_DEV_TOOLS: the developer's command-line flags (--route, --tap, --hold, --visit-levels, --place, --burn-dragon, the measurement

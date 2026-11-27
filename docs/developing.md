@@ -297,7 +297,7 @@ configured.
 - CMake 3.20 or newer;
 - Ninja on `PATH`, for the configure line in step 7 (Visual Studio's "C++ CMake tools for
   Windows" component ships it, or `winget install Ninja-build.Ninja`);
-- a GPU driver capable of Vulkan 1.2;
+- a GPU driver capable of Vulkan (1.0 or newer);
 - the Vulkan SDK, strongly recommended, and required for parity captures: it supplies the
   validation layers and `glslc`. Without `glslc` CMake falls back to the committed SPIR-V;
   without the validation layers a run validates nothing (see *Capture flags*).

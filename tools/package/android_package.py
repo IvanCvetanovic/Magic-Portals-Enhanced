@@ -498,7 +498,7 @@ def check_build_tree(tree, verification, perf_diag=False):
         ('CMAKE_BUILD_TYPE', 'Release', 'the native code must be a Release build'),
         ('SUPERSONIC_ENABLE_VALIDATION', 'OFF', 'Vulkan validation is ON: a phone has no validation layers'),
         ('MAGICPORTALS_BAKED_PATHS', 'OFF', 'baked data paths are ON: a program for a phone must carry no checkout path'),
-        ('MAGICPORTALS_MOBILE', 'ON', "the phone profile is OFF: the program would ask for Vulkan 1.2, which many phones' stock drivers do not offer"),
+        ('MAGICPORTALS_MOBILE', 'ON', "the phone profile is OFF: the program would run a phone with a computer's settings"),
         ('MAGICPORTALS_DEV_TOOLS', 'ON' if verification else 'OFF',
          'the developer tools are %s' % ('OFF in a verification build' if verification else 'ON in a player\'s build: that is the verification variant')),
     ]

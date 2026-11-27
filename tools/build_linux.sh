@@ -47,7 +47,7 @@
 #                        message that says why), --help does not list them, and the program is smaller. AUTO (the CMake default) is ON,
 #                        and OFF with --mobile. The suites always build with the tools.
 #   --mobile             configure with MAGICPORTALS_MOBILE=ON: a phone's build, compiled on this machine. The run starts under the phone
-#                        profile (game/data/engine.json "mobile": a lowest Vulkan version of 1.1 among it) unless --profile desktop says
+#                        profile (game/data/engine.json "mobile") unless --profile desktop says
 #                        otherwise, and the developer tools and the measurement tool are left out unless --dev-tools ON says they stay.
 #                        It builds the Linux program, not the Android one (tools/build_android.sh builds that library and its APK,
 #                        docs/android.md), and adds no iOS entry point; that is a later step. (The Windows release's options, MAGICPORTALS_WIN_GUI

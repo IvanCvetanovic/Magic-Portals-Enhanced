@@ -13,7 +13,7 @@
 // of tables, kinds of run and flags, with a COPY of the rule as it was before the profile existed (OldResolve below), and a literal table of rows
 // says the same without the copy. FOR A PHONE RUN the "mobile" block replaces what it holds and nothing it does not, the flags still win, and the block is
 // read as strictly as the rest of the file: a key it does not know is refused by name. The SHIPPED block is read, and the one fact of it that is a rule and
-// not a tuning decision is pinned: it asks for Vulkan 1.1, because a phone whose stock driver reports 1.1 has no GPU the engine accepts otherwise. Each
+// not a tuning decision is pinned: it takes Vulkan 1.0 (and so every version), because a phone whose driver reports less than the engine asks has no GPU the engine accepts. Each
 // pin below says, in "mutation:", the change to the code that turns it red; the mutations were run (the Step records them).
 //
 // PLANNING STEP 205 (PORT-7) makes the profile TAKE EFFECT and adds what the owner's open decisions need to be measured. The phone block gained
@@ -49,6 +49,7 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <utility>
 #include <system_error>
 
 using namespace MagicPortals;
@@ -90,9 +91,11 @@ std::string TableText(const std::string& size = "16", const std::string& sprites
 }
 
 // The rule as it was before the phone profile existed (planning step 190, game/sim/EngineTuning.cpp at 45d43ec), COPIED here and not shared: an oracle
-// that is the code it checks cannot fail. Its output has no minimum Vulkan, which the old rule did not have.
+// that is the code it checks cannot fail. The minimum Vulkan, which the old rule did not have, is the table's own top-level key (planning step 281).
 EngineTuning::Resolved OldResolve(const EngineTuning::Table& table, bool attended, const EngineTuning::Overrides& overrides) {
     EngineTuning::Resolved out;
+    out.minimumVulkanMinor = table.minimumVulkanMinor;
+    out.compactSceneForOldGpus = table.compactSceneForOldGpus;
     out.shadowMapResolution = overrides.shadowMapResolution.value_or(table.shadowMapResolution);
     out.spritesOnlyScenePipelines = overrides.spritesOnlyScenePipelines.value_or(table.spritesOnlyScenePipelines);
     out.assetWatching = overrides.assetWatching.value_or(attended ? table.assetWatching.attended : table.assetWatching.other);
@@ -114,7 +117,7 @@ EngineTuning::MobileBlock Block(std::optional<std::uint32_t> vulkan, std::option
 bool SameAnswer(const EngineTuning::Resolved& a, const EngineTuning::Resolved& b) {
     return a.shadowMapResolution == b.shadowMapResolution && a.spritesOnlyScenePipelines == b.spritesOnlyScenePipelines &&
            a.assetWatching == b.assetWatching && a.spriteReport == b.spriteReport && a.perfLogSeconds == b.perfLogSeconds &&
-           a.minimumVulkanMinor == b.minimumVulkanMinor && a.sceneSamples == b.sceneSamples && a.dynamicResolution.enabled == b.dynamicResolution.enabled &&
+           a.minimumVulkanMinor == b.minimumVulkanMinor && a.compactSceneForOldGpus == b.compactSceneForOldGpus && a.sceneSamples == b.sceneSamples && a.dynamicResolution.enabled == b.dynamicResolution.enabled &&
            a.perfOverlay == b.perfOverlay;
 }
 
@@ -127,6 +130,8 @@ void TheEnginesOwnDefaultsAreWhatNothingAskedFor() {
     CHECK_MSG(plain.perfLogSeconds == 0.0f, "no perf log unless asked");
     CHECK_MSG(plain.sceneSamples == 0 && !plain.dynamicResolution.enabled && !plain.perfOverlay,
               "no sample cap, no dynamic resolution and no perf readout unless asked (planning step 205)");
+    CHECK_MSG(!plain.minimumVulkanMinor, "and no Vulkan minimum: the engine's own 1.2");
+    CHECK_MSG(!plain.compactSceneForOldGpus, "and no compact scene");
     const EngineTuning::Resolved other = EngineTuning::Resolve(EngineTuning::Table{}, false, false, EngineTuning::Overrides{});
     CHECK_MSG(other.shadowMapResolution == 0 && !other.spritesOnlyScenePipelines && other.assetWatching && other.spriteReport,
               "and the same for a run that is not a person's");
@@ -154,11 +159,13 @@ void TheShippedTableReadsAndKeepsWhatParityWorkNeeds() {
                   std::string("the shipped file resolves, for the desktop, as the rule as it was resolved it: ") + (attended ? "a person's run" : "any other run"));
     }
 
-    // THE PHONE BLOCK OF THE SHIPPED FILE. The one fact pinned is a rule and not a tuning decision: a phone whose stock driver reports Vulkan 1.1 has
-    // no GPU the engine accepts unless the run asks for 1.1 (engine/src/core/GameRuntime.hpp, minimumVulkanMinor), and the start then ends before its
-    // first frame. mutation: delete minimum_vulkan_minor from the shipped file, or set it to 2.
-    CHECK_MSG(table.mobile.minimumVulkanMinor.has_value() && *table.mobile.minimumVulkanMinor == 1,
-              "the shipped phone profile asks for Vulkan 1.1, so that a phone whose driver reports 1.1 is not refused");
+    // THE VULKAN MINIMUM OF THE SHIPPED FILE. The one fact pinned is a rule and not a tuning decision: a device whose driver reports less than the run
+    // asks has no GPU the engine accepts (engine/src/core/GameRuntime.hpp, minimumVulkanMinor), and the start then ends before its first frame, so every
+    // run takes Vulkan 1.0, the first version (planning step 281, the owner's word). mutation: delete either key from the shipped file, or set one to 1.
+    CHECK_MSG(table.minimumVulkanMinor.has_value() && *table.minimumVulkanMinor == 0, "a computer's run takes Vulkan 1.0");
+    CHECK_MSG(table.compactSceneForOldGpus, "and a GPU that allows few storage buffers may take the compact scene set (mutation: delete the key or set it false)");
+    CHECK_MSG(table.mobile.minimumVulkanMinor.has_value() && *table.mobile.minimumVulkanMinor == 0,
+              "and so does a phone's, whatever the top-level key is set to");
     // THE STEP'S RULE (planning step 205, which lifted step 201's "the profile turns nothing on that could change a picture" on purpose): the shipped phone profile
     // builds the scene pipelines sprites-only (byte for byte the desktop's pictures: the step's G1) and keeps the sprite report quiet (no pixel, no tick), and it
     // takes no sample cap (the key is absent: still the owner's decision) and no perf readout or log (a diagnostic build asks for those, never the table). STEP 244
@@ -179,8 +186,9 @@ void TheShippedTableReadsAndKeepsWhatParityWorkNeeds() {
                   "with NO start budget: one under a phone's own pixel count is a blanket downscale of every phone, and for good on a 60 or 90 Hz phone whose driver offers only a display-paced present (a rise needs 110 fps there)");
         CHECK_MSG(phone.perfLogSeconds == desktop.perfLogSeconds && !phone.perfOverlay && !desktop.perfOverlay, "and asks for no perf log or readout");
         CHECK_MSG(desktop.sceneSamples == 0 && !desktop.dynamicResolution.enabled, "while the desktop run asks for neither either");
-        CHECK_MSG(desktop.minimumVulkanMinor == 0, "and the desktop run does not ask for a Vulkan minimum: the engine's own 1.2");
-        CHECK_MSG(phone.minimumVulkanMinor == 1, "while the phone run asks for 1.1");
+        CHECK_MSG(desktop.minimumVulkanMinor == 0u, "and the desktop run asks for Vulkan 1.0");
+        CHECK_MSG(phone.minimumVulkanMinor == 0u, "and so does the phone run");
+        CHECK_MSG(desktop.compactSceneForOldGpus && phone.compactSceneForOldGpus, "and both may take the compact scene set");
     }
     CHECK_MSG(table.mobile.dynamicResolution.has_value(), "the shipped phone block holds the dynamic-resolution object (all seven keys), so a typo in it fails where the file is read");
     // The same file under the developer's flags: nothing the table leaves off is on for want of a flag the table cannot see.
@@ -247,6 +255,11 @@ void ATableThatWillNotReadIsRefusedWhollyAndSaysWhichKey() {
          TableText("16", "true", "{\"attended_run\": false, \"other_runs\": true}", "{\"attended_run\": false, \"other_runs\": true}",
                    "{\"sprites_only\": true}"),
          "mobile.sprites_only"},
+        // The top-level minimum (planning step 281): optional, and strict where present. mutation: take any number, or ignore a wrong one.
+        {"the compact scene as text", "{\"compact_scene_for_old_gpus\": \"yes\", " + TableText().substr(1), "compact_scene_for_old_gpus"},
+        {"a top-level minimum of 3", "{\"minimum_vulkan_minor\": 3, " + TableText().substr(1), "minimum_vulkan_minor"},
+        {"a negative top-level minimum", "{\"minimum_vulkan_minor\": -1, " + TableText().substr(1), "minimum_vulkan_minor"},
+        {"a text top-level minimum", "{\"minimum_vulkan_minor\": \"0\", " + TableText().substr(1), "minimum_vulkan_minor"},
         {"a misspelt phone key",
          TableText("16", "true", "{\"attended_run\": false, \"other_runs\": true}", "{\"attended_run\": false, \"other_runs\": true}",
                    "{\"minimum_vulkan_minnor\": 1}"),
@@ -258,7 +271,7 @@ void ATableThatWillNotReadIsRefusedWhollyAndSaysWhichKey() {
         const char* block;
         const char* names;
     } badMobile[] = {
-        {"a minimum of 0", "{\"minimum_vulkan_minor\": 0}", "mobile.minimum_vulkan_minor"},
+        {"a negative minimum", "{\"minimum_vulkan_minor\": -1}", "mobile.minimum_vulkan_minor"},
         {"a minimum of 3", "{\"minimum_vulkan_minor\": 3}", "mobile.minimum_vulkan_minor"},
         {"a fractional minimum", "{\"minimum_vulkan_minor\": 1.5}", "mobile.minimum_vulkan_minor"},
         {"a text minimum", "{\"minimum_vulkan_minor\": \"1\"}", "mobile.minimum_vulkan_minor"},
@@ -388,6 +401,36 @@ void ThePhoneBlockIsReadKeyByKey() {
                   !one.mobile.assetWatching,
               "the minimum alone: " + error);
     CHECK_MSG(read("m2.json", "{\"minimum_vulkan_minor\": 2}", one, error) && one.mobile.minimumVulkanMinor == 2u, "and 2 is allowed: " + error);
+    CHECK_MSG(read("m0.json", "{\"minimum_vulkan_minor\": 0}", one, error) && one.mobile.minimumVulkanMinor == 0u, "and 0, Vulkan 1.0: " + error);
+    // The top-level key: absent is not asked; present is the desktop's, read from the top, and a phone's where its block holds none.
+    {
+        EngineTuning::Table top;
+        CHECK_MSG(EngineTuning::Load(Put(dir, "nokey.json", TableText()), top, error) && !top.minimumVulkanMinor, "a table without the top-level key reads and asks none: " + error);
+        for (const std::uint32_t asked : {0u, 1u, 2u}) {
+            const std::string text = "{\"minimum_vulkan_minor\": " + std::to_string(asked) + ", " + TableText("16", "true", watching, watching, "{}").substr(1);
+            CHECK_MSG(EngineTuning::Load(Put(dir, "toplevel.json", text), top, error) && top.minimumVulkanMinor == asked, "the top-level minimum " + std::to_string(asked) + ": " + error);
+            CHECK_MSG(EngineTuning::Resolve(top, true, false, EngineTuning::Overrides{}).minimumVulkanMinor == asked, "is the desktop's");
+            CHECK_MSG(EngineTuning::Resolve(top, false, true, EngineTuning::Overrides{}).minimumVulkanMinor == asked, "and a phone's where the block says nothing");
+        }
+        // A key that says false is read as false, and a phone resolves the top level's answer (the block holds no such key).
+    {
+        EngineTuning::Table off;
+        const std::string text = "{\"compact_scene_for_old_gpus\": false, " + TableText("16", "true", watching, watching, "{}").substr(1);
+        CHECK_MSG(EngineTuning::Load(Put(dir, "compactoff.json", text), off, error) && !off.compactSceneForOldGpus, "false reads as false: " + error);
+        CHECK_MSG(!EngineTuning::Resolve(off, true, true, EngineTuning::Overrides{}).compactSceneForOldGpus, "and resolves false");
+        const std::string yes = "{\"compact_scene_for_old_gpus\": true, " + TableText("16", "true", watching, watching, "{}").substr(1);
+        CHECK_MSG(EngineTuning::Load(Put(dir, "compacton.json", yes), off, error) && EngineTuning::Resolve(off, false, false, EngineTuning::Overrides{}).compactSceneForOldGpus,
+                  "true reads and resolves true: " + error);
+    }
+    // Where both say, a phone takes the block's and a desktop the top level's. mutation: let the block apply only where the top level is absent, or apply it to a desktop.
+        for (const auto& [topAsks, blockAsks] : {std::pair<std::uint32_t, std::uint32_t>{2u, 0u}, {0u, 2u}}) {
+            const std::string block = "{\"minimum_vulkan_minor\": " + std::to_string(blockAsks) + "}";
+            const std::string text = "{\"minimum_vulkan_minor\": " + std::to_string(topAsks) + ", " + TableText("16", "true", watching, watching, block).substr(1);
+            CHECK_MSG(EngineTuning::Load(Put(dir, "both.json", text), top, error), "both minimums read: " + error);
+            CHECK_MSG(EngineTuning::Resolve(top, true, true, EngineTuning::Overrides{}).minimumVulkanMinor == blockAsks, "a phone takes its block's");
+            CHECK_MSG(EngineTuning::Resolve(top, true, false, EngineTuning::Overrides{}).minimumVulkanMinor == topAsks, "a desktop the top level's");
+        }
+    }
     CHECK_MSG(read("s0.json", "{\"shadow_map_resolution\": 0}", one, error) && one.mobile.shadowMapResolution && *one.mobile.shadowMapResolution == 0u,
               "a phone resolution of 0, the engine's own sizes, is a value like the table's: " + error);
     CHECK_MSG(read("s4096.json", "{\"shadow_map_resolution\": 4096}", one, error) && one.mobile.shadowMapResolution == 4096u,
@@ -556,7 +599,7 @@ void TheDesktopAnswerIsTheOldAnswerForEveryTableAndEveryRun() {
                             const bool newPart = got.sceneSamples == cap.value_or(0) && got.dynamicResolution.enabled == dr.value_or(false) && got.perfOverlay == overlay.value_or(false);
                             const EngineTuning::Resolved old = OldResolve(table, attended, EngineTuning::Overrides{});
                             const bool oldFieldsStill = got.shadowMapResolution == old.shadowMapResolution && got.spritesOnlyScenePipelines == old.spritesOnlyScenePipelines &&
-                                                        got.assetWatching == old.assetWatching && got.spriteReport == old.spriteReport && got.minimumVulkanMinor == 0;
+                                                        got.assetWatching == old.assetWatching && got.spriteReport == old.spriteReport && !got.minimumVulkanMinor;
                             ++newCompared;
                             if (!oldPart || !newPart || !oldFieldsStill) ++newMismatches;
                         }
@@ -590,7 +633,7 @@ void TheDesktopAnswerIsTheOldAnswerForEveryTableAndEveryRun() {
     for (const auto& row : rows) {
         const EngineTuning::Resolved got = EngineTuning::Resolve(golden, row.attended, false, EngineTuning::Overrides{});
         CHECK_MSG(got.shadowMapResolution == row.shadow && got.spritesOnlyScenePipelines == row.sprites && got.assetWatching == row.watching &&
-                      got.spriteReport == row.report && got.perfLogSeconds == 0.0f && got.minimumVulkanMinor == 0 && got.sceneSamples == 0 &&
+                      got.spriteReport == row.report && got.perfLogSeconds == 0.0f && !got.minimumVulkanMinor && got.sceneSamples == 0 &&
                       !got.dynamicResolution.enabled && !got.perfOverlay,
                   std::string("the desktop row for ") + (row.attended ? "a person's run" : "any other run") + " is the table's own");
     }
@@ -617,7 +660,7 @@ void ThePhoneProfileLaysItsBlockOverTheDesktopAnswer() {
     table.mobile.minimumVulkanMinor.reset();
     table.mobile.assetWatching.reset();
     const EngineTuning::Resolved partial = EngineTuning::Resolve(table, false, true, EngineTuning::Overrides{});
-    CHECK_MSG(partial.minimumVulkanMinor == 0, "no minimum in the block is no minimum asked (0: the engine's own)");
+    CHECK_MSG(!partial.minimumVulkanMinor, "no minimum in the block or the table is no minimum asked (the engine's own)");
     CHECK_MSG(partial.assetWatching, "no watching key leaves the table's own for that kind of run");
     CHECK_MSG(partial.shadowMapResolution == 16, "and the key that is there is still applied");
     // Step 205's keys, laid over the desktop answer for BOTH kinds of run, key by key, and left alone when absent.
@@ -841,6 +884,10 @@ void TheLogLineSaysWhatTheRunAskedFor() {
     const std::string noBudget = EngineTuning::Describe(r);
     CHECK_MSG(noBudget.find("dynamic resolution on (no start budget, floor") != std::string::npos && noBudget.find("start budget 0") == std::string::npos,
               "a start budget of 0 is said as none: " + noBudget);
+    // Step 281: the compact scene's permission is named when given, and only then.
+    CHECK_MSG(noBudget.find("compact scene") == std::string::npos, "nothing about a compact scene unless allowed: " + noBudget);
+    r.compactSceneForOldGpus = true;
+    CHECK_MSG(EngineTuning::Describe(r).find("compact scene for old GPUs allowed") != std::string::npos, "and said when it is");
 }
 
 void runTests() {

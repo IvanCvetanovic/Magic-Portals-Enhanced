@@ -42,8 +42,8 @@
 #include "sim/Scratch.hpp"
 #include "sim/Unpack.hpp"
 
-// An Android program is a phone's build, whatever else was configured: its lowest Vulkan version (1.1) is the phone profile's, and the engine's own
-// default (1.2) refuses many phones' stock drivers. CMake refuses a configure that says otherwise (game/CMakeLists.txt); this is the compiler's word.
+// An Android program is a phone's build, whatever else was configured: it runs under the phone profile (game/data/engine.json "mobile"). CMake
+// refuses a configure that says otherwise (game/CMakeLists.txt); this is the compiler's word.
 static_assert(MagicPortals::kMobileBuild, "the Android program must be configured with MAGICPORTALS_MOBILE (it is, unless a configure turned it OFF)");
 
 namespace {

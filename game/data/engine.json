@@ -51,6 +51,23 @@
     "ABSENT: it is still the owner's decision (see the block's _owner_decisions). Dynamic resolution has its keys and, since step 244, is ON for the phone profile",
     "(the block's _decided says on whose word and why: a trade of the HUD's sharpness against a GPU's speed, measured on no phone)."
   ],
+  "_minimum_vulkan_minor": [
+    "minimum_vulkan_minor 0 (planning step 281, the owner's word of 2026-11-27: \"ok then, I guess it makes the most sesne to support all vulkan verison then?\"):",
+    "the lowest Vulkan 1.x a GPU must report to be used, GameManifest::minimumVulkanMinor (engine/src/core/GameRuntime.hpp), 0 being Vulkan 1.0, the first",
+    "version there is. The engine's renderer and shaders use nothing above 1.0 core (SPIR-V 1.0; the Android libraries import 1.0 and window-system",
+    "functions only), it asks the system for a 1.0 instance where the system speaks nothing newer (Android 8), and a GPU below 1.1 that cannot take even",
+    "the compact scene set (see below) is turned away with the reason (engine/src/renderer/SceneLimits.hpp). Checked on a PC only: NOT RUN on any 1.0",
+    "driver or on Android 8. A table without the key asks for the engine's own 1.2."
+  ],
+  "minimum_vulkan_minor": 0,
+  "_compact_scene_for_old_gpus": [
+    "compact_scene_for_old_gpus true (planning step 281): GameManifest::compactSceneForOldGpus. A GPU that allows fewer than 7 storage buffers in a shader",
+    "stage (most old Mali-T and Adreno 4xx and 5xx drivers allow 4, by vulkan.gpuinfo.org's Android reports read on 2026-11-27) gets the engine's compact",
+    "scene set: no clustered lights and no sky, the fragment shader built without the lit surface. This game draws nothing lit for a player (every draw",
+    "through the scene pipelines is a sprite, a particle or a halo: step 190) and draws its own skies, so the pictures are the same; the developer's lit",
+    "boxes (the B key, or a level without its art) draw flat. A table without the key never takes it."
+  ],
+  "compact_scene_for_old_gpus": true,
   "shadow_map_resolution": 16,
   "sprites_only_scene_pipelines": false,
   "asset_watching": {
@@ -66,13 +83,9 @@
       "THE PHONE PROFILE: each key here, when present, REPLACES the answer above for a run under the profile (sim/EngineTuning.hpp MobileBlock). A key",
       "left out leaves the desktop's answer. The keys, and only these (any other key that does not begin with an underscore is refused by name):",
       "",
-      "minimum_vulkan_minor 1 (or 2): the lowest Vulkan 1.x a GPU must report to be used; GameManifest::minimumVulkanMinor (engine/src/core/GameRuntime.hpp:89,",
-      "clamped into 1 to 2 by GameRuntime.cpp:117). Without it the engine wants 1.2, and the stock drivers of many phones on Android 11 and 12 report 1.1: no GPU is",
-      "acceptable, the device constructor throws and the start ends before its first frame. Source: the sibling port Penumbra and the Castle of Shadows Enhanced, its",
-      "step E39, where two testers' phones (an Oppo A54 on Android 11, Vulkan 1.1.131, and an A74 5G on Android 12, 1.1.128) opened to a black screen and the home",
-      "screen, and the engine's author states that it uses nothing newer than 1.1 core (GameRuntime.hpp). Decoded from that record and the engine's code; NOT measured",
-      "here, on any phone. Unverified on a 1.1 driver: the scene fragment stage uses 8 of one known GPU's 8 combined fragment resources (Penumbra E39).",
-      "This is a START/NO-START matter and not a tuning one, which is why it is a key at all and the desktop leaves it out: a desktop run asks for 1.2, the engine's own.",
+      "minimum_vulkan_minor 0: as the top-level key, repeated on purpose, so that a developer who raises the desktop's does not turn phones away. It was 1 until",
+      "planning step 281 (from the sibling port Penumbra and the Castle of Shadows Enhanced, step E39: two testers' phones reporting Vulkan 1.1 opened to a black",
+      "screen while the engine wanted 1.2). This is a START/NO-START matter and not a tuning one.",
       "",
       "shadow_map_resolution 16: as the top-level key, repeated on purpose. The top-level 16 is a desktop decision (step 190: no sprite samples a shadow map, 192.8 MiB",
       "of GPU memory saved on a 780M); on a phone the system's low-memory manager counts those bytes, and the sibling port's E43 took the same 16 for it. Written here",
@@ -113,7 +126,7 @@
       "without editing the file with `--dynamic-res off` or `on` (these numbers). The engine never applies it to a capture, a --fixed-step run, a replay or a recording, so no",
       "captured pixel can move."
     ],
-    "minimum_vulkan_minor": 1,
+    "minimum_vulkan_minor": 0,
     "shadow_map_resolution": 16,
     "asset_watching": false,
     "sprites_only_scene_pipelines": true,

@@ -70,7 +70,7 @@ fs::path UserFolder(NSSearchPathDirectory which) {
 }
 
 // The engine's working directory: somewhere it may write, holding the
-// bundle's shaders. Copied every launch - seventeen small files - so an
+// bundle's shaders. Copied every launch - eighteen small files - so an
 // updated app never runs an older copy.
 bool PrepareEngineRoot(const fs::path& resources, const fs::path& root) {
     const fs::path from = resources / "engine" / "assets" / "shaders";
