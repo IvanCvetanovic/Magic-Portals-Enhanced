@@ -2987,7 +2987,8 @@ on). The 19 CTL baselines are unchanged by the step (none is a 2-29 capture): th
       H / 256), 35.6 at 720, 23.7 at 1080, 17.8 at 1440, 11.9 at 2160. `Tuning::screenPxPerUnit` stands at the reference (`player.json` `reference_px_per_unit`) until
       `MagicPortalsLayer::stepLevel` sets it from the viewport's height over the view's 256 lines, so every suite and route replay (1280 x 720 or no viewport) flies
       as before and a player's own window sets his. Pinned at 480 to 2160 lines through the solver and through the layer. Route-neutral at 720 (a fall of 590 units);
-      on a 4K window a fall of 63 units reaches it. Open as CAP-4 (whether the port should be fixed at the rig's 720).*
+      on a 4K window a fall of 63 units reaches it. Open as CAP-4 (whether the port should be fixed at the rig's 720).* *Step 283 (2026-11-28, the owner's ruling):
+      the shipped tables hold every window to the 720 reference (`player.json` `gravity.clamp_follows_screen` false); true is this row's behaviour again.*
 - [ ] **G10-7. 1-09's playthrough puts the player on its two shelf crystals** (the decoded player cannot steer out of the far portal onto
       them), and **G10-8** 1-32's rock case asks no pair twice, not exactly one begin. Next: the route phase, which restores the strict pins
       (a real solve that reaches 1-09's shelf, with its three crystals confirmed reachable under the decoded movement; a rock placed over
@@ -3331,7 +3332,8 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
       `motor_seesaw`; deviation 4), and **G10-5c(2) stays open**: `Player::HoldTan` still reads `kStaticFriction` 1. Next: their own values where the
       original's data can be found; `HoldTan` from the body under the player.
 - [x] **WT-5. The clamp holds every body but at the 720-line reference** (35.6 units a tick; deviation 5; G10-6 above): the original's limit is 100
-      screen pixels, fewer units on a taller screen. *Built in step 153 (CAP): the layer tells the sim the screen's pixels a unit.*
+      screen pixels, fewer units on a taller screen. *Built in step 153 (CAP): the layer tells the sim the screen's pixels a unit.* *Off in the shipped tables since step
+      283 (the owner's ruling).*
 - [x] **WT-6. The first build's sweep was re-taken and then replaced** (deviation 6): a control run overwrote `materials.json` for about a minute while it
       ran; every sweep, table and census cited is the fixed build's. Record only, nothing to build.
 - [ ] **WT-7. Awake piles never sleep, and 2-20's stacked crate creeps** (deviation 7; the second verifier's seventh problem, low): 32 loose bodies are awake at
@@ -3380,8 +3382,9 @@ physics moved are re-authored by the wave's route phase after PIC, CAP and G3:
       original's body is 3.9 units shorter and falls to the floor (level30: lands on tick 3, `player_impact` 1.333, a 0.28-unit tremble), and the decoded generator's
       `forth` flag survives a quake that stopped before its back, so the next one starts with the back of that forth. Nothing to build: the original does it; four layer cases
       run one quake out first (`LetTheLandingPass`). Next: the final comparison against a level start's footage.
-- [ ] **CAP-4. The sim reads the window's height through the layer** (G10-6): a 1080 window holds a fall at 23.7 units a tick, a 720 one at 35.6, a suite or a headless run is
-      at 720. The owner's call whether the port should be fixed at the capture rig's 720 instead.
+- [x] **CAP-4. The sim reads the window's height through the layer** (G10-6): a 1080 window holds a fall at 23.7 units a tick, a 720 one at 35.6, a suite or a headless run is
+      at 720. The owner's call whether the port should be fixed at the capture rig's 720 instead. *CLOSED, step 283: the owner ruled "include the 4k fix" (2026-11-28); every
+      window is held to 720's limit (`player.json` `gravity.clamp_follows_screen` false).*
 - [ ] **CAP-5. G10-5c(2) is open, with its scan**: five levels (1-29, 2-11, 2-22, 3-20, 3-29) have a surface between 30 and 40 degrees the decoded floor friction would not hold.
       Next: the original's slide on such a slope, measured, then `HoldTan` from the body under the player (the row above).
 - [ ] **CAP-6. Triggers and portals judge the hull.** A death area, a goal, a portal's entry and the other overlap tests read the 18.2 x 36.2 capsule; the original's portal has no

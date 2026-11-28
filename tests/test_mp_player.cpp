@@ -202,6 +202,7 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
     CHECK_EQ(tuning.maxTranslationM, 2.0);       // b2_maxTranslation (b2Settings.h:101)
     CHECK_EQ(tuning.referencePxPerUnit, 2.8125); // 720 / 256, the line count of every capture
     CHECK_EQ(tuning.screenPxPerUnit, 2.8125);    // until a screen says otherwise: the suites and the route replays
+    CHECK(!tuning.clampFollowsScreen);           // planning step 283: every window is held to the reference's limit
     // The ground sensor, char_feet.ent: 14 x 10, corners cut at 0.6, touching within Box2D's skin.
     CHECK_EQ(tuning.feetWidthPx, 14.0);
     CHECK_EQ(tuning.feetHeightPx, 10.0);
@@ -275,6 +276,25 @@ void TheNumbersAreTheListingsAndAFileWithoutThemIsRefused() {
         CHECK(!Load(TuningText("3", "2", "10", "{\"friction\": 0.9, \"probe_offset_px\": 3, \"probe_reach_px\": 6, "
                                                 "\"probe_line_tol_px\": 0.05}", body), out, error));
         CHECK_MSG(error.find(key) != std::string::npos, error);
+    }
+    // gravity.clamp_follows_screen (planning step 283): absent is false, true is the original's limit again, anything else is refused.
+    {
+        const std::string reference = "\"reference_px_per_unit\": 2.8125";
+        const auto with = [&reference](const std::string& value) {
+            std::string text = TuningText();
+            const std::size_t at = text.find(reference);
+            CHECK_MSG(at != std::string::npos, "the test's own file names the reference");
+            if (at != std::string::npos) text.insert(at + reference.size(), ", \"clamp_follows_screen\": " + value);
+            return text;
+        };
+        Player::Tuning absent;
+        CHECK_MSG(Load(TuningText(), absent, error), error);
+        CHECK(!absent.clampFollowsScreen);
+        Player::Tuning follows;
+        CHECK_MSG(Load(with("true"), follows, error), error);
+        CHECK(follows.clampFollowsScreen);
+        CHECK(!Load(with("1"), out, error));
+        CHECK_MSG(error.find("gravity.clamp_follows_screen") != std::string::npos, error);
     }
     // And a number missing: the port does not invent one.
     CHECK(!Load("{\"movement\": {\"speed\": 3}, \"gravity\": {\"world_m_s2\": 10, \"scale\": 2}, "

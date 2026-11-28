@@ -95,9 +95,13 @@ struct Tuning {
     double gravityScale = 0.0;  // gravity.scale: SetGravityScale(2)
     double maxTranslationM = 0.0;       // gravity.max_translation_m: b2_maxTranslation, Box2D metres a step
     double referencePxPerUnit = 0.0;    // gravity.reference_px_per_unit: the screen pixels a unit is at 720 lines
-    // The screen pixels a unit is NOW: b2_maxTranslation is 100 screen pixels, so the clamp's limit in units goes with the
-    // screen (G10-6). LoadTuning sets it to the reference; the layer overwrites it every tick from the viewport.
+    // The screen pixels a unit is NOW: b2_maxTranslation is 100 screen pixels, so the original's limit in units goes with the
+    // screen (G10-6). LoadTuning sets it to the reference; the layer overwrites it every tick from the viewport only where
+    // clampFollowsScreen says so.
     double screenPxPerUnit = 0.0;
+    // gravity.clamp_follows_screen, optional, absent is false: whether the limit is the original's 100 pixels of the window the game
+    // is shown in. False holds every screen to the 720-line reference, so a level plays the same on a 4K window as on a 720 one.
+    bool clampFollowsScreen = false;
     // The body: dark_mage.ent's compound of two circles (body.*). The box is the .ent's <Collision><Size>, the circles'
     // radius and offsets are shares of it, and widthPx / heightPx are the capsule that is their hull, which LoadTuning
     // derives from the four and refuses a file that disagrees with.

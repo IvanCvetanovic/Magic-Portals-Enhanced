@@ -104,6 +104,15 @@ bool LoadTuning(const std::string& path, Tuning& out, std::string& error) {
         }
         read.*(field.field) = value.AsNumber();
     }
+    // gravity.clamp_follows_screen (planning step 283): optional, absent is false. One that is there but is not true or false is refused.
+    if (root["gravity"].Has("clamp_follows_screen")) {
+        const Json::Value& follows = root["gravity"]["clamp_follows_screen"];
+        if (!follows.IsBool()) {
+            error = path + ": gravity.clamp_follows_screen is not true or false";
+            return false;
+        }
+        read.clampFollowsScreen = follows.AsBool();
+    }
     // movement.air_decay_rate_hz (planning step 213): optional since the pace knob. A file with it evaluates the air brake's formula at that
     // rate; a file without it leaves the rate to the clock (AirShare reads Step::fps), which is what lets the shipped data drop the key.
     // One that is there but is a rate of nothing, or not a number, is refused rather than read as "none given".

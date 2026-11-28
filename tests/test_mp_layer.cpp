@@ -7747,43 +7747,70 @@ void AFallShakesTheView() {
     }
 }
 
-// G10-6 (planning step 153): b2_maxTranslation is 100 SCREEN pixels, so a body's step is held to 100 x 256 / the viewport's
-// height units - the layer tells the sim the screen it is shown on. A crate put in free air at 100 m/s: the first tick's physics
-// step moves it at what it was given, the layer's clamp then scales the velocity, and the second step is the limit. The limit is per STEP OF THE
-// ORIGINAL's physics, and the shipped pace (planning step 270) is two ticks to a step: a tick moves it half the limit, 100 x 256 / lines / 2 units.
-void TheClampFollowsTheViewportsHeight() {
+// G10-6 (planning step 153) and planning step 283: b2_maxTranslation is 100 SCREEN pixels. The shipped tables hold a body's step to the 720-line
+// reference's 100 x 256 / 720 units on every window (player.json gravity.clamp_follows_screen false); with it true the layer tells the sim the screen it
+// is shown on, and the limit is 100 x 256 / the viewport's height, as the original's follows its own. A crate put in free air at 100 m/s: the first
+// tick's physics step moves it at what it was given, the layer's clamp then scales the velocity, and the second step is the limit. The limit is per STEP
+// OF THE ORIGINAL's physics, and the shipped pace (planning step 270) is two ticks to a step: a tick moves it half the limit.
+void TheClampIsTheReferencesOnEveryWindowUnlessTheTablesSayFollow() {
     struct ScreenRow {
         glm::vec2 size;
         double lines;
     };
-    for (const ScreenRow& window : {ScreenRow{glm::vec2(1280.0f, 720.0f), 720.0}, ScreenRow{glm::vec2(1920.0f, 1080.0f), 1080.0},
-                                    ScreenRow{glm::vec2(3840.0f, 2160.0f), 2160.0}}) {
-        entt::registry registry;
-        publishViewport(registry, window.size);
-        MagicPortalsLayer layer(TestPaths(), "level0a");
-        layer.OnAttach(registry);
-        CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
-        if (layer.SimLevel() == nullptr) continue;
-        CloseTheLevelStartPopup(layer, registry);
-        const auto found = layer.SimLevel()->built.entities.find("crate_no_emissive_796");
-        CHECK(found != layer.SimLevel()->built.entities.end());
-        if (found == layer.SimLevel()->built.entities.end()) continue;
-        auto& transform = registry.get<TransformComponent>(found->second);
-        auto& rigid = registry.get<RigidBodyComponent>(found->second);
-        const glm::vec3 world = MagicPortals::Units::ToWorld(layer.BoundsPx().x * 0.5, -3000.0);
-        transform.position = glm::vec3(world.x, world.y, transform.position.z);
-        rigid.velocity = glm::vec3(0.0f, -100.0f, 0.0f);
-        tickWith(layer, registry, kRest, {}, {});
-        const double before = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(found->second).position).y;
-        tickWith(layer, registry, kRest, {}, {});
-        const double moved = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(found->second).position).y - before;
-        std::printf("  %.0f lines: a crate at 100 m/s moves %.3f units in a tick (100 x 256 / %.0f / 2 = %.3f)\n", window.lines, moved,
-                    window.lines, 100.0 * 256.0 / window.lines / 2.0);
-        CHECK_EQ(layer.FrameTicks(), 2);
-        CHECK_MSG(std::fabs(moved - 100.0 * 256.0 / window.lines / 2.0) < 0.05,
-                  std::to_string(window.lines) + " lines: the tick is " + std::to_string(moved) + " units");
-        layer.OnDetach(registry);
+    // A copy of the shipped tables whose one change is the switch: the original's limit.
+    const std::filesystem::path copy = std::filesystem::temp_directory_path() / "supersonic-test-mp-layer-clamp-follows";
+    std::error_code ec;
+    std::filesystem::remove_all(copy, ec);
+    std::filesystem::copy(TestPaths().data, copy, std::filesystem::copy_options::recursive, ec);
+    CHECK_MSG(!ec, "the data tables copy: " + ec.message());
+    {
+        std::ifstream in(copy / "player.json", std::ios::binary);
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        in.close();
+        std::string text = buffer.str();
+        const std::string shipped = "\"clamp_follows_screen\": false";
+        const std::size_t at = text.find(shipped);
+        CHECK_MSG(at != std::string::npos, "the shipped tables say " + shipped);
+        if (at != std::string::npos) text.replace(at, shipped.size(), "\"clamp_follows_screen\": true");
+        std::ofstream out(copy / "player.json", std::ios::binary | std::ios::trunc);
+        out << text;
     }
+    for (const bool follows : {false, true}) {
+        for (const ScreenRow& window : {ScreenRow{glm::vec2(1280.0f, 720.0f), 720.0}, ScreenRow{glm::vec2(1920.0f, 1080.0f), 1080.0},
+                                        ScreenRow{glm::vec2(3840.0f, 2160.0f), 2160.0}}) {
+            entt::registry registry;
+            publishViewport(registry, window.size);
+            MagicPortalsLayer::Paths paths = TestPaths();
+            if (follows) paths.data = copy.string();
+            const double lines = follows ? window.lines : 720.0;
+            const double expected = 100.0 * 256.0 / lines / 2.0;
+            MagicPortalsLayer layer(paths, "level0a");
+            layer.OnAttach(registry);
+            CHECK_MSG(layer.SimLevel() != nullptr, layer.LoadError());
+            if (layer.SimLevel() == nullptr) continue;
+            CloseTheLevelStartPopup(layer, registry);
+            const auto found = layer.SimLevel()->built.entities.find("crate_no_emissive_796");
+            CHECK(found != layer.SimLevel()->built.entities.end());
+            if (found == layer.SimLevel()->built.entities.end()) continue;
+            auto& transform = registry.get<TransformComponent>(found->second);
+            auto& rigid = registry.get<RigidBodyComponent>(found->second);
+            const glm::vec3 world = MagicPortals::Units::ToWorld(layer.BoundsPx().x * 0.5, -3000.0);
+            transform.position = glm::vec3(world.x, world.y, transform.position.z);
+            rigid.velocity = glm::vec3(0.0f, -100.0f, 0.0f);
+            tickWith(layer, registry, kRest, {}, {});
+            const double before = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(found->second).position).y;
+            tickWith(layer, registry, kRest, {}, {});
+            const double moved = MagicPortals::Units::ToPixels(registry.get<TransformComponent>(found->second).position).y - before;
+            std::printf("  a %.0f-line window, %s: a crate at 100 m/s moves %.3f units in a tick (100 x 256 / %.0f / 2 = %.3f)\n", window.lines,
+                        follows ? "following the screen" : "as shipped", moved, lines, expected);
+            CHECK_EQ(layer.FrameTicks(), 2);
+            CHECK_MSG(std::fabs(moved - expected) < 0.05, std::to_string(window.lines) + " lines" + (follows ? ", following" : "") +
+                                                              ": the tick is " + std::to_string(moved) + " units");
+            layer.OnDetach(registry);
+        }
+    }
+    std::filesystem::remove_all(copy, ec);
 }
 
 int diamondsHeld(const PlayedLevel& played) {
@@ -35473,7 +35500,7 @@ void runTests() {
     AShakeDrawnOutsideTheEngineLoopDoesNotPileUp();
     TheLightWallGoingShakesTheView();
     AFallShakesTheView();
-    TheClampFollowsTheViewportsHeight();
+    TheClampIsTheReferencesOnEveryWindowUnlessTheTablesSayFollow();
     ADiamondTakenAndStruckShakesTheView();
     TheGhostsShotEndingShakesTheView();
     AKnightsShotIsDrawnHeardAndShakesTheView();

@@ -35497,3 +35497,17 @@ R-B (H2: the player steps on the lift door's button while A walks back toward th
 **FILES.** `CMakeLists.txt`, `docs/android.md`, `apple.md`, `packaging.md`, `tools/package/check_version.py` (the bump, `a1118b8`); `README.md`, `docs/install.md`, `docs/platforms.md`, `tools/package/check_version.py`, `docs/parity-backlog.md`, this record, the DEVLOG entry.
 
 **LEFT FOR THE OWNER.** (1) Whether 1.0.2 starts on the reporting player's phone, and the message if not. (2) A start of the APK on the emulator or a phone. (3) Step 281's list.
+
+## Step 283 - Every window falls like a 720-line one (CAP-4; GAMEPLAY: on windows other than 720 lines, the speed limit is now 720's; PORT CODE; DATA: `player.json`)
+
+**Asked.** The owner, 2026-11-28, "go also include the 4k fix too", after being shown the measurement below.
+
+**Why.** Box2D's step limit is 100 SCREEN pixels in the original (G10-6), so the port's, read from the window's height since step 153, shrank on tall windows: 23.7 units a step at 1080 lines, 17.8 at 1440, 11.9 at 2160. Before this step the 128 recorded plays were replayed in a 720 window with each height's limit written into a copy of the data: at 1080 every play that wins at 720 won on the same tick; at 1440 all still won, three a few ticks apart; at 2160 four no longer finished (2-03, 2-17, 3-14, 3-15) and 22 others moved by a few ticks. (4-21 and 4-28 did not win at any height, 720 included: an exact-input replay failing says the play diverged, not that the level cannot be won.) A positive control (a limit of 0.02) made plays fail, so the copy was read.
+
+**What was done.** `player.json` gains `gravity.clamp_follows_screen`, false, with its provenance; the loader reads it (optional, absent is false, anything but true or false refused); `MagicPortalsLayer::stepLevel` sets the screen's pixels a unit from the viewport only where it is true. With it false every window is held to the reference's 35.6 units a step. True restores step 153's behaviour, which is the original's.
+
+**Checked.** `test_mp_player` 670 checks, `test_mp_layer` 13247, `test_mp_routes` 2553, `test_mp_timebase` 648, 0 failures. The layer case now shows a crate moving 17.8 units a tick in 720, 1080 and 2160 windows as shipped, and 17.8, 11.9 and 5.9 with the switch true. MSVC without warnings.
+
+**Not checked.** No real 1440 or 4K window (the owner's monitor holds at most about 1924x1170); the replay of the built program in that window is recorded with the release.
+
+**FILES.** `data/player.json`, `tests/fixtures/ci/data/player.json`, `game/sim/Player.{hpp,cpp}`, `game/MagicPortalsLayer.cpp`, `tests/test_mp_player.cpp`, `tests/test_mp_layer.cpp`, `docs/parity-backlog.md`, this record.

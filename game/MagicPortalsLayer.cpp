@@ -14786,10 +14786,12 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, con
     m_direction = direction; // for the picture: which way the player walks this tick
     m_aspect = viewportAspect(registry);
     // G10-6: b2_maxTranslation is 100 SCREEN pixels, so the original's clamp on a step's travel goes with the screen
-    // it runs on - 35.6 units at 720 lines, 23.7 at 1080 - and the sim is told the screen's own, one level unit being
-    // height / 256 pixels. Left at the reference where there is no viewport (the suites, a headless run), so a route
-    // replays the same on every window.
-    if (const auto* viewport = registry.ctx().find<Supersonic::ViewportInfo>()) {
+    // it runs on - 35.6 units at 720 lines, 23.7 at 1080, 11.9 at 2160. Following it made a level play differently on a
+    // tall window (on a 4K one four recorded plays no longer finished: planning step 283), so the shipped tables keep every
+    // screen at the 720-line reference (player.json gravity.clamp_follows_screen false); true is the original's again,
+    // the sim told the screen's own, one level unit being height / 256 pixels. Left at the reference where there is no
+    // viewport (the suites, a headless run), so a route replays the same on every window.
+    if (const auto* viewport = m_data.tuning.clampFollowsScreen ? registry.ctx().find<Supersonic::ViewportInfo>() : nullptr) {
         const float screenHeightPx = viewport->Size().y;
         if (screenHeightPx > 0.0f && m_viewHeightPx > 0.0) {
             m_data.tuning.screenPxPerUnit = static_cast<double>(screenHeightPx) / m_viewHeightPx;

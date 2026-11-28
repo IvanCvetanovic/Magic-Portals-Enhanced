@@ -118,6 +118,12 @@
     "scale": 2.0,
     "max_translation_m": 2.0,
     "reference_px_per_unit": 2.8125,
+    "clamp_follows_screen": false,
+    "_clamp_follows_screen": [
+      "OWNER RULING 2026-11-28 (planning step 283; backlog CAP-4): false holds the limit to the 720-line reference on every screen. true is the ORIGINAL's:",
+      "b2_maxTranslation is 100 SCREEN pixels, so the limit in units shrinks as the window grows (below). That was the port's from step 153 to step 282; replaying",
+      "the recorded plays with each height's limit, 1080 changed nothing, 1440 moved three by a few ticks, and at 2160 four no longer finished."
+    ],
     "_reference_px_per_unit": "720 / 256, the line count every capture of the original is at (briefs 00_order 8.12a; D6 measured 2.8125): the screen's pixels a unit when no screen is known (the suites, the route replays, a headless run).",
     "_max_translation": [
       "b2_maxTranslation (b2Settings.h:101), 2 Box2D metres a step = 100 SCREEN PIXELS (ETHPhysicsSimulator.cpp:27, DEFAULT_SCALE 50 pixels a metre). The limit in",
