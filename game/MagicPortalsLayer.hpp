@@ -42,6 +42,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/SideFill.hpp"
 #include "sim/SideWalls.hpp"
 #include "sim/Effects.hpp"
+#include "sim/FrameRate.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
 #include "sim/Hint.hpp"
@@ -257,6 +258,13 @@ public:
         // Whether main asked the window to open full screen (the player's kept choice, or --fullscreen): what the switch shows where there is no
         // window to ask.
         bool startsFullscreen = false;
+
+        // THE FRAME RATE A PLAYER MAY CHOOSE (planning step 285, sim/FrameRate): main sets `available` for a run somebody plays or watches (RunKind.hpp
+        // FrameRateRun: never --fixed-step, --frames, a capture, a recording or replay, --route, --visit-levels, a scripted input or --hidden) and the
+        // platform of the build. Only then, and only where the engine applies a cap (FrameRateControl::Available), are controls.json's frame_rate block
+        // and framerate.json in saveDir read, the choice applied and the Options screen's row shown. The default, as every suite's bare Paths is,
+        // reads, asks and shows nothing.
+        FrameRate::Policy frameRate;
 
         // WHICH CONTROLS THE RUN PLAYS (planning step 181, CTL-5; the design's 2.1): what main's
         // Controls::ResolvePolicy made of --controls and of the kind of run. The default is the
@@ -1471,6 +1479,16 @@ public:
     // The player's two choices as the layer holds them: memory-only where the run has nowhere to save.
     const Desktop::Store& DesktopStore() const { return m_desktopStore; }
 
+    // ---- the frame rate (planning step 285, sim/FrameRate.hpp) -----------------------------------------------------------------------
+    //
+    // Whether this run reads and applies a player's frame rate: Paths::frameRate.available, an engine that applies a cap, and controls.json's block read.
+    bool FrameRateReady() const { return m_frameRateReady; }
+    // The choice in force: the player's kept one, else the data's default (Auto, as shipped, and wherever the run does not read the setting).
+    FrameRate::Choice FrameRateChoice() const { return m_frameRateStore.Chosen().value_or(m_frameRateRules.fallback); }
+    // The cap last asked of the engine, in frames a second, 0 for none.
+    int FrameCap() const { return m_frameCap; }
+    const FrameRate::Store& FrameRateStore() const { return m_frameRateStore; }
+
     // ---- the language picker (planning step 239, PORT-35) -----------------------------------------------------------------------
     //
     // A globe on the main menu (under the Options gear) and one in the corner of Options open a screen of eleven plates, each the language's own name
@@ -1574,10 +1592,11 @@ public:
     // this, as it stood before that tick's step, modulo FrameTicks().
     unsigned LevelStepCount() const { return m_levelStepCount; }
     // Whether the engine's interpolation is kept for the frames being drawn: a real-time
-    // run whose display outruns the tick (pictures.json). False in a --fixed-step run and at
-    // the matched 60 Hz, where every picture - the camera too - is drawn at its tick's own
-    // place, as the original draws it (planning step 150).
-    bool PicturesSmoothed() const { return m_pictureRate.Smoothing(); }
+    // run whose display outruns the tick (pictures.json), or one whose frame-rate cap holds the
+    // loop back, which then decides (Pictures::SmoothingUnderCap, planning step 285). False in
+    // a --fixed-step run and, with no cap deciding, at the matched 60 Hz, where every picture - the
+    // camera too - is drawn at its tick's own place, as the original draws it (planning step 150).
+    bool PicturesSmoothed() const { return m_capSmoothing.value_or(m_pictureRate.Smoothing()); }
     const Pictures::Rules& PictureRules() const { return m_pictureRules; }
     // The mean rate of the frames OnUpdate was handed, in hertz (0 before the first).
     double FrameHz() const { return m_pictureRate.Hz(); }
@@ -3788,6 +3807,22 @@ private:
     void setFullscreen(entt::registry& registry, bool fullscreen);
     void chooseWalkPads(bool shown);
     void saveDesktop();
+    // The frame rate (planning step 285), after the desktop's: nothing at all where Paths::frameRate is not available.
+    void resolveFrameRate(entt::registry& registry);
+    // The choice asked of the engine, the display and the pictures' smoothing, and the Options row shown or not: at attach, on a press, when Options opens
+    // and when full screen is switched (each may find another monitor). Only what differs from the last asking is asked, so Auto asks nothing.
+    void applyFrameRate(entt::registry& registry);
+    void chooseFrameRate(entt::registry& registry, const FrameRate::Choice& choice);
+    // The refresh rate of the monitor the window is on, 0 where unknown: asked on a desktop alone, as a phone's answer is a fixed 60.
+    int monitorRefreshHz(const entt::registry& registry) const;
+    FrameRate::Rules m_frameRateRules;
+    FrameRate::Store m_frameRateStore;
+    bool m_frameRateReady{false};
+    bool m_rateRowLoaded{false};                  // controls.json's options.frame_rate read, so the row may be shown
+    int m_frameCap{0};                            // what was last asked of the engine
+    std::optional<std::uint32_t> m_displayAsked;  // what was last asked of the display, nothing if it was never asked
+    std::optional<bool> m_capSmoothing;           // the cap's say over the pictures' smoothing; nothing: the watch decides
+    Options::Rules m_optionsWithoutRateRow;       // the Options screen as it stands without the row (and with the row's block, to show it)
     Desktop::Rules m_desktopRules;
     Desktop::Store m_desktopStore;
     bool m_splashAltEnter{false}; // an Enter that went down with an Alt, still held: not the intro's skip

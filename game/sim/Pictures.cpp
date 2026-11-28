@@ -58,6 +58,15 @@ bool LoadRules(const std::string& path, Rules& out, std::string& error) {
     return true;
 }
 
+std::optional<bool> SmoothingUnderCap(const Rules& rules, int cap, int refreshHz, double toleranceHz, bool presentPaced, bool smoothWhenLimited) {
+    if (cap <= 0) return std::nullopt;
+    // A cap at the display's own rate holds nothing back only where the display paces the loop there already; one over that rate is left to the watch
+    // either way, which measures what the machine then reaches.
+    if (refreshHz > 0 && cap >= refreshHz - toleranceHz && (presentPaced || cap > refreshHz + toleranceHz)) return std::nullopt;
+    if (!(rules.aboveHz > 0.0)) return false;
+    return smoothWhenLimited || cap > rules.aboveHz;
+}
+
 void RateWatch::Frame(const Rules& rules, double frameS, double tickS) {
     // Never smoothing is the original's: nothing is measured, and a switch turned off
     // while it was on lets go at once.

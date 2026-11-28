@@ -37,7 +37,12 @@
     "above it, so a capture and real time at 60 Hz both draw the tick's place.",
     "",
     "WHAT THIS DOES NOT CHANGE: no gameplay (a picture only: no tick, route, sim state or tap mapping moves), the engine, the physics,",
-    "the script clock or any number another file carries."
+    "the script clock or any number another file carries.",
+    "",
+    "A PLAYER'S FRAME-RATE CAP (planning step 285; controls.json frame_rate). While a cap is what holds the loop back - it is under the monitor's refresh, or",
+    "at it where the display does not pace the loop (Mailbox), or the refresh is unknown, as on every phone - the cap decides the smoothing and not the watch",
+    "below: on where frame_rate.smooth_when_limited (shipped true), else only where the cap is over above_hz; above_hz 0 still never smooths. With no cap (Auto,",
+    "'max', or a number the display paces already), or one over the monitor's refresh, the watch works as written here."
   ],
   "smoothing": {
     "above_hz": 80,

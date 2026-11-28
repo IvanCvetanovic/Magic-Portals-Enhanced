@@ -472,6 +472,59 @@
         "fullscreen_word": "Fullscreen",
         "walk_pads_word": "Walk arrows"
       }
+    },
+
+    "frame_rate": {
+      "_source": [
+        "THE FRAME-RATE ROW (planning step 285; the owner's request of 2026-11-28 for a choice of frame rate): one button under everything else, for either style, that",
+        "cycles Auto and the offered rates on each press (the top-level frame_rate block says which). Read by sim/Options.LoadRateRow, apart from the rest of this",
+        "block: a typo here costs the row and nothing else. Where the row is not offered (every capture, route and suite, and a display on which it would change",
+        "nothing) the screen stands as above, to the byte; where it is, the title, the tiles, the adjustment button and the desktop switches stand at the places",
+        "below, each shape its own, so that the row fits under them.",
+        "size_units [160, 32], word_at_units [80, 16]: PORT, as wide as a tile and as tall as a desktop switch; at 5:4 it begins at x 80 and the back button ends at 76.8.",
+        "units_per_font_px 0.27: PORT, the switches' scale, so the English words are not shrunk. max_width_units 148: PORT, 6 units a side of the 160, as the",
+        "adjustment button's; a longer translation is shrunk to it (tests/test_mp_overflow.cpp holds every one readable).",
+        "word, auto_word, max_word: PORT, the English of options.frame_rate, options.frame_rate_auto and options.frame_rate_max (lang/en.json), {n} the frames a second.",
+        "frame_rgba: PORT, the idle tile's plate. word_alpha_byte 255: PORT."
+      ],
+      "_guess": true,
+      "size_units": [160, 32],
+      "word_at_units": [80, 16],
+      "font": "Matura84_shadow.fnt",
+      "units_per_font_px": 0.27,
+      "max_width_units": 148,
+      "word": "Frame rate: {n}",
+      "auto_word": "Frame rate: Auto",
+      "max_word": "Frame rate: Max",
+      "frame_rgba": [34, 30, 52, 190],
+      "word_alpha_byte": 255,
+
+      "phone": {
+        "_source": [
+          "PORT, on a 256-unit view: the title's centre at 25.6, the Modern tile 50.2 to 98.2, the Classic tile 104 to 152, the adjustment button 157.4 to 193.4, the row",
+          "202.9 to 234.9. The adjustment button's place is empty while the style in force is Classic."
+        ],
+        "_guess": true,
+        "title_at_screen": [0.5, 0.1],
+        "tile_modern_at_screen": [0.5, 0.29],
+        "tile_classic_at_screen": [0.5, 0.5],
+        "adjust_at_screen": [0.5, 0.685],
+        "row_at_screen": [0.5, 0.855]
+      },
+
+      "desktop": {
+        "_source": [
+          "PORT, the desktop screen's places with the row, on a 256-unit view: the title's centre at 23, the Modern tile 45.9 to 93.9, the Classic tile 96.1 to 144.1, the",
+          "adjustment button 146.1 to 182.1, the two switches (switches_row_at_screen 0.781) 183.9 to 215.9, the row 218 to 250: about 2 units between neighbours."
+        ],
+        "_guess": true,
+        "title_at_screen": [0.5, 0.09],
+        "tile_modern_at_screen": [0.5, 0.273],
+        "tile_classic_at_screen": [0.5, 0.469],
+        "adjust_at_screen": [0.5, 0.641],
+        "switches_row_at_screen": 0.781,
+        "row_at_screen": [0.5, 0.914]
+      }
     }
   },
 
@@ -738,6 +791,36 @@
       "word_max_width_units": 300,
       "alpha_byte": 235
     }
+  },
+
+  "frame_rate": {
+    "_source": [
+      "THE FRAME RATE A PLAYER MAY CHOOSE (planning step 285; sim/FrameRate): the owner, 2026-11-28: 'does the game have variable fps? I dont want it to only be",
+      "60fps max. If it spossible you should allow users to choose, i just dont now what standard we should put on the start? amybe just put 60 fps?'. He was told the",
+      "setting starts on Auto, changeable by one key here. DRAWING ONLY: the simulation ticks 60 times a second whatever this says.",
+      "default \"auto\": PORT, and told to the owner: what a player who has chosen nothing plays. \"auto\" asks nothing of the engine or the display (the game as it was:",
+      "the display's own rate, or as fast as the machine draws where the display does not pace it). 60, or any listed number, or \"max\", is the other choice; a number",
+      "here is applied to every player who has chosen nothing.",
+      "desktop_choices: PORT, common monitor rates; only those at most refresh_tolerance_hz over the monitor's refresh are offered. A cap at or within that tolerance",
+      "under the refresh is not asked for where the display paces the loop (FIFO), as it holds that rate already.",
+      "android_choices: PORT: 30 and 60 cap the drawing and ask the display for android_low_request_hz; \"max\" caps nothing and asks the display's highest rate (the",
+      "engine cannot list a phone's rates, so 90 and 120 are not offered by name). Nothing here has run on a real phone.",
+      "ios_choices: PORT: caps only. game/ios/Info.plist.in's CADisableMinimumFrameDurationOnPhone lets a 120 Hz iPhone pass 60 under Auto. Never run on an iPhone.",
+      "refresh_tolerance_hz 1: PORT: a 59.94 Hz screen reports 59 or 60.",
+      "android_low_request_hz 60: PORT: the rate asked for with 30 or 60; a higher number asks for itself.",
+      "smooth_when_limited true: PORT, an analysis and not measured: while a cap is what holds the loop back (under the monitor's refresh, or at it where the display",
+      "does not pace the loop, or the refresh unknown, as on every phone) the pictures are interpolated between ticks (sim/Pictures SmoothingUnderCap): a 30 cap's",
+      "frames sit at the stall line the rate watch ignores, and at the tick's own place jitter at the accumulator's boundary can give a frame a tick more or fewer than",
+      "its neighbours. The price is up to one tick of lag behind the lights and the HUD. false smooths only where the cap is over pictures.json's above_hz."
+    ],
+    "_guess": true,
+    "default": "auto",
+    "desktop_choices": [30, 60, 90, 120, 144, 165, 240],
+    "android_choices": [30, 60, "max"],
+    "ios_choices": [30, 60],
+    "refresh_tolerance_hz": 1,
+    "android_low_request_hz": 60,
+    "smooth_when_limited": true
   },
 
   "default_mode": "modern",

@@ -10,7 +10,8 @@
 //
 // The numbers are controls.json's `options` block, read STRICTLY by LoadRules here (Controls::LoadRules does not read it, so a typo in it
 // costs the modern controls and never a classic run: the layer reads it after and outside the chain of ui.json's loaders, planning step
-// 181's D9). Every colour and place is the port's own and says so in the file.
+// 181's D9). Every colour and place is the port's own and says so in the file. Its `frame_rate` member, the frame-rate row, is read by a loader of
+// its own (LoadRateRow), so that a typo there costs the row and nothing else.
 
 #include <array>
 #include <optional>
@@ -21,6 +22,7 @@
 
 #include "sim/Controls.hpp"
 #include "sim/Credits.hpp"
+#include "sim/FrameRate.hpp"
 #include "sim/Hud.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/UiLayer.hpp"
@@ -109,6 +111,33 @@ struct Rules {
         std::string fullscreenWord;
         std::string walkPadsWord;
     } desktop;
+
+    // THE FRAME-RATE ROW (planning step 285, sim/FrameRate): one button under everything else that cycles through the choices on each press, drawn like the
+    // adjustment button's plate, for either style. Not shown, and nothing of it used, until ForRateRow says so; the title, the tiles, the adjustment button
+    // and the desktop switches then stand at this block's places (each shape its own), so that the row fits under them.
+    struct RateRow {
+        bool shown = false;
+        glm::dvec2 sizeUnits{0.0};
+        glm::dvec2 wordAtUnits{0.0}; // the word's centre from the button's top-left
+        double maxWidthUnits = 0.0;  // the word's limit
+        std::string font;
+        double unitsPerFontPx = 0.0;
+        Colour frame{};
+        int wordAlphaByte = 255;
+        std::string word;     // with {n}, the frames a second
+        std::string autoWord; // for "auto"
+        std::string maxWord;  // for "max"
+        struct Places {
+            glm::dvec2 title{0.5};
+            std::array<glm::dvec2, 2> tiles{}; // by kTileStyles
+            glm::dvec2 adjust{0.5};
+            double switchesRowAtScreen = 0.5; // the desktop shape's alone
+            glm::dvec2 row{0.5};              // the button's centre, as a fraction of the view
+        };
+        Places phone;
+        Places desktop;
+        glm::dvec2 atScreen{0.5}; // the button's centre in force
+    } rateRow;
 };
 
 // controls.json's `options` block. `controls` is the table the file's `art.generated` names were read into: the gear's file must not be
@@ -117,6 +146,16 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& 
 
 // The screen a desktop player's run shows: `rules` with the desktop block's places in force and its two switches.
 Rules ForDesktop(const Rules& rules);
+
+// controls.json's `options.frame_rate` block, read into `rules.rateRow` (not shown). False, with `error` naming the key, and `rules` untouched.
+bool LoadRateRow(const std::string& path, Rules& rules, std::string& error);
+
+// The screen with the frame-rate row: `rules` with the row's block's places in force, the desktop's where `rules` is the desktop screen (so ForDesktop
+// comes first), and the row shown.
+Rules ForRateRow(const Rules& rules);
+
+// The row's words for a choice: the table's, filled and shaped, else the block's English.
+std::string RateRowWords(const Rules& rules, const FrameRate::Choice& choice, const Strings::Table* strings);
 
 // ---- the main menu's entry ---------------------------------------------------------------------------------
 
@@ -137,7 +176,8 @@ Entry EntryAt(const Rules& rules, const UiLayer::Rules& layer, const MenuState::
 // What a touch can be on. The back button is the credits': 64 x 64 at the left edge's middle, a place no main-menu button occupies, so
 // the press that returns cannot also press one. `Adjust` is the button under the tiles that opens the adjustment screen: a widget only
 // while the style in force is Modern (WidgetAt and Pieces are told). `Fullscreen` and `WalkPads` are the desktop screen's switches (ForDesktop).
-enum class Widget { None, Back, ModernTile, ClassicTile, Adjust, Fullscreen, WalkPads };
+// `RateRow` is the frame-rate row (ForRateRow).
+enum class Widget { None, Back, ModernTile, ClassicTile, Adjust, Fullscreen, WalkPads, RateRow };
 
 Widget WidgetOf(Controls::Style style);
 // The style a tile chooses; none for a widget that is not a tile.
@@ -170,10 +210,13 @@ Hud::Rect AdjustRect(const Rules& rules, const glm::dvec2& viewUnits);
 // A desktop switch's rectangle on a view (`widget` is Fullscreen or WalkPads).
 Hud::Rect SwitchRect(const Rules& rules, Widget widget, const glm::dvec2& viewUnits);
 
+// The frame-rate row's rectangle on a view.
+Hud::Rect RateRowRect(const Rules& rules, const glm::dvec2& viewUnits);
+
 // The widget a point is on: the back button where its entrance has it (Credits::BackHitRect), else the tile whose rectangle holds it
 // (closed on every edge, as Hud::Rect::Contains), else - only where `adjustShown` - the adjustment button, else - only on the desktop
-// screen - a switch, else none. The kinds cannot overlap at any supported aspect (a test holds it), so the order is not a rule. A button
-// that is not shown is not claimed.
+// screen - a switch, else - only where it is shown - the frame-rate row, else none. The kinds cannot overlap at any supported aspect (a test
+// holds it), so the order is not a rule. A button that is not shown is not claimed.
 Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point,
                 bool adjustShown = false);
 
@@ -192,7 +235,8 @@ enum class Element {
     Word,          // words
     AdjustFrame,   // a flat quad: the adjustment button's plate
     SwitchFrame,   // a flat quad: a desktop switch's plate
-    SwitchMark     // a flat quad: a piece of a switch's mark (four edges, and its filling while on)
+    SwitchMark,    // a flat quad: a piece of a switch's mark (four edges, and its filling while on)
+    RateRowFrame   // a flat quad: the frame-rate row's plate
 };
 
 struct Piece {
@@ -206,20 +250,22 @@ struct Piece {
     double maxWidthUnits = 0.0;          // words: the slot's limit, 0 for none; the layer fits the words to it
     std::optional<Controls::Style> tile; // the tile a piece belongs to
     std::optional<Controls::Id> control;  // ThumbnailControl: which of the five
-    Widget widget = Widget::None;         // SwitchFrame, SwitchMark and a switch's word: which switch
+    Widget widget = Widget::None;         // SwitchFrame, SwitchMark and a switch's word: which switch; RateRowFrame and its word: the row
 };
 
 // What the desktop switches show: whether the window covers the screen, and whether the walk arrows are on the picture (a tile's thumbnail
-// shows them only then). A run without the switches reads neither.
+// shows them only then). A run without the switches reads neither. And the frame-rate row's words (RateRowWords), read only where the row is shown.
 struct Switches {
     bool fullscreen = false;
     bool walkPads = true;
+    std::string rateWords{};
 };
 
 // Every picture of the screen `stateMs` after its first frame, in drawing order: the credits' background, its back button (at its bounce
 // and press tint), the title, then each tile - frame, thumbnail base, the five controls, its word. The tile of `chosen` is lit; the widget
 // `held` (a touch went down on it and is still inside it) is drawn at the press tint. Where `adjustShown`, the adjustment button (its plate
-// and its word) comes after the tiles, and on the desktop screen the two switches come last (each its plate, its mark, its word). With a
+// and its word) comes after the tiles, on the desktop screen the two switches come after it (each its plate, its mark, its word), and where the
+// frame-rate row is shown it comes last (its plate and `switches.rateWords`). With a
 // string table (planning step 238: every language but English) the title, the two tiles' words, the adjustment button's word and the
 // switches' words are the table's, shaped.
 std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, const Controls::Rules& controls, const Hud::Rules& hud,

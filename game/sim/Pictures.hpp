@@ -13,6 +13,7 @@
 // drawPicturesAtTick), and keeps the engine's interpolation only where the display outruns
 // the tick, for smoothness: this is the rule for when that is.
 
+#include <optional>
 #include <string>
 
 namespace MagicPortals::Pictures {
@@ -37,6 +38,14 @@ struct Rules {
 // Reads pictures.json. A band that is not one (release above the line), a window under a
 // frame, or a negative rate is refused.
 bool LoadRules(const std::string& path, Rules& out, std::string& error);
+
+// What a frame-rate cap decides about the smoothing, over the watch (planning step 285): nothing (the watch decides, as with no cap) unless the cap is what
+// holds the loop back - the refresh is unknown (`refreshHz` 0: every phone), or the cap is under the display's refresh by more than `toleranceHz`, or it is
+// at the refresh (within the tolerance) and the display does not pace the loop (`presentPaced` false: Mailbox), where nothing else holds it there. Then the
+// smoothing is on where `smoothWhenLimited`, else only where the cap is over the line; and never where the line is 0. Two reasons the cap decides and not
+// the watch: a 30 cap's frames sit at the stall line (two ticks), so the watch would take none of them and keep its old answer; and a capped frame drawn at
+// the tick's own place can show a tick more or fewer than its neighbours where the accumulator's boundary falls inside it (an analysis, not a measurement).
+std::optional<bool> SmoothingUnderCap(const Rules& rules, int cap, int refreshHz, double toleranceHz, bool presentPaced, bool smoothWhenLimited);
 
 // What the layer knows of the display's rate: the lengths of the frames it is handed.
 // Started at the tick's own rate (the rate the port is matched at), so a run begins

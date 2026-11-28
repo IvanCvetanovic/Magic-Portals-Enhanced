@@ -47,6 +47,7 @@
 #include "sim/Desktop.hpp"
 #include "sim/EngineTuning.hpp"
 #include "sim/Files.hpp"
+#include "sim/FrameRate.hpp"
 #include "sim/Language.hpp"
 #include "sim/Strings.hpp"
 #include "sim/Scratch.hpp"
@@ -59,6 +60,9 @@
 #endif
 #if defined(__ANDROID__)
 #include "platform/android/AndroidApp.hpp"
+#endif
+#if defined(__APPLE__)
+#include <TargetConditionals.h> // TARGET_OS_IPHONE: an iPhone or iPad build, apart from a Mac's
 #endif
 
 // Where Magic Rampage's modern-control pictures are looked for (game/CMakeLists.txt, SUPERSONIC_MAGICPORTALS_PADART): a
@@ -98,6 +102,16 @@ namespace {
 
 // The game's name: the manifest's title, the user data directory's and the message box's.
 constexpr const char* kTitle = "Magic Portals";
+
+// Whose frame-rate choices the run offers (planning step 285, sim/FrameRate): the build's target, never the profile - a desktop run under --profile
+// mobile still has a desktop's monitor, and a phone's window control answers a fixed 60 for its display.
+#if defined(__ANDROID__)
+constexpr MagicPortals::FrameRate::Platform kFrameRatePlatform = MagicPortals::FrameRate::Platform::Android;
+#elif defined(__APPLE__) && TARGET_OS_IPHONE
+constexpr MagicPortals::FrameRate::Platform kFrameRatePlatform = MagicPortals::FrameRate::Platform::Ios;
+#else
+constexpr MagicPortals::FrameRate::Platform kFrameRatePlatform = MagicPortals::FrameRate::Platform::Desktop;
+#endif
 
 // The language codes `--lang` takes, in the order of game/data/lang/languages.json: "en, de, es, ...". The codes are the table's (Strings::kLangCodes
 // is checked against the file on every load), so --help can name them before any data is read.
@@ -984,6 +998,9 @@ static int RunGame(int argc, char** argv, FatalContext& fatal) {
         dev.lightMasksOff = lightMasksOff;
 #endif
         fatal.attended = MagicPortals::AttendedRun(options, dev);
+        // A player's frame rate (planning step 285), only in a run the engine would cap and that need not reproduce.
+        paths.frameRate.available = MagicPortals::FrameRateRun(options, dev);
+        paths.frameRate.platform = kFrameRatePlatform;
     }
     // THE SUPERSONIC ENGINE'S INTRO (planning step 272): on a player's run that names no level, and wherever --splash on says so.
     paths.splash = MagicPortals::Splash::Wanted(fatal.attended, !start.empty(), splashForced);

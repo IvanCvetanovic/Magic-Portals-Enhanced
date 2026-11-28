@@ -11,7 +11,9 @@
      the scene lifecycle is what current SDKs require. The scene's delegate is
      named in code (engine/src/platform/ios/IOSApp.mm), not here.
      UILaunchScreen, even empty, is what makes the app run at the display's own
-     size rather than in a letterboxed compatibility mode. -->
+     size rather than in a letterboxed compatibility mode.
+     CADisableMinimumFrameDurationOnPhone (planning step 285): Apple's documented switch without which an iPhone with a 120 Hz screen holds an app to 60
+     frames a second. NEVER TESTED here: no iPhone was available. -->
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
@@ -79,6 +81,8 @@
     </dict>
     <key>UILaunchScreen</key>
     <dict/>
+    <key>CADisableMinimumFrameDurationOnPhone</key>
+    <true/>
     <key>UIRequiresFullScreen</key>
     <true/>
     <key>UIStatusBarHidden</key>

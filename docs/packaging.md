@@ -163,7 +163,7 @@ the one path the Android manifest can name for the system's report of a run that
 prism folder belongs to another account. The half-written prism file has a name of its own per call, so two windows building one level
 cannot take each other's file.
 
-The player's saves (`scores.json`, `audio.json`, `achievements.json`, `controls.json`, `desktop.json` on a computer, `language.json`) stay where they were: the user data folder itself.
+The player's saves (`scores.json`, `audio.json`, `achievements.json`, `controls.json`, `desktop.json` on a computer, `language.json`, `framerate.json`) stay where they were: the user data folder itself.
 
 ## 6. Build options, and which belong in a release
 

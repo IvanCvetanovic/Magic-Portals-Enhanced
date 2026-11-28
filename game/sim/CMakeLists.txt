@@ -36,6 +36,7 @@ add_library(MagicPortalsSim STATIC
     Fields.cpp
     Fire.cpp
     Follower.cpp
+    FrameRate.cpp
     Game.cpp
     Ghost.cpp
     Goals.cpp

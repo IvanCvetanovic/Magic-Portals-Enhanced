@@ -151,6 +151,7 @@ struct Slot {
     double units = 0.0;
     double maxWidth = 0.0;
     double maxHeight = 0.0;
+    std::string number = "4"; // what {n} is filled with
 };
 
 struct Rules {
@@ -172,6 +173,7 @@ std::unique_ptr<Rules> LoadRules() {
     rules->ok = Dashboard::LoadRules(kData + "/ui.json", rules->dashboard, error) && Selector::LoadRules(kData + "/ui.json", rules->selector, error) &&
                 Credits::LoadRules(kData + "/ui.json", rules->credits, error) && Controls::LoadRules(kData + Controls::kDataFile, rules->controls, error) &&
                 Options::LoadRules(kData + Controls::kDataFile, rules->controls, rules->options, error) &&
+                Options::LoadRateRow(kData + Controls::kDataFile, rules->options, error) &&
                 Desktop::LoadRules(kData + Controls::kDataFile, rules->desktop, error) &&
                 Hint::LoadRules(kData + "/camera.json", rules->hint, error) &&
                 Notificator::LoadRules(kData + "/achievements.json", kData + "/gravitywell.json", rules->notificator, error) &&
@@ -206,6 +208,12 @@ std::vector<Slot> SlotsOf(const Rules& rules) {
     slots.push_back({"desktop options title", std::string(Strings::Key::kOptionsDesktopTitle), false, rules.options.title.unitsPerFontPx, rules.options.title.maxWidthUnits, 0.0});
     slots.push_back({"full screen switch", std::string(Strings::Key::kOptionsFullscreen), false, rules.options.desktop.unitsPerFontPx, rules.options.desktop.maxWidthUnits, 0.0});
     slots.push_back({"walk arrows switch", std::string(Strings::Key::kOptionsWalkPads), false, rules.options.desktop.unitsPerFontPx, rules.options.desktop.maxWidthUnits, 0.0});
+    // The frame-rate row (planning step 285), its widest number among the offered ones.
+    for (const auto& [what, key] : {std::pair<const char*, std::string_view>{"frame-rate row", Strings::Key::kOptionsFrameRate},
+                                    {"frame-rate row, auto", Strings::Key::kOptionsFrameRateAuto},
+                                    {"frame-rate row, max", Strings::Key::kOptionsFrameRateMax}}) {
+        slots.push_back({what, std::string(key), false, rules.options.rateRow.unitsPerFontPx, rules.options.rateRow.maxWidthUnits, 0.0, "240"});
+    }
     slots.push_back({"1-01's walking hint", std::string(Strings::Key::kHintWalkKeys), false, rules.desktop.walkHint.unitsPerFontPx,
                      rules.desktop.walkHint.maxWidthUnits, 0.0});
     slots.push_back({"1-21's hint", std::string(Strings::Key::kHintCamera), false, rules.hint.unitsPerFontPx, rules.hint.maxWidthUnits, 0.0});
@@ -216,7 +224,7 @@ void TheLimitsAreInTheTables() {
     const std::unique_ptr<Rules> rules = LoadRules();
     if (!rules->ok) return;
     const std::vector<Slot> slots = SlotsOf(*rules);
-    CHECK_MSG(slots.size() == 15u, "fifteen slots with a limit: " + std::to_string(slots.size()));
+    CHECK_MSG(slots.size() == 18u, "eighteen slots with a limit: " + std::to_string(slots.size()));
     for (const Slot& slot : slots) {
         CHECK_MSG(slot.units > 0.0 && slot.maxWidth > 0.0, slot.what + " has a size and a limit in its rule table");
     }
@@ -243,7 +251,7 @@ void EveryTranslationFitsItsSlot() {
         double tightest = 1.0;
         std::string tightestWhat = "-";
         for (const Slot& slot : slots) {
-            const std::string shown = table.Show(slot.key, {{Strings::Placeholder::kN, "4"}, {Strings::Placeholder::kPercent, "60"},
+            const std::string shown = table.Show(slot.key, {{Strings::Placeholder::kN, slot.number}, {Strings::Placeholder::kPercent, "60"},
                                                             {Strings::Placeholder::kTitle, ""}, {Strings::Placeholder::kWorld, "4"},
                                                             {Strings::Placeholder::kLevel, "32"}});
             const Supersonic::BitmapFont& font = slot.verdana ? fonts->verdana : fonts->matura;

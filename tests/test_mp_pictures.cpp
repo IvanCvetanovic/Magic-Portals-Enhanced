@@ -18,6 +18,9 @@
 //                and 240 do within a handful of frames and hold through a stall; the band holds a
 //                display near the line, and a rate that falls under its floor lets go; a line of 0
 //                never smooths.
+//   the cap      a frame-rate cap that is what holds the loop back decides instead of the watch (planning
+//                step 285); no cap, one over the display's rate, or one at the rate the display paces
+//                the loop at, leaves the watch to decide.
 //   the walk     the player's picture stands on its body - the sim's own transform, which the engine
 //                never interpolates - at alpha 0, a quarter, a half and 1: the offset is constant
 //                (the lag is 0 ticks). With the engine's smoothing on, the lag is 1 - alpha ticks:
@@ -58,6 +61,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -150,6 +154,58 @@ void ThePicturesFileIsRead() {
         Pictures::Rules none;
         CHECK_MSG(!Pictures::LoadRules(kPortData + "/no_such_pictures.json", none, error), "a missing file is refused");
     }
+}
+
+// A player's frame-rate cap (planning step 285): where it is what holds the loop back it decides the smoothing, and the watch only where it is not.
+// MUTATION: the present mode ignored (a 60 cap on a 60 Hz Mailbox screen, which nothing else holds there, would be left to the watch and drawn at the
+// tick's own place); every cap on an unpaced display taken for the cap's, even one far over the refresh.
+void ACapThatHoldsTheLoopBackDecidesTheSmoothing() {
+    const Pictures::Rules rules = ReadRules();
+    const auto says = [&](int cap, int refresh, bool smoothWhenLimited, bool paced = true) {
+        return Pictures::SmoothingUnderCap(rules, cap, refresh, 1.0, paced, smoothWhenLimited);
+    };
+    for (const int refresh : {0, 60, 144}) {
+        for (const bool paced : {false, true}) {
+            CHECK_MSG(!says(0, refresh, true, paced) && !says(0, refresh, false, paced), "no cap: the watch's, at " + std::to_string(refresh) + " Hz");
+        }
+    }
+    // A cap at the display's own rate (within the tolerance), the display pacing the loop: it holds nothing back.
+    CHECK(!says(60, 60, true));
+    CHECK(!says(60, 61, true));
+    CHECK(!says(59, 60, true));
+    CHECK(!says(144, 144, true));
+    CHECK(!says(120, 60, true));
+    // The same with nothing else pacing the loop (Mailbox): the cap is what holds it there.
+    CHECK(says(60, 60, true, false) == std::optional<bool>(true));
+    CHECK(says(60, 61, true, false) == std::optional<bool>(true));
+    CHECK(says(60, 59, true, false) == std::optional<bool>(true));
+    CHECK(says(59, 60, true, false) == std::optional<bool>(true));
+    CHECK(says(60, 60, false, false) == std::optional<bool>(false));
+    CHECK(says(144, 144, false, false) == std::optional<bool>(true));
+    // A cap over the display's rate is left to the watch, which measures what the machine then reaches.
+    CHECK(!says(60, 58, true, false));
+    CHECK(!says(120, 60, true, false));
+    CHECK(!says(144, 60, false, false));
+    // A cap under it, or a display nobody knows (every phone): smoothed where the data says, at 30 and 60 alike, paced or not.
+    for (const bool paced : {false, true}) {
+        CHECK(says(30, 60, true, paced) == std::optional<bool>(true));
+        CHECK(says(60, 62, true, paced) == std::optional<bool>(true));
+        CHECK(says(60, 144, true, paced) == std::optional<bool>(true));
+        CHECK(says(30, 0, true, paced) == std::optional<bool>(true));
+        CHECK(says(60, 0, true, paced) == std::optional<bool>(true));
+        // The other setting: only a cap over the line.
+        CHECK(says(30, 60, false, paced) == std::optional<bool>(false));
+        CHECK(says(60, 144, false, paced) == std::optional<bool>(false));
+        CHECK(says(90, 144, false, paced) == std::optional<bool>(true));
+        CHECK(says(120, 0, false, paced) == std::optional<bool>(true));
+    }
+    // And never where the line is 0, the original's own.
+    Pictures::Rules never = rules;
+    never.aboveHz = 0.0;
+    never.releaseBelowHz = 0.0;
+    CHECK(Pictures::SmoothingUnderCap(never, 30, 60, 1.0, true, true) == std::optional<bool>(false));
+    CHECK(Pictures::SmoothingUnderCap(never, 60, 60, 1.0, false, true) == std::optional<bool>(false));
+    CHECK(!Pictures::SmoothingUnderCap(never, 0, 60, 1.0, true, true));
 }
 
 // Frames at `hz` fed to a watch until it smooths: how many it took, or -1 over `limit`.
@@ -763,6 +819,7 @@ void TheFullSweep(const std::string& file, const std::string& bodiesFile) {
 void runTests(const std::string& sweepFile, const std::string& bodiesFile) {
     ThePicturesFileIsRead();
     TheWatchSmoothsOnlyWhereTheDisplayOutrunsTheTick();
+    ACapThatHoldsTheLoopBackDecidesTheSmoothing();
     ABodysPictureStandsOnItsBodyAtEveryAlpha();
     EveryPictureStandsWhereItsTickLeftIt();
     if (!sweepFile.empty()) TheFullSweep(sweepFile, bodiesFile);

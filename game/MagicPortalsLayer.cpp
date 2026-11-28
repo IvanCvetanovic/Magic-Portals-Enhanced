@@ -24,6 +24,7 @@
 #include "core/Application.hpp"
 #include "core/DetMath.hpp"
 #include "core/Input.hpp"
+#include "core/FrameRateControl.hpp"
 #include "core/WindowControl.hpp"
 #include "core/Light2D.hpp"
 #include "core/Log.hpp"
@@ -437,6 +438,8 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
     resolveControls();
     // A desktop player's walk arrows and full screen (planning step 277), after the controls' tables and before any level is built.
     resolveDesktop();
+    // A player's frame rate (planning step 285), after the desktop's, whose Options screen the row goes under.
+    resolveFrameRate(registry);
     // The tick's two deltas before the first tick runs: what a constructor that moves
     // by "a frame" (the space sky's planet, the loading screen) is handed.
     m_step = ScriptClock::TickStep(m_clockRules, kTick);
@@ -731,6 +734,8 @@ void MagicPortalsLayer::setFullscreen(entt::registry& registry, bool fullscreen)
     m_desktopStore.SetFullscreen(fullscreen);
     saveDesktop();
     SUPERSONIC_LOG_INFO("Magic Portals") << "window: " << (fullscreen ? "full screen" : "a window") << " (the player's choice)" << std::endl;
+    // The window may be on another monitor than when the frame rate was last asked for.
+    applyFrameRate(registry);
 }
 
 void MagicPortalsLayer::chooseWalkPads(bool shown) {
@@ -744,6 +749,120 @@ void MagicPortalsLayer::saveDesktop() {
     if (std::string why; !m_desktopStore.Save(why)) {
         SUPERSONIC_LOG_WARN("Magic Portals") << "desktop choices not saved: " << why << std::endl;
     }
+}
+
+namespace {
+
+// What a frame-rate request asks, as the log says it.
+std::string RateRequestText(const FrameRate::Request& request) {
+    if (request == FrameRate::Request{}) return "no cap";
+    std::string text = request.cap > 0 ? "capped at " + std::to_string(request.cap) + " frames a second" : std::string("no cap");
+    if (request.displayHz) {
+        text += *request.displayHz == Supersonic::WindowControl::kHighestRefreshRate ? std::string(", the display asked for its highest rate")
+                                                                                    : ", the display asked for " + std::to_string(*request.displayHz) + " Hz";
+    }
+    return text;
+}
+
+} // namespace
+
+void MagicPortalsLayer::resolveFrameRate(entt::registry& registry) {
+    m_frameRateRules = FrameRate::Rules{};
+    m_frameRateStore = FrameRate::Store{};
+    m_frameRateReady = false;
+    m_rateRowLoaded = false;
+    m_frameCap = 0;
+    m_displayAsked.reset();
+    m_capSmoothing.reset();
+    // A run that must reproduce, a capture, a bare layer: nothing is read, asked or shown. Nor where the engine applies no cap (no FrameRateControl, or
+    // one that is not available), as the choice would do nothing there.
+    if (!m_paths.frameRate.available) return;
+    const auto* control = registry.ctx().find<Supersonic::FrameRateControl*>();
+    if (control == nullptr || *control == nullptr || !(*control)->Available()) return;
+
+    // A table that will not read costs this setting alone: Auto, no row.
+    std::string why;
+    const std::string file = m_paths.portData + Controls::kDataFile;
+    if (!FrameRate::LoadRules(file, m_frameRateRules, why)) {
+        m_frameRateRules = FrameRate::Rules{};
+        SUPERSONIC_LOG_WARN("Magic Portals") << "no frame-rate choice: " << why << std::endl;
+        return;
+    }
+    if (!m_frameRateStore.Open(m_paths.saveDir, why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "frame rate: the kept choice not read, the default taken: " << why << std::endl;
+    }
+    m_frameRateReady = true;
+    // The row's places, where there is an Options screen at all (--controls classic has none; the choice still applies).
+    if (m_optionsReady) {
+        if (Options::LoadRateRow(file, m_optionsRules, why)) {
+            m_rateRowLoaded = true;
+            m_optionsWithoutRateRow = m_optionsRules;
+        } else {
+            SUPERSONIC_LOG_WARN("Magic Portals") << "no frame-rate row on Options: " << why << std::endl;
+        }
+    }
+    applyFrameRate(registry);
+    const FrameRate::Choice choice = FrameRateChoice();
+    SUPERSONIC_LOG_INFO("Magic Portals") << "frame rate: " << FrameRate::NameOf(choice)
+                                         << (m_frameRateStore.Chosen() ? " (the player's kept choice): " : " (the default): ")
+                                         << (choice == FrameRate::Choice::Auto()
+                                                 ? std::string("nothing asked of the engine or the display")
+                                                 : RateRequestText(FrameRate::RequestFor(m_frameRateRules, m_paths.frameRate.platform, choice,
+                                                                                        monitorRefreshHz(registry), (*control)->PresentPaced())))
+                                         << std::endl;
+}
+
+int MagicPortalsLayer::monitorRefreshHz(const entt::registry& registry) const {
+    if (m_paths.frameRate.platform != FrameRate::Platform::Desktop) return 0;
+    const auto* window = registry.ctx().find<Supersonic::WindowControl*>();
+    return window != nullptr && *window != nullptr ? static_cast<int>((*window)->DesktopMode().refreshRate) : 0;
+}
+
+void MagicPortalsLayer::applyFrameRate(entt::registry& registry) {
+    if (!m_frameRateReady) return;
+    auto* const* slot = registry.ctx().find<Supersonic::FrameRateControl*>();
+    if (slot == nullptr || *slot == nullptr || !(*slot)->Available()) return;
+    Supersonic::FrameRateControl& control = **slot;
+    const FrameRate::Choice choice = FrameRateChoice();
+    const int refreshHz = monitorRefreshHz(registry);
+    const FrameRate::Request request =
+        FrameRate::RequestFor(m_frameRateRules, m_paths.frameRate.platform, choice, refreshHz, control.PresentPaced());
+    // The engine's cap, only when it differs from what it was last asked: a run on Auto asks for nothing at all.
+    if (request.cap != control.RequestedCap()) control.RequestCap(request.cap);
+    // The display's rate (a phone): asked when the choice asks one, and the preference withdrawn only where this run made one.
+    if (auto* const* window = registry.ctx().find<Supersonic::WindowControl*>(); window != nullptr && *window != nullptr) {
+        std::optional<std::uint32_t> ask = request.displayHz;
+        if (!ask && m_displayAsked) ask = Supersonic::WindowControl::kDesktopRefreshRate;
+        if (ask && ask != m_displayAsked) {
+            (*window)->SetPreferredRefreshRate(*ask);
+            m_displayAsked = ask;
+        }
+    }
+    // The pictures' smoothing: the cap's where it holds the loop back, else the rate watch's, which starts afresh on a changed cap - what it had
+    // measured was another rate.
+    const std::optional<bool> decided = Pictures::SmoothingUnderCap(m_pictureRules, request.cap, refreshHz, m_frameRateRules.refreshToleranceHz,
+                                                                    control.PresentPaced(), m_frameRateRules.smoothWhenLimited);
+    if (request.cap != m_frameCap || decided != m_capSmoothing) m_pictureRate = Pictures::RateWatch{};
+    m_frameCap = request.cap;
+    m_capSmoothing = decided;
+    // The Options row only where it would change something here.
+    if (m_rateRowLoaded) {
+        const bool shown = FrameRate::DoesSomething(m_frameRateRules, m_paths.frameRate.platform, choice, refreshHz, control.PresentPaced());
+        m_optionsRules = shown ? Options::ForRateRow(m_optionsWithoutRateRow) : m_optionsWithoutRateRow;
+    }
+}
+
+void MagicPortalsLayer::chooseFrameRate(entt::registry& registry, const FrameRate::Choice& choice) {
+    m_frameRateStore.SetChoice(choice);
+    if (std::string why; !m_frameRateStore.Save(why)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "frame rate not saved: " << why << std::endl;
+    }
+    applyFrameRate(registry);
+    const auto* control = registry.ctx().find<Supersonic::FrameRateControl*>();
+    const bool paced = control != nullptr && *control != nullptr && (*control)->PresentPaced();
+    SUPERSONIC_LOG_INFO("Magic Portals")
+        << "frame rate: " << FrameRate::NameOf(choice) << " (chosen in Options): "
+        << RateRequestText(FrameRate::RequestFor(m_frameRateRules, m_paths.frameRate.platform, choice, monitorRefreshHz(registry), paced)) << std::endl;
 }
 
 void MagicPortalsLayer::chooseControlsStyle(Controls::Style style) {
@@ -4386,6 +4505,9 @@ void MagicPortalsLayer::openMenu(entt::registry& registry, Screen screen) {
         loadUiFont(m_optionsRules.wordFont);
         loadUiFont(m_optionsRules.adjust.font);
         if (m_optionsRules.desktop.shown) loadUiFont(m_optionsRules.desktop.font);
+        // The frame-rate row (planning step 285): its font, and the monitor asked again, which may be another than at the last asking.
+        if (m_rateRowLoaded) loadUiFont(m_optionsRules.rateRow.font);
+        applyFrameRate(registry);
     }
     if (changed && screen == Screen::Language) {
         // A fresh screen, in the language on the screen: its title is that language's in the original's font of the role, and its names are the atlas.
@@ -5061,6 +5183,12 @@ void MagicPortalsLayer::optionsInput(entt::registry& registry) {
     }
     if (press.widget == Options::Widget::WalkPads) {
         chooseWalkPads(!m_walkPads);
+        return;
+    }
+    // The frame-rate row (planning step 285): the next choice, kept and asked for at once.
+    if (press.widget == Options::Widget::RateRow) {
+        chooseFrameRate(registry, FrameRate::Next(FrameRateChoice(), FrameRate::Offered(m_frameRateRules, m_paths.frameRate.platform,
+                                                                                       monitorRefreshHz(registry))));
         return;
     }
     // A tile: the run plays that style from the next level load, and the choice is kept. Pressing the lit one is a choice too, and is kept -
@@ -5919,7 +6047,10 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
             for (const Options::Piece& piece :
                  Options::Pieces(m_optionsRules, m_creditsRules, m_controlsRules, m_hudRules, m_controlsApplied, view, m_menuClock.ms,
                                  m_controlsStyle, m_optionsTouch.held, AdjustAvailable(), strings(),
-                                 Options::Switches{FullscreenNow(registry), WalkPadsShown()})) {
+                                 Options::Switches{FullscreenNow(registry), WalkPadsShown(),
+                                                   m_optionsRules.rateRow.shown
+                                                       ? Options::RateRowWords(m_optionsRules, FrameRateChoice(), strings())
+                                                       : std::string()})) {
                 const glm::vec4 colour(static_cast<float>(piece.colour[0]) / 255.0f, static_cast<float>(piece.colour[1]) / 255.0f,
                                        static_cast<float>(piece.colour[2]) / 255.0f, static_cast<float>(piece.colour[3]) / 255.0f);
                 switch (piece.element) {
@@ -5949,6 +6080,7 @@ void MagicPortalsLayer::EmitMenu(entt::registry& registry) const {
                 case Options::Element::AdjustFrame:
                 case Options::Element::SwitchFrame:
                 case Options::Element::SwitchMark:
+                case Options::Element::RateRowFrame:
                     add(piece.rect, std::string(), colour);
                     break;
                 }
@@ -14586,7 +14718,7 @@ void MagicPortalsLayer::drawPicturesAtTick(entt::registry& registry) {
     // two ticks for smoothness, as it did before planning step 150: the pictures then
     // stand up to one tick behind what the lights, the effects and the HUD read from the
     // sim, which is the price, and under 17 ms at 60 Hz ticks.
-    if (m_pictureRate.Smoothing()) return;
+    if (PicturesSmoothed()) return;
     // WHY THIS IS AN HONEST USE OF THE ENGINE'S INTERPOLATION and not a bypass of it:
     // BeginTick put each transform back at the last tick's end and recorded that as
     // `previous`; the tick has since written this one's. Both ends at this one, and
@@ -15990,8 +16122,9 @@ void MagicPortalsLayer::OnUpdate(entt::registry& registry, float deltaTime) {
     restoreEdgeCulls(registry);
     // What the display's rate is, from the frame the engine has just drawn: the next ticks
     // keep the engine's smoothing only where it outruns the tick (pictures.json). Nothing
-    // is measured in a --fixed-step run, whose frames are the tick's own.
-    if (!m_paths.fixedStep) {
+    // is measured in a --fixed-step run, whose frames are the tick's own, nor while a
+    // frame-rate cap decides instead (planning step 285).
+    if (!m_paths.fixedStep && !m_capSmoothing) {
         m_pictureRate.Frame(m_pictureRules, static_cast<double>(deltaTime), static_cast<double>(kTick));
     }
     // The entities' particles. They belong to the FRAME and not to the tick,

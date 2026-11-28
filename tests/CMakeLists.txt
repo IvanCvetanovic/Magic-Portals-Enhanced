@@ -84,7 +84,7 @@ add_mp_test(test_mp_numbers)
 add_mp_test(test_mp_levels SKIPS_WITH_77)
 
 # UTF-8 text and the interface languages (planning step 236, PORT-32): sim/Utf8's decoder and encoder (each malformed class pinned to its exact
-# output, a fuzz for the round trip), sim/Strings' language table and its thirty-three keys (eighteen interface strings and, since steps 247 and 248, fifteen picture words) in eleven languages (key and placeholder parity, the
+# output, a fuzz for the round trip), sim/Strings' language table and its thirty-six keys (twenty-one interface strings and, since steps 247 and 248, fifteen picture words) in eleven languages (key and placeholder parity, the
 # original fonts' character set, the drift against the English the rules fields still hold, fallback to English), and sim/Language's saved
 # choice. Pure sim and a scratch directory; its drift case ties en.json to the English the rule tables still hold (the secret achievement's words are
 # Asantee's, in no committed table: the overlay's, test_mp_langsim).
@@ -384,6 +384,15 @@ add_mp_test(test_mp_options)
 # file, which exits 77 without the converted levels and Enhanced's data.
 add_mp_test(test_mp_desktop)
 add_mp_test(test_mp_desktop_levels IN_SOURCE test_mp_desktop SKIPS_WITH_77)
+
+# A player's frame rate (planning step 285): controls.json's `frame_rate` block, the choices each platform offers and what each asks, framerate.json and
+# whose run reads it. Pure; it reads only the port's own controls.json and, as text, game/main.cpp's wiring of the setting (this source alone is given
+# MAGICPORTALS_SOURCE_DIR). The layer's cases - what a run asks of the engine's frame-rate control and the window, the Options row - are the suite
+# test_mp_framerate_levels of the same file, which exits 77 without the converted levels and Enhanced's data.
+add_mp_test(test_mp_framerate)
+set_property(SOURCE test_mp_framerate.cpp APPEND PROPERTY
+             COMPILE_DEFINITIONS "MAGICPORTALS_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+add_mp_test(test_mp_framerate_levels IN_SOURCE test_mp_framerate SKIPS_WITH_77)
 
 # The adjustment screen (planning step 192, CTL-11): sim/Adjust, the `adjust` block of controls.json and the editor pictures sim/PadArt draws - the seven
 # widgets (a box and a face each) at every window shape, Back's fixed place under the clear-portals preview and its clearances (the numbers of

@@ -264,4 +264,4 @@ stops opening after 7 days until it is refreshed or installed again, and a free 
 
 Gatekeeper and App Translocation; notarisation; the sandbox and writes to Application Support; retina scaling; MoltenVK on real Apple GPUs (the runner's is a paravirtual device) and on an Intel Mac; touch on an iPad; the safe area and the home indicator;
 a first frame on any device; Rosetta; re-signing the ipa; TestFlight and the App Store; the data-bearing zip; that the two entries compile with Xcode; the alert; the silent failure after the entry (the game's own failure dialog is empty on Apple); the
-cost of a dispatch; MoltenVK's checksum; CoreAudio and the MP3 decoder; Apple's libc++'s availability marks; the placeholder identity; whether the engine's repository is public (APPLE-25).
+cost of a dispatch; MoltenVK's checksum; CoreAudio and the MP3 decoder; Apple's libc++'s availability marks; the placeholder identity; whether the engine's repository is public (APPLE-25); whether a 120 Hz iPhone passes 60 frames a second with `CADisableMinimumFrameDurationOnPhone` (planning step 285, never run on any iPhone).

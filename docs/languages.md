@@ -54,7 +54,7 @@ and what is not translated. The record of how it was built, step by step, with i
 | What | Where |
 |---|---|
 | The eleven codes, their own names, direction, which fonts, how a generated font is drawn, and the two icons a generated atlas draws itself (`fonts.icons`, step 249) | `game/data/lang/languages.json` |
-| The thirty-three short strings of each language: eighteen interface strings (`hud.part`, `dashboard.chapter`, `options.title`, `language.title`, ...) with `{n}`, `{percent}`, `{title}` placeholders, and, since steps 247 and 248, fifteen picture words (`picture.tap_start`, `picture.achievements`, `picture.select_chapter`, `picture.points`, `picture.level_finished`, `picture.portals_created`, `picture.game_over`, and of step 248 `picture.current_score`, `picture.golden_score`, `picture.game_finished` and the credits strip's five bands `credits.role.design`, `credits.role.illustration`, `credits.role.illustration_at`, `credits.role.modelling`, `credits.thanks`) | `game/data/lang/<code>.json` (UTF-8 JSON); `en.json` is the reference every other file is held to |
+| The thirty-six short strings of each language: twenty-one interface strings (`hud.part`, `dashboard.chapter`, `options.title`, `language.title`, since step 285 the frame-rate row's `options.frame_rate`, `options.frame_rate_auto` and `options.frame_rate_max`, ...) with `{n}`, `{percent}`, `{title}` placeholders, and, since steps 247 and 248, fifteen picture words (`picture.tap_start`, `picture.achievements`, `picture.select_chapter`, `picture.points`, `picture.level_finished`, `picture.portals_created`, `picture.game_over`, and of step 248 `picture.current_score`, `picture.golden_score`, `picture.game_finished` and the credits strip's five bands `credits.role.design`, `credits.role.illustration`, `credits.role.illustration_at`, `credits.role.modelling`, `credits.thanks`) | `game/data/lang/<code>.json` (UTF-8 JSON); `en.json` is the reference every other file is held to |
 | Where the English word of each of eleven pictures was, the box the translated word is drawn in, its smallest scale, its shadow (numbers about geometry, and a digest of each sprite so another version is refused; no pixel) | `game/data/picture_recipes.json` |
 | The achievements' titles and descriptions in each language, and the secret achievement's title and sentence (with `{world}` and `{level}`) as a `secret` block | `out/data/achievements.<code>.json` (**not in git**, see below) |
 | The picker and its two globes: places, sizes, colours | `game/data/picker.json` |
@@ -84,7 +84,7 @@ and what is not translated. The record of how it was built, step by step, with i
 1. **The code and its place.** Add it to `Strings::Lang` and `kLangCodes` (`game/sim/Strings.hpp`) and to `languages.json`'s `languages`, in the same order: the loader
    refuses a table whose order is not the enum's. Give its own name in its own script, `rtl`, and `font_set`: `original` only if every character of its strings is in
    Latin-1 (the loader checks), otherwise `generated`.
-2. **The strings.** Copy `en.json` to `<code>.json` and translate the thirty-three values; keep every placeholder. The fifteen `picture.*` and `credits.*` picture values are drawn INTO the original's
+2. **The strings.** Copy `en.json` to `<code>.json` and translate the thirty-six values; keep every placeholder. The fifteen `picture.*` and `credits.*` picture values are drawn INTO the original's
    pictures at run time and must fit their boxes: keep them short, and run `test_mp_overflow`, which fails a phrase that would need less than its recipe's floor (and
    `test_mp_picturebake`, which fails one with a character the faces lack). Keep the `_about` that says who translated it and how
    (a test requires the machine-translation statement on every file but English's, and a native reader's review is the thing to add there).
@@ -100,9 +100,9 @@ and what is not translated. The record of how it was built, step by step, with i
 
 ## The translations
 
-The eighteen interface strings, the fifteen picture words (steps 247 and 248), the 82 achievements' titles and descriptions and the secret achievement's two texts, in each of the ten other languages, were **machine-translated by a language
+The twenty-one interface strings, the fifteen picture words (steps 247 and 248), the 82 achievements' titles and descriptions and the secret achievement's two texts, in each of the ten other languages, were **machine-translated by a language
 model from the English, with the terms aligned with the Magic Rampage Companion app, and, for the interface strings and the achievements, reviewed by a second model pass (the picture words only for fit and for the characters the faces hold). They have NOT been read by a native speaker.**
-Each file says so. Expect wrong register, awkward phrasing and the occasional mistranslation; a reviewer's corrections go straight into the JSON (`LANG-1`).
+Each file says so. Expect wrong register, awkward phrasing and the occasional mistranslation; a reviewer's corrections go straight into the JSON (`LANG-1`). The frame-rate row's three strings of step 285 are machine-made with no second pass at all.
 
 **The seven picture words are machine translations too, with no native reader, and the shipped wording is the machine's first or second choice, not a settled one.** They were made
 for this step from the Magic Rampage Companion app's terms (*tap*, *skill points*, *achievements*, *choose the chapter*, *portal*) and checked only for fit and for the characters the faces hold. Five of them are
@@ -246,7 +246,7 @@ The achievements' titles and descriptions are Asantee's words, so a translation 
 the gitignored `out/data/` beside the English list, made by `tools/l10n/make_achievement_languages.py` from the translators' files, and shipped only in the release's
 content package (the same rule as every other piece of the original). A checkout without them shows the English achievements in any language and says so once.
 
-**What is committed, exactly.** The **thirty-three** short strings (the eighteen interface strings and the fifteen picture words), in `game/data/lang/<code>.json`, and `game/data/picture_recipes.json` (geometry and digests, no pixel). **What is not:** the achievements' titles and descriptions
+**What is committed, exactly.** The **thirty-six** short strings (the twenty-one interface strings and the fifteen picture words), in `game/data/lang/<code>.json`, and `game/data/picture_recipes.json` (geometry and digests, no pixel). **What is not:** the achievements' titles and descriptions
 **and the secret achievement's title and sentence** (the words a locked secret achievement shows, with its chapter and level in them), in every language: they are the
 overlay `out/data/achievements.<code>.json` (a `secret` block beside `achievements`), made from `out/data/lang_src/<code>.json`. The English of the secret achievement is
 what it was before the languages: the original's, composed from `out/data/achievements.json` (`secret`), so a checkout without the converted data holds none of it either.
@@ -262,17 +262,17 @@ committed file and the suite compares when it is there (when it is not, the suit
 strings already in git and to percent strings and the loading dots: the original's cell geometry for this port's own characters, and no word of Asantee's. A content guard in the suite
 lays every line of the achievements out through the original's fonts and fails when a frame that spells one is not flagged hidden, and when a flagged frame spells none.
 
-The fifteen picture words are the words of the original's pictures (TAP START, *Achievements*, ...): their English is committed as text in `en.json`, as the owner decided for this step, and their ten translations are new in git too. Seven of the eighteen interface strings are short interface words of the original's own, already in the repository in English since before the languages (`Part N`, `Chapter N`, `new!`,
+The fifteen picture words are the words of the original's pictures (TAP START, *Achievements*, ...): their English is committed as text in `en.json`, as the owner decided for this step, and their ten translations are new in git too. Seven of the twenty-one interface strings are short interface words of the original's own, already in the repository in English since before the languages (`Part N`, `Chapter N`, `new!`,
 `requires N%`, `Achievement unlocked! {title}`, `This level is locked!`, `move the camera around`); **their ten translations are new in git**, and whether short
 translated UI phrases count as the original's text is the owner's call (`LANG-1`). The rest (`Controls`, `Modern`, `Classic`, `Adjust controls`, `Language`, the
-desktop Options title and switches `Options`, `Fullscreen`, `Walk arrows`, the walking hint of 1-01, and the two credits lines) are this port's own words.
+desktop Options title and switches `Options`, `Fullscreen`, `Walk arrows`, the walking hint of 1-01, the two credits lines, and the frame-rate row's `Frame rate: {n}`, `Frame rate: Auto` and `Frame rate: Max`) are this port's own words.
 
 ## Known limits, and the owner's calls
 
 * **A first run now meets the ten machine translations without choosing them** (`LANG-1`, step 245). A German, Spanish, French, Italian, Portuguese, Russian, Turkish, Ukrainian,
   Japanese or Arabic system now starts in words that no native reader has read, where before a player met them only by opening the globe. Leaving the system's language out is one
   line (`main.cpp`'s call of `Language::ApplySystemLocale`) and the tests that pin it say what would change; whether to keep it until a reviewer has read them is the owner's call.
-* **A first run in another language is no longer a mixed screen** (`LANG-2`, closed by step 248 but for the owner's decisions about the card's Facebook line, which is gone from the card in these languages, not English). The main menu's TAP START and *Achievements*, chapter select's title, the dashboard's *points*, the end screens' *level finished*, *portals created*, *game over* and *golden score*, the pause's and the level HUD's *current score* and *golden score* plaques, the game-finished card's first paragraph and the credits strip's roles and heading are the language's. What stays English: every proper noun; and the card has no Facebook line at all in these languages (option A: it is not drawn, not drawn in English). The translated surface is the 18 interface strings, the 15 picture words and the 82 achievements.
+* **A first run in another language is no longer a mixed screen** (`LANG-2`, closed by step 248 but for the owner's decisions about the card's Facebook line, which is gone from the card in these languages, not English). The main menu's TAP START and *Achievements*, chapter select's title, the dashboard's *points*, the end screens' *level finished*, *portals created*, *game over* and *golden score*, the pause's and the level HUD's *current score* and *golden score* plaques, the game-finished card's first paragraph and the credits strip's roles and heading are the language's. What stays English: every proper noun; and the card has no Facebook line at all in these languages (option A: it is not drawn, not drawn in English). The translated surface is the 21 interface strings, the 15 picture words and the 82 achievements.
 * **A first run in Russian, Turkish, Ukrainian, Japanese or Arabic bakes its fonts before the first frame.** The two atlases of a generated language are made while the game starts
   (60-90 ms on the Linux machine of step 245's launches, from an empty scratch folder; a language already baked is read from the cache). Never timed on a phone. If they cannot be made,
   the run speaks English and says why in the log, as a pick does (`LANG-7`), and the next start tries again.

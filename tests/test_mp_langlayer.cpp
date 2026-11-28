@@ -30,6 +30,7 @@
 #include "MagicPortalsLayer.hpp"
 
 #include "core/BitmapFont.hpp"
+#include "core/FrameRateControl.hpp"
 #include "core/Input.hpp"
 #include "core/Json.hpp"
 #include "core/Log.hpp"
@@ -1684,8 +1685,10 @@ MagicPortalsLayer::Paths langPaths(const std::string& name, const std::optional<
 struct Run {
     entt::registry registry;
     MagicPortalsLayer layer;
-    Run(const MagicPortalsLayer::Paths& paths, const std::string& level) : layer(paths, level) {
+    // With `control`, the engine's frame-rate control published before the attach, as the app publishes it (planning step 285).
+    Run(const MagicPortalsLayer::Paths& paths, const std::string& level, Supersonic::FrameRateControl* control = nullptr) : layer(paths, level) {
         publishViewport(registry);
+        if (control != nullptr) registry.ctx().insert_or_assign<Supersonic::FrameRateControl*>(&*control);
         layer.OnAttach(registry);
     }
     ~Run() { layer.OnDetach(registry); }
@@ -2663,7 +2666,14 @@ void theOptionsWordsAreDrawnInsideTheirSlots() {
         MagicPortalsLayer::Paths paths = langPaths(std::string("options-") + code, std::string(code));
         paths.controls = Controls::ResolvePolicy(std::string("modern"), false, false, false);
         paths.controls.withoutOriginalArt = true;
-        Run run(paths, "");
+        // The frame-rate row (planning step 285) is on this screen too: shown by a run that reads the setting with an engine that caps; a phone's kept
+        // "max", which is the row's widest German word.
+        paths.frameRate = MagicPortals::FrameRate::Policy{true, MagicPortals::FrameRate::Platform::Android};
+        paths.saveDir = scratchDir(std::string("langlayer-rate-") + code).string();
+        std::ofstream(std::filesystem::path(paths.saveDir) / MagicPortals::FrameRate::kStoreFile, std::ios::binary) << "{\"version\":1,\"frame_rate\":\"max\"}";
+        Supersonic::FrameRateControl control;
+        control.Publish(true, 0, "Fifo");
+        Run run(paths, "", &control);
         MagicPortalsLayer& layer = run.layer;
         if (!layer.LoadError().empty() || !tickToTheMainMenu(layer, run.registry) || !layer.OptionsAvailable()) {
             CHECK_MSG(false, std::string(code) + ": no options entry: " + layer.LoadError());
@@ -2700,6 +2710,17 @@ void theOptionsWordsAreDrawnInsideTheirSlots() {
             }
         }
         if (std::string(code) == "de") CHECK_MSG(fittedOne, "German's Classic is wider than its slot, so the fit has something to do here");
+        // The frame-rate row's words, inside its limit and the table's.
+        CHECK_MSG(rules.rateRow.shown, std::string(code) + ": the frame-rate row is shown");
+        const BitmapFont* rateFont = layer.UiFontOf(rules.rateRow.font);
+        CHECK_MSG(rateFont != nullptr, std::string(code) + ": the row's font loads");
+        if (!rules.rateRow.shown || rateFont == nullptr) continue;
+        const Span row = spanInside(frame, view, OptionsUi::RateRowRect(rules, view));
+        const std::string rate = layer.StringTable().Show(Strings::Key::kOptionsFrameRateMax);
+        CHECK_MSG(row.glyphs == Hud::LayOutText(*rateFont, rate, glm::dvec2(0.0), 1.0).size() && row.glyphs > 3u,
+                  std::string(code) + ": the row draws the table's word '" + rate + "': " + std::to_string(row.glyphs) + " letters");
+        CHECK_MSG(row.Width() <= rules.rateRow.maxWidthUnits + kShadowUnits,
+                  std::string(code) + ": no wider than its limit " + std::to_string(rules.rateRow.maxWidthUnits) + ": " + std::to_string(row.Width()));
     }
 }
 

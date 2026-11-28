@@ -209,6 +209,35 @@ bool Meet(const Hud::Rect& a, const Hud::Rect& b) {
     return a.min.x < b.Max().x && b.min.x < a.Max().x && a.min.y < b.Max().y && b.min.y < a.Max().y;
 }
 
+// The desktop shape with the frame-rate row (planning step 285): every widget still on the view and none meeting another.
+void TheDesktopScreenWithTheRateRowOnEveryShape() {
+    Screen s = LoadScreen();
+    if (!s.ok) return;
+    std::string error;
+    CHECK_MSG(Options::LoadRateRow(kControls, s.desktop, error), error);
+    const Options::Rules rules = Options::ForRateRow(s.desktop);
+    CHECK(rules.desktop.shown && rules.rateRow.shown);
+    constexpr double kSettled = 1.0e9;
+    for (const double aspect : {5.0 / 4.0, 4.0 / 3.0, 16.0 / 10.0, 16.0 / 9.0, 20.0 / 9.0, 21.0 / 9.0}) {
+        const glm::dvec2 view(256.0 * aspect, 256.0);
+        const std::string at = " with the row on a view " + std::to_string(view.x) + " wide";
+        const std::vector<std::pair<std::string, Hud::Rect>> widgets = {
+            {"back", Credits::BackHitRect(s.credits, view, kSettled)},
+            {"modern", Options::TileRect(rules, Controls::Style::Modern, view)},
+            {"classic", Options::TileRect(rules, Controls::Style::Classic, view)},
+            {"adjust", Options::AdjustRect(rules, view)},
+            {"full screen", Options::SwitchRect(rules, Options::Widget::Fullscreen, view)},
+            {"walk arrows", Options::SwitchRect(rules, Options::Widget::WalkPads, view)},
+            {"frame rate", Options::RateRowRect(rules, view)}};
+        for (std::size_t i = 0; i < widgets.size(); ++i) {
+            const Hud::Rect& r = widgets[i].second;
+            if (i > 0) CHECK_MSG(r.min.x >= 0.0 && r.min.y >= 0.0 && r.Max().x <= view.x && r.Max().y <= view.y, widgets[i].first + " on the view" + at);
+            for (std::size_t j = i + 1; j < widgets.size(); ++j) CHECK_MSG(!Meet(r, widgets[j].second), widgets[i].first + " and " + widgets[j].first + " do not meet" + at);
+        }
+        CHECK(Options::WidgetAt(rules, s.credits, view, kSettled, widgets.back().second.Centre(), true) == Options::Widget::RateRow);
+    }
+}
+
 void TheDesktopScreenOnEveryShape() {
     const Screen s = LoadScreen();
     if (!s.ok) return;
@@ -606,6 +635,7 @@ void runPureTests() {
     TheKeysAndTheStart();
     TheFile();
     TheDesktopScreenOnEveryShape();
+    TheDesktopScreenWithTheRateRowOnEveryShape();
     TheSwitchesMayNotMeet();
     TheSwitchesShowWhatIsOn();
 }

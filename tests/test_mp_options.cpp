@@ -5,7 +5,8 @@
 // button (top-right, 32 units square, 1190 to 1280 by 0 to 90 px at 720p); two tiles and the credits' own back button lay out, and meet no
 // other widget, at every supported window shape; a tile is pressed by a touch that goes down on it and comes up on it and by nothing else; the
 // chosen tile is the lit one; each tile's thumbnail is the pure layout of its style scaled into 64 x 36 units; and the block is read strictly,
-// each key refused when it is missing and each value when it is out of its range.
+// each key refused when it is missing and each value when it is out of its range. The frame-rate row (planning step 285) is held the same way: its
+// own block and loader, the places it moves the screen to on the phone and the desktop shape, no widget meeting another, claimed only where shown.
 //
 // Pure: no window, no registry, no original art. ui.json and controls.json are the port's own and committed (from MP_TEST_PORTDATA when a
 // mutation test sets it), so this runs anywhere and never skips. Its scratch files go to the temporary directory. What the screen does in the
@@ -18,11 +19,13 @@
 
 #include "sim/Controls.hpp"
 #include "sim/Credits.hpp"
+#include "sim/FrameRate.hpp"
 #include "sim/Hud.hpp"
 #include "sim/MainMenu.hpp"
 #include "sim/MenuState.hpp"
 #include "sim/Options.hpp"
 #include "sim/Pause.hpp"
+#include "sim/Picker.hpp"
 #include "sim/UiLayer.hpp"
 
 #include <algorithm>
@@ -866,6 +869,8 @@ void WhatTheOptionsBlockRefuses() {
     std::vector<Path> paths = {Path{"options"}};
     Path prefix = {"options"};
     Collect(root["options"], prefix, paths);
+    // The `frame_rate` member is the frame-rate row's (planning step 285), read by Options::LoadRateRow and refused key by key below.
+    paths.erase(std::remove_if(paths.begin(), paths.end(), [](const Path& path) { return path.size() > 1 && path[1] == "frame_rate"; }), paths.end());
     CHECK_MSG(paths.size() > 30, "the block has " + std::to_string(paths.size()) + " keys");
     long refused = 0;
     std::vector<Path> optionalLimits;
@@ -1058,6 +1063,181 @@ void WhatTheOptionsBlockRefuses() {
     }
 }
 
+// ---- the frame-rate row (planning step 285) ---------------------------------------------------------------------------------------------------
+
+// The shipped screen with the row's block read: not shown.
+Options::Rules WithRowBlock() {
+    Options::Rules rules = Data().options;
+    std::string error;
+    CHECK_MSG(Options::LoadRateRow(kControls, rules, error), error);
+    return rules;
+}
+
+void TheRateRowStandsWhereItsBlockPutsIt() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Options::Rules base = WithRowBlock();
+    CHECK_MSG(!base.rateRow.shown && base.title.atScreen == glm::dvec2(0.5, 0.14) && base.adjust.atScreen == glm::dvec2(0.5, 0.84),
+              "reading the block moves nothing");
+    CHECK(base.rateRow.sizeUnits == glm::dvec2(160.0, 32.0) && base.rateRow.wordAtUnits == glm::dvec2(80.0, 16.0));
+    CHECK(base.rateRow.font == "Matura84_shadow.fnt" && base.rateRow.unitsPerFontPx == 0.27 && base.rateRow.maxWidthUnits == 148.0);
+    CHECK((base.rateRow.frame == Options::Colour{34, 30, 52, 190}) && base.rateRow.wordAlphaByte == 255);
+    CHECK(base.rateRow.word == "Frame rate: {n}" && base.rateRow.autoWord == "Frame rate: Auto" && base.rateRow.maxWord == "Frame rate: Max");
+
+    const Options::Rules phone = Options::ForRateRow(base);
+    CHECK(phone.rateRow.shown && !phone.desktop.shown);
+    CHECK_MSG(Near(phone.title.atScreen.y, 0.1), "phone.title.atScreen.y is " + Num(phone.title.atScreen.y));
+    CHECK_MSG(Near(phone.tiles[0].atScreen.y, 0.29), "phone.tiles[0].atScreen.y is " + Num(phone.tiles[0].atScreen.y));
+    CHECK_MSG(Near(phone.tiles[1].atScreen.y, 0.5), "phone.tiles[1].atScreen.y is " + Num(phone.tiles[1].atScreen.y));
+    CHECK_MSG(Near(phone.adjust.atScreen.y, 0.685), "phone.adjust.atScreen.y is " + Num(phone.adjust.atScreen.y));
+    CHECK_MSG(Near(phone.rateRow.atScreen.y, 0.855), "phone.rateRow.atScreen.y is " + Num(phone.rateRow.atScreen.y));
+    const Options::Rules desktop = Options::ForRateRow(Options::ForDesktop(base));
+    CHECK(desktop.rateRow.shown && desktop.desktop.shown);
+    CHECK_MSG(Near(desktop.title.atScreen.y, 0.09), "desktop.title.atScreen.y is " + Num(desktop.title.atScreen.y));
+    CHECK_MSG(Near(desktop.tiles[0].atScreen.y, 0.273), "desktop.tiles[0].atScreen.y is " + Num(desktop.tiles[0].atScreen.y));
+    CHECK_MSG(Near(desktop.tiles[1].atScreen.y, 0.469), "desktop.tiles[1].atScreen.y is " + Num(desktop.tiles[1].atScreen.y));
+    CHECK_MSG(Near(desktop.adjust.atScreen.y, 0.641), "desktop.adjust.atScreen.y is " + Num(desktop.adjust.atScreen.y));
+    CHECK_MSG(Near(desktop.desktop.rowAtScreen, 0.781), "desktop.desktop.rowAtScreen is " + Num(desktop.desktop.rowAtScreen));
+    CHECK_MSG(Near(desktop.rateRow.atScreen.y, 0.914), "desktop.rateRow.atScreen.y is " + Num(desktop.rateRow.atScreen.y));
+    CHECK_MSG(desktop.title.words == base.desktop.title, "the desktop title");
+
+    CHECK(Options::RateRowWords(base, FrameRate::Choice::Auto(), nullptr) == "Frame rate: Auto");
+    CHECK(Options::RateRowWords(base, FrameRate::Choice::Of(30), nullptr) == "Frame rate: 30");
+    CHECK(Options::RateRowWords(base, FrameRate::Choice::Of(240), nullptr) == "Frame rate: 240");
+    CHECK(Options::RateRowWords(base, FrameRate::Choice::Max(), nullptr) == "Frame rate: Max");
+    CHECK(!Options::StyleOf(Options::Widget::RateRow));
+}
+
+void NoWidgetMeetsAnotherWithTheRateRowAtAnySupportedAspect() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    Picker::Rules picker;
+    std::string error;
+    CHECK_MSG(Picker::LoadRules(kData + Picker::kDataFile, picker, error), error);
+    const Options::Rules base = WithRowBlock();
+    for (const bool desktop : {false, true}) {
+        const Options::Rules rules = Options::ForRateRow(desktop ? Options::ForDesktop(base) : base);
+        for (const Aspect& aspect : kAspects) {
+            const glm::dvec2 view = ViewOf(aspect.ratio);
+            const std::string at = std::string(desktop ? "desktop " : "phone ") + aspect.name + ": ";
+            // The title's box as the font draws it: a line of 84 font px at the title's scale, as wide as its limit.
+            const glm::dvec2 titleHalf(rules.title.maxWidthUnits * 0.5, 84.0 * rules.title.unitsPerFontPx * 0.5);
+            std::vector<std::pair<const char*, Hud::Rect>> widgets = {
+                {"the back button", Credits::BackHitRect(d.credits, view, kSettled)},
+                {"the title", Hud::Rect{rules.title.atScreen * view - titleHalf, titleHalf * 2.0}},
+                {"the Modern tile", Options::TileRect(rules, Controls::Style::Modern, view)},
+                {"the Classic tile", Options::TileRect(rules, Controls::Style::Classic, view)},
+                {"the adjust button", Options::AdjustRect(rules, view)},
+                {"the frame-rate row", Options::RateRowRect(rules, view)},
+                {"the language globe", Picker::CornerRect(picker, view)}};
+            if (desktop) {
+                widgets.emplace_back("the full screen switch", Options::SwitchRect(rules, Options::Widget::Fullscreen, view));
+                widgets.emplace_back("the walk arrows switch", Options::SwitchRect(rules, Options::Widget::WalkPads, view));
+            }
+            for (std::size_t i = 0; i < widgets.size(); ++i) {
+                CHECK_MSG(Inside(widgets[i].second, Hud::Rect{glm::dvec2(0.0), view}) || std::string(widgets[i].first) == "the back button",
+                          at + widgets[i].first + " is on the view: " + Show(widgets[i].second));
+                for (std::size_t j = i + 1; j < widgets.size(); ++j) {
+                    const double gap = Gap(widgets[i].second, widgets[j].second);
+                    CHECK_MSG(gap > 1.0, at + widgets[i].first + " and " + widgets[j].first + " are clear by more than a unit: " + Num(gap));
+                }
+            }
+        }
+    }
+}
+
+void TheRateRowIsClaimedAndDrawnOnlyWhereItIsShown() {
+    const Loaded& d = Data();
+    if (!d.ok) return;
+    const Controls::Tuning tuning;
+    const glm::dvec2 view = ViewOf(16.0 / 9.0);
+    for (const bool desktop : {false, true}) {
+        const Options::Rules base = WithRowBlock();
+        const Options::Rules shown = Options::ForRateRow(desktop ? Options::ForDesktop(base) : base);
+        Options::Rules hidden = shown;
+        hidden.rateRow.shown = false;
+        const Hud::Rect row = Options::RateRowRect(shown, view);
+        for (const bool adjust : {false, true}) {
+            CHECK(Options::WidgetAt(shown, d.credits, view, kSettled, row.Centre(), adjust) == Options::Widget::RateRow);
+            CHECK(Options::WidgetAt(shown, d.credits, view, kSettled, row.min, adjust) == Options::Widget::RateRow);
+            CHECK(Options::WidgetAt(shown, d.credits, view, kSettled, row.Max(), adjust) == Options::Widget::RateRow);
+            CHECK(Options::WidgetAt(hidden, d.credits, view, kSettled, row.Centre(), adjust) == Options::Widget::None);
+        }
+        const Options::Switches switches{false, true, "Frame rate: 90"};
+        for (const Controls::Style chosen : Options::kTileStyles) {
+            const std::vector<Options::Piece> with = Options::Pieces(shown, d.credits, d.controls, d.hud, tuning, view, kSettled, chosen,
+                                                                     Options::Widget::None, false, nullptr, switches);
+            const std::vector<Options::Piece> without = Options::Pieces(hidden, d.credits, d.controls, d.hud, tuning, view, kSettled, chosen,
+                                                                        Options::Widget::None, false, nullptr, switches);
+            CHECK_EQ(static_cast<int>(with.size()), static_cast<int>(without.size()) + 2);
+            if (with.size() != without.size() + 2) continue;
+            const Options::Piece& frame = with[with.size() - 2];
+            const Options::Piece& word = with.back();
+            CHECK(frame.element == Options::Element::RateRowFrame && frame.widget == Options::Widget::RateRow);
+            CHECK(frame.rect.min == row.min && frame.rect.size == row.size && frame.colour == shown.rateRow.frame);
+            CHECK(word.element == Options::Element::Word && word.words == "Frame rate: 90" && word.widget == Options::Widget::RateRow);
+            CHECK(word.rect.min == row.min + glm::dvec2(80.0, 16.0) && word.maxWidthUnits == 148.0);
+            for (const Options::Piece& piece : without) CHECK(piece.element != Options::Element::RateRowFrame);
+        }
+        const std::vector<Options::Piece> held = Options::Pieces(shown, d.credits, d.controls, d.hud, tuning, view, kSettled, Controls::Style::Modern,
+                                                                 Options::Widget::RateRow, false, nullptr, switches);
+        if (held.size() >= 2) {
+            const int tint = d.credits.state.pressTintByte;
+            CHECK_MSG(held[held.size() - 2].colour[0] == 34 * tint / 255 && held.back().colour[0] == 255 * tint / 255, "a held row is at the press tint");
+        }
+    }
+}
+
+void WhatTheRateRowBlockRefuses() {
+    const Supersonic::Json::Value root = ReadControls();
+    CHECK_MSG(root["options"]["frame_rate"].IsObject(), "the file has the row's block");
+    if (!root["options"]["frame_rate"].IsObject()) return;
+    std::vector<Path> paths = {Path{"options", "frame_rate"}};
+    Path prefix = {"options", "frame_rate"};
+    Collect(root["options"]["frame_rate"], prefix, paths);
+    CHECK_MSG(paths.size() > 20, "the row's block has " + std::to_string(paths.size()) + " keys");
+    const auto load = [](const std::string& name, const std::string& text, Options::Rules& out, std::string& why) {
+        const std::filesystem::path path = ScratchDir() / name;
+        std::ofstream(path, std::ios::binary | std::ios::trunc) << text;
+        return Options::LoadRateRow(path.string(), out, why);
+    };
+    for (const Path& path : paths) {
+        const std::string text = Write(Edit(root, path, 0, std::nullopt));
+        Options::Rules o;
+        std::string why;
+        const bool loaded = load("row-removed.json", text, o, why);
+        CHECK_MSG(!loaded && why.find(path.back()) != std::string::npos, "removing " + Dotted(path) + " is refused, naming it: " + why);
+        // The rest of the file is untouched by it: the table and the Options block still read, so the modern controls stay.
+        Controls::Rules c;
+        Options::Rules whole;
+        CHECK_MSG(LoadBoth("row-removed-whole.json", text, c, whole, why), "and the screen still reads without " + Dotted(path) + ": " + why);
+    }
+    const std::vector<std::pair<Path, const char*>> bad = {
+        {{"options", "frame_rate", "size_units"}, "[160, 0]"},
+        {{"options", "frame_rate", "word_at_units"}, "[80]"},
+        {{"options", "frame_rate", "max_width_units"}, "0"},
+        {{"options", "frame_rate", "units_per_font_px"}, "-1"},
+        {{"options", "frame_rate", "frame_rgba"}, "[1, 2, 3]"},
+        {{"options", "frame_rate", "word_alpha_byte"}, "256"},
+        {{"options", "frame_rate", "word"}, "\"Frame rate\""},
+        {{"options", "frame_rate", "word"}, "\"{n} of {n}\""},
+        {{"options", "frame_rate", "word"}, "\"{percent}\""},
+        {{"options", "frame_rate", "auto_word"}, "\"\""},
+        {{"options", "frame_rate", "phone", "row_at_screen"}, "[0.5, 1.2]"},
+        {{"options", "frame_rate", "desktop", "switches_row_at_screen"}, "2"},
+    };
+    for (const auto& [path, json] : bad) {
+        Options::Rules o;
+        o.rateRow.word = "kept";
+        std::string why;
+        const bool loaded = load("row-bad.json", Write(Edit(root, path, 0, Parse(json))), o, why);
+        CHECK_MSG(!loaded && why.find(path.back()) != std::string::npos, Dotted(path) + " = " + json + " is refused, naming it: " + why);
+        CHECK_MSG(o.rateRow.word == "kept", "and nothing is taken");
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(ScratchDir(), ec);
+}
+
 void runTests() {
     TheOptionsBlockIsWhatTheFileSays();
     TheEntryIsTheFacebookSlot();
@@ -1070,6 +1250,10 @@ void runTests() {
     TheAdjustButtonIsUnderTheTilesAndClearOfEveryOtherWidgetAtEveryAspect();
     TheAdjustButtonIsClaimedAndDrawnOnlyWhereItIsShown();
     WhatTheOptionsBlockRefuses();
+    TheRateRowStandsWhereItsBlockPutsIt();
+    NoWidgetMeetsAnotherWithTheRateRowAtAnySupportedAspect();
+    TheRateRowIsClaimedAndDrawnOnlyWhereItIsShown();
+    WhatTheRateRowBlockRefuses();
 }
 
 } // namespace

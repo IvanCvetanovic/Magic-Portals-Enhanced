@@ -2527,9 +2527,12 @@ void WhatIsRefused() {
     // The `options` block is the Options screen's, read by Options::LoadRules and refused key by key in test_mp_options, and the `adjust` block is the
     // adjustment screen's (planning step 192), read by Adjust::LoadRules and refused key by key in test_mp_adjust; this table is Controls::LoadRules',
     // which leaves both blocks to them (a key it does not know is ignored), so neither is in this table. The `desktop` block (planning step 277) is
-    // sim/Desktop's in the same way, refused by name in test_mp_desktop.
+    // sim/Desktop's in the same way, refused by name in test_mp_desktop, and the `frame_rate` block (planning step 285) is sim/FrameRate's, refused by name
+    // in test_mp_framerate.
     paths.erase(std::remove_if(paths.begin(), paths.end(),
-                               [](const Path& path) { return path.front() == "options" || path.front() == "adjust" || path.front() == "desktop"; }),
+                               [](const Path& path) {
+                                   return path.front() == "options" || path.front() == "adjust" || path.front() == "desktop" || path.front() == "frame_rate";
+                               }),
                 paths.end());
     CHECK_MSG(paths.size() > 100, "the file has " + std::to_string(paths.size()) + " keys of the table");
 

@@ -124,7 +124,10 @@
       "driver the scale only falls for the rest of the run. On an unpaced loop (Mailbox) the relaxed rise opens at 72.5 fps. The HUD and",
       "the touch controls are drawn into the smaller picture and blur with it (the platform research's PL-09). TO TURN IT OFF: set enabled false here. A run can turn it off or on",
       "without editing the file with `--dynamic-res off` or `on` (these numbers). The engine never applies it to a capture, a --fixed-step run, a replay or a recording, so no",
-      "captured pixel can move."
+      "captured pixel can move.",
+      "A PLAYER'S FRAME-RATE CAP CHANGES THIS (planning step 285; controls.json frame_rate; docs/android.md section 10.7): under a pick of 30 or 60 the controller judges",
+      "against min(target_fps, 0.95 x the cap) and the relaxed rise is off on any present mode (the cap is under 72.5), so a size once lost does not come back while the",
+      "cap stands, on Mailbox too. Auto and Max cap nothing. Read from the engine's code; run on no phone."
     ],
     "minimum_vulkan_minor": 0,
     "shadow_map_resolution": 16,

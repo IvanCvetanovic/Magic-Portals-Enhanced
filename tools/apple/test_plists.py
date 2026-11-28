@@ -68,7 +68,7 @@ def check_macos(plist, version):
     assert plist.get('NSHighResolutionCapable') is True, 'NSHighResolutionCapable'
     assert plist.get('NSSupportsAutomaticGraphicsSwitching') is True, 'NSSupportsAutomaticGraphicsSwitching'
     assert plist.get('LSApplicationCategoryType') == 'public.app-category.puzzle-games', 'LSApplicationCategoryType'
-    for ios_only in ('UIRequiresFullScreen', 'MinimumOSVersion', 'UIDeviceFamily', 'UIApplicationSceneManifest'):
+    for ios_only in ('UIRequiresFullScreen', 'MinimumOSVersion', 'UIDeviceFamily', 'UIApplicationSceneManifest', 'CADisableMinimumFrameDurationOnPhone'):
         assert ios_only not in plist, ios_only + ' is iOS\'s'
 
 
@@ -82,6 +82,7 @@ def check_ios(plist, version):
     assert plist.get('UIRequiresFullScreen') is True, 'UIRequiresFullScreen'
     assert plist.get('UIStatusBarHidden') is True, 'UIStatusBarHidden'
     assert plist.get('UILaunchScreen') == {}, 'an EMPTY UILaunchScreen is what makes the app run at the display\'s own size'
+    assert plist.get('CADisableMinimumFrameDurationOnPhone') is True, 'without it a 120 Hz iPhone holds the game to 60 frames a second (planning step 285)'
     assert plist.get('UIApplicationSceneManifest') == {'UIApplicationSupportsMultipleScenes': False}, 'UIApplicationSceneManifest: one scene, delegate named in code'
     landscape = ['UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight']
     assert plist.get('UISupportedInterfaceOrientations') == landscape, 'landscape only (iPhone)'
@@ -193,6 +194,7 @@ class PlistTemplates(unittest.TestCase):
         t = self.ios_text
         self.refused(check_ios, t, '<string>16.3</string>', '<string>15.0</string>')
         self.refused(check_ios, t, '<key>UIRequiresFullScreen</key>\n    <true/>', '<key>UIRequiresFullScreen</key>\n    <false/>')
+        self.refused(check_ios, t, '<key>CADisableMinimumFrameDurationOnPhone</key>\n    <true/>', '<key>CADisableMinimumFrameDurationOnPhone</key>\n    <false/>')
         self.refused(check_ios, t, '<string>metal</string>', '<string>opengles-3</string>')
         self.refused(check_ios, t, '<string>arm64</string>', '<string>armv7</string>')
         self.refused(check_ios, t, '    <key>UISupportedInterfaceOrientations</key>\n    <array>\n        <string>UIInterfaceOrientationLandscapeLeft</string>',

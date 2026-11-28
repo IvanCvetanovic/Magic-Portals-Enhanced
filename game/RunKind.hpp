@@ -45,6 +45,15 @@ inline bool AttendedRun(const Supersonic::LaunchOptions& engine, const DevFlags&
     return !engineUnattended && !portUnattended;
 }
 
+// Whether a run may read, apply and show the player's frame rate (planning step 285, sim/FrameRate): a person's run, `--saves` aside - a run that keeps
+// its saves in another folder still plays at its own pace, and it is how the setting is checked without touching a player's folder. Never a run that
+// must reproduce or is measured (--fixed-step, --frames, a screenshot, a recording, a replay, --route, --visit-levels, scripted input,
+// --light-masks-off), nor a --hidden one: the engine applies no cap to those (LaunchOptions::AllowsFrameCap).
+inline bool FrameRateRun(const Supersonic::LaunchOptions& engine, DevFlags dev) {
+    dev.saves = false;
+    return engine.AllowsFrameCap() && AttendedRun(engine, dev);
+}
+
 // The text of the message box a run that stopped on an error shows, or empty where it shows none (planning step 191; the rule was main.cpp's own
 // and no suite could reach it). Only an attended run opens a box, and the box names the log only if the log was WRITTEN: `logPath` is empty
 // until the file sink really opened, and a box that sent a player to a file that is not there would be worse than one that names none.

@@ -471,7 +471,7 @@ read in 67.8 ms`) and each level's (`level0 data read in 7.7 ms`), to one decima
 The medals and the sound and music switches are kept between runs, as the original keeps
 them, in `%APPDATA%\Magic Portals\` on Windows (`~/.local/share/Magic Portals` on Linux; [docs/platforms.md](platforms.md) has the other platforms) (`scores.json`, and `audio.json` from the first press of
 a switch). So is the choice of controls (`controls.json`, from the first tile pressed in
-Options), a computer's full-screen and walk-arrow choices (`desktop.json`) and the choice of language (`language.json`, from the first language picked). `--saves <dir>` moves them, for a run that must not touch the player's (such a run is not a player's, so it neither reads nor writes `desktop.json` and has no full-screen keys or desktop switches).
+Options), a computer's full-screen and walk-arrow choices (`desktop.json`), the choice of language (`language.json`, from the first language picked) and of frame rate (`framerate.json`, from the first press of the Options row). `--saves <dir>` moves them, for a run that must not touch the player's (such a run is not a player's, so it neither reads nor writes `desktop.json` and has no full-screen keys or desktop switches; it does read and write `framerate.json`, below).
 
 Each of them is written in one step: a temporary of its own name beside the file, flushed and checked
 after it is closed, renamed over the file, and the live file is never removed to make room; `scores.json`,
@@ -515,6 +515,21 @@ configures once - if `build\`'s data paths move, delete `build-play\` and run it
 away turns them on; the adjustment button shows only while they are on). A run without that Options screen (`--controls classic`, or tables that will not read) keeps its arrows. Both choices are kept in
 `desktop.json` beside `scores.json`, and the next start opens as it was left, full screen from its first frame; `--fullscreen` and `--windowed` decide their own run and are not kept.
 The shipped defaults are `controls.json`'s `desktop` block (a window, no arrows). A capture, a route or a suite is not such a run and plays as before.
+
+**The frame rate** (planning step 285, `sim/FrameRate`). The simulation ticks 60 times a second whatever is chosen, but input is read once for each drawn frame, so under a 30 cap it is
+read 30 times a second: both ticks of a frame see the same pointer and held keys, and a new press reaches the first of them. Options has a row that cycles on each press:
+**Auto** (the shipped default, `controls.json`'s `frame_rate.default`; the game as it drew before - the display's own rate, or as fast as the machine draws where the display does not
+pace it - with nothing asked of the engine or the display; one exception, never run on an iPhone: this step's `CADisableMinimumFrameDurationOnPhone` is meant to let a 120 Hz iPhone draw
+above 60 under Auto too), then on a computer 30, 60, 90, 120, 144, 165 and 240 up to the monitor's refresh rate; on Android 30, 60 and Max; on iOS 30 and 60.
+A number caps the frames drawn (the engine waits, `FrameRateControl`); on a computer a number at the monitor's rate or over it asks nothing where the display paces the loop, as the loop
+is held there or lower already. A kept number the screen cannot give (144 picked on a 144 Hz monitor, then played on a 60 Hz one of that kind) stays kept: the row still names it while
+the game draws at the screen's rate, and the next press moves on (to Auto where nothing above it is offered), which replaces it. Android also asks the display for 60 Hz with 30 or 60
+and for its highest rate with Max; a phone's own rate cannot be read. While a cap is what holds the loop back - under the monitor's refresh, at it where the display does not pace the
+loop, or on a phone - the pictures are interpolated between ticks (`frame_rate.smooth_when_limited`). On a phone 30 or 60 also stops dynamic resolution from taking back a size it has
+given up while the cap stands, so there 60 is not the same as Auto ([android.md](android.md) section 10.7). The pick is kept in `framerate.json` (`{"version":1,"frame_rate":30}`, or
+`"auto"`, `"max"`) and applies even without the Options screen (`--controls classic`). The row is shown only where it would change something. A run that must reproduce - `--fixed-step`,
+`--frames`, a capture, a recording or replay, `--route`, `--visit-levels`, a scripted input, `--hidden` - neither reads nor applies nor shows it; `--saves` alone does not switch it off.
+`--perf-log` reports the rate a cap gives (under a cap its per-part times do not add up to the frame).
 
 **The Options screen** (planning step 185). A player's run has a gear in the main menu's top-right corner, in the slot of the
 original's omitted Facebook button, which opens Options: two tiles, **Modern** (Magic Rampage's inset controls) and **Classic** (the
@@ -604,7 +619,7 @@ The flags a capture uses (`--help` prints every flag):
 | `--drag <x,y>:<x,y>@<tick>-<release>` | DEV: a touch that moves evenly from the first pixel to the second |
 | `--place <x>,<y>@<tick>` | DEV: put the player at the level's pixel `(x, y)` after that tick's physics step, to film what a door opens; never a win route; pass `--saves` with it, since a win records a medal |
 | `--press <what>@<tick>` | DEV: press `pause`, a pause button (`levels`, `resume`, `skip`, `achievements`, `sound`, `music`), or `back` on a menu |
-| `--saves <dir>` | DEV: keep the medals (`scores.json`), the sound and music switches (`audio.json`) the controls chosen in Options (`controls.json`) and the language chosen in the picker (`language.json`) here instead of the user's data directory, for a capture that needs a medal recorded, presses a switch or chooses a style; without it a capture reads the player's switches, which its pause and menus show |
+| `--saves <dir>` | DEV: keep the medals (`scores.json`), the sound and music switches (`audio.json`) the controls chosen in Options (`controls.json`), the language chosen in the picker (`language.json`) and the frame rate (`framerate.json`) here instead of the user's data directory, for a capture that needs a medal recorded, presses a switch or chooses a style; without it a capture reads the player's switches, which its pause and menus show |
 | `--root <absolute folder>` | the folder that holds the game's content (levels, tables, art, sounds), in the shape a package or a checkout has; strict: a folder that does not hold the game ends the run with exit 1 ([docs/packaging.md](packaging.md) sections 1 and 2) |
 | `--original`, `--chapters`, `--achievements`, `--port-data` `<absolute path>` | each replaces the answer for that one path and nothing else; `--levels` brings the art with it |
 | `--no-baked-paths` | ignore the paths the build was configured with, so that a package can be proven to hold everything the game opens |

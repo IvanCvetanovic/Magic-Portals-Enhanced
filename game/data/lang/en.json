@@ -4,7 +4,7 @@
     "Each value equals the English the rules fields still hold (the drift case of tests/test_mp_strings.cpp): hud.part is ui.json's caption and pause title prefix 'Part ' with the level number; dashboard.chapter is the dashboard's 'Chapter ' prefix;",
     "dashboard.new is the dashboard's new_label text; selector.requires is the selector's warning words with the chapter_unlock_percent of ui.json's locking block as {percent}; card.unlocked is achievements.json's card message_prefix with the title;",
     "card.locked_level is achievements.json's locked_card message; the secret achievement's two texts are NOT here: they are Asantee's words and live in the gitignored out/data/achievements.<code>.json (Achievements::LoadTranslation); credits.enhanced and credits.engine are the words of ui.json's credits tail (credits.role.* and credits.thanks are the credits strip's picture words, below);",
-    "options.* are the words of controls.json's options block; hint.walk_keys is its desktop block's walk_hint words; hint.camera is camera.json's hint text; language.title is this port's own. The numbers these strings carry are never stored here.",
+    "options.* are the words of controls.json's options block (the three options.frame_rate* are its frame_rate member's word, auto_word and max_word); hint.walk_keys is its desktop block's walk_hint words; hint.camera is camera.json's hint text; language.title is this port's own. The numbers these strings carry are never stored here.",
     "The fifteen picture.* and credits.* keys are the words the original draws as PIXELS inside its pictures (TAP START, Achievements, Select chapter, points, level finished, portals created, game over, the current and golden score plaques, the first paragraph of the game-finished card, the five bands of the credits strip: the four roles and the heading); sim/PictureBake draws them into a copy of the picture at run time (planning step 247). They are stored as they are drawn: upper case where the picture is upper case, Arabic in logical order, and a space is a place a line may break (in Japanese it only breaks and is not drawn, except in the credits' five bands, whose dashes have real spaces; picture.game_finished is the card's first paragraph only, and a language other than English shows no Facebook line). They are not rule-table English, so the drift case of tests/test_mp_strings.cpp has a documented exception for them."
   ],
   "strings": {
@@ -23,6 +23,9 @@
     "options.desktop_title": "Options",
     "options.fullscreen": "Fullscreen",
     "options.walk_pads": "Walk arrows",
+    "options.frame_rate": "Frame rate: {n}",
+    "options.frame_rate_auto": "Frame rate: Auto",
+    "options.frame_rate_max": "Frame rate: Max",
     "hint.walk_keys": "Walk with the arrow keys",
     "hint.camera": "move the camera around",
     "language.title": "Language",

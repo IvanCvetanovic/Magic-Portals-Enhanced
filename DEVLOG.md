@@ -5576,3 +5576,27 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - no new word from the owner on this part.
 
 **Where it stands / next:** in the working tree, not committed.
+
+### 2026-11-28 17:50 - Session 83, continued: the frame-rate choice - Step 285
+**Asked:** "go also include the 4k fix too. also does the game have variable fps? I dont want it to only be 60fps max. If it spossible you should allow users to choose, i just dont now what standard we should put on the start? amybe just put 60 fps?" - told it would start on Auto, changeable by one data key.
+**Built:** `sim/FrameRate`, `controls.json` `frame_rate` and `options.frame_rate`, `framerate.json`, a cycling row on Options, the per-platform cap and refresh requests, the cap's say over picture smoothing, three strings in eleven languages (machine-made), the iOS 120 Hz plist key; engine pin 97e86ac.
+**Broke / dead ends:** the first build failed in one test line (`insert_or_assign<T*>` takes an rvalue). Line-ending detection with `grep -c $'\r'` through the shell tool counted the wrong thing and the first edit script failed on CRLF files before the helper kept each file's endings.
+**Decision:** Auto asks nothing at all; a run is eligible when a person plays it, `--saves` included, so a check never needs the player's folder; the row has its own loader so a typo costs the row alone.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; nothing staged or committed; the 128 compare captures and the raw Options captures deleted, three comparison sheets kept in `out/parity/port/fps285/`.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** 103 suites, 305,566 checks, 0 failures; 128 of 128 levels pixel-identical at 1280x720; 30 kept drew 30.0 fps on this PC, Auto and 60 drew 59.9 to 60.0; `tools/ci` 353 (1 skipped).
+**Inferred mood:** a guess - wants players to have the choice and not to be tied to 60.
+
+**Where it stands / next:** in the working tree, not committed; the engine pin not committed; nothing above 60 Hz, no phone and no iPhone has run it.
+
+### 2026-11-28 18:55 - Session 83, continued: the review's findings on Step 285
+**Asked:** check a review's six findings on the uncommitted step, fix the real ones, run the gates again.
+**Built:** `Pictures::SmoothingUnderCap` takes whether the display paces the loop, so a 60 picked on a 60 Hz screen that does not is smoothed; `test_mp_framerate` pins `main.cpp`'s wiring of the setting; the docs say what a cap costs (input read once a drawn frame; on a phone a lowered picture size stays down under 30 or 60) and add the frame rate to `docs/platforms.md`'s saves, the three words to `docs/languages.md` and the iPhone exception to what Auto means.
+**Broke / dead ends:** the step read every cap at the display's own rate as holding nothing back, which is true only where the display paces the loop: elsewhere the picked 60 was drawn at the tick's own place, the case its own comment gave as the reason to smooth. No suite would have noticed `main.cpp` losing the two lines that switch the setting on. A first script for the record died on the shell's quoting before it ran, so it was written to a file.
+**Decision:** the row goes on naming a kept number the screen cannot give; changing the label alone would make the next press look like nothing, so it is left to the owner.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; nothing staged or committed; this run's captures deleted, the three comparison sheets kept.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** the entry above is the build before these fixes. After them: 103 suites, 305,595 checks, 0 failures; 128 of 128 levels pixel-identical at 1280x720; `tools/ci` 353 (1 skipped), `tools/apple` 145 (1), `tools/package` 442 (5). The three visible launches were not repeated, and the new checks were not seen to fail on the old code.
+**Inferred mood:** a guess - no new word from the owner on this part.
+
+**Where it stands / next:** in the working tree, not committed; the engine pin not committed.

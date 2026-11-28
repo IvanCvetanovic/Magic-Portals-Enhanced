@@ -208,6 +208,83 @@ bool LoadRules(const std::string& path, const Controls::Rules& controls, Rules& 
     return true;
 }
 
+namespace {
+
+// One shape's places in the frame-rate block: where everything above the row stands when the row is there, and the row.
+bool ReadPlaces(const Json::Value& row, const char* shape, bool desktop, Rules::RateRow::Places& out, std::string& why) {
+    const std::string where = std::string("options.frame_rate.") + shape;
+    if (!Object(row, shape, why, "options.frame_rate")) return false;
+    const Json::Value& block = row[shape];
+    if (!Fraction(block, "title_at_screen", out.title, why, where) || !Fraction(block, "tile_modern_at_screen", out.tiles[0], why, where) ||
+        !Fraction(block, "tile_classic_at_screen", out.tiles[1], why, where) || !Fraction(block, "adjust_at_screen", out.adjust, why, where) ||
+        !Fraction(block, "row_at_screen", out.row, why, where)) {
+        return false;
+    }
+    return !desktop || Number(block, "switches_row_at_screen", 0.0, 1.0, out.switchesRowAtScreen, why, where);
+}
+
+} // namespace
+
+bool LoadRateRow(const std::string& path, Rules& rules, std::string& error) {
+    Json::Value root;
+    if (!UiLayer::Read::File(path, root, error)) return false;
+    std::string why;
+    const auto fail = [&error, &path, &why]() {
+        error = path + ": " + why;
+        return false;
+    };
+    if (!root["options"].IsObject()) {
+        why = "options is missing or not an object";
+        return fail();
+    }
+    if (!Object(root["options"], "frame_rate", why, "options")) return fail();
+    const Json::Value& row = root["options"]["frame_rate"];
+    const std::string at = "options.frame_rate";
+    Rules::RateRow read;
+    if (!Size(row, "size_units", read.sizeUnits, why, at) || !UiLayer::Read::Pair(row, "word_at_units", read.wordAtUnits, why, at) ||
+        !Positive(row, "max_width_units", read.maxWidthUnits, why, at) || !Text(row, "font", read.font, why, at) ||
+        !Positive(row, "units_per_font_px", read.unitsPerFontPx, why, at) || !ReadColour(row, "frame_rgba", read.frame, why, at) ||
+        !Byte(row, "word_alpha_byte", read.wordAlphaByte, why, at) || !Text(row, "word", read.word, why, at) ||
+        !Text(row, "auto_word", read.autoWord, why, at) || !Text(row, "max_word", read.maxWord, why, at) ||
+        !ReadPlaces(row, "phone", false, read.phone, why) || !ReadPlaces(row, "desktop", true, read.desktop, why)) {
+        return fail();
+    }
+    // The number goes into the word, once.
+    bool wellFormed = true;
+    if (Strings::PlaceholdersOf(read.word, wellFormed) != std::vector<std::string>{std::string(Strings::Placeholder::kN)} || !wellFormed) {
+        why = at + ".word does not hold {n} once and nothing else in braces";
+        return fail();
+    }
+    rules.rateRow = std::move(read);
+    return true;
+}
+
+Rules ForRateRow(const Rules& rules) {
+    Rules out = rules;
+    out.rateRow.shown = true;
+    const Rules::RateRow::Places& places = out.desktop.shown ? rules.rateRow.desktop : rules.rateRow.phone;
+    out.title.atScreen = places.title;
+    for (std::size_t i = 0; i < out.tiles.size(); ++i) out.tiles[i].atScreen = places.tiles[i];
+    out.adjust.atScreen = places.adjust;
+    if (out.desktop.shown) out.desktop.rowAtScreen = places.switchesRowAtScreen;
+    out.rateRow.atScreen = places.row;
+    return out;
+}
+
+std::string RateRowWords(const Rules& rules, const FrameRate::Choice& choice, const Strings::Table* strings) {
+    switch (choice.kind) {
+    case FrameRate::Choice::Kind::Auto:
+        return strings != nullptr ? strings->Show(Strings::Key::kOptionsFrameRateAuto) : rules.rateRow.autoWord;
+    case FrameRate::Choice::Kind::Max:
+        return strings != nullptr ? strings->Show(Strings::Key::kOptionsFrameRateMax) : rules.rateRow.maxWord;
+    case FrameRate::Choice::Kind::Fps:
+        break;
+    }
+    const std::string n = std::to_string(choice.fps);
+    return strings != nullptr ? strings->Show(Strings::Key::kOptionsFrameRate, {{Strings::Placeholder::kN, n}})
+                              : Strings::Fill(rules.rateRow.word, {{Strings::Placeholder::kN, n}});
+}
+
 Rules ForDesktop(const Rules& rules) {
     Rules out = rules;
     out.desktop.shown = true;
@@ -244,6 +321,7 @@ std::optional<Controls::Style> StyleOf(Widget widget) {
     case Widget::Adjust: // the button that opens the adjustment screen chooses no style
     case Widget::Fullscreen:
     case Widget::WalkPads:
+    case Widget::RateRow:
         break;
     }
     return std::nullopt;
@@ -283,6 +361,11 @@ Hud::Rect SwitchRect(const Rules& rules, Widget widget, const glm::dvec2& viewUn
     return Hud::Rect{centre - d.sizeUnits * 0.5, d.sizeUnits};
 }
 
+Hud::Rect RateRowRect(const Rules& rules, const glm::dvec2& viewUnits) {
+    const glm::dvec2 centre = rules.rateRow.atScreen * viewUnits;
+    return Hud::Rect{centre - rules.rateRow.sizeUnits * 0.5, rules.rateRow.sizeUnits};
+}
+
 Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dvec2& viewUnits, double stateMs, const glm::dvec2& point,
                 bool adjustShown) {
     if (Credits::BackHitRect(credits, viewUnits, stateMs).Contains(point)) return Widget::Back;
@@ -295,6 +378,7 @@ Widget WidgetAt(const Rules& rules, const Credits::Rules& credits, const glm::dv
             if (SwitchRect(rules, widget, viewUnits).Contains(point)) return widget;
         }
     }
+    if (rules.rateRow.shown && RateRowRect(rules, viewUnits).Contains(point)) return Widget::RateRow;
     return Widget::None;
 }
 
@@ -419,9 +503,9 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
         word.colour = tinted(Colour{255, 255, 255, rules.adjust.wordAlphaByte});
         pieces.push_back(std::move(word));
     }
-    if (!rules.desktop.shown) return pieces;
     const Rules::Desktop& d = rules.desktop;
     for (const Widget widget : {Widget::Fullscreen, Widget::WalkPads}) {
+        if (!d.shown) break;
         const Hud::Rect plate = SwitchRect(rules, widget, viewUnits);
         const bool on = widget == Widget::Fullscreen ? switches.fullscreen : switches.walkPads;
         const bool isHeld = held == widget;
@@ -458,6 +542,31 @@ std::vector<Piece> Pieces(const Rules& rules, const Credits::Rules& credits, con
         word.rect = Hud::Rect{plate.min + d.wordAtUnits, glm::dvec2(0.0)};
         word.colour = tinted(Colour{255, 255, 255, on ? rules.chosenWordAlphaByte : rules.idleWordAlphaByte});
         word.widget = widget;
+        pieces.push_back(std::move(word));
+    }
+    if (rules.rateRow.shown) {
+        const Hud::Rect button = RateRowRect(rules, viewUnits);
+        const bool isHeld = held == Widget::RateRow;
+        const auto tinted = [&](Colour colour) {
+            if (!isHeld) return colour;
+            for (int i = 0; i < 3; ++i) colour[static_cast<std::size_t>(i)] = colour[static_cast<std::size_t>(i)] * pressTint / 255;
+            return colour;
+        };
+        Piece frame;
+        frame.element = Element::RateRowFrame;
+        frame.rect = button;
+        frame.colour = tinted(rules.rateRow.frame);
+        frame.widget = Widget::RateRow;
+        pieces.push_back(std::move(frame));
+        Piece word;
+        word.element = Element::Word;
+        word.words = switches.rateWords;
+        word.font = rules.rateRow.font;
+        word.unitsPerFontPx = rules.rateRow.unitsPerFontPx;
+        word.maxWidthUnits = rules.rateRow.maxWidthUnits;
+        word.rect = Hud::Rect{button.min + rules.rateRow.wordAtUnits, glm::dvec2(0.0)};
+        word.colour = tinted(Colour{255, 255, 255, rules.rateRow.wordAlphaByte});
+        word.widget = Widget::RateRow;
         pieces.push_back(std::move(word));
     }
     return pieces;
