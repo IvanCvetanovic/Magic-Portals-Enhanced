@@ -389,6 +389,27 @@ void TheNoPortalSignFollowsTheCameraCorner() {
     for (int i = 0; i < 2; ++i) lag.Tick(rules, movedAgain, tick); // past 100 ms
     CHECK_MSG(lag.to == movedAgain, "and again once they have passed");
     CHECK_MSG(lag.at.x < movedAgain.x, "trailing the corner as it goes: " + Num(lag.at.x));
+
+    // The camera moved under a stop (planning step 284): the whole follow carried by what the corner moved, half way
+    // through an ease. The frames after it are the same ones, that far over - where moving `at` alone is undone by the
+    // next frame, which puts the sign back where its interpolator says.
+    const glm::dvec2 by(-227.5, 3.0);
+    Hud::Follow carried = lag;
+    Hud::Follow stayed = lag;
+    carried.Shift(by);
+    CHECK_MSG(carried.at == lag.at + by && carried.from == lag.from + by && carried.to == lag.to + by &&
+                  carried.elapsedMs == lag.elapsedMs && carried.sinceAimedMs == lag.sinceAimedMs && carried.started,
+              "every point moved and neither clock");
+    double worst = 0.0;
+    for (int i = 0; i < 30; ++i) {
+        const glm::dvec2 one = carried.Tick(rules, movedAgain + by, tick);
+        worst = std::max(worst, glm::length(one - stayed.Tick(rules, movedAgain, tick) - by));
+    }
+    CHECK_MSG(worst < 1e-9, "and eases on as it would have, that far over: " + Num(worst));
+    Hud::Follow atAlone = lag;
+    atAlone.at += by;
+    atAlone.Tick(rules, movedAgain + by, 0.0);
+    CHECK_MSG(glm::length(atAlone.at - (lag.at + by)) > 100.0, "at alone does not carry: " + Num(atAlone.at.x));
 }
 
 // The sign's chase is the one clock of the opening that depends on how its time

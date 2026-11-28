@@ -193,6 +193,11 @@ struct Follow {
 
     // One frame of it, `dtMs` long, toward `target`. Returns the new `at`.
     glm::dvec2 Tick(const Rules& rules, const glm::dvec2& target, double dtMs);
+
+    // The whole follow moved by `delta`, its clocks untouched: where it stands, where its
+    // interpolator set out from and where it is aimed. Tick puts `at` where the interpolator
+    // says, so moving `at` alone would be undone by the next frame (planning step 284).
+    void Shift(const glm::dvec2& delta);
 };
 
 // The frame time a PATH-DEPENDENT frame-time clock - the sign's follow - is handed

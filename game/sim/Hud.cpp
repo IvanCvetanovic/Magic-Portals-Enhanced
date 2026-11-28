@@ -358,6 +358,12 @@ glm::dvec2 Follow::Tick(const Rules& rules, const glm::dvec2& target, double dtM
     return at;
 }
 
+void Follow::Shift(const glm::dvec2& delta) {
+    at += delta;
+    from += delta;
+    to += delta;
+}
+
 double HandOver(const Rules& rules, double ageMs, double dtMs, double& heldMs) {
     heldMs += std::max(dtMs, 0.0);
     // Whole at startAfterMs itself, as OverlayLayersAlpha has it.

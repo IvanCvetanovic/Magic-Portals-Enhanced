@@ -1,0 +1,78 @@
+{
+  "_about": [
+    "THE STONE WALL BESIDE A LEVEL NARROWER THAN THE WINDOW (planning step 284; sim/SideWalls.hpp). ENHANCED, not the original: the view is 256 units tall and 256 x the window's",
+    "shape wide, and the camera centres a level narrower than that, so a window wider than 16:9 showed only the sky, or black, beyond the level's two sides (a player's report).",
+    "On a level whose two sides its own static collision closes over the whole height, each strip is drawn as a stone wall: the game's own double_block_plat, stood on end, in",
+    "the brightness variant of the level's own blocks, at most three columns of it, fading into plain black. A picture only: no collision, nothing the simulation reads. A level",
+    "with an open side keeps the frame it had. `enabled: false` draws the frame as it was before step 284.",
+    "",
+    "PROVENANCE. THE OWNER'S RULING, 2026-11-28, on the mock-ups (option F, with the super-wide pictures 'at most three rows, then dark'): 'this is it! This is the best one!',",
+    "then 'go'. THE NUMBERS ARE THE MOCK'S (its script, kept outside git): columns of the block 31 units apart (so two overlap by 1), pieces 128 long every 125 down the height,",
+    "every second column's first row at 0 and the others' at 62, a quarter turn, at most 3 columns, black from the fade's end outward, a smoothstep fade from 76 to 94 units",
+    "beyond the edge (the third column ends at 94). Chosen for the build and not shown to the owner as numbers, `_guess: true`: closed_reach_units, backing_reach_units,",
+    "margin_units, fade_steps, fade_cap_units, world_default_variants, light_height_units, z_first, z_step."
+  ],
+  "side_walls": {
+    "enabled": true,
+    "_guess": true,
+
+    "closed_reach_units": 4.0,
+    "_closed_reach_units": [
+      "A side is closed when the vertical line this far outside the level's edge is covered, from y 0 to the level's height, by the rectangles of the walls below. Measured over",
+      "the 128 converted levels: 2-23 and 2-24 (level22a, level23a: 460 wide) stand their right wall at x 462, 2 units outside the edge, so under 2 units 102 levels are closed",
+      "and from 2 units 104; 8 units gives 104 as well. 4 leaves room beside the 2 and stays far short of a wall that stands well out: 1-08 and 1-27 are 704 wide with their",
+      "right wall at x 768, 64 units out, and are open."
+    ],
+    "solid_entities": ["collision_128x768.ent", "collision_768x128.ent", "collision_192x32.ent", "collision_128_sqr.ent"],
+    "_solid_entities": [
+      "The original's invisible walls: static, unmoving, unbreakable, each one upright rectangle. Nothing else counts, so that a piece that breaks, moves or is taken away can",
+      "never close a side. Over the 128 levels the same 104 are closed if every static piece without a role is counted as well, so no level depends on the choice."
+    ],
+
+    "stone_entity": "double_block_plat",
+    "black_entity": "black_bar.ent",
+    "_entities": [
+      "Read from the original's entities/ when the level's art is built, as black_bar.ent is (art.json black_bar): the stone's picture, its <EmissiveColor>, its applyLight and",
+      "static and its <Normal> are the .ent's own. The black is black_bar.ent's picture, black in every texel. No picture of this port's own is committed or made."
+    ],
+    "block_families": ["double_block_plat", "single_block_plat", "platform", "block00"],
+    "variants": ["", "_low_emissive", "_no_emissive"],
+    "world_default_variants": ["", "_no_emissive", "_low_emissive", ""],
+    "_variants": [
+      "The stone takes the suffix most of the level's own placements of the block families carry (a tie goes to the world's default). The world's default, for a level that",
+      "places none, is what that world's levels mostly place (worlds 0 to 3, chapters 1 to 4): counted over the converted levels, chapter 1 places the plain blocks, chapter 2",
+      "the no-emissive, chapter 3 the low-emissive, and chapter 4 both the plain and the no-emissive, the plain on more levels. Only 4-02 and 4-18 place none, and both are open."
+    ],
+
+    "turn_deg": 90.0,
+    "light_height_units": 0.0,
+    "_light_height_units": "The depth the stone's lights are measured at: a level's own blocks stand at z 0.",
+
+    "columns": 3,
+    "column_step_units": 31.0,
+    "row_step_units": 125.0,
+    "row_start_units": [62.0, 0.0],
+
+    "backing_reach_units": 2048.0,
+    "_backing_reach_units": "Black from the edge outward. A 48:9 window is 1365 units wide, so beside the narrowest level (456) it shows 455 a side; 2048 covers any window up to 17:1.",
+    "margin_units": 128.0,
+    "_margin_units": "The backing and the fade run this far above and below the level, so an earthquake's band beside a side shows black and not sky. The black bars reach x 0 to 768 only.",
+    "fade_from_units": 76.0,
+    "fade_to_units": 94.0,
+    "fade_steps": 64,
+    "_fade_steps": [
+      "Flat black slices side by side between the two, each at the smoothstep's value at its middle: the largest step of alpha between two slices is 1.5 / 64 = 0.023, and a",
+      "slice is 0.28 units, 0.8 px at 720 lines and 2.4 px at 2160."
+    ],
+    "fade_cap_units": 2.0,
+    "_fade_cap_units": "A last slice of whole black beyond the fade's end, over the outer stones' edge.",
+
+    "z_first": 0.8,
+    "z_step": 0.0005,
+    "_depths": [
+      "In the layer's z: in front of everything the scene draws (the markers' boxes stand at 0.5) and behind the black bars (1.0, art.json black_bar). The backings first, then",
+      "the stones, then the fade's slices, each piece z_step in front of the one before it, so no two are tied. Nothing the level draws is beyond a closed side on a 16:9",
+      "screen, where the camera never leaves the level."
+    ]
+  }
+}

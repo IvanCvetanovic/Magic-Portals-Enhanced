@@ -27,6 +27,7 @@ add_library(MagicPortalsSim STATIC
     Earthquake.cpp
     EdgeCover.cpp
     SideFill.cpp
+    SideWalls.cpp
     Ease.cpp
     Effects.cpp
     EngineTuning.cpp

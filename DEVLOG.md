@@ -5552,3 +5552,27 @@ again, which is not a thing a quiet afternoon fixes.
 **Inferred mood:** a guess - wants the player with the old phone to try it.
 
 **Where it stands / next:** 1.0.2 is live; the player's answer, and an Android start, are next.
+
+### 2026-11-28 14:31 - Session 83: the stone wall beside narrow levels, and the camera framed again under a stop - Step 284
+**Asked:** a player's report that a wide window shows only sky or black beside a level; the owner, on the mock-ups, "this is it! This is the best one!", then "go".
+**Built:** `sim/SideWalls`, `game/data/side_walls.json`, the layer's wall quads and `reframeLevel`; 104 of 128 levels get the wall.
+**Broke / dead ends:** two expectations in the new tests were wrong first (1-04 is 512 tall, not 256; the space sky's spiral keeps the size taken at load, so a widened window does not match a fresh one in that one size). 1-02 and 1-03 differed from the old build inside the level's own span at 32:9: the old build kept them framed for 16:9 under their tutorial popup when started with `--level`.
+**Decision:** only the original's invisible walls close a side (a short list in the data file), so nothing that breaks or moves can; counting every static piece gives the same 104.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; nothing staged or committed; captures under `out/parity/port/side284/`, all but six comparison sheets deleted.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** 101 suites, 295,644 checks, 0 failures; 128 of 128 levels pixel-identical at 1280x720; 24 open levels identical at 1920x540.
+**Inferred mood:** a guess - pleased with the look of the mock and wants it as shown.
+
+**Where it stands / next:** in the working tree, not committed; no real wide screen or phone has shown it; the frame-rate question the owner asked in the same message is not part of this step.
+
+### 2026-11-28 15:20 - Session 83, continued: the review's findings on Step 284
+**Asked:** check a review's four findings on the uncommitted step, fix the real ones, run the gates again.
+**Built:** `Hud::Follow::Shift`, so the no-portal sign is carried when the window changes under a stop; 2-32's claw placed again there too; two layer cases and one HUD case.
+**Broke / dead ends:** the step's record and a code comment said the sign was carried, and it was not: only its position was moved, which its follow's next frame undid (227.6 units off the screen on 1-15, shown by the new case on the unfixed code). No reshape case had a level with a sign. The claw case's first two set-ups lost 2-32 before its pause (the player held above the level counts as fallen; standing still it burns), so the claw case was never seen to fail on the unfixed code.
+**Decision:** the wall's hidden quads go on being lit every sync, so one shown under a stop is already right. The wall over overhanging platforms (51 of 104 walled levels) stays as the approved mock had it; the record now says how many.
+**Assets check:** `git status` shows nothing from `reference/` or `out/`; nothing staged or committed; this run's captures deleted, the six comparison sheets of the entry above still in `out/parity/port/side284/`.
+**[CLIP] --:--** - none. **[BROLL]** - none.
+**Numbers:** after the fixes 15 suites run once each, 0 failures (layer 14512, HUD 994, routes 2553 among them); 128 of 128 levels pixel-identical at 1280x720; `tools/ci` 353 tests, 1 skipped.
+**Inferred mood:** a guess - no new word from the owner on this part.
+
+**Where it stands / next:** in the working tree, not committed.

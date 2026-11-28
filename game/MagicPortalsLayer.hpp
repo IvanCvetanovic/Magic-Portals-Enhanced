@@ -40,6 +40,7 @@ class ScreenOverlay; // core/ScreenOverlay.hpp: the popups' pieces are sent to i
 #include "sim/Earthquake.hpp"
 #include "sim/EdgeCover.hpp"
 #include "sim/SideFill.hpp"
+#include "sim/SideWalls.hpp"
 #include "sim/Effects.hpp"
 #include "sim/Game.hpp"
 #include "sim/Art.hpp"
@@ -1166,6 +1167,21 @@ public:
     };
     std::vector<BlackBarReport> BlackBars() const;
 
+    // THE STONE WALL BESIDE A LEVEL NARROWER THAN THE WINDOW (side_walls.json; Enhanced, planning step 284):
+    // every piece the level's art made, back to front (sim/SideWalls' Layout), with its quad and whether it is
+    // drawn - only while the view is wider than the level. Empty on a level with an open side, with the file's
+    // switch off, and where the art did not read.
+    struct SideWallReport {
+        entt::entity quad{entt::null};
+        SideWalls::Piece piece;
+        std::string texture; // the file the quad draws: the stone's, or black_bar.png
+    };
+    std::vector<SideWallReport> SideWallPieces() const;
+    // The .ent the stone was read from (double_block_plat_low_emissive.ent), empty where there is no wall.
+    const std::string& SideWallStone() const { return m_sideWallFile; }
+    // The tag of the wall's quads, none of which is one of the level's pictures.
+    static constexpr const char* kSideWallTag = "Magic Portals Side Wall";
+
     // THE PIXEL-CENTRE RULE AT THE FRAME'S EDGE (edge_cover.json, planning step 165): the
     // strips the last frame drew, one for each side of a picture whose edge lay in the
     // frame's outer half pixel. A strip is a second quad of its picture's material over the
@@ -2044,6 +2060,10 @@ private:
     float pictureZ(int slot) const;
     // The four black bars round the scene (m_blackBars), with the level's art.
     void buildBlackBars(entt::registry& registry);
+    // The stone wall beside the level (m_sideWalls; side_walls.json), every quad of it with the level's art, hidden until
+    // placeCamera finds the view wider than the level (showSideWalls).
+    void buildSideWalls(entt::registry& registry);
+    void showSideWalls(entt::registry& registry);
     void buildHud(entt::registry& registry);
 
     // The menu: opened onto a screen, drawn from its buttons, and taken down
@@ -2287,7 +2307,9 @@ private:
     float systemZ(float base, Slot klass, int slot, int systems) const;
     float readInput(entt::registry& registry);
     void syncDrawables(entt::registry& registry);
-    void syncSprites(entt::registry& registry);
+    // `cameraFollowersOnly` places the pictures that stand where the camera is and nothing else: no picture is made,
+    // taken away or moved on (reframeLevel, under a stop).
+    void syncSprites(entt::registry& registry, bool cameraFollowersOnly = false);
     // The picture of a barrel a restock built from the port's template table (3-32's,
     // whose level places none to borrow one from). False when the table's picture
     // does not read.
@@ -2430,6 +2452,13 @@ private:
 
     float viewportAspect(const entt::registry& registry) const;
     void placeCamera(entt::registry& registry);
+    // Where a level that sets `auto_camera` (2-32 alone) puts the camera: locked to its dragon, held inside the level.
+    glm::dvec2 autoCameraPx() const;
+    // THE WINDOW'S SHAPE CHANGED WHILE THE LEVEL IS STOPPED (a pause, a popup; F11 does it): the camera held inside the
+    // level again for the new view and placed, and the pictures that follow the camera - the sky, the space sky's, the
+    // satellite, 2-32's claw - and the no-portal sign put where this view has them. Nothing while the shape is the one the camera
+    // was last placed at, and nothing is stepped.
+    void reframeLevel(entt::registry& registry);
 
     entt::entity makeBox(entt::registry& registry, const char* tag, const glm::vec3& centre, const glm::vec3& size,
                          const glm::vec3& colour);
@@ -2491,6 +2520,7 @@ private:
     Camera::Rules m_cameraRules;
     double m_viewHeightPx{0.0};
     float m_aspect{16.0f / 9.0f}; // the window's shape as of the last tick
+    float m_framedAspect{16.0f / 9.0f}; // the shape the level's camera was last placed at (placeCamera)
     Camera::Follow m_follow;
     // THE POINTER AS THE CAMERA READS IT (camera.json `drag`): its own record of the
     // one touch, followed on every tick the touch is read - the level's and a
@@ -2584,6 +2614,7 @@ private:
     EdgeCover::Rules m_edgeRules;           // the port's edge_cover.json
     // The sides of a menu picture on a window wider than it (side_fill.json; Enhanced, planning step 212).
     SideFill::Rules m_sideFillRules;
+    SideWalls::Rules m_sideWallRules; // the port's side_walls.json (Enhanced, planning step 284)
     std::vector<entt::entity> m_edgeStrips; // the pool of edge strips; those past the frame's use are hidden
     std::vector<EdgeCoverReport> m_edgeReports; // what the last frame's strips extend
     std::vector<entt::entity> m_edgeCulled; // the quads the last frame's cull hid, to show again
@@ -2789,6 +2820,20 @@ private:
     // black_bar.ent as LoadEnt read it with the level: its emissive and lighting
     // facts, which syncLighting tints the bars with.
     Art::Entity m_blackBarEntity;
+
+    // THE STONE WALL BESIDE THE LEVEL (side_walls.json; planning step 284): pictures with no node and no body, in
+    // front of the scene and behind the black bars, made with the level's art and destroyed with it. Their own
+    // quads, not m_sprites'. Picture-side only: never Game::Level or the state hash.
+    struct SideWallQuad {
+        entt::entity quad{entt::null};
+        SideWalls::Piece piece;
+        std::string texture;
+    };
+    std::vector<SideWallQuad> m_sideWalls;
+    // The stone's .ent and the black's as LoadEnt read them with the level, which syncLighting tints the wall with.
+    Art::Entity m_sideWallStone;
+    Art::Entity m_sideWallBlack;
+    std::string m_sideWallFile; // the stone's .ent file name, empty where there is no wall
 
     // THE SHOCK RINGS (art.json shock_ring): shock_area.ent, which each shock agent
     // adds round itself on its first frame. Pictures with no node, one per field in
@@ -4215,6 +4260,8 @@ private:
     void layOutControls();
     // The no-portal sign a tick on, against the camera as this tick left it.
     void tickNoPortalSign(double dtMs);
+    // Where the sign is on the view, from where its follow has it and where the camera stands.
+    void placeNoPortalSign();
     // Which control the tick's touch is on, or nullptr. Asked once a tick, before
     // a shot is fired, because a tap that works a control must not also open a
     // portal under it - a scheduled tap's as much as a real press's.

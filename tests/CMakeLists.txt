@@ -331,6 +331,11 @@ add_mp_test(test_mp_sky_levels IN_SOURCE test_mp_sky SKIPS_WITH_77)
 add_mp_test(test_mp_edgecover)
 # The sides of a menu picture on a wide window: side_fill.json and sim/SideFill (planning step 212), pure arithmetic; it runs anywhere.
 add_mp_test(test_mp_sidefill)
+# The stone wall beside a level narrower than the window: side_walls.json and sim/SideWalls (planning step 284) - which sides a level's own walls
+# close, the stone's variant and the layout, on scenes the suite writes: it runs anywhere. The census of the converted levels and the stone's .ent
+# files is a suite of the same file, which exits 77 without them.
+add_mp_test(test_mp_sidewalls)
+add_mp_test(test_mp_sidewalls_levels IN_SOURCE test_mp_sidewalls SKIPS_WITH_77)
 # The texture tiers and the one cut rule: tiers.json and sim/Tiers - which file of an
 # image the original draws, its size in units and its frames' uv - on files the suite
 # writes, and over the original's own tier folders, which are skipped without them and

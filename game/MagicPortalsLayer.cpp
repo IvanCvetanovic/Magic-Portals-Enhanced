@@ -406,6 +406,7 @@ void MagicPortalsLayer::OnAttach(entt::registry& registry) {
                       Sky::LoadSpaceRules(m_paths.portData + "/sky.json", m_spaceRules, error) &&
                       EdgeCover::LoadRules(m_paths.portData + "/edge_cover.json", m_edgeRules, error) &&
                       SideFill::LoadRules(m_paths.portData + "/side_fill.json", m_sideFillRules, error) &&
+                      SideWalls::LoadRules(m_paths.portData + "/side_walls.json", m_sideWallRules, error) &&
                       Tiers::LoadRules(m_paths.portData + "/tiers.json", m_tierRules, error) &&
                       Motion::LoadRules(m_paths.portData + "/motions.json", m_motionRules, error) &&
                       Effects::LoadRules(m_paths.portData + "/effects.json", m_effectRules, error) &&
@@ -1626,6 +1627,9 @@ void MagicPortalsLayer::unloadLevel(entt::registry& registry, bool keepLightmaps
     m_wallGhost = WallGhost{};
     for (BlackBarQuad& bar : m_blackBars) destroy(bar.quad);
     m_blackBars.clear();
+    for (SideWallQuad& wall : m_sideWalls) destroy(wall.quad);
+    m_sideWalls.clear();
+    m_sideWallFile.clear();
     for (ShockRingQuad& ring : m_shockRings) destroy(ring.quad);
     m_shockRings.clear();
     for (MinionQuad& minion : m_minions) destroy(minion.quad);
@@ -6197,6 +6201,35 @@ void MagicPortalsLayer::placeCamera(entt::registry& registry) {
     registry.get<Supersonic::TransformComponent>(m_camera).position = camera.position;
     // Written whole, so whatever shake a frame left on it is gone with it.
     m_quakeDrawn.onCamera = false;
+    m_framedAspect = m_aspect;
+    showSideWalls(registry);
+}
+
+glm::dvec2 MagicPortalsLayer::autoCameraPx() const {
+    // AutoCameraController::update: x locked to the dragon, y pinned to 0; Camera::Clamp is the same arithmetic as the
+    // original's camMin/camMax expressed for a centre rather than a corner.
+    const glm::dvec2 view = ViewPx();
+    return Camera::Clamp(glm::dvec2(m_level.dragon.atPx.x + view.x * 0.5, view.y * 0.5), view, m_boundsPx);
+}
+
+void MagicPortalsLayer::reframeLevel(entt::registry& registry) {
+    if (!m_loaded || m_aspect == m_framedAspect) return;
+    const glm::dvec2 before(m_viewHeightPx * static_cast<double>(m_framedAspect), m_viewHeightPx);
+    const glm::dvec2 cornerBefore = m_follow.centrePx - before * 0.5;
+    // 2-32's dragon measures its claw from the camera's left edge, for which it is told the view's width: told now, as
+    // every step tells it before the sim reads it (stepLevel), so the claw's picture is placed for this view.
+    if (m_level.dragon.present) m_level.dragon.viewWidthPx = ViewPx().x;
+    // The clamp the next step makes of its own accord (Follow::Tick holds the centre inside the level before it eases).
+    m_follow.centrePx =
+        m_level.dragon.present ? autoCameraPx() : Camera::Clamp(m_follow.centrePx, ViewPx(), m_boundsPx);
+    placeCamera(registry);
+    // The sign hangs from the view's corner: carried with it, so it stands where it stood on the screen. Its follow
+    // is moved and not ticked: a frame of it would aim it again, and nothing is stepped under a stop.
+    if (m_sign.present && m_hudReady) {
+        m_sign.follow.Shift(m_follow.centrePx - ViewPx() * 0.5 - cornerBefore);
+        placeNoPortalSign();
+    }
+    syncSprites(registry, true);
 }
 
 bool MagicPortalsLayer::ScreenToLevelPx(const entt::registry& registry, const glm::vec2& screenPoint,
@@ -6632,8 +6665,10 @@ void MagicPortalsLayer::syncEdgeCovers(entt::registry& registry) {
         const EdgeCover::Slivers slivers =
             left ? EdgeCover::Slivers{} : EdgeCover::SliversOf(m_edgeRules, rect, frameW, frameH);
         if (!left && strips.count == 0 && !slivers.Any()) continue;
+        // Nor a piece of the side wall: it stands at or beyond the level's side, its fade's slices are narrower than the
+        // outer pixel (a strip over one would blend its black twice), and what lies under its edge is black.
         if (const auto* tag = registry.try_get<TagComponent>(entity);
-            tag != nullptr && (tag->tag == kEdgeCoverTag || tag->tag == kSkyCoverTag)) {
+            tag != nullptr && (tag->tag == kEdgeCoverTag || tag->tag == kSkyCoverTag || tag->tag == kSideWallTag)) {
             continue;
         }
         if (std::find(covered.begin(), covered.end(), entity) != covered.end()) continue;
@@ -7760,6 +7795,7 @@ void MagicPortalsLayer::buildSprites(entt::registry& registry) {
     } else if (lightmaps.kept > 0) {
         SUPERSONIC_LOG_INFO("Magic Portals") << levelName << " kept " << lightmaps.kept << " baked lightmap(s)" << std::endl;
     }
+    buildSideWalls(registry);
     buildBlackBars(registry);
     m_artReady = true;
     // And what the level's own art does not show: the entities' particles.
@@ -7835,6 +7871,82 @@ std::vector<MagicPortalsLayer::BlackBarReport> MagicPortalsLayer::BlackBars() co
         report.z = kLayerableTopZ;
         reports.push_back(std::move(report));
     }
+    return reports;
+}
+
+// THE STONE WALL BESIDE A LEVEL NARROWER THAN THE WINDOW (side_walls.json; sim/SideWalls; Enhanced, planning step
+// 284). Every quad is made here, with the level's art and never in the middle of a level (an entity made then would
+// move others in the registry's stores, which the renderer's ties go by: buildEdgeCoverPool), and is shown only while
+// the view is wider than the level (showSideWalls). The stone and the black are read from the original's .ent files as
+// the black bars' is; a level whose sides are not both closed, or whose files do not read, has no wall.
+void MagicPortalsLayer::buildSideWalls(entt::registry& registry) {
+    m_sideWalls.clear();
+    m_sideWallStone = Art::Entity{};
+    m_sideWallBlack = Art::Entity{};
+    m_sideWallFile.clear();
+    if (!m_sideWallRules.enabled) return;
+    const SideWalls::Closed closed = SideWalls::ClosedSides(m_sideWallRules, m_data.scene, m_boundsPx);
+    if (!closed.Both()) {
+        SUPERSONIC_LOG_INFO("Magic Portals")
+            << "no side wall: the level is open on "
+            << (closed.left ? "its right" : closed.right ? "its left" : "both sides") << std::endl;
+        return;
+    }
+    const int world = m_current >= 0 ? m_chapters.levels[static_cast<std::size_t>(m_current)].world : -1;
+    const std::string file =
+        SideWalls::StoneFile(m_sideWallRules, SideWalls::Variant(m_sideWallRules, m_data.scene, world));
+    std::string error;
+    if (!Art::LoadEnt(m_paths.original + "/entities/" + file, m_sideWallStone, error) ||
+        !Art::LoadEnt(m_paths.original + "/entities/" + m_sideWallRules.blackEntity, m_sideWallBlack, error)) {
+        SUPERSONIC_LOG_WARN("Magic Portals") << "no side wall: " << error << std::endl;
+        return;
+    }
+    const Sprites::Image& stone = drawnImage(originalImage(m_sideWallStone.sprite));
+    const Sprites::Image& black = drawnImage(originalImage(m_sideWallBlack.sprite));
+    if (stone.units.x <= 0 || stone.units.y <= 0 || black.units.x <= 0 || black.units.y <= 0) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "no side wall: " << (stone.units.x <= 0 || stone.units.y <= 0 ? stone.path : black.path)
+            << " could not be read" << std::endl;
+        return;
+    }
+    const std::vector<SideWalls::Piece> pieces = SideWalls::Layout(
+        m_sideWallRules, m_boundsPx, glm::dvec2(stone.units) * m_sideWallStone.ScaleAt(1.0));
+    if (pieces.empty() || !(static_cast<float>(pieces.back().z) < kLayerableTopZ)) {
+        SUPERSONIC_LOG_WARN("Magic Portals")
+            << "no side wall: its " << pieces.size() << " pieces would not stand behind the black bars" << std::endl;
+        return;
+    }
+    m_sideWallFile = file;
+    for (const SideWalls::Piece& piece : pieces) {
+        const bool isStone = piece.kind == SideWalls::Kind::Stone;
+        SideWallQuad wall;
+        wall.piece = piece;
+        wall.texture = isStone ? stone.path : black.path;
+        wall.quad = makeSprite(registry, kSideWallTag, wall.texture,
+                               isStone ? m_sideWallStone.additive : m_sideWallBlack.additive);
+        placeSprite(registry, wall.quad, piece.centrePx, piece.sizePx, static_cast<float>(piece.z),
+                    Units::ToWorldRotation(piece.turnRad));
+        registry.get<Supersonic::RenderableComponent>(wall.quad).isVisible = false;
+        m_sideWalls.push_back(std::move(wall));
+    }
+    SUPERSONIC_LOG_INFO("Magic Portals") << "side wall: " << m_sideWalls.size() << " pieces of " << file
+                                         << " beside a level " << m_boundsPx.x << " x " << m_boundsPx.y << std::endl;
+}
+
+void MagicPortalsLayer::showSideWalls(entt::registry& registry) {
+    if (m_sideWalls.empty()) return;
+    const bool shown = SideWalls::Shown(ViewPx().x, m_boundsPx.x);
+    for (const SideWallQuad& wall : m_sideWalls) {
+        if (wall.quad != entt::null && registry.valid(wall.quad)) {
+            registry.get<Supersonic::RenderableComponent>(wall.quad).isVisible = shown;
+        }
+    }
+}
+
+std::vector<MagicPortalsLayer::SideWallReport> MagicPortalsLayer::SideWallPieces() const {
+    std::vector<SideWallReport> reports;
+    reports.reserve(m_sideWalls.size());
+    for (const SideWallQuad& wall : m_sideWalls) reports.push_back(SideWallReport{wall.quad, wall.piece, wall.texture});
     return reports;
 }
 
@@ -8022,13 +8134,13 @@ bool MagicPortalsLayer::templatePicture(const Restock::Added& added, DrawnSprite
     return true;
 }
 
-void MagicPortalsLayer::syncSprites(entt::registry& registry) {
+void MagicPortalsLayer::syncSprites(entt::registry& registry, bool cameraFollowersOnly) {
     using namespace Supersonic;
-    rankSprites();
+    if (!cameraFollowersOnly) rankSprites();
     // A restock the port could not build, said once a level (the original prints
     // 'Spawn entity not found ' for a missing marker, addEntityAtSpawnPoint #85-101;
     // the port also cannot build a template it has no node for).
-    if (m_level.restock.refusals > 0 && !m_restockRefusalSaid) {
+    if (!cameraFollowersOnly && m_level.restock.refusals > 0 && !m_restockRefusalSaid) {
         m_restockRefusalSaid = true;
         SUPERSONIC_LOG_WARN("Magic Portals") << "a boss's restock was refused (" << m_level.restock.refusals
                                              << " so far): " << m_level.restock.firstRefusal << std::endl;
@@ -8041,7 +8153,7 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
     // (templatePicture). Each follows its own body as a placed one does. Made BEFORE
     // the loop below, which places it on the tick it appears, and by value, since
     // pushing into m_sprites moves it.
-    while (m_artReady && m_restockDrawn < m_level.restock.added.size()) {
+    while (!cameraFollowersOnly && m_artReady && m_restockDrawn < m_level.restock.added.size()) {
         const Restock::Added& added = m_level.restock.added[m_restockDrawn];
         ++m_restockDrawn;
         if (!registry.valid(added.body)) continue;
@@ -8086,6 +8198,11 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
         m_sprites.push_back(std::move(made));
     }
     for (DrawnSprite& drawn : m_sprites) {
+        // Under a stop, only what the camera carries: the sky, the satellite and the space sky (the first three
+        // branches below) and 2-32's claw.
+        if (cameraFollowersOnly && drawn.sky < 0 && !drawn.satellite && !drawn.claw && drawn.space == SpaceRole::None) {
+            continue;
+        }
         // A FIRE DIAMOND 3-32'S GHOST PUT BACK. A gone diamond's picture is destroyed below, for good: a
         // crystal taken or a shock diamond spent never returns. This one does - Game's put-back turns the same
         // Diamond's `gone` off at fire_diamond_spawn, where the original's addEntityAtSpawnPoint adds a NEW
@@ -8492,7 +8609,7 @@ void MagicPortalsLayer::syncSprites(entt::registry& registry) {
     // node Game sized the box from. Added AFTER the loop above, and by index,
     // because pushing into m_sprites while ranging over it would invalidate it.
     const entt::entity platform = m_level.darkDragon.platformBody;
-    if (!m_platformDrawn && m_artReady && platform != entt::null && registry.valid(platform)) {
+    if (!cameraFollowersOnly && !m_platformDrawn && m_artReady && platform != entt::null && registry.valid(platform)) {
         int templateAt = -1;
         for (std::size_t i = 0; i < m_sprites.size(); ++i) {
             if (m_sprites[i].sprite.node == m_level.darkDragon.platformNode) {
@@ -9445,6 +9562,22 @@ void MagicPortalsLayer::syncLighting(entt::registry& registry) {
     // the one lit path every picture of the scene is drawn on.
     for (const BlackBarQuad& bar : m_blackBars) {
         tint(registry, bar.quad, white, m_blackBarEntity.emissive, {}, receiverOf(m_blackBarEntity, 0.0));
+    }
+    // The side wall (side_walls.json): the stone with its .ent's emissive, lighting and normal map, lit as a static
+    // piece of the level with no lightmap of its own - so on a level whose torch is lit it takes the static lights
+    // live, as every static picture there does; the black with black_bar.ent's facts, at its piece's alpha.
+    if (!m_sideWalls.empty()) {
+        Receiver stone = receiverOf(m_sideWallStone, m_sideWallRules.lightHeight);
+        stone.runtimeBake = runtimeBake;
+        const Receiver black = receiverOf(m_sideWallBlack, m_sideWallRules.lightHeight);
+        for (const SideWallQuad& wall : m_sideWalls) {
+            if (wall.piece.kind == SideWalls::Kind::Stone) {
+                tint(registry, wall.quad, white, m_sideWallStone.emissive, {}, stone);
+            } else {
+                tint(registry, wall.quad, glm::vec4(1.0f, 1.0f, 1.0f, static_cast<float>(wall.piece.alpha)),
+                     m_sideWallBlack.emissive, {}, black);
+            }
+        }
     }
     tint(registry, m_shotQuad, white, m_artRules.shot.emissive, {}, receiverOf(m_artRules.shot, m_artRules.shot.z));
     tint(registry, m_beholderQuad, m_beholderColour, m_artRules.beholder.emissive, {},
@@ -10653,6 +10786,11 @@ void MagicPortalsLayer::tickNoPortalSign(double dtMs) {
     // Ethanon's GetCameraPos is the screen's top-left corner in the world.
     const glm::dvec2 corner = m_follow.centrePx - view * 0.5;
     m_sign.follow.Tick(m_hudRules, Hud::SignTarget(m_hudRules, corner, m_sign.sizeUnits), dtMs);
+    placeNoPortalSign();
+}
+
+void MagicPortalsLayer::placeNoPortalSign() {
+    const glm::dvec2 corner = m_follow.centrePx - ViewPx() * 0.5;
     m_sign.onView.size = m_sign.sizeUnits;
     m_sign.onView.min = m_sign.follow.at - m_sign.sizeUnits * 0.5 - corner;
 }
@@ -14836,12 +14974,9 @@ void MagicPortalsLayer::stepLevel(entt::registry& registry, float direction, con
         // sets it to dragon.ent. AutoCameraController::update is a hard lock
         // to that entity's x - no lag, no hold, y pinned to 0 - so the
         // follow's easing does not run here at all. dragon.json has the
-        // decode, and Camera::Clamp is the same arithmetic as the original's
-        // camMin/camMax expressed for a centre rather than a corner. It has no
-        // dragMoveCamera, so no finger moves it (camera.json `drag`).
-        const glm::dvec2 view = ViewPx();
-        m_follow.centrePx =
-            Camera::Clamp(glm::dvec2(m_level.dragon.atPx.x + view.x * 0.5, view.y * 0.5), view, m_boundsPx);
+        // decode (autoCameraPx). It has no dragMoveCamera, so no finger moves
+        // it (camera.json `drag`).
+        m_follow.centrePx = autoCameraPx();
     } else {
         glm::dvec2 targetPx = Units::ToPixels(registry.get<Supersonic::TransformComponent>(m_level.player).position);
         // 4-19's landing sets the character on the door every frame (cutscenes.json
@@ -15569,7 +15704,9 @@ bool MagicPortalsLayer::popupTick(entt::registry& registry, const ScriptClock::S
     m_stoppedMs += dtMs;
     m_levelFrameWallMs += ScriptClock::WallMs(step);
     Popup::Tick(*m_popup.cls, m_popup.state, dtMs);
+    // The window may have changed shape under the popup: the level is framed for it, though it does not step.
     m_aspect = viewportAspect(registry);
+    reframeLevel(registry);
     layOutControls();
 
     // Popup::hasReceivedCloseCommand: for a HelpPopup - every class a level raises
@@ -15726,6 +15863,7 @@ bool MagicPortalsLayer::pauseTick(entt::registry& registry, const ScriptClock::S
         m_stoppedMs += popupMs;
         m_levelFrameWallMs += ScriptClock::WallMs(step);
         m_aspect = viewportAspect(registry);
+        reframeLevel(registry);
         layOutControls();
         achievementsPopupTick(registry, popupMs);
         return false;
@@ -15736,9 +15874,11 @@ bool MagicPortalsLayer::pauseTick(entt::registry& registry, const ScriptClock::S
     m_pause.clockMs += dtMs;
     m_stoppedMs += dtMs;
     m_levelFrameWallMs += ScriptClock::WallMs(step);
-    // The window may change shape under a pause; restart and pause, drawn frozen
-    // under it, stay on their corner.
+    // The window may change shape under a pause: the level is framed for it, though
+    // it does not step, and restart and pause, drawn frozen under it, stay on their
+    // corner.
     m_aspect = viewportAspect(registry);
+    reframeLevel(registry);
     layOutControls();
 
     // The back key resumes: handleBackButton hides the pause when GameMenuLayer

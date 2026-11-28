@@ -10151,6 +10151,349 @@ void TheBlackBarsStopAt768OnAWideScene() {
     layer.OnDetach(registry);
 }
 
+// ---- the stone wall beside a narrow level (side_walls.json, step 284) ---------------
+//
+// On a level whose two sides its own walls close, the wall is made with the level's art - the black behind, the stone, the fade, back to front,
+// between the markers' boxes and the black bars - and drawn only while the view is wider than the level. An open level has none. The
+// pure part (which sides, which stone, where every piece lies) is test_mp_sidewalls'.
+void TheSideWallStandsBesideANarrowLevelOnAWideWindow() {
+    if (!OriginalArtIsThere("TheSideWallStandsBesideANarrowLevelOnAWideWindow")) return;
+    namespace SideWalls = MagicPortals::SideWalls;
+    constexpr double kQuarter = 1.5707963267948966;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level3");
+    layer.OnAttach(registry);
+    if (!layer.LoadError().empty() || !layer.ArtError().empty()) {
+        CHECK_MSG(false, layer.LoadError() + layer.ArtError());
+        return;
+    }
+    const glm::dvec2 bounds = layer.BoundsPx();
+    CHECK_MSG(bounds == glm::dvec2(512.0, 512.0), "1-04's max marker: " + Point(bounds));
+    const std::vector<MagicPortalsLayer::SideWallReport> walls = layer.SideWallPieces();
+    CHECK_MSG(layer.SideWallStone() == "double_block_plat.ent", "1-04's own blocks are the plain ones: " + layer.SideWallStone());
+    // Per side: a backing, three columns of five down its 512 units, and 64 slices with their cap.
+    CHECK_EQ(walls.size(), static_cast<std::size_t>(2 + 30 + 130));
+    CHECK_EQ(Tagged(registry, MagicPortalsLayer::kSideWallTag), static_cast<int>(walls.size()));
+    const auto visibleCount = [&]() {
+        int count = 0;
+        for (const MagicPortalsLayer::SideWallReport& wall : walls) {
+            count += registry.valid(wall.quad) && registry.get<RenderableComponent>(wall.quad).isVisible ? 1 : 0;
+        }
+        return count;
+    };
+    for (int tick = 0; tick < 3; ++tick) {
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_EQ(visibleCount(), 0); // 16:9: the view is narrower than the level
+    // 32:9: the next tick finds the view wider than the level.
+    publishViewport(registry, glm::vec2(1920.0f, 540.0f));
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_EQ(visibleCount(), static_cast<int>(walls.size()));
+    const glm::dvec2 view = layer.ViewPx();
+    CHECK_MSG(view.x > bounds.x && std::fabs(layer.CameraCentrePx().x - bounds.x * 0.5) < 1e-9, "the level stands in the middle");
+    float lowest = 1e9f;
+    float highest = -1e9f;
+    std::set<float> depths;
+    int stones = 0;
+    int wrong = 0;
+    double leftReach = 0.0;
+    double rightReach = bounds.x;
+    for (const MagicPortalsLayer::SideWallReport& wall : walls) {
+        const auto& transform = registry.get<TransformComponent>(wall.quad);
+        const auto& material = registry.get<MaterialComponent>(wall.quad);
+        const bool stone = wall.piece.kind == SideWalls::Kind::Stone;
+        const glm::dvec2 at = MagicPortals::Units::ToPixels(transform.position);
+        const double scaleX = std::fabs(MagicPortals::Units::ToPixels(transform.scale).x);
+        const double scaleY = std::fabs(MagicPortals::Units::ToPixels(transform.scale).y);
+        // The footprint across: a stone stands on end.
+        const double halfAcross = 0.5 * (stone ? std::fabs(scaleY) : std::fabs(scaleX));
+        const bool beyond = wall.piece.side < 0 ? at.x + halfAcross <= 1e-3 : at.x - halfAcross >= bounds.x - 1e-3;
+        wrong += beyond ? 0 : 1;
+        leftReach = std::min(leftReach, at.x - halfAcross);
+        rightReach = std::max(rightReach, at.x + halfAcross);
+        lowest = std::min(lowest, transform.position.z);
+        highest = std::max(highest, transform.position.z);
+        depths.insert(transform.position.z);
+        CHECK(material.blend != MaterialComponent::BlendMode::Additive && material.transparent && material.sprite2D.enabled);
+        if (stone) {
+            ++stones;
+            CHECK_MSG(EndsWith(wall.texture, "STONE03A4x10_half_contrast.png") && material.albedoTexturePath == wall.texture, wall.texture);
+            CHECK_MSG(material.normalTexturePath.find("wall__height4x2_half_nm") != std::string::npos,
+                      "the stone's own normal map: " + material.normalTexturePath);
+            CHECK_MSG(std::fabs(std::fabs(transform.rotation.z) - kQuarter) < 1e-5 && std::fabs(scaleX - 128.0) < 1e-3 &&
+                          std::fabs(scaleY - 32.0) < 1e-3,
+                      "128 x 32, stood on end");
+            CHECK(material.albedoColor.a == 1.0f);
+        } else {
+            CHECK_MSG(EndsWith(wall.texture, "/entities/black_bar.png") && material.normalTexturePath.empty(), wall.texture);
+            CHECK_MSG(transform.rotation.z == 0.0f && material.albedoColor.a == static_cast<float>(wall.piece.alpha),
+                      "the black at its alpha");
+        }
+    }
+    CHECK_EQ(stones, 30);
+    CHECK_MSG(wrong == 0, std::to_string(wrong) + " pieces reach inside the level");
+    CHECK_EQ(depths.size(), walls.size());
+    CHECK_MSG(lowest > 0.75f && highest < MagicPortalsLayer::kLayerableTopZ, "between the markers' boxes and the black bars");
+    const double leftEdge = layer.CameraCentrePx().x - view.x * 0.5;
+    CHECK_MSG(leftReach < leftEdge && rightReach > leftEdge + view.x, "the black reaches past both sides of the view");
+    // The frontmost of everything but the black bars is still behind them, with the wall shown.
+    CHECK(frontmostOther(registry).first < MagicPortalsLayer::kLayerableTopZ);
+    // And 16:9 again: hidden again, the same quads.
+    publishViewport(registry);
+    tickWith(layer, registry, kRest, {}, {});
+    layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    CHECK_EQ(visibleCount(), 0);
+    CHECK_EQ(Tagged(registry, MagicPortalsLayer::kSideWallTag), static_cast<int>(walls.size()));
+    // A level's unload takes every one of them.
+    MagicPortalsLayer::MenuButton list;
+    list.kind = MagicPortalsLayer::MenuButton::Kind::List;
+    layer.PressMenu(registry, list);
+    CHECK_EQ(Tagged(registry, MagicPortalsLayer::kSideWallTag), 0);
+    CHECK(layer.SideWallPieces().empty() && layer.SideWallStone().empty());
+    layer.OnDetach(registry);
+
+    // The stone of each level's own variant, and none beside an open one.
+    const struct {
+        const char* level;
+        const char* stone;
+    } cases[] = {{"level5a", "double_block_plat_no_emissive.ent"},
+                 {"level13b", "double_block_plat_low_emissive.ent"},
+                 {"level19b", "double_block_plat_low_emissive.ent"},
+                 {"level25c", "double_block_plat_no_emissive.ent"},
+                 {"level4c", ""},
+                 {"level24", ""}};
+    for (const auto& one : cases) {
+        entt::registry other;
+        publishViewport(other, glm::vec2(1920.0f, 540.0f));
+        MagicPortalsLayer level(TestPaths(), one.level);
+        level.OnAttach(other);
+        CHECK_MSG(level.LoadError().empty() && level.ArtError().empty(), level.LoadError() + level.ArtError());
+        CHECK_MSG(level.SideWallStone() == one.stone, std::string(one.level) + " has " + level.SideWallStone());
+        CHECK_MSG(level.SideWallPieces().empty() == std::string(one.stone).empty(), one.level);
+        CHECK_EQ(Tagged(other, MagicPortalsLayer::kSideWallTag), static_cast<int>(level.SideWallPieces().size()));
+        // Loaded on a wide window, it is shown from the first.
+        for (const MagicPortalsLayer::SideWallReport& wall : level.SideWallPieces()) {
+            CHECK_MSG(other.get<RenderableComponent>(wall.quad).isVisible, one.level);
+        }
+        // A dark level's stone is lit as its own blocks with no emissive are: the room's ambient and nothing of its own.
+        if (std::string(one.level) == "level25c") {
+            glm::vec3 own(-1.0f);
+            for (auto [entity, tag, material] : other.view<TagComponent, MaterialComponent>().each()) {
+                (void)entity;
+                if (tag.tag == "Magic Portals Sprite" && own.x < 0.0f &&
+                    material.albedoTexturePath.find("STONE03A4x10") != std::string::npos) {
+                    own = material.sprite2D.ambient;
+                }
+            }
+            for (const MagicPortalsLayer::SideWallReport& wall : level.SideWallPieces()) {
+                if (wall.piece.kind != SideWalls::Kind::Stone) continue;
+                const glm::vec3 ambient = other.get<MaterialComponent>(wall.quad).sprite2D.ambient;
+                CHECK_MSG(ambient == own && ambient.x < 0.5f && ambient.y < 0.5f && ambient.z < 0.5f,
+                          "4-26's stone at " + std::to_string(ambient.x) + ", its own blocks at " + std::to_string(own.x));
+                break;
+            }
+        }
+        level.OnDetach(other);
+        CHECK_EQ(Tagged(other, MagicPortalsLayer::kSideWallTag), 0);
+    }
+}
+
+// What a frame draws of the level's pictures and of the wall, each as its texture and where it stands, in an order of its own.
+std::vector<std::string> LevelQuadsAsDrawn(entt::registry& registry) {
+    std::vector<std::string> quads;
+    for (auto [entity, tag, transform, material, renderable] :
+         registry.view<TagComponent, TransformComponent, MaterialComponent, RenderableComponent>().each()) {
+        (void)entity;
+        if (!renderable.isVisible || (tag.tag != "Magic Portals Sprite" && tag.tag != MagicPortalsLayer::kSideWallTag)) continue;
+        // But for the space sky's spiral's size, which its constructor takes from the screen's diagonal as the level
+        // loads and nothing scales again (sim/Sky BuildSpace): its place is the camera's, its size the load's.
+        const bool spiral = material.albedoTexturePath.find("spiral") != std::string::npos;
+        char line[96];
+        std::snprintf(line, sizeof line, " %.3f %.3f %.4f %.3f %.3f %.3f", transform.position.x, transform.position.y,
+                      transform.position.z, spiral ? 0.0f : transform.scale.x, spiral ? 0.0f : transform.scale.y,
+                      transform.rotation.z);
+        quads.push_back(material.albedoTexturePath + line);
+    }
+    std::sort(quads.begin(), quads.end());
+    return quads;
+}
+
+// THE WINDOW RESHAPED UNDER A STOP (planning step 284; F11 does it): the level under a pause or a popup does not step, and its camera and the
+// pictures that follow it are framed for the new shape at once - as a level loaded on a window of that shape stands after the same ticks.
+void AWindowReshapedUnderAStopIsFramedAgain() {
+    if (!OriginalArtIsThere("AWindowReshapedUnderAStopIsFramedAgain")) return;
+    const glm::vec2 narrow(1280.0f, 720.0f);
+    const struct {
+        const char* level;
+        glm::vec2 wide;
+        bool popup; // true: under the popup the level opens on; false: under the pause
+    } cases[] = {{"level3", {1920.0f, 540.0f}, false},
+                 {"level1", {1920.0f, 540.0f}, true},
+                 {"level0c", {1920.0f, 480.0f}, false}};
+    for (const auto& one : cases) {
+        const std::string name = std::string(one.level) + (one.popup ? " under its popup" : " paused");
+        // `reshaped` loads and stops narrow and is then widened; `fresh` is wide throughout.
+        entt::registry reshapedRegistry;
+        entt::registry freshRegistry;
+        publishViewport(reshapedRegistry, narrow);
+        publishViewport(freshRegistry, one.wide);
+        MagicPortalsLayer reshaped(TestPaths(), one.level);
+        MagicPortalsLayer fresh(TestPaths(), one.level);
+        const auto stop = [&](MagicPortalsLayer& layer, entt::registry& registry) {
+            layer.OnAttach(registry);
+            if (!layer.LoadError().empty() || !layer.ArtError().empty()) return false;
+            if (one.popup) {
+                for (int tick = 0; tick < 5; ++tick) tickWith(layer, registry, kRest, {}, {});
+                return layer.PopupOpen();
+            }
+            CloseTheLevelStartPopup(layer, registry);
+            for (int tick = 0; tick < 60; ++tick) tickWith(layer, registry, kRest, {}, {});
+            press(layer, registry, MagicPortalsLayer::kBack);
+            return layer.Paused();
+        };
+        const bool stopped = stop(reshaped, reshapedRegistry);
+        const bool stoppedFresh = stop(fresh, freshRegistry);
+        CHECK_MSG(stopped && stoppedFresh, name + " is stopped: " + reshaped.LoadError() + reshaped.ArtError());
+        if (!stopped || !stoppedFresh) continue;
+        const glm::dvec2 before = reshaped.CameraCentrePx();
+        const double ageBefore = reshaped.LevelAgeMs();
+        const std::vector<std::string> quadsBefore = LevelQuadsAsDrawn(reshapedRegistry);
+        publishViewport(reshapedRegistry, one.wide);
+        tickWith(reshaped, reshapedRegistry, kRest, {}, {});
+        tickWith(fresh, freshRegistry, kRest, {}, {});
+        reshaped.OnUpdate(reshapedRegistry, MagicPortalsLayer::kTick);
+        fresh.OnUpdate(freshRegistry, MagicPortalsLayer::kTick);
+        CHECK_MSG((one.popup ? reshaped.PopupOpen() : reshaped.Paused()) && reshaped.LevelAgeMs() == ageBefore, name + ": not stepped");
+        // The camera: moved (or the case proves nothing), held for the new view, and where the fresh level's is.
+        const glm::dvec2 centre = reshaped.CameraCentrePx();
+        CHECK_MSG(std::fabs(centre.x - before.x) > 1.0, name + ": the camera stood at " + Point(before) + ", now " + Point(centre));
+        CHECK_MSG(std::fabs(centre.x - reshaped.BoundsPx().x * 0.5) < 1e-9, name + ": a level narrower than the view in its middle");
+        CHECK_MSG(glm::length(centre - fresh.CameraCentrePx()) < 1e-6,
+                  name + ": at " + Point(centre) + ", the fresh level at " + Point(fresh.CameraCentrePx()));
+        const auto& camera = reshapedRegistry.get<CameraComponent>(primaryCamera(reshapedRegistry));
+        const auto& other = freshRegistry.get<CameraComponent>(primaryCamera(freshRegistry));
+        CHECK_MSG(camera.position == other.position && camera.aspect == other.aspect && camera.orthoHeight == other.orthoHeight,
+                  name + ": the camera drawn");
+        // Every picture of the level and of the wall where the fresh level draws it: the sky among them.
+        const std::vector<std::string> quads = LevelQuadsAsDrawn(reshapedRegistry);
+        const std::vector<std::string> wanted = LevelQuadsAsDrawn(freshRegistry);
+        std::string differs;
+        for (std::size_t i = 0; i < std::max(quads.size(), wanted.size()) && differs.empty(); ++i) {
+            const std::string a = i < quads.size() ? quads[i] : "none";
+            const std::string b = i < wanted.size() ? wanted[i] : "none";
+            if (a != b) differs = a + " / " + b;
+        }
+        CHECK_MSG(differs.empty(), name + ": " + differs);
+        CHECK_MSG(quads != quadsBefore, name + ": the pictures moved with the camera");
+        // Narrow again, still stopped: held inside the level again, and the wall hidden.
+        publishViewport(reshapedRegistry, narrow);
+        tickWith(reshaped, reshapedRegistry, kRest, {}, {});
+        CHECK_MSG(viewInside(reshaped), name + ": back inside the level at " + Point(reshaped.CameraCentrePx()));
+        CHECK_EQ(Shown(reshapedRegistry, MagicPortalsLayer::kSideWallTag), 0);
+        reshaped.OnDetach(reshapedRegistry);
+        fresh.OnDetach(freshRegistry);
+    }
+}
+
+// THE NO-PORTAL SIGN HANGS FROM THE VIEW'S CORNER (planning step 284): a window reshaped under a pause moves the
+// camera, and the sign is carried with the corner - it stands where it stood on the screen, settled or still on
+// its way - and goes on to its corner once the level steps again. 1-15 is 768 wide: from 32:9, whose view is held in
+// the middle, to 16:9, which follows the player at its left end, the corner moves some 450 units.
+void AReshapeUnderAPauseCarriesTheNoPortalSign() {
+    if (!OriginalArtIsThere("AReshapeUnderAPauseCarriesTheNoPortalSign")) return;
+    const glm::vec2 narrow(1280.0f, 720.0f);
+    const glm::vec2 wide(1920.0f, 540.0f);
+    const struct {
+        int ticks;     // the level's ticks before the pause
+        bool settled;  // and whether the sign is in its corner by then
+    } cases[] = {{36, false}, {270, true}};
+    for (const auto& one : cases) {
+        const std::string name = "level14 paused after " + std::to_string(one.ticks) + " ticks";
+        entt::registry registry;
+        publishViewport(registry, wide);
+        MagicPortalsLayer layer(TestPaths(), "level14");
+        layer.OnAttach(registry);
+        if (!layer.LoadError().empty()) {
+            CHECK_MSG(false, layer.LoadError());
+            return;
+        }
+        CloseTheLevelStartPopup(layer, registry);
+        for (int tick = 0; tick < one.ticks; ++tick) tickWith(layer, registry, kRest, {}, {});
+        press(layer, registry, MagicPortalsLayer::kBack);
+        Hud::Rect stood;
+        CHECK_MSG(layer.Paused() && layer.NoPortalSignRect(stood), name);
+        CHECK_MSG((glm::length(stood.min) < 0.36) == one.settled, name + ": " + ShowRect(stood));
+        const auto cornerX = [&]() { return layer.CameraCentrePx().x - layer.ViewPx().x * 0.5; };
+        const double wideCorner = cornerX();
+        for (const glm::vec2& window : {narrow, wide, narrow}) {
+            publishViewport(registry, window);
+            tickWith(layer, registry, kRest, {}, {});
+            Hud::Rect sign;
+            CHECK(layer.Paused() && layer.NoPortalSignRect(sign));
+            CHECK_MSG(glm::length(sign.min - stood.min) < 1e-6 && glm::length(sign.size - stood.size) < 1e-9,
+                      name + ", reshaped to " + std::to_string(window.x) + " wide: " + ShowRect(sign) + " against " +
+                          ShowRect(stood));
+        }
+        CHECK_MSG(std::fabs(cornerX() - wideCorner) > 100.0,
+                  name + ": the corner moved, " + std::to_string(wideCorner) + " to " + std::to_string(cornerX()));
+        // Resumed, it goes on from where it was carried to its corner.
+        press(layer, registry, MagicPortalsLayer::kBack);
+        for (int tick = 0; tick < 300; ++tick) tickWith(layer, registry, kRest, {}, {});
+        Hud::Rect after;
+        CHECK_MSG(!layer.Paused() && layer.NoPortalSignRect(after) && glm::length(after.min) < 0.36,
+                  name + ": resumed, " + ShowRect(after));
+        layer.OnDetach(registry);
+    }
+}
+
+// 2-32'S CLAW RIDES THE CAMERA'S LEFT EDGE, which near the level's right end depends on how wide the view is: a window
+// reshaped under a pause moves it with the camera. A 10:1 window's view is 2560 of the level's 2632 units, so its left
+// edge stops at 72 where a 16:9 view's still follows the dragon.
+void AReshapeUnderAPausePlacesTheClawFromTheNewCorner() {
+    if (!OriginalArtIsThere("AReshapeUnderAPausePlacesTheClawFromTheNewCorner")) return;
+    entt::registry registry;
+    publishViewport(registry);
+    MagicPortalsLayer layer(TestPaths(), "level31a");
+    layer.OnAttach(registry);
+    CHECK_MSG(layer.SimLevel() != nullptr && layer.ArtError().empty(), layer.LoadError() + layer.ArtError());
+    if (layer.SimLevel() == nullptr || !layer.ArtError().empty()) return;
+    CloseTheLevelStartPopup(layer, registry);
+    const MagicPortals::Dragon::State& dragon = layer.SimLevel()->dragon;
+    // The player held in the air far ahead, out of the first fireball's way: it dies to it before the dragon is that far.
+    for (int tick = 0; tick < 900 && dragon.atPx.x < 150.0; ++tick) {
+        HoldPlayerAt(registry, layer, glm::dvec2(2000.0, 40.0));
+        tickWith(layer, registry, kRest, {}, {});
+        layer.OnUpdate(registry, MagicPortalsLayer::kTick);
+    }
+    CHECK_MSG(dragon.atPx.x >= 150.0, "the dragon is inside the level: " + Point(dragon.atPx));
+    press(layer, registry, MagicPortalsLayer::kBack);
+    CHECK(layer.Paused());
+    const MagicPortalsLayer::DragonReport before = layer.DragonPicture();
+    const glm::dvec2 dragonAt = dragon.atPx;
+    const double narrowView = layer.ViewPx().x;
+    publishViewport(registry, glm::vec2(4000.0f, 400.0f));
+    tickWith(layer, registry, kRest, {}, {});
+    const MagicPortalsLayer::DragonReport widened = layer.DragonPicture();
+    const double wideView = layer.ViewPx().x;
+    const glm::dvec2 narrowLeft(std::clamp(dragonAt.x, 0.0, layer.BoundsPx().x - narrowView), 0.0);
+    const glm::dvec2 wideLeft(std::clamp(dragonAt.x, 0.0, layer.BoundsPx().x - wideView), 0.0);
+    CHECK_MSG(layer.Paused() && dragon.atPx == dragonAt, "not stepped");
+    CHECK_MSG(narrowLeft.x - wideLeft.x > 50.0, "the left edge differs: " + Point(narrowLeft) + ", " + Point(wideLeft));
+    CHECK_MSG(std::fabs(layer.CameraCentrePx().x - wideView * 0.5 - wideLeft.x) < 1e-6,
+              "the camera at " + Point(layer.CameraCentrePx()));
+    const glm::dvec2 moved = dragon.claw.AtPx(dragon.rules, wideLeft) - dragon.claw.AtPx(dragon.rules, narrowLeft);
+    CHECK_MSG(glm::length(widened.clawCentrePx - before.clawCentrePx - moved) < 1e-6,
+              "the claw went " + Point(widened.clawCentrePx - before.clawCentrePx) + ", the edge's own is " + Point(moved));
+    CHECK_MSG(widened.centrePx == before.centrePx, "the dragon's picture stands");
+    publishViewport(registry);
+    tickWith(layer, registry, kRest, {}, {});
+    CHECK_MSG(glm::length(layer.DragonPicture().clawCentrePx - before.clawCentrePx) < 1e-6, "and back");
+    layer.OnDetach(registry);
+}
+
 void AClearPortalsButtonComesWithAPortal() {
     if (!OriginalArtIsThere("AClearPortalsButtonComesWithAPortal")) return;
     entt::registry registry;
@@ -35526,6 +35869,10 @@ void runTests() {
     TwoOhFivesWallIsDrawnOutToTheFrame();
     TheComplementaryHalfDrawsAnInwardEdgeWholeAndLeavesOutASliver();
     TheBlackBarsStopAt768OnAWideScene();
+    TheSideWallStandsBesideANarrowLevelOnAWideWindow();
+    AWindowReshapedUnderAStopIsFramedAgain();
+    AReshapeUnderAPauseCarriesTheNoPortalSign();
+    AReshapeUnderAPausePlacesTheClawFromTheNewCorner();
     TheBetweenSlotTableSaysWhereEachClassStands();
     TheTableIsTheFractionTheLayerDrawsAt();
     AnEffectsPictureHaloAndSystemsStandWhereTheTableSays();
